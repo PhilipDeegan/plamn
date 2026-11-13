@@ -214,7 +214,7 @@ private:
     auto spatial_hyperresistive_(VecField const& J, VecField const& B, Field const& n,
                                  damn::core::Point<std::size_t, VecField::dimension> index) const DAMN_ALL
     {
-        auto const lvlCoeff = 1. / std::pow(4, layout_.levelNumber());
+        auto const lvlCoeff = 1. / std::pow(4, layout_.level);
 
         auto constexpr min_density = 0.1;
         auto computeHR             = [&]<auto dst>() {

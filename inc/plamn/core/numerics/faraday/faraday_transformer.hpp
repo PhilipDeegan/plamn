@@ -46,7 +46,7 @@ public:
     static auto box_for(GridLayout const& layout, Field const& Bnc)
     {
         auto constexpr static dim = GridLayout::dimension;
-        return local_domain_box(layout.AMRBox(), centering_of<dim>(Bnc),
+        return local_domain_box(layout.cells, centering_of<dim>(Bnc),
                                 GridLayout::options.field_ghost_width);
     }
 
@@ -56,7 +56,7 @@ public:
         requires(not has_tiled_field_type_c<VecField>)
     {
         auto constexpr static dim = GridLayout::dimension;
-        auto const curlE          = curl<dim>(layout.meshSize(), E);
+        auto const curlE          = curl<dim>(layout.dx, E);
 
         damn::core::for_N<3>([&](auto c) {
             assign(Bnew[c], box_for(layout, Bnew[c]), of(B[c]) - dt * curlE.template get<c>());

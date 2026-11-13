@@ -201,7 +201,7 @@ void IonUpdater<Particles_t, GridLayout>::updatePopulations(auto& ions, auto con
     DAMN_LOG_SCOPE(3, "IonUpdater::updatePopulations");
 
     resetMoments(ions);
-    pusher_.setMeshAndTimeStep(boxing.layout.meshSize(), dt);
+    pusher_.setMeshAndTimeStep(boxing.layout.dx, dt);
 
     if (mode == UpdaterMode::domain_only)
         updateAndDepositDomain_(ions, em, boxing);
@@ -306,7 +306,7 @@ void IonUpdater<Particles_t, GridLayout>::updateAndDepositAll_(auto& ions, auto 
                 DAMN_LOG_LINE_SS(particle);
                 auto const nearbyBox = damn::core::grow(damn::core::Box(particle.iCell(), particle.iCell()), 3);
                 for (auto const& xyz : em.E)
-                    if (auto const overlap = nearbyBox * layout.AMRGhostBoxFor(xyz))
+                    if (auto const overlap = nearbyBox * amr_ghost_box(layout, xyz))
                         layout.amr_lcl_idx(*overlap, [&](auto const& bix, auto const& lix) {
                             DAMN_LOG_LINE_SS(xyz.name() << " at:" << bix << ":" << xyz(lix));
                         });

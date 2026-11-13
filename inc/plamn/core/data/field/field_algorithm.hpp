@@ -99,7 +99,7 @@ auto& convert_to_fortran_primal(      // DOES NOT WORK ON GHOST BOX!
     auto const all_primal
         = all(layout.centering(src), [](auto const c) { return c == QtyCentering::primal; });
 
-    auto const lcl_src_box = layout.AMRToLocal(layout.AMRBoxFor(dst));
+    auto const lcl_src_box = to_local(layout, layout.AMRBoxFor(dst));
     auto dst_view          = damn::core::make_array_view<c_ordering>(dst.data(), *lcl_src_box.shape());
 
     auto const lcl_dst_box = [&]() {

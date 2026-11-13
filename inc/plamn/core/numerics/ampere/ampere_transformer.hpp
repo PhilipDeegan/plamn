@@ -47,9 +47,9 @@ public:
     static auto box_for(GridLayout const& layout, Field const& Jc)
     {
         if constexpr (box.mode == AmpereMode::ShrinkedGhost)
-            return damn::core::shrink(layout.ghostBoxFor(Jc), amount<GridLayout>());
+            return damn::core::shrink(ghost_box(layout, Jc), amount<GridLayout>());
         else
-            return damn::core::grow(layout.domainBoxFor(Jc), amount<GridLayout>());
+            return damn::core::grow(domain_box(layout, Jc), amount<GridLayout>());
     }
 
     template<typename GridLayout, typename VecField>

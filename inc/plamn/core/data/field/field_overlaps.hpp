@@ -36,7 +36,7 @@ struct FieldTileOverlaps
     // when you're sure it should exist
     static auto& getQuantity(auto const& layout, Quantity const& pq)
     {
-        return levels.at(layout.levelNumber()).patches.at(to_string(layout.AMRBox())).at(pq);
+        return levels.at(layout.level).patches.at(to_string(layout.cells)).at(pq);
     }
     // when you're sure it should exist
     template<typename Tiles>
@@ -78,8 +78,8 @@ struct FieldTileOverlaps
             struct Tile
             {
                 Tile(auto& field_tile)
-                    : domain_box{field_tile.layout().domainBoxFor(field_tile())}
-                    , ghost_box{field_tile.layout().ghostBoxFor(field_tile())}
+                    : domain_box{domain_box(field_tile.layout(), field_tile())}
+                    , ghost_box{ghost_box(field_tile.layout(), field_tile())}
                 {
                 }
 
@@ -119,11 +119,11 @@ auto& FieldTileOverlaps<GL, opts>::getOrCreateQuantity(auto const& layout, auto&
 
     using Patch_t = Level::Patch;
 
-    if (!levels.count(layout.levelNumber()))
-        levels.try_emplace(layout.levelNumber());
+    if (!levels.count(layout.level))
+        levels.try_emplace(layout.level);
 
-    auto& level           = levels.at(layout.levelNumber());
-    auto const& patch_key = to_string(layout.AMRBox());
+    auto& level           = levels.at(layout.level);
+    auto const& patch_key = to_string(layout.cells);
     if (!level.patches.count(patch_key))
         level.patches.try_emplace(patch_key);
 

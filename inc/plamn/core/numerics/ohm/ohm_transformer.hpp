@@ -51,7 +51,7 @@ public:
     template<typename GridLayout, typename Field>
     static auto box_for(GridLayout const& layout, Field const& Ec)
     {
-        return layout.domainBoxFor(Ec);
+        return domain_box(layout, Ec);
     }
 
     template<typename GridLayout, typename VecField, typename Field>

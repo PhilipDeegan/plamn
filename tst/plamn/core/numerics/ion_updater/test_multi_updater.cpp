@@ -114,7 +114,7 @@ void update_serial(UpdaterMode mode, Patches& patches)
         {
             auto& [layout, ions, em, electromag] = patch.model.state;
 
-            Boxing_t const boxing{layout, {layout.AMRBox()}};
+            Boxing_t const boxing{layout, {layout.cells}};
             IonUpdater_t{}.updatePopulations(ions, electromag, boxing, dt, mode);
             ions.computeChargeDensity();
             ions.computeBulkVelocity();
@@ -128,7 +128,7 @@ void update_parallel(UpdaterMode mode, Patches& patches)
 
     auto const& layout = patches[0].layout;
     std::unordered_map<std::string, Boxing_t> boxings;
-    boxings.try_emplace("patch_id", Boxing_t{layout, {layout.AMRBox()}});
+    boxings.try_emplace("patch_id", Boxing_t{layout, {layout.cells}});
 
     auto const quantities = [&](int i) {
         return std::forward_as_tuple(patches[i].model.state.ions,
@@ -139,7 +139,7 @@ void update_parallel(UpdaterMode mode, Patches& patches)
     try
     {
         particles_domain_is_valid(
-            patches[0].model.state.ions.populations[0].particles.domain_particles, layout.AMRBox());
+            patches[0].model.state.ions.populations[0].particles.domain_particles, layout.cells);
         DAMN_LOG_LINE_STR("pre-push domain_particles valid");
     }
     catch (std::exception const& e)
@@ -203,7 +203,7 @@ auto make_ref_ions(auto const& layout)
         vary_velocity(particles.level_ghost_particles, -6, 6, seed);
     };
 
-    auto const particle_box = layout.AMRBox();
+    auto const particle_box = layout.cells;
     auto add_particles      = [&](auto& particles) {
         particles.domain_particles.reserve(particle_box.size() * ppc);
         core::add_particles(particles.domain_particles, particle_box, ppc);
@@ -228,7 +228,7 @@ auto from_ions(auto const& layout, auto const& from)
     EXPECT_EQ(ions.populations[0].particles.domain_particles.size(), 0ull);
 
     auto _add_particles_from = [&]<auto type>(auto& src, auto& dst) {
-        reserve(dst, layout.AMRBox(), ppc);
+        reserve(dst, layout.cells, ppc);
         append_particles<type>(src, dst);
     };
 
@@ -236,13 +236,13 @@ auto from_ions(auto const& layout, auto const& from)
         from.populations[0].particles.domain_particles,
         ions.populations[0].particles.domain_particles);
 
-    particles_domain_is_valid(ions.populations[0].particles.domain_particles, layout.AMRBox());
+    particles_domain_is_valid(ions.populations[0].particles.domain_particles, layout.cells);
 
     _add_particles_from.template operator()<ParticleType::LevelGhost>(
         from.populations[0].particles.level_ghost_particles,
         ions.populations[0].particles.level_ghost_particles);
 
-    auto const particle_box = layout.AMRBox();
+    auto const particle_box = layout.cells;
     EXPECT_EQ(ions.populations[0].particles.domain_particles.size(), particle_box.size() * ppc);
     return ions;
 }
@@ -257,7 +257,7 @@ void check_particles(GridLayout_t const& layout, P0& ref, P1& cmp_, double const
     using CPU_ref = Particles<ParticlesOptions{P0::dimension, LayoutMode::AoS,
                                                        StorageMode::VECTOR, damn::AllocatorMode::CPU}>;
 
-    auto const box = layout.AMRBox();
+    auto const box = layout.cells;
     // level/patch ghost particles live outside the domain box entirely - the sorter's
     // flat-index cell key isn't defined out there, so sorting with the plain domain box
     // can scatter/misgroup ghost-region particles differently between ref and cmp even

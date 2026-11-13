@@ -143,7 +143,7 @@ TEST_F(Faraday1DTest, Faraday1DCalculatedOk)
     for (auto ix = gsi_p_X; ix <= gei_p_X; ++ix)
     {
         auto point
-            = this->layout.fieldNodeCoordinates(Ey, this->layout.localToAMR(damn::core::Point{ix}.as_signed()));
+            = coordinate(this->layout, Ey, this->layout.localToAMR(damn::core::Point{ix}.as_signed()));
 
         Ey(ix) = std::cos(2 * M_PI / 5. * point[0]);
         Ez(ix) = std::sin(2 * M_PI / 5. * point[0]);
@@ -155,7 +155,7 @@ TEST_F(Faraday1DTest, Faraday1DCalculatedOk)
     for (auto ix = gsi_d_X; ix <= gei_d_X; ++ix)
     {
         auto point
-            = this->layout.fieldNodeCoordinates(By, this->layout.localToAMR(damn::core::Point{ix}.as_signed()));
+            = coordinate(this->layout, By, this->layout.localToAMR(damn::core::Point{ix}.as_signed()));
 
         By(ix) = std::tanh(point[0] - 5. / 2.);
         Bz(ix) = std::tanh(point[0] - 5. / 2.);
@@ -203,7 +203,7 @@ TEST_F(Faraday2DTest, Faraday2DCalculatedOk)
     {
         for (auto iy = gsi_p_Y; iy <= gei_p_Y; ++iy)
         {
-            auto point = this->layout.fieldNodeCoordinates(
+            auto point = coordinate(this->layout, 
                 Ex, this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
 
             Ex(ix, iy) = std::cos(2 * M_PI / 5. * point[0]) * std::sin(2 * M_PI / 6. * point[1]);
@@ -214,7 +214,7 @@ TEST_F(Faraday2DTest, Faraday2DCalculatedOk)
     {
         for (auto iy = gsi_d_Y; iy <= gei_d_Y; ++iy)
         {
-            auto point = this->layout.fieldNodeCoordinates(
+            auto point = coordinate(this->layout, 
                 Ey, this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
 
             Ey(ix, iy) = std::cos(2 * M_PI / 5. * point[0]) * std::tanh(2 * M_PI / 6. * point[1]);
@@ -225,7 +225,7 @@ TEST_F(Faraday2DTest, Faraday2DCalculatedOk)
     {
         for (auto iy = gsi_p_Y; iy <= gei_p_Y; ++iy)
         {
-            auto point = this->layout.fieldNodeCoordinates(
+            auto point = coordinate(this->layout, 
                 Ez, this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
 
             Ez(ix, iy) = std::sin(2 * M_PI / 5. * point[0]) * std::tanh(2 * M_PI / 6. * point[1]);
@@ -236,7 +236,7 @@ TEST_F(Faraday2DTest, Faraday2DCalculatedOk)
     {
         for (auto iy = gsi_d_Y; iy <= gei_d_Y; ++iy)
         {
-            auto point = this->layout.fieldNodeCoordinates(
+            auto point = coordinate(this->layout, 
                 Bx, this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
 
             Bx(ix, iy) = std::tanh(point[0] - 5. / 2.) * std::tanh(point[1] - 6. / 2.);
@@ -247,7 +247,7 @@ TEST_F(Faraday2DTest, Faraday2DCalculatedOk)
     {
         for (auto iy = gsi_p_Y; iy <= gei_p_Y; ++iy)
         {
-            auto point = this->layout.fieldNodeCoordinates(
+            auto point = coordinate(this->layout, 
                 By, this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
 
             By(ix, iy) = std::tanh(point[0] - 5. / 2.) * std::tanh(point[1] - 6. / 2.);
@@ -258,7 +258,7 @@ TEST_F(Faraday2DTest, Faraday2DCalculatedOk)
     {
         for (auto iy = gsi_d_Y; iy <= gei_d_Y; ++iy)
         {
-            auto point = this->layout.fieldNodeCoordinates(
+            auto point = coordinate(this->layout, 
                 Bz, this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
 
             Bz(ix, iy) = std::tanh(point[0] - 5. / 2.) * std::tanh(point[1] - 6. / 2.);
@@ -272,7 +272,7 @@ TEST_F(Faraday2DTest, Faraday2DCalculatedOk)
     auto psi_d_Y = this->layout.physicalStartIndex(QtyCentering::dual, Direction::Y);
     auto pei_d_Y = this->layout.physicalEndIndex(QtyCentering::dual, Direction::Y);
 
-    auto nPts_ = this->layout.allocSize(HybridQuantity::Scalar::Bx);
+    auto nPts_ = alloc_shape(this->layout, HybridQuantity::Scalar::Bx);
 
     for (auto ix = psi_p_X; ix <= pei_p_X; ++ix)
     {
@@ -288,7 +288,7 @@ TEST_F(Faraday2DTest, Faraday2DCalculatedOk)
     auto psi_p_Y = this->layout.physicalStartIndex(QtyCentering::primal, Direction::Y);
     auto pei_p_Y = this->layout.physicalEndIndex(QtyCentering::primal, Direction::Y);
 
-    nPts_ = this->layout.allocSize(HybridQuantity::Scalar::By);
+    nPts_ = alloc_shape(this->layout, HybridQuantity::Scalar::By);
 
     for (auto ix = psi_d_X; ix <= pei_d_X; ++ix)
     {
@@ -299,7 +299,7 @@ TEST_F(Faraday2DTest, Faraday2DCalculatedOk)
         }
     }
 
-    nPts_ = this->layout.allocSize(HybridQuantity::Scalar::Bz);
+    nPts_ = alloc_shape(this->layout, HybridQuantity::Scalar::Bz);
 
     for (auto ix = psi_d_X; ix <= pei_d_X; ++ix)
     {
@@ -347,7 +347,7 @@ TEST_F(Faraday3DTest, Faraday3DCalculatedOk)
         {
             for (auto iz = gsi_p_Z; iz <= gei_p_Z; ++iz)
             {
-                auto point = this->layout.fieldNodeCoordinates(
+                auto point = coordinate(this->layout, 
                     Ex, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
 
                 Ex(ix, iy, iz) = std::sin(2 * M_PI / 5. * point[0])
@@ -363,7 +363,7 @@ TEST_F(Faraday3DTest, Faraday3DCalculatedOk)
         {
             for (auto iz = gsi_p_Z; iz <= gei_p_Z; ++iz)
             {
-                auto point = this->layout.fieldNodeCoordinates(
+                auto point = coordinate(this->layout, 
                     Ey, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
 
                 Ey(ix, iy, iz) = std::tanh(2 * M_PI / 5. * point[0])
@@ -379,7 +379,7 @@ TEST_F(Faraday3DTest, Faraday3DCalculatedOk)
         {
             for (auto iz = gsi_d_Z; iz <= gei_d_Z; ++iz)
             {
-                auto point = this->layout.fieldNodeCoordinates(
+                auto point = coordinate(this->layout, 
                     Ez, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
 
                 Ez(ix, iy, iz) = std::cos(2 * M_PI / 5. * point[0])
@@ -395,7 +395,7 @@ TEST_F(Faraday3DTest, Faraday3DCalculatedOk)
         {
             for (auto iz = gsi_d_Z; iz <= gei_d_Z; ++iz)
             {
-                auto point = this->layout.fieldNodeCoordinates(
+                auto point = coordinate(this->layout, 
                     Bx, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
 
                 Bx(ix, iy, iz) = std::tanh(point[0] - 5. / 2.) * std::tanh(point[1] - 6. / 2.)
@@ -410,7 +410,7 @@ TEST_F(Faraday3DTest, Faraday3DCalculatedOk)
         {
             for (auto iz = gsi_d_Z; iz <= gei_d_Z; ++iz)
             {
-                auto point = this->layout.fieldNodeCoordinates(
+                auto point = coordinate(this->layout, 
                     By, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
 
                 By(ix, iy, iz) = std::tanh(point[0] - 5. / 2.) * std::tanh(point[1] - 6. / 2.)
@@ -425,7 +425,7 @@ TEST_F(Faraday3DTest, Faraday3DCalculatedOk)
         {
             for (auto iz = gsi_p_Z; iz <= gei_p_Z; ++iz)
             {
-                auto point = this->layout.fieldNodeCoordinates(
+                auto point = coordinate(this->layout, 
                     Bz, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
 
                 Bz(ix, iy, iz) = std::tanh(point[0] - 5. / 2.) * std::tanh(point[1] - 6. / 2.)
@@ -451,7 +451,7 @@ TEST_F(Faraday3DTest, Faraday3DCalculatedOk)
     auto psi_d_Z = this->layout.physicalStartIndex(QtyCentering::dual, Direction::Z);
     auto pei_d_Z = this->layout.physicalEndIndex(QtyCentering::dual, Direction::Z);
 
-    auto nPts_ = this->layout.allocSize(HybridQuantity::Scalar::Bx);
+    auto nPts_ = alloc_shape(this->layout, HybridQuantity::Scalar::Bx);
 
     for (auto ix = psi_p_X; ix <= pei_p_X; ++ix)
     {
@@ -466,7 +466,7 @@ TEST_F(Faraday3DTest, Faraday3DCalculatedOk)
         }
     }
 
-    nPts_ = this->layout.allocSize(HybridQuantity::Scalar::By);
+    nPts_ = alloc_shape(this->layout, HybridQuantity::Scalar::By);
 
     for (auto ix = psi_d_X; ix <= pei_d_X; ++ix)
     {
@@ -481,7 +481,7 @@ TEST_F(Faraday3DTest, Faraday3DCalculatedOk)
         }
     }
 
-    nPts_ = this->layout.allocSize(HybridQuantity::Scalar::Bz);
+    nPts_ = alloc_shape(this->layout, HybridQuantity::Scalar::Bz);
 
     for (auto ix = psi_d_X; ix <= pei_d_X; ++ix)
     {

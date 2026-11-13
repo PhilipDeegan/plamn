@@ -192,7 +192,7 @@ void MaxwellianParticleInitializer<Particles_t, GridLayout>::loadParticles(
 
 
     auto const cells = coordinate_vectors(
-        layout.meshSize(), layout.AMRBox(), damn::core::ConstArray<QtyCentering, dimension>(QtyCentering::dual));
+        layout.dx, layout.cells, damn::core::ConstArray<QtyCentering, dimension>(QtyCentering::dual));
 
     auto const fns = std::make_from_tuple<MaxwellianInitFunctions>(std::tuple_cat(
         std::forward_as_tuple(density_, bulkVelocity_, thermalVelocity_, magneticField_, basis_),
@@ -219,7 +219,7 @@ void MaxwellianParticleInitializer<Particles_t, GridLayout>::loadParticles(
 
     if constexpr (is_tiled(Particles_t::layout_mode))
     { // per tile storage: reserve where the particles will land
-        core::reserve(particles, layout.AMRBox(), nbrParticlePerCell_);
+        core::reserve(particles, layout.cells, nbrParticlePerCell_);
     }
     else
     { // flat storage: cells above the density cutoff, plus room for incoming particles
@@ -231,7 +231,7 @@ void MaxwellianParticleInitializer<Particles_t, GridLayout>::loadParticles(
                                              : sum;
                               });
 
-        auto const incoming_estimate = (surface_cell_count_(layout.AMRBox())
+        auto const incoming_estimate = (surface_cell_count_(layout.cells)
                                         * (nbrParticlePerCell_ * over_alloc_factor_));
         if constexpr (requires { out.reserve(expected_size); }) // not per cell (AoSPCTS)
             out.reserve(expected_size + incoming_estimate);
@@ -244,7 +244,7 @@ void MaxwellianParticleInitializer<Particles_t, GridLayout>::loadParticles(
 
         auto const cellWeight = n[flatCellIdx] / nbrParticlePerCell_;
         auto const iCell      = cells.points[flatCellIdx].toArray();
-        damn::core::SplitMix64 randGen{damn::core::cell_key(seed, populationKey_, layout.levelNumber(), iCell)};
+        damn::core::SplitMix64 randGen{damn::core::cell_key(seed, populationKey_, layout.level, iCell)};
         ParticleDeltaDistribution<double> deltaDistrib;
         std::array<double, 3> particleVelocity;
         std::array<std::array<double, 3>, 3> basis;

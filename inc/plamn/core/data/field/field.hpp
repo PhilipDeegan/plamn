@@ -286,7 +286,7 @@ template<auto opts>
 void check_field(basic::Field<opts> const& f, auto const& layout)
 {
 #if DAMN_DEBUG
-    // for_each_point(layout.domainBoxFor(f), [&](auto const& bix) {
+    // for_each_point(domain_box(layout, f), [&](auto const& bix) {
     //     if (std::isnan(f(bix)))
     //     {
     //         DAMN_LOG_LINE_SS("\n" << f);

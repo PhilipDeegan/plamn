@@ -131,6 +131,13 @@ namespace core
         }
 
 
+        // transitional: free functions return PatchLayout, holders still store GridLayout
+        GridLayout(PatchLayout<options_> const& that)
+            : GridLayout{that.dx, that.cells.shape().as_unsigned(), that.origin, that.cells,
+                         that.level}
+        {
+        }
+
         GridLayout(GridLayout const& that)            = default;
         GridLayout(GridLayout&& source)               = default;
         GridLayout& operator=(GridLayout const& that) = default;

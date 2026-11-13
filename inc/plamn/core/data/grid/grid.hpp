@@ -52,7 +52,7 @@ public:
     template<typename GridLayout_t>
     Grid(std::string const& name, GridLayout_t const& layout, PhysicalQuantity qty,
          std::optional<value_type> const value = std::nullopt)
-        : Grid{name, qty, layout.allocSize(qty), value}
+        : Grid{name, qty, alloc_shape(layout, qty), value}
     {
     }
 

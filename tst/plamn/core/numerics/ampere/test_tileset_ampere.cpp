@@ -88,7 +88,7 @@ void compare(GridLayout_t const& layout, R& ref, C& cmp)
     // if constexpr (alloc_mode == GPU_UNIFIED)
     //     diff *= 1e3; // atomic no order guaranteed
 
-    auto const& patch_box = layout.AMRBox();
+    auto const& patch_box = layout.cells;
     for (std::size_t c = 0; c < n_components; ++c)
     {
         {

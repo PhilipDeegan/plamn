@@ -215,7 +215,7 @@ struct IonUpdaterTest : public ::testing::Test
     GridLayout const layout{{0.1}, {100u}, {{0.}}};
 
 
-    Boxing_t const boxing{layout, {layout.AMRBox()}};
+    Boxing_t const boxing{layout, {layout.cells}};
     std::unordered_map<std::string, Boxing_t> const levelBoxing{{"patch_id", boxing}};
 
     static_assert(std::is_same_v<Electromag, typename UsableElectromag_t::Super>);
@@ -237,7 +237,7 @@ struct IonUpdaterTest : public ::testing::Test
             auto particleInitializer = ParticleInitializerFactory::create(info, pop.name());
             particleInitializer->loadParticles(pop.domainParticles(), layout);
             EXPECT_GT(pop.domainParticles().size(), 0ull);
-            // particles_domain_is_valid(pop.domainParticles(), layout.AMRBox());
+            // particles_domain_is_valid(pop.domainParticles(), layout.cells);
         }
         assert(no_nans(ions.velocity()(Component::X)));
 
@@ -257,8 +257,8 @@ struct IonUpdaterTest : public ::testing::Test
             {
                 int firstPhysCell = layout.physicalStartIndex(QtyCentering::dual, Direction::X);
                 int lastPhysCell  = layout.physicalEndIndex(QtyCentering::dual, Direction::X);
-                auto firstAMRCell = layout.localToAMR(damn::core::Point{firstPhysCell});
-                auto lastAMRCell  = layout.localToAMR(damn::core::Point{lastPhysCell});
+                auto firstAMRCell = to_amr(layout, damn::core::Point{firstPhysCell});
+                auto lastAMRCell  = to_amr(layout, damn::core::Point{lastPhysCell});
 
                 // we need to put levelGhost particles in the cell just to the
                 // left of the first cell. In reality these particles should
@@ -558,7 +558,7 @@ TYPED_TEST(IonUpdaterTest, ionUpdaterTakesPusherParamsFromDictAtConstruction)
 TYPED_TEST(IonUpdaterTest, loadsDomainPatchAndLevelGhostParticles)
 {
     auto check = [this](std::size_t nbrGhostCells, auto& pop) {
-        EXPECT_EQ(this->layout.nbrCells()[0] * nbrPartPerCell, pop.domainParticles().size());
+        EXPECT_EQ(cell_count(this->layout)[0] * nbrPartPerCell, pop.domainParticles().size());
         EXPECT_EQ(0, pop.patchGhostParticles().size());
         EXPECT_EQ(nbrGhostCells * nbrPartPerCell, pop.levelGhostParticlesOld().size());
         EXPECT_EQ(nbrGhostCells * nbrPartPerCell, pop.levelGhostParticlesNew().size());
@@ -588,7 +588,7 @@ TYPED_TEST(IonUpdaterTest, loadsDomainPatchAndLevelGhostParticles)
 TYPED_TEST(IonUpdaterTest, loadsLevelGhostParticlesOnLeftGhostArea)
 {
     int firstPhysCell = this->layout.physicalStartIndex(QtyCentering::dual, Direction::X);
-    auto firstAMRCell = this->layout.localToAMR(damn::core::Point{firstPhysCell});
+    auto firstAMRCell = to_amr(this->layout, damn::core::Point{firstPhysCell});
 
     if constexpr (TypeParam::dimension == 1)
     {
@@ -798,7 +798,7 @@ void populate_particles(auto& ions, GridLayout& layout)
     auto constexpr dim = GridLayout::dimension;
     Particle<dim> const particle{1.0 / nbrPartPerCell, damn::core::ConstArray<int, dim>(),
                                  damn::core::ConstArray<double, dim>(.5), damn::core::ConstArray<double, 3>(1)};
-    auto const ghost_box = damn::core::grow(layout.AMRBox(), 1);
+    auto const ghost_box = damn::core::grow(layout.cells, 1);
 
     auto const shift_particle = [](auto p, auto const bix) {
         p.iCell() = bix;
@@ -814,19 +814,19 @@ void populate_particles(auto& ions, GridLayout& layout)
         pop.domainParticles().check();
         pop.levelGhostParticles().check();
 
-        damn::core::for_each_point(layout.AMRBox(), [&](auto const& bix) {
+        damn::core::for_each_point(layout.cells, [&](auto const& bix) {
             for (std::size_t i = 0; i < nbrPartPerCell; ++i)
                 pop.domainParticles().emplace_back(shift_particle(particle, *bix));
         });
 
         damn::core::for_each_point(ghost_box, [&](auto const& bix) {
-            if (not isIn(bix, layout.AMRBox()))
+            if (not isIn(bix, layout.cells))
                 for (std::size_t i = 0; i < nbrPartPerCell; ++i)
                     pop.levelGhostParticles().emplace_back(shift_particle(particle, *bix));
         });
 
         per_particle(pop.levelGhostParticles(),
-                     [&](Particle<dim>& p) { EXPECT_TRUE(not isIn(p, layout.AMRBox())); });
+                     [&](Particle<dim>& p) { EXPECT_TRUE(not isIn(p, layout.cells)); });
 
         pseudo_randomize_deltas<dim>(pop.domainParticles());
         pseudo_randomize_deltas<dim>(pop.levelGhostParticles());
@@ -859,7 +859,7 @@ struct IonUpdaterOwnershipTest : public IonUpdaterTest<TestParam_t>
     Boxing_t makeBoxing(std::vector<Box_t> const& nonOwned) const
     {
         return {this->layout,
-                {damn::core::grow(this->layout.AMRBox(), Super::GridLayout::options.particle_ghost_width)},
+                {damn::core::grow(this->layout.cells, Super::GridLayout::options.particle_ghost_width)},
                 nonOwned};
     }
 
@@ -867,7 +867,7 @@ struct IonUpdaterOwnershipTest : public IonUpdaterTest<TestParam_t>
 
     void setVelocityX(auto& particles, double const v)
     {
-        auto const dx = this->layout.meshSize()[0];
+        auto const dx = this->layout.dx[0];
         for (auto& particle : particles)
             particle.v()[0] = v * cellsPerStep * dx / this->dt;
     }

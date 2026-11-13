@@ -114,7 +114,7 @@ void udpate(Ions& ions, EM const& em, GridLayout_t const& layout)
     using Boxing_t = std::decay_t<decltype(*selection_boxing_impl<IonUpdater_t, GridLayout_t>())>;
 
     Boxing_t const boxing{layout,
-                          damn::core::grow(layout.AMRBox(), GridLayout_t::options.particle_ghost_width)};
+                          damn::core::grow(layout.cells, GridLayout_t::options.particle_ghost_width)};
     updater.updatePopulations(ions, em, boxing, dt);
 }
 
@@ -161,16 +161,16 @@ auto make_ions(GridLayout_t const& layout)
     };
 
     auto add_particles = [&](auto& particles) {
-        add_particles_in(particles.domain_particles, layout.AMRBox(), ppc);
+        add_particles_in(particles.domain_particles, layout.cells, ppc);
         if constexpr (WITH_PATCH_GHOST)
-            add_ghost_particles(particles.patch_ghost_particles, layout.AMRBox(), ppc,
+            add_ghost_particles(particles.patch_ghost_particles, layout.cells, ppc,
                                 GridLayout_t::options.particle_ghost_width);
     };
 
     add_particles(ions.populations[0].particles);
     disperse(ions.populations[0].particles);
 
-    EXPECT_EQ(ions.populations[0].particles.domain_particles.size(), layout.AMRBox().size() * ppc);
+    EXPECT_EQ(ions.populations[0].particles.domain_particles.size(), layout.cells.size() * ppc);
 
     if constexpr (USE_SERIALIZATION)
         if (gen_bin)
@@ -193,7 +193,7 @@ auto from_ions(GridLayout_t const& layout, Ions const& from)
     EXPECT_EQ(ions.populations[0].particles.domain_particles.size(), 0);
 
     auto _add_particles_from = [&]<auto type>(auto& src, auto& dst) {
-        reserve(dst, layout.AMRBox(), ppc);
+        reserve(dst, layout.cells, ppc);
         append_particles<type>(src, dst);
     };
 
@@ -210,7 +210,7 @@ auto from_ions(GridLayout_t const& layout, Ions const& from)
             from.populations[0].particles.patch_ghost_particles,
             ions.populations[0].particles.patch_ghost_particles);
 
-    EXPECT_EQ(ions.populations[0].particles.domain_particles.size(), layout.AMRBox().size() * ppc);
+    EXPECT_EQ(ions.populations[0].particles.domain_particles.size(), layout.cells.size() * ppc);
     return ions_p;
 }
 
@@ -243,7 +243,7 @@ void check_particles(GridLayout_t const& layout, P0& ref, P1& cmp, std::size_t g
     using CPU_ref = Particles<ParticlesOptions{P0::dimension, LayoutMode::AoS,
                                                        StorageMode::VECTOR, damn::AllocatorMode::CPU}>;
 
-    auto const box = damn::core::grow(layout.AMRBox(), ghosts);
+    auto const box = damn::core::grow(layout.cells, ghosts);
 
     sort_particles(cmp, box);
     sort_particles(ref, box);

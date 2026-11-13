@@ -15,7 +15,7 @@ template<typename GridLayout_t>
 auto make_nd_span_set_for_qty(GridLayout_t const& layout, auto const pq)
 {
     return damn::core::make_nd_span_set_from(layout,
-                                 [&](auto const& layout) { return layout.ghostBoxFor(pq); });
+                                 [&](auto const& layout) { return ghost_box(layout, pq); });
 }
 
 
@@ -23,7 +23,7 @@ template<auto quantity, typename TileSet_t, typename GridLayout_t>
 auto make_qty_nd_span_set_from(TileSet_t& tiles, GridLayout_t const& layout)
 {
     return damn::core::make_nd_span_set_from(tiles, layout, [&](auto const& box) {
-        return layout.copy_as(box).AMRGhostBoxFor(quantity);
+        return sub_layout(layout, box).AMRGhostBoxFor(quantity);
     });
 }
 
@@ -31,7 +31,7 @@ template<typename TileSet_t, typename GridLayout_t>
 auto make_qty_nd_span_set_from(TileSet_t& tiles, GridLayout_t const& layout, auto const qty)
 {
     return damn::core::make_nd_span_set_from(
-        tiles, layout, [&](auto const& box) { return layout.copy_as(box).AMRGhostBoxFor(qty); });
+        tiles, layout, [&](auto const& box) { return sub_layout(layout, box).AMRGhostBoxFor(qty); });
 }
 
 

@@ -761,7 +761,7 @@ protected:
                           Delta const& delta) DAMN_ALL
     {
         return indexAndWeights__<centering>(
-            [&] DAMN_ALL(auto const& point) { return layout.AMRToLocal(point); }, iCell_,
+            [&] DAMN_ALL(auto const& point) { return to_local(layout, point); }, iCell_,
             delta);
     }
 
@@ -836,7 +836,7 @@ public:
             Array<ArrayFp64, dim> fpiCells;
             for (std::size_t i = 0; i < N; ++i)
             {
-                auto const lCell = layout.AMRToLocal(iCells[i]);
+                auto const lCell = to_local(layout, iCells[i]);
                 for (std::size_t d = 0; d < dim; ++d)
                     fpiCells[d][i] = lCell[d];
             }
@@ -970,7 +970,7 @@ public:
                         GridLayout const& layout, double coef = 1.) DAMN_ALL
     {
         particleToMesh(particle, particleDensity, flux,
-                       damn::core::grow(layout.AMRBox(), GridLayout::options.field_ghost_width), coef);
+                       damn::core::grow(layout.cells, GridLayout::options.field_ghost_width), coef);
     }
 
     template<typename Particle_t, typename GridLayout>

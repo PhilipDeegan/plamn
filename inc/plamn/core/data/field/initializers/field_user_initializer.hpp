@@ -19,7 +19,7 @@ class FieldUserFunctionInitializer
     template<typename Field, typename GridLayout, typename InitFunction>
     void static _initialize(Field& field, GridLayout const& layout, InitFunction const& init)
     {
-        auto const coords = coordinate_vectors(layout.meshSize(), layout.AMRGhostBoxFor(field),
+        auto const coords = coordinate_vectors(layout.dx, amr_ghost_box(layout, field),
                                                layout.centering(field));
 
         std::shared_ptr<damn::core::Span<double>> gridPtr // keep grid data alive
@@ -28,7 +28,7 @@ class FieldUserFunctionInitializer
         damn::core::Span<double>& grid = *gridPtr;
 
         for (std::size_t i = 0; i < coords.size(); ++i)
-            field(layout.AMRToLocal(coords.points[i])) = grid[i];
+            field(to_local(layout, coords.points[i])) = grid[i];
     }
 
 public:

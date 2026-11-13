@@ -407,7 +407,7 @@ void MultiBorisBackend<layout, ModelAccessor, Interpolator>::move_gpu_copy(
     for (auto& pop : ions)
     {
         auto const coef1     = pop.charge() * (0.5 * in.dt / pop.mass());
-        auto const halfdt    = in.mesh(view.layout.meshSize(), in.dt);
+        auto const halfdt    = in.mesh(view.layout.dx, in.dt);
         auto const nlgb      = in.gpu_nlgb[i];
         auto const domain    = in.gpu_domain[i];
         auto const non_owned = in.gpu_non_owned[i];
@@ -591,7 +591,7 @@ void MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>::move_patch
     auto [ions, em]    = view.args;
     auto const& layout = view.layout;
     auto const& boxing = boxings.at(view.patchID());
-    auto const halfdt  = in.mesh(layout.meshSize(), in.dt);
+    auto const halfdt  = in.mesh(layout.dx, in.dt);
     Interpolator_t interp;
 
     for (auto& pop : ions)
@@ -662,7 +662,7 @@ void MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>::move_rest(
         auto [ions, em]     = view.args;
         auto const layout   = view.layout;
         auto const ghostBox = boxings.at(view.patchID()).ghostBox;
-        auto const halfdt   = in.mesh(layout.meshSize(), in.dt);
+        auto const halfdt   = in.mesh(layout.dx, in.dt);
 
         for (auto& pop : ions)
         {
@@ -705,8 +705,8 @@ void MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>::move_gpu_c
     auto view            = in.accessor[i];
     auto [ions, em]      = view.args;
     auto const layout    = view.layout;
-    auto const halfdt    = in.mesh(layout.meshSize(), in.dt);
-    auto const ghostBox  = damn::core::grow(layout.AMRBox(), GridLayout_t::options.particle_ghost_width);
+    auto const halfdt    = in.mesh(layout.dx, in.dt);
+    auto const ghostBox  = damn::core::grow(layout.cells, GridLayout_t::options.particle_ghost_width);
     auto const nlgb      = in.gpu_nlgb[i];
     auto const domain    = in.gpu_domain[i];
     auto const non_owned = in.gpu_non_owned[i];
@@ -816,7 +816,7 @@ struct MultiBorisFunctors
         : pps{*parts}
         , electromag{em}
         , coef1{pop.charge() * (0.5 * in.dt / pop.mass())}
-        , halfdt{in.mesh(view.layout.meshSize(), in.dt)}
+        , halfdt{in.mesh(view.layout.dx, in.dt)}
         , particles{parts}
     {
         check_particles(parts);

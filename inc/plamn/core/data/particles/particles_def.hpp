@@ -228,7 +228,7 @@ Particles_t make_particles(damn::core::Box<T, D> const& box, std::size_t const g
 template<typename Particles_t, typename GridLayout_t>
 Particles_t make_particles(GridLayout_t const& layout)
 {
-    return make_particles<Particles_t>(layout.AMRBox(), GridLayout_t::options.particle_ghost_width);
+    return make_particles<Particles_t>(layout.cells, GridLayout_t::options.particle_ghost_width);
 }
 
 

@@ -108,7 +108,7 @@ public:
                     ex("E_" + std::to_string(i), std::to_string(e[i]));
                 for (std::uint16_t i = 0; i < 3; ++i)
                     ex("B_" + std::to_string(i), std::to_string(b[i]));
-                ex("level", std::to_string(layout.levelNumber()));
+                ex("level", std::to_string(layout.level));
                 throw ex;
             }
         }

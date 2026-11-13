@@ -26,7 +26,7 @@ auto default_em_init(EM& em, GridLayout const& patch_layout)
     auto constexpr static dim = GridLayout::dimension;
 
     auto const setter = [](auto& v, auto& layout) {
-        auto const box = layout.ghostBoxFor(v);
+        auto const box = ghost_box(layout, v);
         // DAMN_LOG_LINE_SS(box);
 
         for (std::size_t i = 0; i < box.upper[0]; i += 2)

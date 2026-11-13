@@ -112,7 +112,7 @@ public:
 
     template<typename... Args>
     FieldTile(GridLayout_t const& layout, Field_t const& field)
-        : Super{layout.AMRBox()}
+        : Super{layout.cells}
         , field_{field}
         , layout_{layout}
     {
@@ -127,7 +127,7 @@ public:
     // same box, other mesh size/origin, see GridTileSet::reset_layout
     void reset_layout(GridLayout_t const& layout)
     {
-        assert(layout.AMRBox() == layout_.AMRBox());
+        assert(layout.cells == layout_.cells);
         layout_ = layout;
     }
 
@@ -174,7 +174,7 @@ public:
 private:
     Field_t field_;
     GridLayout_t layout_;
-    damn::core::Box<int, dimension> ghost_box_   = layout_.AMRGhostBoxFor(physicalQuantity());
+    damn::core::Box<int, dimension> ghost_box_   = amr_ghost_box(layout_, physicalQuantity());
     std::array<FieldTile*, 7> _links = damn::core::ConstArray<FieldTile*, 7>(nullptr);
 };
 
@@ -237,7 +237,7 @@ public:
                              reinterpret_cast<FieldTile<GridLayout_t, Field_t>**>(cells_data),
                              cells_shape};
             });
-            ghost_box_     = field->layout().AMRGhostBoxFor(qty_);
+            ghost_box_     = amr_ghost_box(field->layout(), qty_);
             max_tile_size_ = field->max_tile_size();
         }
         else

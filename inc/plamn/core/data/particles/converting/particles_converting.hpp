@@ -71,7 +71,7 @@ auto static convert_particles_and_sort(Src const& src, GridLayout const& layout)
     DAMN_LOG_SCOPE(1, function_id);
 
     auto out = convert_particles<Dst>(src, layout);
-    sort_particles(out, damn::core::grow(layout.AMRBox(), GridLayout::options.particle_ghost_width));
+    sort_particles(out, damn::core::grow(layout.cells, GridLayout::options.particle_ghost_width));
     return out;
 }
 

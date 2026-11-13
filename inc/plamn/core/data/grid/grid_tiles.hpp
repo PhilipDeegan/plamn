@@ -20,9 +20,9 @@ auto static grid_cells(auto&&... args)
     auto const& [layout, qty] = std::forward_as_tuple(args...);
 
     if constexpr (hasGhosts)
-        return layout.allocSize(qty);
+        return alloc_shape(layout, qty);
     else
-        return *(layout.AMRBox().shape().as_unsigned() - 1);
+        return *(layout.cells.shape().as_unsigned() - 1);
 }
 
 template<typename GridLayout_t, typename Grid_t, typename Field_t>
@@ -43,7 +43,7 @@ struct GridTile : public FieldTile<GridLayout_t, Field_t>
 
     // called when making tiles
     GridTile(auto const& box, auto const& patch_layout, auto const& pq)
-        : GridTile(patch_layout.copy_as(box), pq)
+        : GridTile(sub_layout(patch_layout, box), pq)
     {
     }
 
@@ -94,7 +94,7 @@ public:
 
     GridTileSet(std::string const& name, GridLayout_t const& layout,
                 physical_quantity_type const qty, std::optional<type> val = std::nullopt)
-        : Super{layout.AMRBox(), layout, qty}
+        : Super{layout.cells, layout, qty}
         , View{name, qty}
         , name_{name}
         , layout_{layout}
@@ -160,7 +160,7 @@ public:
     {
         layout_ = layout;
         for (auto& tile : *this)
-            tile.reset_layout(layout.copy_as(tile.layout().AMRBox()));
+            tile.reset_layout(sub_layout(layout, tile.layout().AMRBox()));
     }
 
     Super& super() { return *this; }
@@ -177,7 +177,7 @@ private:
     void check_tile_widths_() const
     {
         auto constexpr ghost_width = GridLayout_t::options.field_ghost_width;
-        auto const patch_shape     = layout_.AMRBox().shape();
+        auto const patch_shape     = layout_.cells.shape();
         for (auto const& tile : super()())
         {
             auto const tile_shape = static_cast<damn::core::Box<int, dimension>>(tile).shape();
@@ -244,11 +244,11 @@ void check_field(basic::FieldTileSet<GridLayout_t, Grid_t, Field_t> const& f,
                  GridLayout_t const& layout)
 {
 #if DAMN_DEBUG
-    auto const domainBox = layout.AMRBoxFor(f);
+    auto const domainBox = amr_box(layout, f);
 
     for (auto& tile : f())
         if (auto const overlap = **tile * domainBox)
-            damn::core::for_each_point(tile.layout().AMRToLocal(*overlap),
+            damn::core::for_each_point(to_local(tile.layout(), *overlap),
                            [&](auto const& bix) { assert(not std::isnan(tile()(bix))); });
 #endif // DAMN_DEBUG
 }

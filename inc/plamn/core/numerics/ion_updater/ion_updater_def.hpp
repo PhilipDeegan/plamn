@@ -59,7 +59,7 @@ struct UpdaterSelectionBoxing
     std::vector<Box_t> const nonLevelGhostBox;
     // domain cells owned by an overlapping same-level patch, usually empty
     std::vector<Box_t> const nonOwnedBoxes;
-    Box_t const domainBox = layout.AMRBox();
+    Box_t const domainBox = layout.cells;
     Box_t const ghostBox  = damn::core::grow(domainBox, partGhostWidth);
 
     static bool isOwned(auto const& cell, Box_t const& domainBox,
@@ -185,7 +185,7 @@ struct UpdaterTileSetSelectionBoxing : public UpdaterSelectionBoxing<GridLayout>
     // field_quantities(Super::layout); BoxSpanSet_t particles{make_nd_span_set_from(Super::layout,
     // [](auto const& layout) {
     //     return box_from_zero_to_upper_minus_one(
-    //         *grow(layout.AMRBox(), GridLayout_t::nbrParticleGhosts()).shape().as_unsigned());
+    //         *grow(layout.cells, GridLayout_t::nbrParticleGhosts()).shape().as_unsigned());
     // })};
 };
 

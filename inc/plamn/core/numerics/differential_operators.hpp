@@ -76,7 +76,7 @@ public:
 
     template<typename GridLayout, typename Src>
     Partial(GridLayout const& layout, Src const& src)
-        : Partial{layout.meshSize(), layout.centering(src), src}
+        : Partial{layout.dx, layout.centering(src), src}
     {
     }
 
@@ -297,7 +297,7 @@ NO_DISCARD double laplacian(GridLayout const& layout, Src const& f,
     double lap = 0;
     damn::core::for_N<GridLayout::dimension>([&](auto ic) {
         constexpr auto d = ic();
-        auto const inv   = layout.inverseMeshSize(static_cast<Direction>(d));
+        auto const inv   = 1.0 / layout.dx[d];
         lap += inv * inv
                * (detail::shifted<d>(f, idx, 1) - 2.0 * detail::shifted<d>(f, idx, 0)
                   + detail::shifted<d>(f, idx, -1));
