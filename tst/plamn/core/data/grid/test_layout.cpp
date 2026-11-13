@@ -122,8 +122,7 @@ TEST_F(Layout2D, amrLocalConversions)
 {
     EXPECT_EQ(amr_to_local(cells, point<int, 2>({5, -3}), gw), (point<std::uint32_t, 2>({2, 2})));
     EXPECT_EQ(amr_to_local(cells, point<int, 2>({3, -5}), gw), (point<std::uint32_t, 2>({0, 0})));
-    EXPECT_EQ(local_to_amr(cells, point<std::uint32_t, 2>({14, 11}), gw),
-              (point<int, 2>({17, 6})));
+    EXPECT_EQ(local_to_amr(cells, point<std::uint32_t, 2>({14, 11}), gw), (point<int, 2>({17, 6})));
 
     // the ghost box is the same box in both index spaces
     EXPECT_EQ(amr_to_local(cells, amr_ghost_box(cells, c, gw), gw), local_ghost_box(cells, c, gw));

@@ -130,7 +130,7 @@ struct FaradayTileTest : public ::testing::Test
                                                     .alloc_mode   = alloc_mode};
 
         using DamnTypes                 = PLAMN_Types<opts>;
-        using Layout_t               = DamnTypes::Hybrid::Layout_t;
+        using Layout_t                   = DamnTypes::Hybrid::Layout_t;
         using Field_t                    = DamnTypes::Hybrid::Grid_t;
         using Hybrid_t                   = DamnTypes::Hybrid;
         auto constexpr static field_opts = TensorFieldOptions<Hybrid_t>{};
@@ -155,7 +155,7 @@ struct FaradayTileTest : public ::testing::Test
         auto constexpr static opts   = SimOpts{.dimension = dim, .interp_order = interp};
 
         using DamnTypes                 = PLAMN_Types<opts>;
-        using Layout_t               = DamnTypes::Hybrid::Layout_t;
+        using Layout_t                   = DamnTypes::Hybrid::Layout_t;
         using Hybrid_t                   = DamnTypes::Hybrid;
         auto constexpr static field_opts = TensorFieldOptions<Hybrid_t>{};
         using UsableElectromag_t         = UsableElectromag<field_opts>;

@@ -111,7 +111,7 @@ void udpate(auto& ions, auto const& em, Layout_t const& layout)
     // no timings
     auto updater       = get_updater_for(ions, em, layout);
     using IonUpdater_t = std::decay_t<decltype(updater)>;
-    using Boxing_t = std::decay_t<decltype(*selection_boxing_impl<IonUpdater_t, Layout_t>())>;
+    using Boxing_t     = std::decay_t<decltype(*selection_boxing_impl<IonUpdater_t, Layout_t>())>;
 
     Boxing_t const boxing{layout,
                           damn::core::grow(layout.cells, Layout_t::options.particle_ghost_width)};
@@ -317,8 +317,7 @@ struct TestParam
 template<typename Ions, std::size_t dim, std::size_t interp>
 struct DefaultIons
 {
-    using Layout_t
-        = TestLayout<typename PLAMN_Types<SimOpts{dim, interp}>::Hybrid::Layout_t>;
+    using Layout_t = TestLayout<typename PLAMN_Types<SimOpts{dim, interp}>::Hybrid::Layout_t>;
 
     Layout_t const layout{cells};
     std::shared_ptr<Ions> init; // = make_ions<typename Ions::particles_type>(layout);
@@ -360,8 +359,7 @@ struct IonUpdaterPPTest : public ::testing::Test
     auto constexpr static alloc_mode  = Param::alloc_mode;
 
 
-    using Layout_t
-        = TestLayout<typename PLAMN_Types<SimOpts{dim, interp}>::Hybrid::Layout_t>;
+    using Layout_t       = TestLayout<typename PLAMN_Types<SimOpts{dim, interp}>::Hybrid::Layout_t>;
     using RefParticles_t = ParticlesAoSMapped<dim>;
     using CmpParticles_t
         = Particles<ParticlesOptions{dim, layout_mode, StorageMode::VECTOR, alloc_mode}>;

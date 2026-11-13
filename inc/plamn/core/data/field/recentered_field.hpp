@@ -39,7 +39,7 @@ public:
     RecenteredField(Field const& field, std::array<QtyCentering, dimension> const& destination,
                     auto const& layout)
         : field_{field}
-        , source_{::plamn::core::centering(layout, field)}
+        , source_{::plamn::core::centering(layout, field)} // the member centering() hides it
         , destination_{destination}
     {
     }

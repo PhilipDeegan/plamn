@@ -78,7 +78,7 @@ struct UsableModelAccessor
 {
     using Patch_t      = Patches::value_type;
     using Model_t      = Patch_t::Model_t;
-    using Layout_t = Patch_t::Layout_t;
+    using Layout_t     = Patch_t::Layout_t;
     using State_t      = std::decay_t<decltype(std::declval<Patch_t>().model.state)>;
     using Args_t       = detail::resolve_args_t<ArgsGetter>;
 

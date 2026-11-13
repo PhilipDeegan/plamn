@@ -33,3 +33,13 @@ profile:
 # tpp/damn may be a symlink to a local damn checkout, otherwise it is cloned
 - name: damn
   dep: damn&tpp/damn(https://github.com/PhilipDeegan/damn)[damn_core]
+
+# include-what-you-use report for inc/, needs iwyu on PATH
+- name: iwyu
+  parent: base
+  mode: none
+  mod:
+  - name: cpp.iwyu
+    compile:
+      paths: inc
+      headers: -x c++-header

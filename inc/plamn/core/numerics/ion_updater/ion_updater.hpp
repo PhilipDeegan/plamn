@@ -195,8 +195,8 @@ private:
 
 template<typename Particles_t, typename Layout>
 void IonUpdater<Particles_t, Layout>::updatePopulations(auto& ions, auto const& em,
-                                                                Boxing_t const& boxing, double dt,
-                                                                UpdaterMode mode)
+                                                        Boxing_t const& boxing, double dt,
+                                                        UpdaterMode mode)
 {
     DAMN_LOG_SCOPE(3, "IonUpdater::updatePopulations");
 
@@ -216,7 +216,7 @@ void IonUpdater<Particles_t, Layout>::updatePopulations(auto& ions, auto const& 
  */
 template<typename Particles_t, typename Layout>
 void IonUpdater<Particles_t, Layout>::updateAndDepositDomain_(auto& ions, auto const& em,
-                                                                      Boxing_t const& boxing)
+                                                              Boxing_t const& boxing)
 {
     DAMN_LOG_SCOPE(3, "IonUpdater::updateAndDepositDomain_");
 
@@ -273,7 +273,7 @@ void IonUpdater<Particles_t, Layout>::updateAndDepositDomain_(auto& ions, auto c
  */
 template<typename Particles_t, typename Layout>
 void IonUpdater<Particles_t, Layout>::updateAndDepositAll_(auto& ions, auto const& em,
-                                                                   Boxing_t const& boxing)
+                                                           Boxing_t const& boxing)
 {
     DAMN_LOG_SCOPE(1, "IonUpdater::updateAndDepositAll_");
 
@@ -406,8 +406,7 @@ void ParallelIonUpdater<Particles_t, Layout>::reset_moments(auto& accessor)
 
 
 template<typename Particles_t, typename Layout>
-void ParallelIonUpdater<Particles_t, Layout>::post_move_sync_(auto& view,
-                                                                      auto const& boxings)
+void ParallelIonUpdater<Particles_t, Layout>::post_move_sync_(auto& view, auto const& boxings)
 {
     auto& [ions, _]           = view.args;
     auto const& patch_boxings = boxings.at(view.patchID());
@@ -426,9 +425,8 @@ void ParallelIonUpdater<Particles_t, Layout>::post_move_sync_(auto& view,
 }
 
 template<typename Particles_t, typename Layout>
-void ParallelIonUpdater<Particles_t, Layout>::post_move_sync(auto& accessor,
-                                                                     auto const& boxings,
-                                                                     std::size_t const i)
+void ParallelIonUpdater<Particles_t, Layout>::post_move_sync(auto& accessor, auto const& boxings,
+                                                             std::size_t const i)
 {
     auto view = accessor[i];
     post_move_sync_(view, boxings);
@@ -449,7 +447,7 @@ void ParallelIonUpdater<Particles_t, Layout>::deposit_tile_(auto& view, std::siz
 
 template<typename Particles_t, typename Layout>
 void ParallelIonUpdater<Particles_t, Layout>::deposit(auto& accessor, auto const& boxings,
-                                                              std::size_t const i)
+                                                      std::size_t const i)
 {
     auto view            = accessor[i];
     auto [ions, _]       = view.args;

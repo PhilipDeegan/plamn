@@ -182,16 +182,17 @@ private:
 
 
 template<typename Particles_t, typename Layout>
-void MaxwellianParticleInitializer<Particles_t, Layout>::loadParticles(
-    Particles_t& particles, Layout const& layout) const
+void MaxwellianParticleInitializer<Particles_t, Layout>::loadParticles(Particles_t& particles,
+                                                                       Layout const& layout) const
 {
     auto const deltas = [](auto& pos, auto& gen) {
         return damn::core::for_N_make_array<dimension>([&](auto) { return pos(gen); });
     };
 
 
-    auto const cells = coordinate_vectors(
-        layout.dx, layout.cells, damn::core::ConstArray<QtyCentering, dimension>(QtyCentering::dual));
+    auto const cells
+        = coordinate_vectors(layout.dx, layout.cells,
+                             damn::core::ConstArray<QtyCentering, dimension>(QtyCentering::dual));
 
     auto const fns = std::make_from_tuple<MaxwellianInitFunctions>(std::tuple_cat(
         std::forward_as_tuple(density_, bulkVelocity_, thermalVelocity_, magneticField_, basis_),
@@ -230,8 +231,8 @@ void MaxwellianParticleInitializer<Particles_t, Layout>::loadParticles(
                                              : sum;
                               });
 
-        auto const incoming_estimate = (surface_cell_count_(layout.cells)
-                                        * (nbrParticlePerCell_ * over_alloc_factor_));
+        auto const incoming_estimate
+            = (surface_cell_count_(layout.cells) * (nbrParticlePerCell_ * over_alloc_factor_));
         if constexpr (requires { out.reserve(expected_size); }) // not per cell (AoSPCTS)
             out.reserve(expected_size + incoming_estimate);
     }
@@ -243,7 +244,8 @@ void MaxwellianParticleInitializer<Particles_t, Layout>::loadParticles(
 
         auto const cellWeight = n[flatCellIdx] / nbrParticlePerCell_;
         auto const iCell      = cells.points[flatCellIdx].toArray();
-        damn::core::SplitMix64 randGen{damn::core::cell_key(seed, populationKey_, layout.level, iCell)};
+        damn::core::SplitMix64 randGen{
+            damn::core::cell_key(seed, populationKey_, layout.level, iCell)};
         ParticleDeltaDistribution<double> deltaDistrib;
         std::array<double, 3> particleVelocity;
         std::array<std::array<double, 3>, 3> basis;

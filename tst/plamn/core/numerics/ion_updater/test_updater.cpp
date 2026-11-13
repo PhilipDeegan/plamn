@@ -193,7 +193,7 @@ struct IonUpdaterTest : public ::testing::Test
     using DAMNTypes                   = plamn::core::PLAMN_Types<opts>;
     using Ions                         = DAMNTypes::Hybrid::Ions_t;
     using Electromag                   = DAMNTypes::Hybrid::Electromag_t;
-    using Layout                   = DAMNTypes::Hybrid::Layout_t;
+    using Layout                       = DAMNTypes::Hybrid::Layout_t;
     using Particles                = DAMNTypes::Hybrid::Particles_t;
     using ParticleInitializerFactory   = DAMNTypes::Hybrid::ParticleInitializerFactory_t;
 

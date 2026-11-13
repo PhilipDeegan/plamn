@@ -46,8 +46,7 @@ Dst ParticlesConverter<AoSCMTS, CPU, AoS, CPU>::operator()(Src const& src, Layou
 
 template<>
 template<typename Dst, typename Src, typename Layout>
-Dst ParticlesConverter<AoSPCTS, CPU, AoS, CPU>::operator()(Src const& src,
-                                                            Layout const& layout)
+Dst ParticlesConverter<AoSPCTS, CPU, AoS, CPU>::operator()(Src const& src, Layout const& layout)
 {
     auto out = make_particles<Dst>(layout);
     out.reserve(src.size());
@@ -66,7 +65,7 @@ Dst ParticlesConverter<AoSPCTS, CPU, AoS, CPU>::operator()(Src const& src,
 template<> // unified memory is host readable, so the CPU path works as is
 template<typename Dst, typename Src, typename Layout>
 Dst ParticlesConverter<AoSPCTS, GPU_UNIFIED, AoS, CPU>::operator()(Src const& src,
-                                                                    Layout const& layout)
+                                                                   Layout const& layout)
 {
     return ParticlesConverter<AoSPCTS, CPU, AoS, CPU>{}.template operator()<Dst>(src, layout);
 }

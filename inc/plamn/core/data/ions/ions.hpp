@@ -42,7 +42,7 @@ namespace core
         using Float                     = field_type::type;
         using tensorfield_type          = IonPopulation::tensorfield_type;
         using particles_type       = IonPopulation::particles_type;
-        using layout_type           = Layout;
+        using layout_type               = Layout;
         static constexpr auto dimension = Layout::dimension;
 
 

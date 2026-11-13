@@ -93,11 +93,11 @@ auto& convert_to_fortran_primal(      // DOES NOT WORK ON GHOST BOX!
 {
     bool static constexpr c_ordering = false;
 
-    if (not all(::plamn::core::centering(layout, dst), [](auto const c) { return c == QtyCentering::primal; }))
+    if (not all(centering(layout, dst), [](auto const c) { return c == QtyCentering::primal; }))
         throw std::runtime_error("Invalid operation, all directions must be primal");
 
     auto const all_primal
-        = all(::plamn::core::centering(layout, src), [](auto const c) { return c == QtyCentering::primal; });
+        = all(centering(layout, src), [](auto const c) { return c == QtyCentering::primal; });
 
     auto const lcl_src_box = to_local(layout, layout.AMRBoxFor(dst));
     auto dst_view          = damn::core::make_array_view<c_ordering>(dst.data(), *lcl_src_box.shape());
@@ -115,9 +115,10 @@ auto& convert_to_fortran_primal(      // DOES NOT WORK ON GHOST BOX!
 
     else
     {
-        auto const isDual = std::apply(
-            [](auto... dual) { return damn::core::Constexprifier{dual...}; },
-            damn::core::generate_from([](auto c) { return c == QtyCentering::dual; }, ::plamn::core::centering(layout, src)));
+        auto const isDual
+            = std::apply([](auto... dual) { return damn::core::Constexprifier{dual...}; },
+                         damn::core::generate_from([](auto c) { return c == QtyCentering::dual; },
+                                                   centering(layout, src)));
 
         isDual([&]<bool... dual>() {
             constexpr std::array source{(dual ? QtyCentering::dual : QtyCentering::primal)...};

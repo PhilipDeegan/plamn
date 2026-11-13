@@ -45,8 +45,7 @@ void test_fields(auto const& layout, auto const& field0, auto const& field1)
 
 
 template<typename Layout, typename NdArrayImpl>
-void test(Layout const& layout,
-          Field<Layout::dimension, HybridQuantity::Scalar> const& field0,
+void test(Layout const& layout, Field<Layout::dimension, HybridQuantity::Scalar> const& field0,
           Field<Layout::dimension, HybridQuantity::Scalar> const& field1)
 {
     test_fields(layout, field0, field1);

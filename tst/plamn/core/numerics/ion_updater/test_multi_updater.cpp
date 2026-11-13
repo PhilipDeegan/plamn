@@ -171,7 +171,7 @@ void update_parallel(UpdaterMode mode, auto& patches)
 template<UpdaterVersion version, typename Patches>
 void update(UpdaterMode mode, Patches& patches)
 {
-    using Layout_t = Patches::value_type::Layout_t;
+    using Layout_t     = Patches::value_type::Layout_t;
     using Particles    = Patches::value_type::Model_t::particles_type;
     using IonUpdater_t = Updater_t<version, Particles, Layout_t>;
     auto constexpr function_id

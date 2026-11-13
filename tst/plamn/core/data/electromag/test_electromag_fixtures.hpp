@@ -89,7 +89,7 @@ template<auto opts>
 struct UsableElectromagImpl
 {
     using Options      = decltype(opts);
-    using Layout_t = Options::Layout_t;
+    using Layout_t     = Options::Layout_t;
     using Field_t      = Options::Field_t;
     using Super_t      = Electromag<TensorField<Field_t, HybridQuantity, /*rank*/ 1>>;
 };
@@ -99,7 +99,7 @@ template<auto opts>
 class UsableElectromag : public UsableElectromagImpl<opts>::Super_t
 {
     using Options     = decltype(opts);
-    using Layout_ = Options::Layout_t;
+    using Layout_     = Options::Layout_t;
 
     void _set()
     {

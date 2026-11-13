@@ -1,0 +1,39 @@
+name: format
+
+# changed C++ lines follow .clang-format, as PHARE's gate (one clang-format version for
+# everyone: results differ between versions)
+
+on:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  clang-format:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+
+    - run: python -m pip install clang-format==22.1.8
+
+    # exit 0: nothing to change, 1: a diff, other: an error
+    - run: |
+        mb=$(git merge-base "origin/${{ github.base_ref }}" HEAD)
+        rc=0
+        git clang-format --diff --extensions c,cc,cpp,h,hpp,ipp "$mb" -- inc src tst \
+          > format.diff || rc=$?
+        [ "$rc" -le 1 ] || { cat format.diff; exit "$rc"; }
+        if grep -q '^diff --git' format.diff; then
+          cat format.diff
+          echo "run: git clang-format $mb -- inc src tst"
+          exit 1
+        fi

@@ -103,7 +103,7 @@ template<typename Layout_t, typename Field_t>
 class FieldTile : public damn::core::Box<std::int32_t, Layout_t::dimension>
 {
 public:
-    auto constexpr static dimension  = Layout_t::dimension;
+    auto constexpr static dimension    = Layout_t::dimension;
     auto constexpr static alloc_mode   = Field_t::alloc_mode;
     auto constexpr static is_c_ordered = Field_t::is_c_ordered;
     using Super                        = damn::core::Box<std::int32_t, dimension>;
@@ -174,7 +174,7 @@ public:
 private:
     Field_t field_;
     Layout_t layout_;
-    damn::core::Box<int, dimension> ghost_box_   = amr_ghost_box(layout_, physicalQuantity());
+    damn::core::Box<int, dimension> ghost_box_ = amr_ghost_box(layout_, physicalQuantity());
     std::array<FieldTile*, 7> _links = damn::core::ConstArray<FieldTile*, 7>(nullptr);
 };
 
@@ -198,7 +198,7 @@ class FieldTileSet : public FieldTileSetTypes<Layout_, Grid_t, Field_t>::value_t
     using local_types = FieldTileSetTypes<Layout_, Grid_t, Field_t>;
 
 public:
-    using Layout_t               = Layout_;
+    using Layout_t                   = Layout_;
     using grid_type                  = Grid_t;
     using field_type                 = Field_t;
     using Super                      = local_types::value_type;

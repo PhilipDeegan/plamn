@@ -225,8 +225,9 @@ damn::core::EqualityReport compare_fields(FieldTileSet<T0s...> const& ref, Field
  * Supports both AoSMapped (plain Field) and AoSCMTS (FieldTileSet) inputs.
  */
 template<std::size_t dim, typename PQ, typename D0, typename D1, auto am0, auto am1>
-damn::core::EqualityReport compare_field_domains(auto const& layout, Field<dim, PQ, D0, am0> const& ref,
-                                     Field<dim, PQ, D1, am1> const& cmp, double const diff = 1e-15)
+damn::core::EqualityReport
+compare_field_domains(auto const& layout, Field<dim, PQ, D0, am0> const& ref,
+                      Field<dim, PQ, D1, am1> const& cmp, double const diff = 1e-15)
 {
     auto const same_sizes = ref.size() == cmp.size();
 
@@ -267,14 +268,15 @@ damn::core::EqualityReport compare_field_domains(auto const& layout, Field<dim, 
 
 template<typename... T0s, typename... T1s>
 damn::core::EqualityReport compare_field_domains(auto const& layout, Grid<T0s...> const& ref,
-                                     Grid<T1s...> const& cmp, double const diff = 1e-15)
+                                                 Grid<T1s...> const& cmp, double const diff = 1e-15)
 {
     return compare_field_domains(layout, *ref, *cmp, diff);
 }
 
 template<std::size_t dim, typename PQ, typename D, auto am, typename... T1s>
-damn::core::EqualityReport compare_field_domains(auto const& layout, Field<dim, PQ, D, am> const& ref,
-                                     FieldTileSet<T1s...> const& cmp, double const diff = 1e-15)
+damn::core::EqualityReport
+compare_field_domains(auto const& layout, Field<dim, PQ, D, am> const& ref,
+                      FieldTileSet<T1s...> const& cmp, double const diff = 1e-15)
 {
     if (ref.size() != cmp.size())
         return damn::core::EqualityReport{false, "Field/FieldTileSet shape mismatch"};
@@ -285,8 +287,9 @@ damn::core::EqualityReport compare_field_domains(auto const& layout, Field<dim, 
 }
 
 template<typename... T0s, std::size_t dim, typename PQ, typename D, auto am>
-damn::core::EqualityReport compare_field_domains(auto const& layout, FieldTileSet<T0s...> const& ref,
-                                     Field<dim, PQ, D, am> const& cmp, double const diff = 1e-15)
+damn::core::EqualityReport
+compare_field_domains(auto const& layout, FieldTileSet<T0s...> const& ref,
+                      Field<dim, PQ, D, am> const& cmp, double const diff = 1e-15)
 {
     return compare_field_domains(layout, cmp, ref, diff);
 }

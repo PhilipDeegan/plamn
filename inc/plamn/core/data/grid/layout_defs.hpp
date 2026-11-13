@@ -35,8 +35,8 @@ namespace core
 
 
     template<typename T, std::size_t dim>
-    NO_DISCARD damn::core::Box<T, dim> toCenteredBox(damn::core::Box<T, dim> box,
-                                         std::array<QtyCentering, dim> const& centerings)
+    NO_DISCARD damn::core::Box<T, dim>
+    toCenteredBox(damn::core::Box<T, dim> box, std::array<QtyCentering, dim> const& centerings)
     {
         for (std::size_t i = 0; i < dim; ++i)
             if (centerings[i] == QtyCentering::primal)
@@ -53,8 +53,9 @@ namespace core
     // src, dst: centerings; for quantities see patch_layout.hpp
     template<auto src, auto dst, std::size_t order = 2, typename Field>
         requires(not std::is_enum_v<decltype(src)>)
-    NO_DISCARD inline auto project(Field const& field,
-                                   damn::core::Point<std::size_t, Field::dimension> const& index) DAMN_ALL
+    NO_DISCARD inline auto
+    project(Field const& field,
+            damn::core::Point<std::size_t, Field::dimension> const& index) DAMN_ALL
     {
         constexpr auto stencil = recenteringStencil<src, dst, order>();
 

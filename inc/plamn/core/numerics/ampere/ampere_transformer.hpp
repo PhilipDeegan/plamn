@@ -137,9 +137,9 @@ public:
     }
 
     template<typename Layout, typename VecField>
-    using item_t = decltype(make_item(
-        std::declval<Layout const&>(), region_view(std::declval<VecField const&>(), 0),
-        region_view(std::declval<VecField&>(), 0)));
+    using item_t = decltype(make_item(std::declval<Layout const&>(),
+                                      region_view(std::declval<VecField const&>(), 0),
+                                      region_view(std::declval<VecField&>(), 0)));
 
     // appends one patch's items
     template<typename VecField>

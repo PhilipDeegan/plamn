@@ -75,7 +75,7 @@ public:
     }
 
     Partial(auto const& layout, auto const& src)
-        : Partial{layout.dx, ::plamn::core::centering(layout, src), src}
+        : Partial{layout.dx, ::plamn::core::centering(layout, src), src} // not Partial::centering
     {
     }
 
@@ -285,8 +285,7 @@ template<typename Layout, typename Src>
 NO_DISCARD double laplacian(Layout const& layout, Src const& f,
                             damn::core::Point<std::size_t, Layout::dimension> const idx) DAMN_ALL
 {
-    static_assert(Src::dimension == Layout::dimension,
-                  "field and layout dimensions must match");
+    static_assert(Src::dimension == Layout::dimension, "field and layout dimensions must match");
 
     // plain accumulation rather than sum(array): sum is host-only (std::accumulate)
     double lap = 0;

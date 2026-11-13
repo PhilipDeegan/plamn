@@ -75,7 +75,7 @@ struct PLAMN_Types
         auto static constexpr opts           = opts_;
         auto static constexpr field_options  = HybridFieldOptions<opts>{};
         auto static constexpr hybrid_options = HybridOptions<field_options>{};
-        using Layout_t                   = PatchLayout<hybrid_options>;
+        using Layout_t                       = PatchLayout<hybrid_options>;
 
         using Resolver_t = UsingResolver<Layout_t, layout_mode, allocator_mode>;
 
@@ -103,8 +103,7 @@ struct PLAMN_Types
         using Ions_t          = Ions<IonPopulation_t, Layout_t>;
         using Electrons_t     = Electrons<Ions_t>;
 
-        using ParticleInitializerFactory_t
-            = ParticleInitializerFactory<Particles_t, Layout_t>;
+        using ParticleInitializerFactory_t = ParticleInitializerFactory<Particles_t, Layout_t>;
     };
 
 
@@ -113,8 +112,8 @@ struct PLAMN_Types
         auto static constexpr opts          = opts_;
         auto static constexpr field_options = MHDFieldOptions<opts>{};
         auto static constexpr mhd_options   = MHDOptions<field_options>{};
-        using Layout_t                  = PatchLayout<mhd_options>;
-        using Resolver_t = UsingResolver<Layout_t, layout_mode, allocator_mode>;
+        using Layout_t                      = PatchLayout<mhd_options>;
+        using Resolver_t                    = UsingResolver<Layout_t, layout_mode, allocator_mode>;
 
         using Array_t
             = damn::core::NdArrayVector<dimension, field_value_type, Resolver_t::c_ordering, allocator_mode>;

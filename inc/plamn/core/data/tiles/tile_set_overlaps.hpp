@@ -13,8 +13,8 @@ namespace plamn::core
 
 auto make_nd_span_set_for_qty(auto const& layout, auto const pq)
 {
-    return damn::core::make_nd_span_set_from(layout,
-                                 [&](auto const& layout) { return ghost_box(layout, pq); });
+    return damn::core::make_nd_span_set_from(
+        layout, [&](auto const& layout) { return ghost_box(layout, pq); });
 }
 
 
@@ -28,8 +28,9 @@ auto make_qty_nd_span_set_from(auto& tiles, auto const& layout)
 
 auto make_qty_nd_span_set_from(auto& tiles, auto const& layout, auto const qty)
 {
-    return damn::core::make_nd_span_set_from(
-        tiles, layout, [&](auto const& box) { return amr_ghost_box(sub_layout(layout, box), qty); });
+    return damn::core::make_nd_span_set_from(tiles, layout, [&](auto const& box) {
+        return amr_ghost_box(sub_layout(layout, box), qty);
+    });
 }
 
 

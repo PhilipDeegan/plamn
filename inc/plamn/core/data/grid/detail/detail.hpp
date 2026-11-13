@@ -35,8 +35,7 @@ namespace plamn::core
 // fn(index, args...) for each point of box: a host loop for CPU fields, else one launch
 // field only selects where to run: pass it among args to use it in fn
 template<typename Field, typename Fn, typename T, std::size_t S, typename... Args>
-void eval_on_box(Field const& /*field*/, damn::core::Box<T, S> const& box, Fn&& fn,
-                 Args&&... args)
+void eval_on_box(Field const& /*field*/, damn::core::Box<T, S> const& box, Fn&& fn, Args&&... args)
 {
     if constexpr (Field::alloc_mode == damn::AllocatorMode::CPU)
         damn::core::for_each_point(box, [&](auto const& bix) { fn(bix, args...); });

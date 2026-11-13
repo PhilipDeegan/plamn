@@ -40,7 +40,7 @@ struct MultiBoris
 {
     static constexpr auto dim = ModelAccessor::Layout_t::dimension;
     using Model_t             = ModelAccessor::Model_t;
-    using Layout_t        = ModelAccessor::Layout_t;
+    using Layout_t            = ModelAccessor::Layout_t;
     using Particles_t     = Model_t::particles_type;
     using Electromag_t        = Model_t::electromag_type;
     using Vecfield_t          = Electromag_t::vecfield_type;
@@ -90,7 +90,7 @@ template<LayoutMode layout, typename ModelAccessor, typename Interpolator>
 struct MultiBorisBackend
 {
     using MultiBoris_t   = MultiBoris<ModelAccessor, Interpolator>;
-    using Layout_t   = MultiBoris_t::Layout_t;
+    using Layout_t       = MultiBoris_t::Layout_t;
     using Particles_t    = MultiBoris_t::Particles_t;
     using Electromag_t   = MultiBoris_t::Electromag_t;
     using Interpolator_t = Interpolator;
@@ -460,7 +460,7 @@ template<typename ModelAccessor, typename Interpolator>
 struct MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>
 {
     using MultiBoris_t   = MultiBoris<ModelAccessor, Interpolator>;
-    using Layout_t   = MultiBoris_t::Layout_t;
+    using Layout_t       = MultiBoris_t::Layout_t;
     using Particles_t    = MultiBoris_t::Particles_t;
     using Interpolator_t = Interpolator;
 
@@ -794,7 +794,7 @@ struct MultiBorisFunctors
 {
     static_assert(damn::core::all_are<ParticleType>(particle_type));
 
-    using Layout_t    = Backend_t::Layout_t;
+    using Layout_t        = Backend_t::Layout_t;
     using Particles_t     = Backend_t::Particles_t;
     using Electromag_t    = Backend_t::Electromag_t;
     using Interpolator_t  = Backend_t::Interpolator_t;

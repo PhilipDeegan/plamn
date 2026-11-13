@@ -33,10 +33,10 @@ namespace plamn::core
 template<auto options_>
 struct PatchLayout
 {
-    auto static constexpr options                   = options_;
-    std::size_t static constexpr dimension          = options.dimension;
-    std::uint32_t static constexpr ghost_width      = options.field_ghost_width;
-    using AMRBox_t                                  = damn::core::Box<int, dimension>;
+    auto static constexpr options              = options_;
+    std::size_t static constexpr dimension     = options.dimension;
+    std::uint32_t static constexpr ghost_width = options.field_ghost_width;
+    using AMRBox_t                             = damn::core::Box<int, dimension>;
 
     AMRBox_t cells{};
     std::array<double, dimension> dx{};
@@ -45,8 +45,8 @@ struct PatchLayout
 };
 
 template<typename T>
-concept IsPatchLayout = requires { T::options; }
-                        && std::derived_from<std::decay_t<T>, PatchLayout<T::options>>;
+concept IsPatchLayout
+    = requires { T::options; } && std::derived_from<std::decay_t<T>, PatchLayout<T::options>>;
 
 
 // ---------------------------------------------------------------- centering
@@ -185,9 +185,9 @@ NO_DISCARD constexpr auto amr_ghost_box(PatchLayout<o> const& L, auto const& qty
 // ---------------------------------------------------------------- index spaces
 
 template<auto o, typename T>
-NO_DISCARD constexpr auto to_local(PatchLayout<o> const& L,
-                                   damn::core::Point<T, PatchLayout<o>::dimension> const& amr)
-    DAMN_ALL
+NO_DISCARD constexpr auto
+to_local(PatchLayout<o> const& L,
+         damn::core::Point<T, PatchLayout<o>::dimension> const& amr) DAMN_ALL
 {
     return amr_to_local(L.cells, amr, PatchLayout<o>::ghost_width);
 }
@@ -225,17 +225,17 @@ void for_each_amr_local(PatchLayout<o> const& L, auto const& amr, auto&& fn)
 
 // position of an AMR index of qty
 template<auto o>
-NO_DISCARD constexpr auto coordinate(PatchLayout<o> const& L, auto const& qty,
-                                     damn::core::Point<int, PatchLayout<o>::dimension> const& amr)
-    DAMN_ALL
+NO_DISCARD constexpr auto
+coordinate(PatchLayout<o> const& L, auto const& qty,
+           damn::core::Point<int, PatchLayout<o>::dimension> const& amr) DAMN_ALL
 {
     return coordinate(L.dx, amr, centering(L, qty));
 }
 
 template<auto o>
 NO_DISCARD constexpr auto
-cell_center(PatchLayout<o> const& L, damn::core::Point<int, PatchLayout<o>::dimension> const& amr)
-    DAMN_ALL
+cell_center(PatchLayout<o> const& L,
+            damn::core::Point<int, PatchLayout<o>::dimension> const& amr) DAMN_ALL
 {
     return cell_center(L.dx, amr);
 }
