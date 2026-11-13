@@ -8,7 +8,7 @@
 #include "plamn/core/data/tensorfield/tensorfield.hpp"
 #include "plamn/core/data/vecfield/vecfield_component.hpp"
 
-#include "damn/initializer/data_provider.hpp"
+#include "plamn/initializer/data_provider.hpp"
 
 
 #include <tuple>
@@ -147,7 +147,7 @@ class IsothermalElectronPressureClosure
 public:
     using field_type = Field;
 
-    IsothermalElectronPressureClosure(damn::initializer::DAMNDict const& dict, Ions const& ions)
+    IsothermalElectronPressureClosure(plamn::initializer::Dict const& dict, Ions const& ions)
         : ions_{ions}
         , Te_{dict["Te"].template to<double>()}
         , Pe_{"Pe", HybridQuantity::Scalar::P}
@@ -227,7 +227,7 @@ class ElectronMomentModel
     using FluxComputer = StandardHybridElectronFluxComputer<Ions>;
 
 public:
-    ElectronMomentModel(damn::initializer::DAMNDict const& dict, Ions& ions, VecField& J)
+    ElectronMomentModel(plamn::initializer::Dict const& dict, Ions& ions, VecField& J)
         : fluxComput_{ions, J}
         , pressureClosure_{dict["pressure_closure"], fluxComput_.getIons()}
     {
@@ -299,7 +299,7 @@ class Electrons
     using GridLayout = Ions::gridlayout_type;
 
 public:
-    Electrons(damn::initializer::DAMNDict const& dict, Ions& ions, VecField& J)
+    Electrons(plamn::initializer::Dict const& dict, Ions& ions, VecField& J)
         : momentModel_{dict, ions, J}
     {
     }

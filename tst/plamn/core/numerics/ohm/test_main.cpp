@@ -60,9 +60,9 @@ public:
 
 
 
-damn::initializer::DAMNDict createDict()
+plamn::initializer::Dict createDict()
 {
-    damn::initializer::DAMNDict dict;
+    plamn::initializer::Dict dict;
 
     dict["resistivity"]       = 1.0;
     dict["hyper_resistivity"] = 0.01;

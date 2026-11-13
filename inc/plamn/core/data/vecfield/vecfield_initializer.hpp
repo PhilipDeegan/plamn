@@ -2,7 +2,7 @@
 #ifndef VECFIELD_INITIALIZER_HPP
 #define VECFIELD_INITIALIZER_HPP
 
-#include "damn/initializer/data_provider.hpp"
+#include "plamn/initializer/data_provider.hpp"
 #include "plamn/core/data/vecfield/vecfield_component.hpp"
 #include "plamn/core/data/field/initializers/field_user_initializer.hpp"
 
@@ -18,19 +18,19 @@ namespace core
     template<std::size_t dimension>
     class VecFieldInitializer
     {
-        static bool validate_dict(damn::initializer::DAMNDict const& dict);
+        static bool validate_dict(plamn::initializer::Dict const& dict);
 
-        VecFieldInitializer(damn::initializer::DAMNDict const& dict, bool)
-            : x_{dict["x_component"].template to<damn::initializer::InitFunction<dimension>>()}
-            , y_{dict["y_component"].template to<damn::initializer::InitFunction<dimension>>()}
-            , z_{dict["z_component"].template to<damn::initializer::InitFunction<dimension>>()}
+        VecFieldInitializer(plamn::initializer::Dict const& dict, bool)
+            : x_{dict["x_component"].template to<plamn::initializer::InitFunction<dimension>>()}
+            , y_{dict["y_component"].template to<plamn::initializer::InitFunction<dimension>>()}
+            , z_{dict["z_component"].template to<plamn::initializer::InitFunction<dimension>>()}
         {
         }
 
     public:
         VecFieldInitializer() = default;
 
-        VecFieldInitializer(damn::initializer::DAMNDict const& dict)
+        VecFieldInitializer(plamn::initializer::Dict const& dict)
             : VecFieldInitializer{dict, validate_dict(dict)}
         {
         }
@@ -48,9 +48,9 @@ namespace core
         }
 
     private:
-        damn::initializer::InitFunction<dimension> x_;
-        damn::initializer::InitFunction<dimension> y_;
-        damn::initializer::InitFunction<dimension> z_;
+        plamn::initializer::InitFunction<dimension> x_;
+        plamn::initializer::InitFunction<dimension> y_;
+        plamn::initializer::InitFunction<dimension> z_;
     };
 
 } // namespace core
@@ -61,7 +61,7 @@ namespace core
 namespace plamn::core
 {
 template<std::size_t dim>
-bool VecFieldInitializer<dim>::validate_dict(damn::initializer::DAMNDict const& dict)
+bool VecFieldInitializer<dim>::validate_dict(plamn::initializer::Dict const& dict)
 {
     for (auto const* key : {"x_component", "y_component", "z_component"})
         if (!dict.contains(key))
