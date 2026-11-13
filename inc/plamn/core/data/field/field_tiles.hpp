@@ -174,7 +174,7 @@ public:
 private:
     Field_t field_;
     Layout_t layout_;
-    damn::core::Box<int, dimension> ghost_box_ = amr_ghost_box(layout_, physicalQuantity());
+    damn::core::Box<int, dimension> ghost_box_ = qty_ghost_box(layout_, physicalQuantity());
     std::array<FieldTile*, 7> _links = damn::core::ConstArray<FieldTile*, 7>(nullptr);
 };
 
@@ -237,7 +237,7 @@ public:
                              reinterpret_cast<FieldTile<Layout_t, Field_t>**>(cells_data),
                              cells_shape};
             });
-            ghost_box_     = amr_ghost_box(field->layout(), qty_);
+            ghost_box_     = qty_ghost_box(field->layout(), qty_);
             max_tile_size_ = field->max_tile_size();
         }
         else

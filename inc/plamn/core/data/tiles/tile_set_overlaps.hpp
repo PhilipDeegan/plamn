@@ -22,14 +22,14 @@ template<auto quantity>
 auto make_qty_nd_span_set_from(auto& tiles, auto const& layout)
 {
     return damn::core::make_nd_span_set_from(tiles, layout, [&](auto const& box) {
-        return amr_ghost_box(sub_layout(layout, box), quantity);
+        return qty_ghost_box(sub_layout(layout, box), quantity);
     });
 }
 
 auto make_qty_nd_span_set_from(auto& tiles, auto const& layout, auto const qty)
 {
     return damn::core::make_nd_span_set_from(tiles, layout, [&](auto const& box) {
-        return amr_ghost_box(sub_layout(layout, box), qty);
+        return qty_ghost_box(sub_layout(layout, box), qty);
     });
 }
 

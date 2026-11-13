@@ -1,5 +1,5 @@
-#ifndef PLAMN_ION_UPDATER_HPP
-#define PLAMN_ION_UPDATER_HPP
+#ifndef PLAMN_CORE_NUMERICS_PARTICLES_SYNCHRONISED_MOVER_HPP
+#define PLAMN_CORE_NUMERICS_PARTICLES_SYNCHRONISED_MOVER_HPP
 
 #include "plamn/core/def.hpp"
 
@@ -19,7 +19,7 @@
 #include "plamn/core/numerics/pusher/boris/detail/multi_boris.hpp"
 #include "plamn/core/data/particles/exporting/particles_exporting.hpp"
 
-#include "ion_updater_def.hpp" // = UpdaterMode
+#include "particles_synchronised_mover_def.hpp" // = UpdaterMode
 
 #include <string>
 #include <optional>
@@ -32,8 +32,8 @@ namespace plamn::core
 // after a REF move: domain particles leaving the owned domain become patch ghosts or are
 // deleted, level ghosts entering it become domain particles
 template<typename Particles_t>
-void post_move_sync(Particles_t& domain, Particles_t& patchGhost,
-                    Particles_t& levelGhost, auto const& boxing)
+void post_move_sync(Particles_t& domain, Particles_t& patchGhost, Particles_t& levelGhost,
+                    auto const& boxing)
 {
     auto const& nonOwnedBoxes = boxing.nonOwnedBoxes;
 
@@ -98,8 +98,8 @@ PostMoveSyncCells(Boxing_t const&) -> PostMoveSyncCells<Boxing_t>;
 // border tiles
 template<typename Particles_t>
     requires(Particles_t::layout_mode == LayoutMode::AoSCMTS)
-void post_move_sync_tile(Particles_t& domain, Particles_t& patchGhost,
-                         Particles_t& levelGhost, auto const& boxing, std::size_t const ti)
+void post_move_sync_tile(Particles_t& domain, Particles_t& patchGhost, Particles_t& levelGhost,
+                         auto const& boxing, std::size_t const ti)
 {
     PostMoveSyncCells const cells{boxing};
     thread_local std::vector<std::size_t> erased;
@@ -143,8 +143,7 @@ void post_move_sync_tile(Particles_t& domain, Particles_t& patchGhost,
 
 // sizes and views of the arrays post_move_sync_tile wrote to, once all tiles are synced
 template<typename Particles_t>
-void post_move_sync_finalize(Particles_t& domain, Particles_t& patchGhost,
-                             Particles_t& levelGhost)
+void post_move_sync_finalize(Particles_t& domain, Particles_t& patchGhost, Particles_t& levelGhost)
 {
     domain.on_appended();
     patchGhost.on_appended();
@@ -153,8 +152,8 @@ void post_move_sync_finalize(Particles_t& domain, Particles_t& patchGhost,
 
 template<typename Particles_t>
     requires(Particles_t::layout_mode == LayoutMode::AoSCMTS)
-void post_move_sync(Particles_t& domain, Particles_t& patchGhost,
-                    Particles_t& levelGhost, auto const& boxing)
+void post_move_sync(Particles_t& domain, Particles_t& patchGhost, Particles_t& levelGhost,
+                    auto const& boxing)
 {
     for (std::size_t ti = 0; ti < domain().size(); ++ti)
         post_move_sync_tile(domain, patchGhost, levelGhost, boxing, ti);
@@ -162,10 +161,11 @@ void post_move_sync(Particles_t& domain, Particles_t& patchGhost,
 }
 
 /**
- * @brief IonUpdater moves/deposits a single patch's ions/electromag, given directly.
+ * @brief ParticlesSynchronisedMover moves/deposits a single patch's ions/electromag, given
+ * directly.
  */
 template<typename Particles_t, typename Layout>
-class IonUpdater
+class ParticlesSynchronisedMover
 {
     static constexpr auto dimension    = Layout::dimension;
     static constexpr auto interp_order = Layout::options.interp_order;
@@ -194,11 +194,11 @@ private:
 
 
 template<typename Particles_t, typename Layout>
-void IonUpdater<Particles_t, Layout>::updatePopulations(auto& ions, auto const& em,
-                                                        Boxing_t const& boxing, double dt,
-                                                        UpdaterMode mode)
+void ParticlesSynchronisedMover<Particles_t, Layout>::updatePopulations(auto& ions, auto const& em,
+                                                                        Boxing_t const& boxing,
+                                                                        double dt, UpdaterMode mode)
 {
-    DAMN_LOG_SCOPE(3, "IonUpdater::updatePopulations");
+    DAMN_LOG_SCOPE(3, "ParticlesSynchronisedMover::updatePopulations");
 
     resetMoments(ions);
     pusher_.setMeshAndTimeStep(boxing.layout.dx, dt);
@@ -211,14 +211,14 @@ void IonUpdater<Particles_t, Layout>::updatePopulations(auto& ions, auto const& 
 
 
 /**
- * @brief IonUpdater::updateAndDepositDomain_
+ * @brief ParticlesSynchronisedMover::updateAndDepositDomain_
    evolves moments from time n to n+1 without updating particles, which stay at time n
  */
 template<typename Particles_t, typename Layout>
-void IonUpdater<Particles_t, Layout>::updateAndDepositDomain_(auto& ions, auto const& em,
-                                                              Boxing_t const& boxing)
+void ParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositDomain_(
+    auto& ions, auto const& em, Boxing_t const& boxing)
 {
-    DAMN_LOG_SCOPE(3, "IonUpdater::updateAndDepositDomain_");
+    DAMN_LOG_SCOPE(3, "ParticlesSynchronisedMover::updateAndDepositDomain_");
 
     auto const& layout = boxing.layout;
 
@@ -268,14 +268,15 @@ void IonUpdater<Particles_t, Layout>::updateAndDepositDomain_(auto& ions, auto c
 
 
 /**
- * @brief IonUpdater::updateAndDepositAll_
+ * @brief ParticlesSynchronisedMover::updateAndDepositAll_
    evolves moments and particles from time n to n+1
  */
 template<typename Particles_t, typename Layout>
-void IonUpdater<Particles_t, Layout>::updateAndDepositAll_(auto& ions, auto const& em,
-                                                           Boxing_t const& boxing)
+void ParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositAll_(auto& ions,
+                                                                           auto const& em,
+                                                                           Boxing_t const& boxing)
 {
-    DAMN_LOG_SCOPE(1, "IonUpdater::updateAndDepositAll_");
+    DAMN_LOG_SCOPE(1, "ParticlesSynchronisedMover::updateAndDepositAll_");
 
     auto const& layout = boxing.layout;
 
@@ -291,7 +292,8 @@ void IonUpdater<Particles_t, Layout>::updateAndDepositAll_(auto& ions, auto cons
         auto inDomain = pusher_.move(domainPartRange, domainPartRange, em, pop.charge(), pop.mass(),
                                      interpolator_, layout, boxing.noop, boxing.inOwnedDomain);
 
-        auto now_ghosts = damn::core::makeRange(domainParticles, inDomain.iend(), domainParticles.size());
+        auto now_ghosts
+            = damn::core::makeRange(domainParticles, inDomain.iend(), domainParticles.size());
         auto const not_level_ghosts = boxing.inNonLevelGhostBox(now_ghosts);
 
         // copy out new patch ghosts
@@ -304,9 +306,10 @@ void IonUpdater<Particles_t, Layout>::updateAndDepositAll_(auto& ions, auto cons
             for (auto const& particle : outsideGhostBox)
             {
                 DAMN_LOG_LINE_SS(particle);
-                auto const nearbyBox = damn::core::grow(damn::core::Box(particle.iCell(), particle.iCell()), 3);
+                auto const nearbyBox
+                    = damn::core::grow(damn::core::Box(particle.iCell(), particle.iCell()), 3);
                 for (auto const& xyz : em.E)
-                    if (auto const overlap = nearbyBox * amr_ghost_box(layout, xyz))
+                    if (auto const overlap = nearbyBox * qty_ghost_box(layout, xyz))
                         for_each_amr_local(layout, *overlap, [&](auto const& bix, auto const& lix) {
                             DAMN_LOG_LINE_SS(xyz.name() << " at:" << bix << ":" << xyz(lix));
                         });
@@ -328,8 +331,8 @@ void IonUpdater<Particles_t, Layout>::updateAndDepositAll_(auto& ions, auto cons
             particleArray.export_particles(domainParticles,
                                            [&](auto const& cell) { return boxing.isOwned(cell); });
 
-            particleArray.erase(
-                damn::core::makeRange(particleArray, inGhostLayerRange.iend(), particleArray.size()));
+            particleArray.erase(damn::core::makeRange(particleArray, inGhostLayerRange.iend(),
+                                                      particleArray.size()));
         }
 
         interpolator_( //
@@ -341,11 +344,11 @@ void IonUpdater<Particles_t, Layout>::updateAndDepositAll_(auto& ions, auto cons
 
 
 /**
- * @brief ParallelIonUpdater moves/deposits ions across every patch of a level in parallel,
- * given a ModelAccessor rather than direct ions/electromag references.
+ * @brief ParallelParticlesSynchronisedMover moves/deposits ions across every patch of a level in
+ * parallel, given a ModelAccessor rather than direct ions/electromag references.
  */
 template<typename Particles_t, typename Layout>
-class ParallelIonUpdater
+class ParallelParticlesSynchronisedMover
 {
     static constexpr auto dimension    = Layout::dimension;
     static constexpr auto interp_order = Layout::options.interp_order;
@@ -363,7 +366,7 @@ public:
     void reset() {}
 
 protected:
-    // per patch steps, shared with mkn_xyz::ParallelIonUpdater (different dispatch)
+    // per patch steps, shared with mkn_xyz::ParallelParticlesSynchronisedMover (different dispatch)
     static void reset_moments(auto& accessor);
     static void post_move_sync(auto& accessor, auto const& boxings, std::size_t const i);
     static void deposit(auto& accessor, auto const& boxings, std::size_t const i);
@@ -388,7 +391,7 @@ private:
 
 
 template<typename Particles_t, typename Layout>
-void ParallelIonUpdater<Particles_t, Layout>::reset_moments(auto& accessor)
+void ParallelParticlesSynchronisedMover<Particles_t, Layout>::reset_moments(auto& accessor)
 {
     if constexpr (use_main_thread or not is_tiled(Particles_t::layout_mode))
         for (std::size_t i = 0; i < accessor.size(); ++i)
@@ -406,7 +409,8 @@ void ParallelIonUpdater<Particles_t, Layout>::reset_moments(auto& accessor)
 
 
 template<typename Particles_t, typename Layout>
-void ParallelIonUpdater<Particles_t, Layout>::post_move_sync_(auto& view, auto const& boxings)
+void ParallelParticlesSynchronisedMover<Particles_t, Layout>::post_move_sync_(auto& view,
+                                                                              auto const& boxings)
 {
     auto& [ions, _]           = view.args;
     auto const& patch_boxings = boxings.at(view.patchID());
@@ -425,8 +429,9 @@ void ParallelIonUpdater<Particles_t, Layout>::post_move_sync_(auto& view, auto c
 }
 
 template<typename Particles_t, typename Layout>
-void ParallelIonUpdater<Particles_t, Layout>::post_move_sync(auto& accessor, auto const& boxings,
-                                                             std::size_t const i)
+void ParallelParticlesSynchronisedMover<Particles_t, Layout>::post_move_sync(auto& accessor,
+                                                                             auto const& boxings,
+                                                                             std::size_t const i)
 {
     auto view = accessor[i];
     post_move_sync_(view, boxings);
@@ -435,7 +440,8 @@ void ParallelIonUpdater<Particles_t, Layout>::post_move_sync(auto& accessor, aut
 
 // only writes the moments of tile t, domain and patch ghosts of a tile in the same task
 template<typename Particles_t, typename Layout>
-void ParallelIonUpdater<Particles_t, Layout>::deposit_tile_(auto& view, std::size_t const t)
+void ParallelParticlesSynchronisedMover<Particles_t, Layout>::deposit_tile_(auto& view,
+                                                                            std::size_t const t)
 {
     Interpolating_t interp;
     for (auto& pop : std::get<0>(view.args))
@@ -446,8 +452,9 @@ void ParallelIonUpdater<Particles_t, Layout>::deposit_tile_(auto& view, std::siz
 }
 
 template<typename Particles_t, typename Layout>
-void ParallelIonUpdater<Particles_t, Layout>::deposit(auto& accessor, auto const& boxings,
-                                                      std::size_t const i)
+void ParallelParticlesSynchronisedMover<Particles_t, Layout>::deposit(auto& accessor,
+                                                                      auto const& boxings,
+                                                                      std::size_t const i)
 {
     auto view            = accessor[i];
     auto [ions, _]       = view.args;
@@ -465,11 +472,11 @@ void ParallelIonUpdater<Particles_t, Layout>::deposit(auto& accessor, auto const
 
 
 template<typename Particles_t, typename Layout>
-void ParallelIonUpdater<Particles_t, Layout>::updatePopulations(
+void ParallelParticlesSynchronisedMover<Particles_t, Layout>::updatePopulations(
     auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings, double const& dt,
     UpdaterMode mode)
 {
-    DAMN_LOG_SCOPE(2, "IonUpdater::updatePopulations");
+    DAMN_LOG_SCOPE(2, "ParticlesSynchronisedMover::updatePopulations");
 
     reset_moments(accessor);
     dt_ = dt;
@@ -481,10 +488,10 @@ void ParallelIonUpdater<Particles_t, Layout>::updatePopulations(
 
 
 template<typename Particles_t, typename Layout>
-void ParallelIonUpdater<Particles_t, Layout>::updateAndDepositDomain_(
+void ParallelParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositDomain_(
     auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings)
 {
-    DAMN_LOG_SCOPE(1, "IonUpdater::updateAndDepositDomain_");
+    DAMN_LOG_SCOPE(1, "ParticlesSynchronisedMover::updateAndDepositDomain_");
 
     if (accessor.size() == 0)
         return;
@@ -496,17 +503,17 @@ void ParallelIonUpdater<Particles_t, Layout>::updateAndDepositDomain_(
 
 
 template<typename Particles_t, typename Layout>
-void ParallelIonUpdater<Particles_t, Layout>::updateAndDepositAll_(
+void ParallelParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositAll_(
     auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings)
 {
-    DAMN_LOG_SCOPE(1, "IonUpdater::updateAndDepositAll_");
+    DAMN_LOG_SCOPE(1, "ParticlesSynchronisedMover::updateAndDepositAll_");
 
     if (accessor.size() == 0)
         return;
 
     using Accessor_t = std::remove_reference_t<decltype(accessor)>;
     {
-        DAMN_LOG_SCOPE(1, "IonUpdater::updateAndDepositAll_::multi_boris");
+        DAMN_LOG_SCOPE(1, "ParticlesSynchronisedMover::updateAndDepositAll_::multi_boris");
         MultiBoris<Accessor_t, Interpolator_t>{dt_, accessor}.move(boxings);
     }
 
@@ -537,7 +544,7 @@ void ParallelIonUpdater<Particles_t, Layout>::updateAndDepositAll_(
     {
         auto& tp = damn::core::ThreadPool::INSTANCE();
         {
-            DAMN_LOG_SCOPE(1, "IonUpdater::updateAndDepositAll_::post_move_sync");
+            DAMN_LOG_SCOPE(1, "ParticlesSynchronisedMover::updateAndDepositAll_::post_move_sync");
             if constexpr (Particles_t::layout_mode == LayoutMode::AoSCMTS)
             {
                 tp.tile_exec(
@@ -553,7 +560,7 @@ void ParallelIonUpdater<Particles_t, Layout>::updateAndDepositAll_(
                     [&](auto& view) { post_move_sync_(view, boxings); });
         }
         {
-            DAMN_LOG_SCOPE(1, "IonUpdater::updateAndDepositAll_::deposit");
+            DAMN_LOG_SCOPE(1, "ParticlesSynchronisedMover::updateAndDepositAll_::deposit");
             if constexpr (per_tile_deposit)
                 tp.tile_exec(
                     accessor.size(), [&](auto const i) { return accessor[i]; },
@@ -571,11 +578,11 @@ void ParallelIonUpdater<Particles_t, Layout>::updateAndDepositAll_(
 
 
 /**
- * @brief FlatParallelIonUpdater is ParallelIonUpdater for untiled layouts (AoS): untiled
- * fields, so a patch is the unit of work rather than a tile.
+ * @brief FlatParallelParticlesSynchronisedMover is ParallelParticlesSynchronisedMover for untiled
+ * layouts (AoS): untiled fields, so a patch is the unit of work rather than a tile.
  */
 template<typename Particles_t, typename Layout>
-class FlatParallelIonUpdater
+class FlatParallelParticlesSynchronisedMover
 {
     static constexpr auto dimension    = Layout::dimension;
     static constexpr auto interp_order = Layout::options.interp_order;
@@ -599,7 +606,8 @@ private:
 
 
 template<typename Particles_t, typename Layout>
-void FlatParallelIonUpdater<Particles_t, Layout>::per_patch(auto& accessor, auto const& fn)
+void FlatParallelParticlesSynchronisedMover<Particles_t, Layout>::per_patch(auto& accessor,
+                                                                            auto const& fn)
 {
     if constexpr (use_main_thread)
         for (std::size_t i = 0; i < accessor.size(); ++i)
@@ -614,18 +622,19 @@ void FlatParallelIonUpdater<Particles_t, Layout>::per_patch(auto& accessor, auto
 
 
 template<typename Particles_t, typename Layout>
-void FlatParallelIonUpdater<Particles_t, Layout>::updatePopulations(
+void FlatParallelParticlesSynchronisedMover<Particles_t, Layout>::updatePopulations(
     auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings, double const& dt,
     UpdaterMode mode)
 {
-    DAMN_LOG_SCOPE(2, "FlatParallelIonUpdater::updatePopulations");
+    DAMN_LOG_SCOPE(2, "FlatParallelParticlesSynchronisedMover::updatePopulations");
 
     if (accessor.size() == 0)
         return;
 
     dt_ = dt;
     {
-        DAMN_LOG_SCOPE(2, "FlatParallelIonUpdater::updatePopulations::reset_moments");
+        DAMN_LOG_SCOPE(2,
+                       "FlatParallelParticlesSynchronisedMover::updatePopulations::reset_moments");
         per_patch(accessor, [](auto& view) { resetMoments(std::get<0>(view.args)); });
     }
 
@@ -634,36 +643,36 @@ void FlatParallelIonUpdater<Particles_t, Layout>::updatePopulations(
 
     if (mode == UpdaterMode::domain_only)
     {
-        DAMN_LOG_SCOPE(2, "FlatParallelIonUpdater::updatePopulations::move_copy");
+        DAMN_LOG_SCOPE(2, "FlatParallelParticlesSynchronisedMover::updatePopulations::move_copy");
         multi_boris.template move<MultiBorisMode::COPY>(boxings);
         return;
     }
 
     {
-        DAMN_LOG_SCOPE(2, "FlatParallelIonUpdater::updatePopulations::move");
+        DAMN_LOG_SCOPE(2, "FlatParallelParticlesSynchronisedMover::updatePopulations::move");
         multi_boris.move(boxings);
     }
 
-    DAMN_LOG_SCOPE(2, "FlatParallelIonUpdater::updatePopulations::per_patch");
+    DAMN_LOG_SCOPE(2, "FlatParallelParticlesSynchronisedMover::updatePopulations::per_patch");
     per_patch(accessor, [&](auto& view) {
         auto const& boxing = boxings.at(view.patchID());
         Interpolator_t interp;
         for (auto& pop : std::get<0>(view.args))
         {
             {
-                DAMN_LOG_SCOPE(2, "FlatParallelIonUpdater::post_move_sync");
+                DAMN_LOG_SCOPE(2, "FlatParallelParticlesSynchronisedMover::post_move_sync");
                 core::post_move_sync(pop.domainParticles(), pop.patchGhostParticles(),
                                      pop.levelGhostParticles(), boxing);
             }
             if constexpr (Particles_t::layout_mode == LayoutMode::SoAVXChunked)
             {
-                DAMN_LOG_SCOPE(2, "FlatParallelIonUpdater::on_moved");
+                DAMN_LOG_SCOPE(2, "FlatParallelParticlesSynchronisedMover::on_moved");
                 // offsets stale after the push and the sync
                 pop.domainParticles().template on_moved<ParticleType::Domain>();
                 pop.patchGhostParticles().template on_moved<ParticleType::PatchGhost>();
                 pop.levelGhostParticles().template on_moved<ParticleType::LevelGhost>();
             }
-            DAMN_LOG_SCOPE(2, "FlatParallelIonUpdater::deposit");
+            DAMN_LOG_SCOPE(2, "FlatParallelParticlesSynchronisedMover::deposit");
             interp(pop.domainParticles(), pop.particleDensity(), pop.flux(), view.layout);
             interp(pop.patchGhostParticles(), pop.particleDensity(), pop.flux(), view.layout);
         }
@@ -680,19 +689,22 @@ namespace plamn::core::mkn_xyz
 {
 
 /**
- * @brief mkn_xyz::ParallelIonUpdater: core::ParallelIonUpdater steps dispatched with mkn.gpu
- * ThreadedStreamLauncher (one host thread + stream per patch), and GPU deposit kernels
+ * @brief mkn_xyz::ParallelParticlesSynchronisedMover: core::ParallelParticlesSynchronisedMover
+ * steps dispatched with mkn.gpu ThreadedStreamLauncher (one host thread + stream per patch), and
+ * GPU deposit kernels
  */
 template<typename Particles_t, typename Layout>
-class ParallelIonUpdater : public core::ParallelIonUpdater<Particles_t, Layout>
+class ParallelParticlesSynchronisedMover
+    : public core::ParallelParticlesSynchronisedMover<Particles_t, Layout>
 {
-    using Super = core::ParallelIonUpdater<Particles_t, Layout>;
+    using Super = core::ParallelParticlesSynchronisedMover<Particles_t, Layout>;
 
-    static constexpr auto dimension     = Layout::dimension;
-    static constexpr auto interp_order  = Layout::options.interp_order;
-    static constexpr bool atomic_interp = Particles_t::alloc_mode == damn::AllocatorMode::GPU_UNIFIED;
-    using Interpolator_t                = Interpolator<dimension, interp_order, atomic_interp>;
-    using Interpolating_t               = Interpolating<dimension, interp_order, atomic_interp>;
+    static constexpr auto dimension    = Layout::dimension;
+    static constexpr auto interp_order = Layout::options.interp_order;
+    static constexpr bool atomic_interp
+        = Particles_t::alloc_mode == damn::AllocatorMode::GPU_UNIFIED;
+    using Interpolator_t  = Interpolator<dimension, interp_order, atomic_interp>;
+    using Interpolating_t = Interpolating<dimension, interp_order, atomic_interp>;
 
 public:
     using Boxing_t = Super::Boxing_t;
@@ -718,7 +730,8 @@ private:
 
 
 template<typename Particles_t, typename Layout>
-void ParallelIonUpdater<Particles_t, Layout>::reset_moments_(auto& accessor, auto& in)
+void ParallelParticlesSynchronisedMover<Particles_t, Layout>::reset_moments_(auto& accessor,
+                                                                             auto& in)
 {
     if constexpr (moments_on_streams)
     {
@@ -745,11 +758,11 @@ void ParallelIonUpdater<Particles_t, Layout>::reset_moments_(auto& accessor, aut
 
 
 template<typename Particles_t, typename Layout>
-void ParallelIonUpdater<Particles_t, Layout>::updatePopulations(
+void ParallelParticlesSynchronisedMover<Particles_t, Layout>::updatePopulations(
     auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings, double const& dt,
     UpdaterMode mode)
 {
-    DAMN_LOG_SCOPE(2, "mkn_xyz::IonUpdater::updatePopulations");
+    DAMN_LOG_SCOPE(2, "mkn_xyz::ParticlesSynchronisedMover::updatePopulations");
 
     if constexpr (not moments_on_streams) // else zeroed on each patch's stream, see reset_moments_
         Super::reset_moments(accessor);
@@ -762,10 +775,10 @@ void ParallelIonUpdater<Particles_t, Layout>::updatePopulations(
 
 
 template<typename Particles_t, typename Layout>
-void ParallelIonUpdater<Particles_t, Layout>::updateAndDepositDomain_(
+void ParallelParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositDomain_(
     auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings)
 {
-    DAMN_LOG_SCOPE(1, "mkn_xyz::IonUpdater::updateAndDepositDomain_");
+    DAMN_LOG_SCOPE(1, "mkn_xyz::ParticlesSynchronisedMover::updateAndDepositDomain_");
 
     if (accessor.size() == 0)
         return;
@@ -784,10 +797,10 @@ void ParallelIonUpdater<Particles_t, Layout>::updateAndDepositDomain_(
 
 
 template<typename Particles_t, typename Layout>
-void ParallelIonUpdater<Particles_t, Layout>::updateAndDepositAll_(
+void ParallelParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositAll_(
     auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings)
 {
-    DAMN_LOG_SCOPE(1, "mkn_xyz::IonUpdater::updateAndDepositAll_");
+    DAMN_LOG_SCOPE(1, "mkn_xyz::ParticlesSynchronisedMover::updateAndDepositAll_");
 
     if (accessor.size() == 0)
         return;
@@ -847,8 +860,8 @@ void ParallelIonUpdater<Particles_t, Layout>::updateAndDepositAll_(
                     auto const domain   = *pop.domainParticles();
                     auto pdensity       = pop.particleDensity();
                     auto flux           = *pop.flux();
-                    auto const mode
-                        = tile_deposit_mode(n_points, 0, damn::core::gpu::max_dynamic_shared_bytes());
+                    auto const mode     = tile_deposit_mode(
+                        n_points, 0, damn::core::gpu::max_dynamic_shared_bytes());
                     with_tile_deposit(mode, [&](auto deposit_c) {
                         using Launcher = damn::core::gpu::ChunkLauncher<false>;
                         Launcher launcher{1, 0};
@@ -919,9 +932,9 @@ void ParallelIonUpdater<Particles_t, Layout>::updateAndDepositAll_(
             auto& pop = ions[j];
             particles_domain_is_valid(pop.domainParticles(), patch_boxings.domainBox);
             particles_ghost_is_valid(pop.patchGhostParticles(), patch_boxings.domainBox,
-                                          patch_boxings.ghostBox);
+                                     patch_boxings.ghostBox);
             particles_ghost_is_valid(pop.levelGhostParticles(), patch_boxings.domainBox,
-                                          patch_boxings.ghostBox);
+                                     patch_boxings.ghostBox);
         }
     }
 #endif /* DAMN_DEBUG */
@@ -937,28 +950,32 @@ namespace plamn::core
 {
 namespace detail
 {
-    // layouts in unified memory update on the device: mkn_xyz::ParallelIonUpdater, as
-    //  test_multi_updater checks them (UpdaterVersion::mkn_parallel), CPU tiled: ParallelIonUpdater
+    // layouts in unified memory update on the device: mkn_xyz::ParallelParticlesSynchronisedMover,
+    // as
+    //  test_multi_updater checks them (UpdaterVersion::mkn_parallel), CPU tiled:
+    //  ParallelParticlesSynchronisedMover
     template<typename Particles_t, typename Layout>
-    using TiledIonUpdaterFor_t =
+    using TiledParticlesSynchronisedMoverFor_t =
 #if DAMN_HAVE_MKN_GPU
         std::conditional_t<Particles_t::alloc_mode == damn::AllocatorMode::GPU_UNIFIED,
-                           mkn_xyz::ParallelIonUpdater<Particles_t, Layout>,
-                           ParallelIonUpdater<Particles_t, Layout>>;
+                           mkn_xyz::ParallelParticlesSynchronisedMover<Particles_t, Layout>,
+                           ParallelParticlesSynchronisedMover<Particles_t, Layout>>;
 #else
-        ParallelIonUpdater<Particles_t, Layout>;
+        ParallelParticlesSynchronisedMover<Particles_t, Layout>;
 #endif
 } // namespace detail
 
-// unified memory updates on the device (mkn_xyz::ParallelIonUpdater), tiled or not: untiled
-//  GPU_UNIFIED (SoAVXChunked) through FlatParallelIonUpdater deposited on the host
+// unified memory updates on the device (mkn_xyz::ParallelParticlesSynchronisedMover), tiled or not:
+// untiled
+//  GPU_UNIFIED (SoAVXChunked) through FlatParallelParticlesSynchronisedMover deposited on the host
 template<typename Particles_t, typename Layout>
-using IonUpdaterFor_t = std::conditional_t<
-    Particles_t::layout_mode == LayoutMode::AoSMapped, IonUpdater<Particles_t, Layout>,
+using ParticlesSynchronisedMoverFor_t = std::conditional_t<
+    Particles_t::layout_mode == LayoutMode::AoSMapped,
+    ParticlesSynchronisedMover<Particles_t, Layout>,
     std::conditional_t<is_tiled(Particles_t::layout_mode)
                            or Particles_t::alloc_mode == damn::AllocatorMode::GPU_UNIFIED,
-                       detail::TiledIonUpdaterFor_t<Particles_t, Layout>,
-                       FlatParallelIonUpdater<Particles_t, Layout>>>;
+                       detail::TiledParticlesSynchronisedMoverFor_t<Particles_t, Layout>,
+                       FlatParallelParticlesSynchronisedMover<Particles_t, Layout>>>;
 
 } // namespace plamn::core
 

@@ -244,7 +244,7 @@ template<typename Layout_t, typename Grid_t, typename Field_t>
 void check_field(basic::FieldTileSet<Layout_t, Grid_t, Field_t> const& f, Layout_t const& layout)
 {
 #if DAMN_DEBUG
-    auto const domainBox = amr_box(layout, f);
+    auto const domainBox = qty_box(layout, f);
 
     for (auto& tile : f())
         if (auto const overlap = **tile * domainBox)

@@ -1083,7 +1083,7 @@ struct MultiBorisFunctors
 
         // batched in phases (copy + half step, m2p + accelerate + half step, deposit) as
         // interleaving m2p and p2m per particle is slower, see updater_realloc's
-        // IonUpdater1::Pusher::move_domain_copy
+        // ParticlesSynchronisedMover1::Pusher::move_domain_copy
         std::array<Particle_t, copy_batch_size> batch;
         std::size_t n = 0;
 

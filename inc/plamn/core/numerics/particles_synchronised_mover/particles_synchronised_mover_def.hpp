@@ -1,5 +1,5 @@
-#ifndef PLAMN_ION_UPDATER_DEF_HPP
-#define PLAMN_ION_UPDATER_DEF_HPP
+#ifndef PLAMN_CORE_NUMERICS_PARTICLES_SYNCHRONISED_MOVER_DEF_HPP
+#define PLAMN_CORE_NUMERICS_PARTICLES_SYNCHRONISED_MOVER_DEF_HPP
 
 #include "plamn/core/def.hpp"
 
@@ -203,7 +203,7 @@ namespace plamn::core::detail
 auto static const timings_dir_str
     = damn::core::get_env_as("PLAMN_ASYNC_TIMES", std::string{".damn/async/multi_updater"});
 
-static bool ion_updater_io_setup = []() {
+static bool particles_synchronised_mover_io_setup = []() {
     mkn::kul::Dir timings{timings_dir_str};
     timings.mk();
     return true;

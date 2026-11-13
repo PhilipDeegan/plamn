@@ -170,15 +170,15 @@ NO_DISCARD constexpr auto ghost_box(PatchLayout<o> const& L, auto const& qty) DA
 
 // AMR index space
 template<auto o>
-NO_DISCARD constexpr auto amr_box(PatchLayout<o> const& L, auto const& qty) DAMN_ALL
+NO_DISCARD constexpr auto qty_box(PatchLayout<o> const& L, auto const& qty) DAMN_ALL
 {
-    return amr_box(L.cells, centering(L, qty));
+    return qty_box(L.cells, centering(L, qty));
 }
 
 template<auto o>
-NO_DISCARD constexpr auto amr_ghost_box(PatchLayout<o> const& L, auto const& qty) DAMN_ALL
+NO_DISCARD constexpr auto qty_ghost_box(PatchLayout<o> const& L, auto const& qty) DAMN_ALL
 {
-    return amr_ghost_box(L.cells, centering(L, qty), PatchLayout<o>::ghost_width);
+    return qty_ghost_box(L.cells, centering(L, qty), PatchLayout<o>::ghost_width);
 }
 
 

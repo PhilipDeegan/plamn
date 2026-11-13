@@ -5,7 +5,7 @@
 
 #include "damn/core/math/array.hpp"
 #include "damn/core/math/numeric.hpp"
-#include "plamn/core/numerics/ion_updater/ion_updater.hpp"
+#include "plamn/core/numerics/particles_synchronised_mover/particles_synchronised_mover.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/numerics/interpolator/interpolating.hpp"
 #include "plamn/core/numerics/interpolator/interpolating.hpp"
@@ -185,22 +185,23 @@ template<auto layout_mode, auto opts>
 struct updater_test_bits;
 
 template<typename TestParam_t>
-struct IonUpdaterTest : public ::testing::Test
+struct ParticlesSynchronisedMoverTest : public ::testing::Test
 {
     auto static constexpr opts         = TestParam_t::opts;
     static constexpr auto dim          = opts.dimension;
     static constexpr auto interp_order = opts.interp_order;
-    using DAMNTypes                   = plamn::core::PLAMN_Types<opts>;
+    using DAMNTypes                    = plamn::core::PLAMN_Types<opts>;
     using Ions                         = DAMNTypes::Hybrid::Ions_t;
     using Electromag                   = DAMNTypes::Hybrid::Electromag_t;
     using Layout                       = DAMNTypes::Hybrid::Layout_t;
-    using Particles                = DAMNTypes::Hybrid::Particles_t;
+    using Particles                    = DAMNTypes::Hybrid::Particles_t;
     using ParticleInitializerFactory   = DAMNTypes::Hybrid::ParticleInitializerFactory_t;
 
-    using IonUpdater_t = std::conditional_t<Particles::layout_mode == LayoutMode::AoSMapped,
-                                            core::IonUpdater<Particles, Layout>,
-                                            core::ParallelIonUpdater<Particles, Layout>>;
-    using Boxing_t     = IonUpdater_t::Boxing_t;
+    using ParticlesSynchronisedMover_t
+        = std::conditional_t<Particles::layout_mode == LayoutMode::AoSMapped,
+                             core::ParticlesSynchronisedMover<Particles, Layout>,
+                             core::ParallelParticlesSynchronisedMover<Particles, Layout>>;
+    using Boxing_t     = ParticlesSynchronisedMover_t::Boxing_t;
     using Interpolator = Interpolating<dim, interp_order>;
 
     using Hybrid_t                   = DAMNTypes::Hybrid;
@@ -223,7 +224,7 @@ struct IonUpdaterTest : public ::testing::Test
 
     UsableIons_t<opts> ions{layout, init_dict["ions"]};
 
-    IonUpdaterTest()
+    ParticlesSynchronisedMoverTest()
     {
         // ok all resources pointers are set to buffers
         // now let's initialize Electromag fields to user input functions
@@ -354,7 +355,7 @@ struct IonUpdaterTest : public ::testing::Test
     auto update(auto const mode)
     {
         assert(no_nans(ions.velocity()(Component::X)));
-        IonUpdater_t ionUpdater{};
+        ParticlesSynchronisedMover_t ionUpdater{};
 
         if constexpr (Particles::layout_mode == LayoutMode::AoSMapped)
             ionUpdater.updatePopulations(*ions, *EM, boxing, dt, mode);
@@ -545,21 +546,21 @@ using Permutations = ::testing::Types<
   , TestParam<SimOpts{.dimension = 1, .interp_order = 3, .layout_mode = LayoutMode::AoSPCTS}>
 >;
 // clang-format on
-TYPED_TEST_SUITE(IonUpdaterTest, Permutations, );
+TYPED_TEST_SUITE(ParticlesSynchronisedMoverTest, Permutations, );
 
 
 
 
-TYPED_TEST(IonUpdaterTest, ionUpdaterTakesPusherParamsFromDictAtConstruction)
+TYPED_TEST(ParticlesSynchronisedMoverTest, ionUpdaterTakesPusherParamsFromDictAtConstruction)
 {
-    typename IonUpdaterTest<TypeParam>::IonUpdater_t ionUpdater{};
+    typename ParticlesSynchronisedMoverTest<TypeParam>::ParticlesSynchronisedMover_t ionUpdater{};
 }
 
 
 // the following 3 tests are testing the fixture is well configured.
 
 
-TYPED_TEST(IonUpdaterTest, loadsDomainPatchAndLevelGhostParticles)
+TYPED_TEST(ParticlesSynchronisedMoverTest, loadsDomainPatchAndLevelGhostParticles)
 {
     auto check = [this](std::size_t nbrGhostCells, auto& pop) {
         EXPECT_EQ(cell_count(this->layout)[0] * nbrPartPerCell, pop.domainParticles().size());
@@ -589,7 +590,7 @@ TYPED_TEST(IonUpdaterTest, loadsDomainPatchAndLevelGhostParticles)
 
 
 
-TYPED_TEST(IonUpdaterTest, loadsLevelGhostParticlesOnLeftGhostArea)
+TYPED_TEST(ParticlesSynchronisedMoverTest, loadsLevelGhostParticlesOnLeftGhostArea)
 {
     int firstPhysCell = domain_box(this->layout, dual_centering<TypeParam::dimension>()).lower[0];
     auto firstAMRCell = to_amr(this->layout, damn::core::Point{firstPhysCell});
@@ -628,9 +629,9 @@ TYPED_TEST(IonUpdaterTest, loadsLevelGhostParticlesOnLeftGhostArea)
 
 
 
-TYPED_TEST(IonUpdaterTest, particlesUntouchedInMomentOnlyMode)
+TYPED_TEST(ParticlesSynchronisedMoverTest, particlesUntouchedInMomentOnlyMode)
 {
-    typename IonUpdaterTest<TypeParam>::IonUpdater_t ionUpdater{};
+    typename ParticlesSynchronisedMoverTest<TypeParam>::ParticlesSynchronisedMover_t ionUpdater{};
 
     auto ionsBufferCpy = this->ions;
 
@@ -674,9 +675,9 @@ TYPED_TEST(IonUpdaterTest, particlesUntouchedInMomentOnlyMode)
 
 
 
-// TYPED_TEST(IonUpdaterTest, particlesAreChangedInParticlesAndMomentsMode)
+// TYPED_TEST(ParticlesSynchronisedMoverTest, particlesAreChangedInParticlesAndMomentsMode)
 //{
-//    typename IonUpdaterTest<TypeParam>::IonUpdater_t
+//    typename ParticlesSynchronisedMoverTest<TypeParam>::ParticlesSynchronisedMover_t
 //    ionUpdater{init_dict["simulation"]["pusher"]};
 //
 //    IonsBuffers ionsBufferCpy{this->ionsBuffers, this->layout};
@@ -699,9 +700,9 @@ TYPED_TEST(IonUpdaterTest, particlesUntouchedInMomentOnlyMode)
 
 
 
-TYPED_TEST(IonUpdaterTest, momentsAreChangedInParticlesAndMomentsMode)
+TYPED_TEST(ParticlesSynchronisedMoverTest, momentsAreChangedInParticlesAndMomentsMode)
 {
-    typename IonUpdaterTest<TypeParam>::IonUpdater_t ionUpdater{};
+    typename ParticlesSynchronisedMoverTest<TypeParam>::ParticlesSynchronisedMover_t ionUpdater{};
 
     auto ionsBufferCpy = this->ions;
 
@@ -725,9 +726,9 @@ TYPED_TEST(IonUpdaterTest, momentsAreChangedInParticlesAndMomentsMode)
 
 
 
-TYPED_TEST(IonUpdaterTest, momentsAreChangedInMomentsOnlyMode)
+TYPED_TEST(ParticlesSynchronisedMoverTest, momentsAreChangedInMomentsOnlyMode)
 {
-    typename IonUpdaterTest<TypeParam>::IonUpdater_t ionUpdater{};
+    typename ParticlesSynchronisedMoverTest<TypeParam>::ParticlesSynchronisedMover_t ionUpdater{};
 
     auto ionsBufferCpy = this->ions;
 
@@ -745,9 +746,9 @@ TYPED_TEST(IonUpdaterTest, momentsAreChangedInMomentsOnlyMode)
 
 
 
-TYPED_TEST(IonUpdaterTest, thatNoNaNsExistOnPhysicalNodesMoments)
+TYPED_TEST(ParticlesSynchronisedMoverTest, thatNoNaNsExistOnPhysicalNodesMoments)
 {
-    typename IonUpdaterTest<TypeParam>::IonUpdater_t ionUpdater{};
+    typename ParticlesSynchronisedMoverTest<TypeParam>::ParticlesSynchronisedMover_t ionUpdater{};
 
     this->update(UpdaterMode::domain_only);
 
@@ -802,7 +803,8 @@ void populate_particles(auto& ions, Layout& layout)
 {
     auto constexpr dim = Layout::dimension;
     Particle<dim> const particle{1.0 / nbrPartPerCell, damn::core::ConstArray<int, dim>(),
-                                 damn::core::ConstArray<double, dim>(.5), damn::core::ConstArray<double, 3>(1)};
+                                 damn::core::ConstArray<double, dim>(.5),
+                                 damn::core::ConstArray<double, 3>(1)};
     auto const ghost_box = damn::core::grow(layout.cells, 1);
 
     auto const shift_particle = [](auto p, auto const bix) {
@@ -847,15 +849,15 @@ void populate_particles(auto& ions, Layout& layout)
 // Overlapping same-level patches: cells in `nonOwnedBoxes` belong to another patch.
 // Particles move only along x, at a fixed fraction of a cell per step (E = B = 0).
 template<typename TestParam_t>
-struct IonUpdaterOwnershipTest : public IonUpdaterTest<TestParam_t>
+struct ParticlesSynchronisedMoverOwnershipTest : public ParticlesSynchronisedMoverTest<TestParam_t>
 {
-    using Super    = IonUpdaterTest<TestParam_t>;
+    using Super    = ParticlesSynchronisedMoverTest<TestParam_t>;
     using Boxing_t = Super::Boxing_t;
     using Box_t    = Boxing_t::Box_t;
 
     static constexpr double cellsPerStep = 0.5;
 
-    IonUpdaterOwnershipTest()
+    ParticlesSynchronisedMoverOwnershipTest()
     {
         (*this->EM).E.zero();
         (*this->EM).B.zero();
@@ -886,7 +888,8 @@ struct IonUpdaterOwnershipTest : public IonUpdaterTest<TestParam_t>
 
     static std::size_t count(auto const& particles, auto&& predicate)
     {
-        return damn::core::sum_from(particles, [&](auto const& p) { return predicate(p) ? 1ul : 0ul; });
+        return damn::core::sum_from(particles,
+                                    [&](auto const& p) { return predicate(p) ? 1ul : 0ul; });
     }
 
     // particles of `cell` whose displacement takes them into the next cell
@@ -899,7 +902,8 @@ struct IonUpdaterOwnershipTest : public IonUpdaterTest<TestParam_t>
 
     static double weights(auto const& particles)
     {
-        return damn::core::sum_from(particles, [](auto const& particle) { return particle.weight(); });
+        return damn::core::sum_from(particles,
+                                    [](auto const& particle) { return particle.weight(); });
     }
 
     static double total(auto const& field) { return sum(field); }
@@ -907,8 +911,8 @@ struct IonUpdaterOwnershipTest : public IonUpdaterTest<TestParam_t>
     // level ghosts move into the first domain cell, which is owned or not
     void checkLevelGhostExport(bool const withNonOwned)
     {
-        using IonUpdater_t = Super::IonUpdater_t;
-        IonUpdater_t ionUpdater{};
+        using ParticlesSynchronisedMover_t = Super::ParticlesSynchronisedMover_t;
+        ParticlesSynchronisedMover_t ionUpdater{};
 
         auto const nonOwned = withNonOwned ? std::vector{box(0, 9)} : std::vector<Box_t>{};
         auto const boxing   = this->makeBoxing(nonOwned);
@@ -938,8 +942,8 @@ struct IonUpdaterOwnershipTest : public IonUpdaterTest<TestParam_t>
 
     void checkLevelGhostDeposit(bool const withNonOwned, UpdaterMode const mode)
     {
-        using IonUpdater_t = Super::IonUpdater_t;
-        IonUpdater_t ionUpdater{};
+        using ParticlesSynchronisedMover_t = Super::ParticlesSynchronisedMover_t;
+        ParticlesSynchronisedMover_t ionUpdater{};
 
         auto const nonOwned = withNonOwned ? std::vector{box(0, 9)} : std::vector<Box_t>{};
         auto const boxing   = this->makeBoxing(nonOwned);
@@ -977,8 +981,8 @@ struct IonUpdaterOwnershipTest : public IonUpdaterTest<TestParam_t>
     // interpolated on them if the map reaches that far, else they also stay level ghosts.
     void checkLevelGhostsPastTheGhostBoxAreDropped(double const cellsPerHalfPush)
     {
-        using IonUpdater_t = Super::IonUpdater_t;
-        IonUpdater_t ionUpdater{};
+        using ParticlesSynchronisedMover_t = Super::ParticlesSynchronisedMover_t;
+        ParticlesSynchronisedMover_t ionUpdater{};
 
         auto const boxing = makeBoxing({});
         auto const pastGhostBox
@@ -1012,13 +1016,14 @@ using OwnershipPermutations = ::testing::Types<
 >;
 // clang-format on
 
-TYPED_TEST_SUITE(IonUpdaterOwnershipTest, OwnershipPermutations, );
+TYPED_TEST_SUITE(ParticlesSynchronisedMoverOwnershipTest, OwnershipPermutations, );
 
 
 
-TYPED_TEST(IonUpdaterOwnershipTest, particleEnteringNonOwnedCellLeavesDomainAndIsDepositedOnce)
+TYPED_TEST(ParticlesSynchronisedMoverOwnershipTest,
+           particleEnteringNonOwnedCellLeavesDomainAndIsDepositedOnce)
 {
-    typename TestFixture::IonUpdater_t ionUpdater{};
+    typename TestFixture::ParticlesSynchronisedMover_t ionUpdater{};
 
     auto const nonOwned = std::vector{TestFixture::box(60, 99)};
     auto const boxing   = this->makeBoxing(nonOwned);
@@ -1061,46 +1066,48 @@ TYPED_TEST(IonUpdaterOwnershipTest, particleEnteringNonOwnedCellLeavesDomainAndI
 
 
 
-TYPED_TEST(IonUpdaterOwnershipTest, levelGhostEnteringOwnedCellIsExported)
+TYPED_TEST(ParticlesSynchronisedMoverOwnershipTest, levelGhostEnteringOwnedCellIsExported)
 {
     this->checkLevelGhostExport(/*withNonOwned=*/false);
 }
 
-TYPED_TEST(IonUpdaterOwnershipTest, levelGhostEnteringNonOwnedCellIsNotExported)
+TYPED_TEST(ParticlesSynchronisedMoverOwnershipTest, levelGhostEnteringNonOwnedCellIsNotExported)
 {
     this->checkLevelGhostExport(/*withNonOwned=*/true);
 }
 
-TYPED_TEST(IonUpdaterOwnershipTest, levelGhostEnteringOwnedCellIsDepositedInMomentsOnlyMode)
+TYPED_TEST(ParticlesSynchronisedMoverOwnershipTest,
+           levelGhostEnteringOwnedCellIsDepositedInMomentsOnlyMode)
 {
     this->checkLevelGhostDeposit(/*withNonOwned=*/false, UpdaterMode::domain_only);
 }
 
-TYPED_TEST(IonUpdaterOwnershipTest, levelGhostEnteringNonOwnedCellIsNotDepositedInMomentsOnlyMode)
+TYPED_TEST(ParticlesSynchronisedMoverOwnershipTest,
+           levelGhostEnteringNonOwnedCellIsNotDepositedInMomentsOnlyMode)
 {
     this->checkLevelGhostDeposit(/*withNonOwned=*/true, UpdaterMode::domain_only);
 }
 
-TYPED_TEST(IonUpdaterOwnershipTest, levelGhostEnteringOwnedCellIsDeposited)
+TYPED_TEST(ParticlesSynchronisedMoverOwnershipTest, levelGhostEnteringOwnedCellIsDeposited)
 {
     this->checkLevelGhostDeposit(/*withNonOwned=*/false, UpdaterMode::all);
 }
 
-TYPED_TEST(IonUpdaterOwnershipTest, levelGhostEnteringNonOwnedCellIsNotDeposited)
+TYPED_TEST(ParticlesSynchronisedMoverOwnershipTest, levelGhostEnteringNonOwnedCellIsNotDeposited)
 {
     this->checkLevelGhostDeposit(/*withNonOwned=*/true, UpdaterMode::all);
 }
 
 
 
-TYPED_TEST(IonUpdaterOwnershipTest, levelGhostsPushedPastTheGhostBoxAreDropped)
+TYPED_TEST(ParticlesSynchronisedMoverOwnershipTest, levelGhostsPushedPastTheGhostBoxAreDropped)
 {
     this->checkLevelGhostsPastTheGhostBoxAreDropped(2.0); // the most Boris allows
 }
 
 
 
-TYPED_TEST(IonUpdaterOwnershipTest, ownershipFollowsDomainAndNonOwnedBoxes)
+TYPED_TEST(ParticlesSynchronisedMoverOwnershipTest, ownershipFollowsDomainAndNonOwnedBoxes)
 {
     auto const boxing = this->makeBoxing({TestFixture::box(10, 19), TestFixture::box(50, 50)});
     auto const owned  = [&](int i) { return boxing.isOwned(std::array{i}); };
@@ -1117,9 +1124,9 @@ TYPED_TEST(IonUpdaterOwnershipTest, ownershipFollowsDomainAndNonOwnedBoxes)
 }
 
 
-// TYPED_TEST(IonUpdaterTest, hardCodedRegressionTest0)
+// TYPED_TEST(ParticlesSynchronisedMoverTest, hardCodedRegressionTest0)
 // {
-//     using IonUpdater      = TestFixture::IonUpdater;
+//     using ParticlesSynchronisedMover      = TestFixture::ParticlesSynchronisedMover;
 //     auto constexpr dim    = TestFixture::dim;
 //     auto constexpr interp = TestFixture::interp_order;
 
@@ -1135,7 +1142,7 @@ TYPED_TEST(IonUpdaterOwnershipTest, ownershipFollowsDomainAndNonOwnedBoxes)
 //         EXPECT_EQ(pop.patchGhostParticles().size(), 0);
 //     }
 
-//     IonUpdater ionUpdater{};
+//     ParticlesSynchronisedMover ionUpdater{};
 //     this->update(ionUpdater, UpdaterMode::domain_only);
 
 //     std::int64_t icellSum = 0;
@@ -1159,9 +1166,9 @@ TYPED_TEST(IonUpdaterOwnershipTest, ownershipFollowsDomainAndNonOwnedBoxes)
 
 
 
-// TYPED_TEST(IonUpdaterTest, hardCodedRegressionTest1)
+// TYPED_TEST(ParticlesSynchronisedMoverTest, hardCodedRegressionTest1)
 // {
-//     using IonUpdater      = TestFixture::IonUpdater;
+//     using ParticlesSynchronisedMover      = TestFixture::ParticlesSynchronisedMover;
 //     auto constexpr dim    = TestFixture::dim;
 //     auto constexpr interp = TestFixture::interp_order;
 
@@ -1181,7 +1188,7 @@ TYPED_TEST(IonUpdaterOwnershipTest, ownershipFollowsDomainAndNonOwnedBoxes)
 //     }
 //     EXPECT_DOUBLE_EQ(deltaSum, 103333.29999993632);
 
-//     IonUpdater ionUpdater{};
+//     ParticlesSynchronisedMover ionUpdater{};
 //     this->update(ionUpdater, UpdaterMode::all);
 
 //     std::size_t icellSum = 0, pCount = 0;

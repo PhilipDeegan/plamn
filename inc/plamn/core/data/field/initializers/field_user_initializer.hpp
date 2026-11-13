@@ -19,7 +19,7 @@ class FieldUserFunctionInitializer
     void static _initialize(auto& field, auto const& layout, auto const& init)
     {
         auto const coords
-            = coordinate_vectors(layout.dx, amr_ghost_box(layout, field), centering(layout, field));
+            = coordinate_vectors(layout.dx, qty_ghost_box(layout, field), centering(layout, field));
 
         std::shared_ptr<damn::core::Span<double>> gridPtr // keep grid data alive
             = std::apply([&](auto const&... args) { return init(args...); }, coords.spans());
