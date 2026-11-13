@@ -7,8 +7,10 @@ profile:
 # subprojects are fetched along the profile/parent chain, before sources are checked
 - name: base
   inc: inc
+       tpp/cppdict/include
        tpp/menum/include
-  sub: menum&tpp/menum(https://github.com/Neargye/magic_enum)
+  sub: cppdict&tpp/cppdict(https://github.com/LaboratoryOfPlasmaPhysics/cppdict)
+       menum&tpp/menum(https://github.com/Neargye/magic_enum)
   self: damn
   arg: -std=c++20
 

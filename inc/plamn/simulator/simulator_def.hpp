@@ -6,7 +6,7 @@
 #include "plamn/core/models/options/mhd_options_def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 
-#include "damn/initializer/data_provider.hpp"
+#include "plamn/initializer/data_provider.hpp"
 
 #include <array>
 #include <cassert>
@@ -74,10 +74,10 @@ struct SimOpts
                && mhd_is_off == (riemann_solver_type == MHDOpts::RiemannSolverType::MHDOff);
     }
 
-    static SimOpts FROM(damn::initializer::DAMNDict const& dict);
+    static SimOpts FROM(plamn::initializer::Dict const& dict);
 };
 
-SimOpts inline SimOpts::FROM(damn::initializer::DAMNDict const& dict)
+SimOpts inline SimOpts::FROM(plamn::initializer::Dict const& dict)
 {
     SimOpts static const defaults{};
 

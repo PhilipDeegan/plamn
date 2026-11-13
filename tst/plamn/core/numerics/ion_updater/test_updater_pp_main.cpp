@@ -80,7 +80,7 @@ bool static const premain = []() {
 template<typename IonUpdater_t, typename Ions, typename EM, typename GridLayout_t>
 auto construct_(Ions& ions, EM const& em, GridLayout_t const& layout)
 {
-    damn::initializer::DAMNDict dict;
+    plamn::initializer::Dict dict;
     dict["simulation"]["algo"]["ion_updater"]["pusher"]["name"] = std::string{"modified_boris"};
     return IonUpdater_t{dict["simulation"]["algo"]["ion_updater"]};
 }

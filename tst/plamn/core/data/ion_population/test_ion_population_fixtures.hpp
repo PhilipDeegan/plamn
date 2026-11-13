@@ -47,10 +47,10 @@ public:
 
 auto inline pop_dict(std::string const& name, std::size_t const ppc = 0)
 {
-    damn::initializer::DAMNDict popdict;
+    plamn::initializer::Dict popdict;
     popdict["name"]                           = name;
     popdict["mass"]                           = 1.0;
-    auto particle_initializer                 = damn::initializer::DAMNDict{};
+    auto particle_initializer                 = plamn::initializer::Dict{};
     particle_initializer["nbr_part_per_cell"] = static_cast<int>(ppc);
     particle_initializer["charge"]            = 1.;
     particle_initializer["basis"]             = std::string{"cartesian"};
@@ -85,7 +85,7 @@ class UsableIonsPopulation : public _defaults::IonPopulation_t
 
 
 public:
-    UsableIonsPopulation(damn::initializer::DAMNDict const& dict, GridLayout_t const& layout)
+    UsableIonsPopulation(plamn::initializer::Dict const& dict, GridLayout_t const& layout)
         : Super{dict}
         , layout_{layout}
         , rhoP{this->name() + "_particleDensity", layout_, Quantity::Scalar::rho, 1}
@@ -140,7 +140,7 @@ class UsableIons
     template<typename PopNames>
     auto static super(PopNames const& pop_names, std::size_t const ppc)
     {
-        damn::initializer::DAMNDict dict;
+        plamn::initializer::Dict dict;
         dict["nbrPopulations"] = pop_names.size();
         for (std::size_t i = 0; i < pop_names.size(); ++i)
             dict["pop" + std::to_string(i)] = pop_dict(pop_names[i], ppc);
@@ -151,7 +151,7 @@ class UsableIons
 
     auto static super(Super const supe)
     {
-        damn::initializer::DAMNDict dict;
+        plamn::initializer::Dict dict;
         dict["nbrPopulations"] = supe.size();
         for (std::size_t i = 0; i < supe.size(); ++i)
             dict["pop" + std::to_string(i)] = pop_dict(supe[i].name());
@@ -177,7 +177,7 @@ class UsableIons
 public:
     using Particles_t = typename _defaults::Particles_t;
 
-    UsableIons(GridLayout_t const& layout, damn::initializer::DAMNDict const& dict)
+    UsableIons(GridLayout_t const& layout, plamn::initializer::Dict const& dict)
         : Super{dict}
         , layout_{layout}
         , rhoM{"massDensity", layout_, Quantity::Scalar::rho, 1}

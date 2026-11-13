@@ -15,7 +15,7 @@
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 #include "plamn/core/data/ions/particle_initializers/particle_initializer.hpp"
 
-#include "damn/initializer/data_provider.hpp"
+#include "plamn/initializer/data_provider.hpp"
 
 #include <cmath>
 #include <memory>
@@ -33,7 +33,7 @@
 #include "damn/core/math/random.hpp"
 #include "plamn/core/data/ions/particle_initializers/particle_initializer.hpp"
 #include "plamn/core/data/particles/particle.hpp"
-#include "damn/initializer/data_provider.hpp"
+#include "plamn/initializer/data_provider.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/def.hpp"
 
@@ -71,7 +71,7 @@ class MaxwellianParticleInitializer : public ParticleInitializer<Particles, Grid
 {
 public:
     static constexpr auto dimension = GridLayout::dimension;
-    using InputFunction             = damn::initializer::InitFunction<dimension>;
+    using InputFunction             = plamn::initializer::InitFunction<dimension>;
 
     MaxwellianParticleInitializer(
         InputFunction density, std::array<InputFunction, 3> const& bulkVelocity,

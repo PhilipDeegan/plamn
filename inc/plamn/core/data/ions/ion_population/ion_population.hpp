@@ -8,7 +8,7 @@
 
 #include "plamn/core/def.hpp"
 #include "particle_pack.hpp"
-#include "damn/initializer/data_provider.hpp"
+#include "plamn/initializer/data_provider.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 
 namespace plamn
@@ -26,7 +26,7 @@ namespace core
         using tensorfield_type                 = TensorField;
 
 
-        IonPopulation(damn::initializer::DAMNDict const& initializer)
+        IonPopulation(plamn::initializer::Dict const& initializer)
             : name_{initializer["name"].template to<std::string>()}
             , mass_{initializer["mass"].template to<double>()}
             , charge_{initializer["particle_initializer"]["charge"].template to<double>()}
@@ -143,7 +143,7 @@ namespace core
         field_type particleDensity_;
         field_type chargeDensity_;
         ParticlesPack<Particles> particles_;
-        damn::initializer::DAMNDict const& particleInitializerInfo_;
+        plamn::initializer::Dict const& particleInitializerInfo_;
     };
 } // namespace core
 } // namespace plamn

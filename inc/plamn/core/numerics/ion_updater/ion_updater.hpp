@@ -5,7 +5,7 @@
 
 #include "damn/core/def/damn_config.hpp"
 
-#include "damn/core/errors.hpp"
+#include "plamn/core/errors.hpp"
 #include "damn/core/logger.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/box_spans.hpp"
@@ -312,7 +312,7 @@ void IonUpdater<Particles_t, GridLayout>::updateAndDepositAll_(auto& ions, auto 
                         });
             }
             if (outsideGhostBox.size())
-                throw damn::core::DictionaryException{}("ID", "Updater::outsideGhostBox");
+                throw plamn::core::DictionaryException{}("ID", "Updater::outsideGhostBox");
         })
 
         domainParticles.erase(now_ghosts); // drop all ghosts

@@ -3,7 +3,7 @@
 
 
 #include "plamn/core/def.hpp"
-#include "damn/initializer/data_provider.hpp"
+#include "plamn/initializer/data_provider.hpp"
 #include "maxwellian_particle_initializer.hpp"
 #include "particle_initializer.hpp"
 
@@ -23,9 +23,9 @@ namespace core
 
     public:
         NO_DISCARD static std::unique_ptr<ParticleInitializerT>
-        create(damn::initializer::DAMNDict const& dict, std::string const& populationName = "")
+        create(plamn::initializer::Dict const& dict, std::string const& populationName = "")
         {
-            using FunctionType = damn::initializer::InitFunction<dimension>;
+            using FunctionType = plamn::initializer::InitFunction<dimension>;
 
             auto initializerName = dict["name"].template to<std::string>();
 
