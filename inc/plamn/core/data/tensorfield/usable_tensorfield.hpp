@@ -16,6 +16,13 @@
 
 namespace plamn::core
 {
+// Usable* constructors given no_fill allocate only: production code writes everything
+// before reading it; without it they fill on construction, as test fixtures expect
+struct no_fill_t
+{
+};
+inline constexpr no_fill_t no_fill{};
+
 template<typename core_types>
 struct TensorFieldOptions
 {

@@ -8,6 +8,8 @@ patch() points pyphare at plamn:
     plamn Dict, a python owned object, instead of the global pybindlibs.dictator module
   - pharein.clearDict() drops it, so the next simulation starts from an empty Dict
   - pyphare.cpp.cpp_etc_lib() returns pyplamn.etc
+  - pyphare.cpp.cpp_lib(sim) returns pyplamn's simulator module for sim's permutation,
+    built from the Dict (pyplamn.etc.make_hierarchy() hands it to make_simulator)
   - no SAMRAI/MPI start up, no pybindlibs build checks
 """
 
@@ -34,6 +36,21 @@ def clear_dict():
     _dict = None
 
 
+def cpp_lib(sim):
+    """the plamn simulator module of sim's build permutation, as pyphare.cpp.cpp_lib"""
+    import importlib
+
+    from pyphare.cpp import simulator_id
+
+    name = f"pyplamn.plamn_cpp_{simulator_id(sim)}"
+    try:
+        return importlib.import_module(name)
+    except ModuleNotFoundError as e:
+        raise ModuleNotFoundError(
+            f"{name} is not built, see the py_sim profile in plamn's mkn.yaml"
+        ) from e
+
+
 def patch():
     import pyphare.cpp as cpp
     import pyphare.cpp.validate as validate
@@ -45,6 +62,7 @@ def patch():
     ph.clearDict = clear_dict
 
     cpp.cpp_etc_lib = lambda: etc
+    cpp.cpp_lib = cpp_lib
 
     simulator.startMPI = lambda: None
     validate.log_runtime_config = lambda *a, **k: None

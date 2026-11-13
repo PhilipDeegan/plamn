@@ -12,6 +12,7 @@
 #include "plamn/core/data/particles/usable_particles.hpp"
 #include "plamn/initializer/data_provider.hpp"
 #include <string>
+#include <optional>
 #include <vector>
 
 namespace plamn::core
@@ -77,16 +78,23 @@ class UsableIonsPopulation : public _defaults::IonPopulation_t
 
 
 public:
-    UsableIonsPopulation(plamn::initializer::Dict const& dict, Layout_t const& layout)
+    UsableIonsPopulation(plamn::initializer::Dict const& dict, Layout_t const& layout,
+                         std::optional<double> const fill = 1)
         : Super{dict}
         , layout_{layout}
-        , rhoP{this->name() + "_particleDensity", layout_, Quantity::Scalar::rho, 1}
-        , rhoC{this->name() + "_chargeDensity", layout_, Quantity::Scalar::rho, 1}
-        , F{this->name() + "_flux", layout, Quantity::Vector::V, 1}
-        , M{this->name() + "_momentumTensor", layout, Quantity::Tensor::M, 1}
+        , rhoP{this->name() + "_particleDensity", layout_, Quantity::Scalar::rho, fill}
+        , rhoC{this->name() + "_chargeDensity", layout_, Quantity::Scalar::rho, fill}
+        , F{this->name() + "_flux", layout, Quantity::Vector::V, fill}
+        , M{this->name() + "_momentumTensor", layout, Quantity::Tensor::M, fill}
         , particles{this->name(), layout}
     {
         set();
+    }
+
+    UsableIonsPopulation(plamn::initializer::Dict const& dict, Layout_t const& layout,
+                         no_fill_t)
+        : UsableIonsPopulation{dict, layout, std::nullopt}
+    {
     }
 
     UsableIonsPopulation(UsableIonsPopulation const& that)
@@ -166,23 +174,35 @@ class UsableIons
     }
 
 
-public:
-    using Particles_t = typename _defaults::Particles_t;
-
-    UsableIons(Layout_t const& layout, plamn::initializer::Dict const& dict)
+    // fill: moments and populations, fillM: the momentum tensor
+    UsableIons(Layout_t const& layout, plamn::initializer::Dict const& dict,
+               std::optional<double> const fill, std::optional<double> const fillM)
         : Super{dict}
         , layout_{layout}
-        , rhoM{"massDensity", layout_, Quantity::Scalar::rho, 1}
-        , rhoC{"chargeDensity", layout_, Quantity::Scalar::rho, 1}
-        , Vi{"bulkVel", layout, Quantity::Vector::V, 1}
-        , chargeFlux{"chargeFlux", layout, Quantity::Vector::V, 1}
-        , M{"momentumTensor", layout, Quantity::Tensor::M, 0}
+        , rhoM{"massDensity", layout_, Quantity::Scalar::rho, fill}
+        , rhoC{"chargeDensity", layout_, Quantity::Scalar::rho, fill}
+        , Vi{"bulkVel", layout, Quantity::Vector::V, fill}
+        , chargeFlux{"chargeFlux", layout, Quantity::Vector::V, fill}
+        , M{"momentumTensor", layout, Quantity::Tensor::M, fillM}
     {
         auto& super_pops = Super::getRunTimeResourcesViewList();
         populations.reserve(super_pops.size());
         for (std::size_t i = 0; i < super_pops.size(); ++i)
-            populations.emplace_back(dict["pop" + std::to_string(i)], layout);
+            populations.emplace_back(dict["pop" + std::to_string(i)], layout, fill);
         set();
+    }
+
+public:
+    using Particles_t = typename _defaults::Particles_t;
+
+    UsableIons(Layout_t const& layout, plamn::initializer::Dict const& dict)
+        : UsableIons{layout, dict, 1., 0.}
+    {
+    }
+
+    UsableIons(Layout_t const& layout, plamn::initializer::Dict const& dict, no_fill_t)
+        : UsableIons{layout, dict, std::nullopt, std::nullopt}
+    {
     }
 
     UsableIons(Layout_t const& layout, std::vector<std::string> const& pop_names,

@@ -45,6 +45,14 @@ def mpi_is_root_rank_for_host():
     return True
 
 
+def make_hierarchy():
+    """what pyphare hands to make_simulator: the Dict it filled, plamn builds the
+    hierarchy from it"""
+    from . import current_dict
+
+    return current_dict()
+
+
 class SamraiLifeCycle:
     """nothing to start or stop without SAMRAI"""
 

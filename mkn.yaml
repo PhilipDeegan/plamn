@@ -24,6 +24,16 @@ profile:
   out: plamn_etc
   install: python/pyplamn
 
+# python module: a simulator permutation (1D, interp 1, AoSMapped, CPU)
+- name: py_sim
+  parent: base
+  dep: lang.nanobind
+  mod: lang.python3 python3.module
+  src: src/python3/plamn_sim.cpp
+  mode: shared
+  out: plamn_cpp_1_1_2_AoSMapped_CPU
+  install: python/pyplamn
+
 - name: test_plamn_core
   inc: . tpp/damn
   self: base

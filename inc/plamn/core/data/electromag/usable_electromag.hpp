@@ -9,6 +9,7 @@
 #include "plamn/core/data/tensorfield/usable_tensorfield.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include <cstddef>
+#include <optional>
 
 namespace plamn::core
 {
@@ -116,12 +117,19 @@ public:
 
 
     template<typename Layout>
-    UsableElectromag(Layout const& layout, plamn::initializer::Dict const& dict)
+    UsableElectromag(Layout const& layout, plamn::initializer::Dict const& dict,
+                     std::optional<double> const fill = 0)
         : Super{dict}
-        , E{"EM_E", layout, HybridQuantity::Vector::E, 0}
-        , B{"EM_B", layout, HybridQuantity::Vector::B, 0}
+        , E{"EM_E", layout, HybridQuantity::Vector::E, fill}
+        , B{"EM_B", layout, HybridQuantity::Vector::B, fill}
     {
         _set();
+    }
+
+    template<typename Layout>
+    UsableElectromag(Layout const& layout, plamn::initializer::Dict const& dict, no_fill_t)
+        : UsableElectromag{layout, dict, std::nullopt}
+    {
     }
 
 
