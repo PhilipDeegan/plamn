@@ -11,32 +11,30 @@
 namespace plamn::core
 {
 
-template<typename Layout_t>
-auto make_nd_span_set_for_qty(Layout_t const& layout, auto const pq)
+auto make_nd_span_set_for_qty(auto const& layout, auto const pq)
 {
     return damn::core::make_nd_span_set_from(layout,
                                  [&](auto const& layout) { return ghost_box(layout, pq); });
 }
 
 
-template<auto quantity, typename TileSet_t, typename Layout_t>
-auto make_qty_nd_span_set_from(TileSet_t& tiles, Layout_t const& layout)
+template<auto quantity>
+auto make_qty_nd_span_set_from(auto& tiles, auto const& layout)
 {
     return damn::core::make_nd_span_set_from(tiles, layout, [&](auto const& box) {
         return amr_ghost_box(sub_layout(layout, box), quantity);
     });
 }
 
-template<typename TileSet_t, typename Layout_t>
-auto make_qty_nd_span_set_from(TileSet_t& tiles, Layout_t const& layout, auto const qty)
+auto make_qty_nd_span_set_from(auto& tiles, auto const& layout, auto const qty)
 {
     return damn::core::make_nd_span_set_from(
         tiles, layout, [&](auto const& box) { return amr_ghost_box(sub_layout(layout, box), qty); });
 }
 
 
-template<typename TileSet_t, typename Layout_t>
-auto make_particle_nd_span_set_from(TileSet_t& tiles, Layout_t const& layout)
+template<typename Layout_t>
+auto make_particle_nd_span_set_from(auto& tiles, Layout_t const& layout)
 {
     return damn::core::make_nd_span_set_from(tiles, layout, [](auto const& box) {
         return damn::core::grow(box, Layout_t::options.particle_ghost_width);

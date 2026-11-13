@@ -76,8 +76,7 @@ struct FieldComparator
 
     void finalize() { ok = eqvals == total and nan0 == 0 and nan1 == 0; }
 
-    template<typename F0, typename F1>
-    auto operator()(F0 const& ref, F1 const& cmp)
+    auto operator()(auto const& ref, auto const& cmp)
     {
         auto const& ref_dat = ref.data();
         auto const& cmp_dat = cmp.data();
@@ -225,9 +224,8 @@ damn::core::EqualityReport compare_fields(FieldTileSet<T0s...> const& ref, Field
  * never given a valid interpolated value, e.g. density and bulk velocity).
  * Supports both AoSMapped (plain Field) and AoSCMTS (FieldTileSet) inputs.
  */
-template<typename Layout, std::size_t dim, typename PQ, typename D0, typename D1, auto am0,
-         auto am1>
-damn::core::EqualityReport compare_field_domains(Layout const& layout, Field<dim, PQ, D0, am0> const& ref,
+template<std::size_t dim, typename PQ, typename D0, typename D1, auto am0, auto am1>
+damn::core::EqualityReport compare_field_domains(auto const& layout, Field<dim, PQ, D0, am0> const& ref,
                                      Field<dim, PQ, D1, am1> const& cmp, double const diff = 1e-15)
 {
     auto const same_sizes = ref.size() == cmp.size();
@@ -267,15 +265,15 @@ damn::core::EqualityReport compare_field_domains(Layout const& layout, Field<dim
     return damn::core::EqualityReport{true, log.str()};
 }
 
-template<typename Layout, typename... T0s, typename... T1s>
-damn::core::EqualityReport compare_field_domains(Layout const& layout, Grid<T0s...> const& ref,
+template<typename... T0s, typename... T1s>
+damn::core::EqualityReport compare_field_domains(auto const& layout, Grid<T0s...> const& ref,
                                      Grid<T1s...> const& cmp, double const diff = 1e-15)
 {
     return compare_field_domains(layout, *ref, *cmp, diff);
 }
 
-template<typename Layout, std::size_t dim, typename PQ, typename D, auto am, typename... T1s>
-damn::core::EqualityReport compare_field_domains(Layout const& layout, Field<dim, PQ, D, am> const& ref,
+template<std::size_t dim, typename PQ, typename D, auto am, typename... T1s>
+damn::core::EqualityReport compare_field_domains(auto const& layout, Field<dim, PQ, D, am> const& ref,
                                      FieldTileSet<T1s...> const& cmp, double const diff = 1e-15)
 {
     if (ref.size() != cmp.size())
@@ -286,8 +284,8 @@ damn::core::EqualityReport compare_field_domains(Layout const& layout, Field<dim
     return compare_field_domains(layout, ref, tmp, diff);
 }
 
-template<typename Layout, typename... T0s, std::size_t dim, typename PQ, typename D, auto am>
-damn::core::EqualityReport compare_field_domains(Layout const& layout, FieldTileSet<T0s...> const& ref,
+template<typename... T0s, std::size_t dim, typename PQ, typename D, auto am>
+damn::core::EqualityReport compare_field_domains(auto const& layout, FieldTileSet<T0s...> const& ref,
                                      Field<dim, PQ, D, am> const& cmp, double const diff = 1e-15)
 {
     return compare_field_domains(layout, cmp, ref, diff);

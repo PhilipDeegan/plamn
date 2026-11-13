@@ -9,8 +9,8 @@ namespace plamn::core::gpu::impl
 
 struct BoxKernel
 {
-    template<typename Fn, typename T, std::size_t S, typename... Args>
-    static void evalOnBox(Fn& fn, damn::core::Box<T, S> const& box, Args&&... args)
+    template<typename T, std::size_t S, typename... Args>
+    static void evalOnBox(auto& fn, damn::core::Box<T, S> const& box, Args&&... args)
     {
 #if !defined(RAJA_ENABLE_CUDA)
         RAJA::forall<RAJA::seq_exec>(

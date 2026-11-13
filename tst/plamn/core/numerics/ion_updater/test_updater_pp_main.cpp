@@ -77,8 +77,8 @@ bool static const premain = []() {
     return true;
 }();
 
-template<typename IonUpdater_t, typename Ions, typename EM, typename Layout_t>
-auto construct_(Ions& ions, EM const& em, Layout_t const& layout)
+template<typename IonUpdater_t>
+auto construct_(auto& ions, auto const& em, auto const& layout)
 {
     plamn::initializer::Dict dict;
     dict["simulation"]["algo"]["ion_updater"]["pusher"]["name"] = std::string{"modified_boris"};
@@ -105,8 +105,8 @@ namespace detail::strings
 } // namespace detail::strings
 
 
-template<typename Ions, typename EM, typename Layout_t>
-void udpate(Ions& ions, EM const& em, Layout_t const& layout)
+template<typename Layout_t>
+void udpate(auto& ions, auto const& em, Layout_t const& layout)
 {
     // no timings
     auto updater       = get_updater_for(ions, em, layout);
@@ -118,8 +118,8 @@ void udpate(Ions& ions, EM const& em, Layout_t const& layout)
     updater.updatePopulations(ions, em, boxing, dt);
 }
 
-template<typename Ions, typename EM, typename Layout_t>
-void update(Ions& ions, EM const& em, Layout_t const& layout)
+template<typename Ions>
+void update(Ions& ions, auto const& em, auto const& layout)
 {
     using Particles = typename Ions::particles_type;
     auto constexpr function_id
@@ -237,8 +237,8 @@ auto& evolve(Ions& ions, Layout_t const& layout)
 }
 
 
-template<typename Layout_t, typename P0, typename P1>
-void check_particles(Layout_t const& layout, P0& ref, P1& cmp, std::size_t ghosts = 0)
+template<typename P0, typename P1>
+void check_particles(auto const& layout, P0& ref, P1& cmp, std::size_t ghosts = 0)
 {
     using CPU_ref = Particles<ParticlesOptions{P0::dimension, LayoutMode::AoS,
                                                        StorageMode::VECTOR, damn::AllocatorMode::CPU}>;
@@ -261,8 +261,8 @@ void check_particles(Layout_t const& layout, P0& ref, P1& cmp, std::size_t ghost
     EXPECT_TRUE(report);
 }
 
-template<typename Layout_t, typename R, typename C>
-void compare(Layout_t const& layout, R& ref, C& cmp)
+template<typename C>
+void compare(auto const& layout, auto& ref, C& cmp)
 {
     if (!do_cmp)
         return;

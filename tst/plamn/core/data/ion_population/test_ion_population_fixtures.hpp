@@ -137,8 +137,7 @@ class UsableIons
 
 
 
-    template<typename PopNames>
-    auto static super(PopNames const& pop_names, std::size_t const ppc)
+    auto static super(auto const& pop_names, std::size_t const ppc)
     {
         plamn::initializer::Dict dict;
         dict["nbrPopulations"] = pop_names.size();

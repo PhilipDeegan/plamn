@@ -23,8 +23,8 @@
 
 namespace plamn::core::detail
 {
-template<std::size_t d, typename Array, typename T, std::size_t dim>
-double shifted(Array const& array, damn::core::Point<T, dim> const& idx, int const shift) DAMN_ALL
+template<std::size_t d, typename T, std::size_t dim>
+double shifted(auto const& array, damn::core::Point<T, dim> const& idx, int const shift) DAMN_ALL
 {
     return damn::core::for_N_fold<dim>([&](auto... i) { return array((i == d ? idx[i] + shift : idx[i])...); });
 }
@@ -61,9 +61,8 @@ class Partial<dir, dim>
 public:
     using expr_tag = void;
 
-    template<typename Src>
     Partial(std::array<double, dim> const& dx, std::array<QtyCentering, dim> const& srcCentering,
-            Src const& src)
+            auto const& src)
         : view_{src.data(), src.shape()}
     {
         if (src.data() == nullptr)
@@ -75,8 +74,7 @@ public:
         centering_[d] = detail::flipped(srcCentering[d]);
     }
 
-    template<typename Layout, typename Src>
-    Partial(Layout const& layout, Src const& src)
+    Partial(auto const& layout, auto const& src)
         : Partial{layout.dx, ::plamn::core::centering(layout, src), src}
     {
     }
@@ -112,8 +110,7 @@ public:
     {
     }
 
-    template<typename Layout, typename Src>
-    Partial(Layout const& layout, Src const& src)
+    Partial(auto const& layout, auto const& src)
         : centering_{::plamn::core::centering(layout, src)}
     {
     }
@@ -140,17 +137,15 @@ namespace detail
     public:
         using expr_tag = void;
 
-        template<typename VecField>
         CurlComponent(std::array<double, dim> const& dx,
-                      std::array<std::array<QtyCentering, dim>, 3> const& cs, VecField const& v)
+                      std::array<std::array<QtyCentering, dim>, 3> const& cs, auto const& v)
             : dj_vk_{dx, cs[k], v[k]}
             , dk_vj_{dx, cs[j], v[j]}
         {
             check_();
         }
 
-        template<typename Layout, typename VecField>
-        CurlComponent(Layout const& layout, VecField const& v)
+        CurlComponent(auto const& layout, auto const& v)
             : dj_vk_{layout, v[k]}
             , dk_vj_{layout, v[j]}
         {
@@ -219,8 +214,7 @@ class Div
 public:
     using expr_tag = void;
 
-    template<typename Layout, typename VecField>
-    Div(Layout const& layout, VecField const& v)
+    Div(auto const& layout, auto const& v)
         : dx_vx_{layout, v[0]}
         , dy_vy_{layout, v[1]}
         , dz_vz_{layout, v[2]}
@@ -248,41 +242,41 @@ private:
 
 
 
-template<auto dir, typename Layout, typename Src>
-auto partial(Layout const& layout, Src const& src)
+template<auto dir, typename Layout>
+auto partial(Layout const& layout, auto const& src)
 {
     return Partial<dir, Layout::dimension>{layout, src};
 }
 
 // centering of a field from its quantity, no layout needed
-template<std::size_t dim, typename Field>
-auto centering_of(Field const& f)
+template<std::size_t dim>
+auto centering_of(auto const& f)
 {
     return centering<dim>(quantity(f.physicalQuantity()));
 }
 
-template<std::size_t dim, typename VecField>
-auto curl(std::array<double, dim> const& dx, VecField const& v)
+template<std::size_t dim>
+auto curl(std::array<double, dim> const& dx, auto const& v)
 {
     std::array<std::array<QtyCentering, dim>, 3> const c{
         centering_of<dim>(v[0]), centering_of<dim>(v[1]), centering_of<dim>(v[2])};
     return Curl<dim>{{dx, c, v}, {dx, c, v}, {dx, c, v}};
 }
 
-template<typename Layout, typename VecField>
-auto curl(Layout const& layout, VecField const& v)
+template<typename Layout>
+auto curl(Layout const& layout, auto const& v)
 {
     return Curl<Layout::dimension>{{layout, v}, {layout, v}, {layout, v}};
 }
 
-template<typename Layout, typename Src>
-auto grad(Layout const& layout, Src const& src)
+template<typename Layout>
+auto grad(Layout const& layout, auto const& src)
 {
     return Grad<Layout::dimension>{{layout, src}, {layout, src}, {layout, src}};
 }
 
-template<typename Layout, typename VecField>
-auto div(Layout const& layout, VecField const& v)
+template<typename Layout>
+auto div(Layout const& layout, auto const& v)
 {
     return Div<Layout::dimension>{layout, v};
 }

@@ -76,8 +76,8 @@ damn::core::EqualityReport compare_reduced_fields(Grid<T0s...> const& ref, Grid<
 }
 
 
-template<typename Layout_t, auto opts>
-void zero_ghost_layer(basic::Field<opts>& f, Layout_t const& layout)
+template<auto opts>
+void zero_ghost_layer(basic::Field<opts>& f, auto const& layout)
 {
     for (auto const& ghost : ghost_box(layout, f).remove(domain_box(layout, f)))
         damn::core::for_each_point(ghost, [&](auto const& bix) { f(bix) = 0; });

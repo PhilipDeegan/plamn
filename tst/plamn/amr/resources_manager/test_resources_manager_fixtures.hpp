@@ -114,8 +114,8 @@ template<typename Patches, typename ArgsGetter>
 UsableModelAccessor(Patches, ArgsGetter) -> UsableModelAccessor<Patches, ArgsGetter>;
 
 
-template<typename Patches, typename ArgsGetter = decltype(detail::default_no_args)>
-auto make_model_level_accessor(Patches& patches, ArgsGetter getter = detail::default_no_args)
+template<typename ArgsGetter = decltype(detail::default_no_args)>
+auto make_model_level_accessor(auto& patches, ArgsGetter getter = detail::default_no_args)
 {
     return UsableModelAccessor{patches, getter};
 }

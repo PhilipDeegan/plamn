@@ -16,8 +16,7 @@ namespace plamn::core
 
 class FieldUserFunctionInitializer
 {
-    template<typename Field, typename Layout, typename InitFunction>
-    void static _initialize(Field& field, Layout const& layout, InitFunction const& init)
+    void static _initialize(auto& field, auto const& layout, auto const& init)
     {
         auto const coords = coordinate_vectors(layout.dx, amr_ghost_box(layout, field),
                                                centering(layout, field));
@@ -32,8 +31,8 @@ class FieldUserFunctionInitializer
     }
 
 public:
-    template<typename Field, typename Layout, typename InitFunction>
-    void static initialize(Field& field, Layout const& layout, InitFunction const& init)
+    template<typename Field>
+    void static initialize(Field& field, auto const& layout, auto const& init)
     {
         auto constexpr static is_field_tile_set = is_field_tile_set_v<Field>;
 

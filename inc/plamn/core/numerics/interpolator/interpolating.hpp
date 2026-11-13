@@ -137,8 +137,7 @@ template<std::size_t dim, std::size_t interpOrder, bool atomic_ops = false,
 class Interpolating
 {
 public:
-    template<typename Particles>
-    inline void operator()(Particles const& particles, auto& rhoP, auto& flux, auto const& layout,
+    inline void operator()(auto const& particles, auto& rhoP, auto& flux, auto const& layout,
                            double coef = 1.)
     {
         DAMN_LOG_SCOPE(3, "Interpolating::particleToMesh");
@@ -341,9 +340,8 @@ public:
 #endif // DAMN_HAVE_MKN_GPU_HW
     }
 
-    template<bool in_box = false, typename Particles, typename Layout, typename VecField,
-             typename Field>
-    static void box_kernel(Particles& particles, Layout& layout, VecField& flux, Field& density,
+    template<bool in_box = false, typename Particles>
+    static void box_kernel(Particles& particles, auto& layout, auto& flux, auto& density,
                            double coef = 1.) DAMN_ALL
     {
 #if DAMN_HAVE_MKN_GPU_HW
@@ -374,9 +372,8 @@ public:
     }
 
 #if 0 // old unused
-    template<typename Particles, typename Layout, typename VecField, typename Field>
-    static void chunk_kernel_ts(Particles& particles, Layout& layout, VecField& flux,
-                                Field& density, double coef = 1.) DAMN_ALL
+    static void chunk_kernel_ts(auto& particles, auto& layout, auto& flux,
+                                auto& density, double coef = 1.) DAMN_ALL
     {
 #if DAMN_HAVE_MKN_GPU_HW
 
@@ -659,8 +656,8 @@ public:
     }
 
 
-    template<typename Field, typename Particles, typename Layout>
-    static void on_cpu_tiles(Particles& particles, Layout& layout,
+    template<typename Field>
+    static void on_cpu_tiles(auto& particles, auto& layout,
                              double coef = 1.) DAMN_ALL
     {
         using TensorField_t = basic::TensorField<typename Field::Super, 1>;
@@ -683,9 +680,9 @@ public:
 
 
 
-    template<typename Particles, typename Layout, typename VecField, typename Field>
-    static void chunk_kernel(Particles& particles, Layout& layout, VecField& flux,
-                             Field& density, double coef = 1.) DAMN_DEV
+    template<typename Layout>
+    static void chunk_kernel(auto& particles, Layout& layout, auto& flux,
+                             auto& density, double coef = 1.) DAMN_DEV
     {
 #if DAMN_HAVE_MKN_GPU_HW
         auto constexpr static nghosts = Layout::options.field_ghost_width;
@@ -803,8 +800,7 @@ struct MomentumTensorInterpolating
     Interpolator_t interp_;
 
 public:
-    template<typename Particles_t>
-    inline void operator()(Particles_t& particles, auto& momentumTensor, auto const& layout,
+    inline void operator()(auto& particles, auto& momentumTensor, auto const& layout,
                            double mass = 1.)
     {
         assert(momentumTensor.isUsable());

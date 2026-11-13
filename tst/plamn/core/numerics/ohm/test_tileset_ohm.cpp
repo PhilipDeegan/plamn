@@ -40,23 +40,21 @@ double static constexpr eta = 1;
 double static constexpr nu  = 1;
 auto static const cells     = damn::core::get_env_as("PLAMN_CELLS", std::uint32_t{22});
 
-template<typename Patch>
-void ref_do(Patch& patch)
+void ref_do(auto& patch)
 {
     OhmTransformer{{eta, nu}}(patch.layout, patch.n, patch.V, patch.P, patch.em.B, patch.J,
                               patch.emNew.E);
 }
 
-template<typename Patch>
-void cmp_do(Patch& patch)
+void cmp_do(auto& patch)
 {
     // CPU: tile by tile, GPU: one launch, block per tile
     OhmTransformer{{eta, nu}}(patch.layout, *patch.n, *patch.V, *patch.P, *patch.em.B, *patch.J,
                               *patch.emNew.E);
 }
 
-template<auto alloc_mode, typename Layout_t, typename R, typename C>
-void compare(Layout_t const& layout, R& ref, C& cmp)
+template<auto alloc_mode>
+void compare(auto const& layout, auto& ref, auto& cmp)
 {
     using enum LayoutMode;
     using enum damn::AllocatorMode;
@@ -192,8 +190,7 @@ DAMN_WITH_GPU(
 
 TYPED_TEST_SUITE(OhmTileTest, Permutations_t, );
 
-template<typename OhmTileTest_t>
-auto run(OhmTileTest_t& self)
+auto run(auto& self)
 {
     ref_do(self.ref_patch);
     cmp_do(self.cmp_patch);

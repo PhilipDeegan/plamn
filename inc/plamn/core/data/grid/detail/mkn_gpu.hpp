@@ -11,8 +11,8 @@ namespace plamn::core::gpu::impl
 
 struct BoxKernel
 {
-    template<typename Fn, typename T, std::size_t S, typename... Args>
-    static void evalOnBox(Fn& fn, damn::core::Box<T, S> const& box, Args&... args)
+    template<typename T, std::size_t S, typename... Args>
+    static void evalOnBox(auto& fn, damn::core::Box<T, S> const& box, Args&... args)
     {
         damn::kernel::launch(box.size(),
                        [=] DAMN_ALL() mutable { fn(damn::core::point_at(box, damn::kernel::idx()), args...); });

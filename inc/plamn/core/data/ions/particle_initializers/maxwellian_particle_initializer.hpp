@@ -43,9 +43,8 @@ namespace plamn::core
 enum class Basis { Magnetic, Cartesian };
 
 
-template<typename Generator>
 void maxwellianVelocity(std::array<double, 3> const& V, std::array<double, 3> const& Vth,
-                        Generator& generator, std::array<double, 3>& partVelocity)
+                        auto& generator, std::array<double, 3>& partVelocity)
 {
     std::normal_distribution<> maxwellX(V[0], Vth[0]);
     std::normal_distribution<> maxwellY(V[1], Vth[1]);
@@ -144,10 +143,10 @@ private:
 class MaxwellianInitFunctions
 {
 public:
-    template<typename Function, typename FunctionArray, typename Basis, typename... Coords>
-    MaxwellianInitFunctions(Function& density, FunctionArray& bulkVelocity,
+    template<typename FunctionArray, typename... Coords>
+    MaxwellianInitFunctions(auto& density, FunctionArray& bulkVelocity,
                             FunctionArray& thermalVelocity, FunctionArray& magneticField,
-                            Basis const& basis, Coords const&... coords)
+                            auto const& basis, Coords const&... coords)
         : _n{density(coords...)}
 
     {

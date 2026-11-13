@@ -162,8 +162,7 @@ public:
     friend std::ostream& operator<<(std::ostream&, UsableTensorField<o> const&);
 
 protected:
-    template<typename ComponentNames, typename Layout>
-    auto static make_grids(ComponentNames const& compNames, Layout const& layout, tensor_t qty)
+    auto static make_grids(auto const& compNames, auto const& layout, tensor_t qty)
     {
         auto qts = HybridQuantity::componentsQuantities(qty);
         return damn::core::for_N<N_elements, damn::core::for_N_R_mode::make_array>(

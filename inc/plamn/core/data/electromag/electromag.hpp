@@ -75,8 +75,7 @@ namespace core
         }
 
 
-        template<typename Layout>
-        void initialize(Layout const& layout)
+        void initialize(auto const& layout)
         {
             assert(B.isUsable());
             Binit_.initialize(B, layout);

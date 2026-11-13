@@ -122,8 +122,8 @@ private:
     }
 
 
-    template<auto component, typename Field, typename GradPe>
-    auto pressure_(Field const& n, GradPe const& gradPe,
+    template<auto component, typename Field>
+    auto pressure_(Field const& n, auto const& gradPe,
                    damn::core::Point<std::size_t, Field::dimension> index) const DAMN_ALL
     {
         if constexpr (component == Component::X)
@@ -165,8 +165,8 @@ private:
 
 
 
-    template<auto component, typename VecField>
-    auto resistive_(VecField const& J, damn::core::Point<std::size_t, dimension> index) const DAMN_ALL
+    template<auto component>
+    auto resistive_(auto const& J, damn::core::Point<std::size_t, dimension> index) const DAMN_ALL
     {
         auto const& Jxyx = J(component);
 
@@ -189,8 +189,8 @@ private:
         }
     }
 
-    template<auto component, typename VecField, typename Field>
-    auto hyperresistive_(VecField const& J, VecField const& B, Field const& n,
+    template<auto component, typename VecField>
+    auto hyperresistive_(VecField const& J, VecField const& B, auto const& n,
                          damn::core::Point<std::size_t, VecField::dimension> index) const DAMN_ALL
     {
         // if compile error, fix this function
@@ -211,8 +211,8 @@ private:
         return -nu * laplacian(layout_, J(component), index);
     }
 
-    template<auto component, typename VecField, typename Field>
-    auto spatial_hyperresistive_(VecField const& J, VecField const& B, Field const& n,
+    template<auto component, typename VecField>
+    auto spatial_hyperresistive_(VecField const& J, VecField const& B, auto const& n,
                                  damn::core::Point<std::size_t, VecField::dimension> index) const DAMN_ALL
     {
         auto const lvlCoeff = 1. / std::pow(4, layout_.level);

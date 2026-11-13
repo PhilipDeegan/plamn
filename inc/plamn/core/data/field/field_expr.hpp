@@ -97,8 +97,8 @@ namespace expr
             return Scalar{static_cast<double>(t)};
     }
 
-    template<typename Op, typename A, typename B>
-    NO_DISCARD auto binary(A const& a, B const& b)
+    template<typename Op>
+    NO_DISCARD auto binary(auto const& a, auto const& b)
     {
         using L = decltype(lift(a));
         using R = decltype(lift(b));
@@ -152,8 +152,8 @@ NO_DISCARD auto operator-(E const& e)
 
 
 // dst = e at every point of box (dst's local index space)
-template<typename Dst, typename Box_t, Expr E>
-void assign(Dst& dst, Box_t const& box, E const& e)
+template<typename Dst, Expr E>
+void assign(Dst& dst, auto const& box, E const& e)
 {
     auto const fn = [] DAMN_ALL(auto const& ijk, auto& d, auto const& ex) {
         d(ijk) = ex(ijk);

@@ -92,21 +92,18 @@ public:
     {
     }
 
-    template<typename Layout_t>
-    FieldBox(Field_t& field_, Layout_t const& layout)
+    FieldBox(Field_t& field_, auto const& layout)
         : FieldBox{field_, layout.cells, ghost_box(layout, field_)}
     {
     }
 
-    template<typename Layout_t>
-    FieldBox(Field_t& field_, Layout_t const& layout,
+    FieldBox(Field_t& field_, auto const& layout,
              damn::core::Box<std::uint32_t, dimension> const& selection)
         : FieldBox{field_, layout.cells, selection}
     {
     }
 
-    template<typename Layout_t>
-    FieldBox(Field_t& field_, Layout_t const& layout, damn::core::Box<int, dimension> const& selection)
+    FieldBox(Field_t& field_, auto const& layout, damn::core::Box<int, dimension> const& selection)
         : FieldBox{field_, layout.cells, to_local(layout, selection)}
     {
     }
@@ -822,8 +819,8 @@ auto& reduce_single(Tiles const& input)
     return input;
 }
 
-template<typename Operator, typename Grid_t, typename GridTiles_t>
-auto& reduce_into_(GridTiles_t const& tiles, Grid_t& grid)
+template<typename Operator, typename Grid_t>
+auto& reduce_into_(auto const& tiles, Grid_t& grid)
 {
     DAMN_LOG_SCOPE(3, "reduce_into<GridTileSet,Grid>");
 

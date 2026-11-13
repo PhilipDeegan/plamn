@@ -104,8 +104,8 @@ namespace detail::strings
 } // namespace detail::strings
 
 
-template<typename IonUpdater_t, typename Patches>
-void update_serial(UpdaterMode mode, Patches& patches)
+template<typename IonUpdater_t>
+void update_serial(UpdaterMode mode, auto& patches)
 {
     using Boxing_t = IonUpdater_t::Boxing_t;
 
@@ -121,8 +121,8 @@ void update_serial(UpdaterMode mode, Patches& patches)
         }
 }
 
-template<typename IonUpdater_t, typename Patches>
-void update_parallel(UpdaterMode mode, Patches& patches)
+template<typename IonUpdater_t>
+void update_parallel(UpdaterMode mode, auto& patches)
 {
     using Boxing_t = IonUpdater_t::Boxing_t;
 
@@ -340,8 +340,8 @@ void check_particles(Layout_t const& layout, P0& ref, P1& cmp_, double const ato
     EXPECT_TRUE(report);
 }
 
-template<typename Layout_t, typename R, typename C>
-void compare(Layout_t const& layout, R& ref, C& cmp)
+template<typename C>
+void compare(auto const& layout, auto& ref, C& cmp)
 {
     using Particles_t = C::Particles_t;
     auto constexpr function_id

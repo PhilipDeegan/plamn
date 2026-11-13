@@ -49,8 +49,7 @@ public:
     }
 
     // the box E component Ec is computed on, as eval_on_box below
-    template<typename Layout, typename Field>
-    static auto box_for(Layout const& layout, Field const& Ec)
+    static auto box_for(auto const& layout, auto const& Ec)
     {
         return domain_box(layout, Ec);
     }

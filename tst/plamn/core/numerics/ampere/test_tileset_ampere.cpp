@@ -51,8 +51,7 @@ bool static const premain = []() {
 auto& pool = *damn::core::ThreadPool::INSTANCE().thread_pools[0];
 
 
-template<typename Patch>
-void ref_do(Patch& patch)
+void ref_do(auto& patch)
 {
     AmpereTransformer<>{}(patch.layout, patch.em.B, patch.J);
 }
@@ -76,8 +75,8 @@ void cmp_do(Patch& patch)
 
 
 
-template<auto alloc_mode, typename Layout_t, typename R, typename C>
-void compare(Layout_t const& layout, R& ref, C& cmp)
+template<auto alloc_mode>
+void compare(auto const& layout, auto& ref, auto& cmp)
 {
     using enum LayoutMode;
     using enum damn::AllocatorMode;
@@ -200,8 +199,7 @@ DAMN_WITH_GPU(
 
 TYPED_TEST_SUITE(AmpereTileTest, Permutations_t, );
 
-template<typename AmpereTileTest_t>
-auto run(AmpereTileTest_t& self)
+auto run(auto& self)
 {
     ref_do(self.ref_patch);
     cmp_do(self.cmp_patch);

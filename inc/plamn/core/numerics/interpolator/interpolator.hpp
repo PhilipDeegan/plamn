@@ -192,8 +192,8 @@ class MeshToParticle
 };
 
 
-template<std::size_t dimdex, typename Layout, auto quantity, typename IndexWeights>
-NO_DISCARD auto static resolve_start_index_and_weights(IndexWeights const& indexWeights)
+template<std::size_t dimdex, typename Layout, auto quantity>
+NO_DISCARD auto static resolve_start_index_and_weights(auto const& indexWeights)
     DAMN_ALL
 {
     auto constexpr centerings                              = centering<Layout::dimension>(quantity);
@@ -217,9 +217,9 @@ public:
      * \param[in] startIndex is the first of the nbrPointsSupport indices where to interpolate
      * the field \param[in] weights are the nbrPointsSupport weights used for the interpolation
      */
-    template<typename Layout, auto quantity, typename Field, typename IndexWeights>
-    NO_DISCARD DAMN_ALWAYS_INLINE auto op(Field const& field,
-                                           IndexWeights const& indexWeights) const DAMN_ALL
+    template<typename Layout, auto quantity>
+    NO_DISCARD DAMN_ALWAYS_INLINE auto op(auto const& field,
+                                           auto const& indexWeights) const DAMN_ALL
     {
         auto const& [xStartIndex, xWeights]
             = resolve_start_index_and_weights<0, Layout, quantity>(indexWeights);
@@ -261,9 +261,9 @@ public:
      * interpolate the field in both directions \param[in] weights are the nbrPointsSupport
      * weights used for the interpolation in both directions
      */
-    template<typename Layout, auto quantity, typename Field, typename IndexWeights>
-    NO_DISCARD DAMN_ALWAYS_INLINE auto op(Field const& field,
-                                           IndexWeights const& indexWeights) const DAMN_ALL
+    template<typename Layout, auto quantity>
+    NO_DISCARD DAMN_ALWAYS_INLINE auto op(auto const& field,
+                                           auto const& indexWeights) const DAMN_ALL
     {
         auto const& [xStartIndex, xWeights]
             = resolve_start_index_and_weights<0, Layout, quantity>(indexWeights);
@@ -314,9 +314,9 @@ public:
      * interpolate the field in the 3 directions \param[in] weights are the nbrPointsSupport
      * weights used for the interpolation in the 3 directions
      */
-    template<typename Layout, auto quantity, typename Field, typename IndexWeights>
-    NO_DISCARD DAMN_ALWAYS_INLINE auto op(Field const& field,
-                                           IndexWeights const& indexWeights) const DAMN_ALL
+    template<typename Layout, auto quantity>
+    NO_DISCARD DAMN_ALWAYS_INLINE auto op(auto const& field,
+                                           auto const& indexWeights) const DAMN_ALL
     {
         auto const& [xStartIndex, xWeights]
             = resolve_start_index_and_weights<0, Layout, quantity>(indexWeights);
@@ -471,10 +471,10 @@ public: /** Performs the 1D interpolation
             Op{field(xStartIndex + ik)} += deposit * xWeights[ik];
     }
 
-    template<typename Density, typename Flux, typename Particle, typename Indexes, typename Weights>
-    DAMN_ALWAYS_INLINE void operator()(Density& density, Flux& xFlux, Flux& yFlux, Flux& zFlux,
-                                        Particle const& particle, Indexes const& startIndex,
-                                        Weights const& weights, double coef = 1.)
+    template<typename Flux>
+    DAMN_ALWAYS_INLINE void operator()(auto& density, Flux& xFlux, Flux& yFlux, Flux& zFlux,
+                                        auto const& particle, auto const& startIndex,
+                                        auto const& weights, double coef = 1.)
     {
         auto const& [xStartIndex] = startIndex;
 
@@ -487,10 +487,10 @@ public: /** Performs the 1D interpolation
     }
 
 private:
-    template<typename T, typename Weights, typename V>
+    template<typename T>
     DAMN_ALWAYS_INLINE static void deposit_(T* __restrict rho, T* __restrict fx, T* __restrict fy,
-                                             T* __restrict fz, Weights const& weights,
-                                             double const deposit, V const& v)
+                                             T* __restrict fz, auto const& weights,
+                                             double const deposit, auto const& v)
     {
         auto const& [xWeights] = weights;
         auto const& order_size = xWeights.size();
@@ -543,10 +543,10 @@ public: /** Performs the 2D interpolation
         }
     }
 
-    template<typename Density, typename Flux, typename Particle, typename Indexes, typename Weights>
-    DAMN_ALWAYS_INLINE void operator()(Density& density, Flux& xFlux, Flux& yFlux, Flux& zFlux,
-                                        Particle const& particle, Indexes const& startIndex,
-                                        Weights const& weights, double coef = 1.)
+    template<typename Flux>
+    DAMN_ALWAYS_INLINE void operator()(auto& density, Flux& xFlux, Flux& yFlux, Flux& zFlux,
+                                        auto const& particle, auto const& startIndex,
+                                        auto const& weights, double coef = 1.)
     {
         auto const& [xStartIndex, yStartIndex] = startIndex;
 
@@ -560,10 +560,10 @@ public: /** Performs the 2D interpolation
     }
 
 private:
-    template<typename T, typename Weights, typename V>
+    template<typename T>
     DAMN_ALWAYS_INLINE static void
     deposit_(T* __restrict rho, T* __restrict fx, T* __restrict fy, T* __restrict fz,
-             std::size_t const xStride, Weights const& weights, double const deposit, V const& v)
+             std::size_t const xStride, auto const& weights, double const deposit, auto const& v)
     {
         auto const& [xWeights, yWeights] = weights;
         auto const& order_size           = xWeights.size();
@@ -631,10 +631,10 @@ public: /** Performs the 3D interpolation
         }
     }
 
-    template<typename Density, typename Flux, typename Particle, typename Indexes, typename Weights>
-    DAMN_ALWAYS_INLINE void operator()(Density& density, Flux& xFlux, Flux& yFlux, Flux& zFlux,
-                                        Particle const& particle, Indexes const& startIndex,
-                                        Weights const& weights, double coef = 1.)
+    template<typename Flux>
+    DAMN_ALWAYS_INLINE void operator()(auto& density, Flux& xFlux, Flux& yFlux, Flux& zFlux,
+                                        auto const& particle, auto const& startIndex,
+                                        auto const& weights, double coef = 1.)
     {
         auto const& [xStartIndex, yStartIndex, zStartIndex] = startIndex;
         auto const& shape                                   = density.shape();
@@ -650,11 +650,11 @@ public: /** Performs the 3D interpolation
     }
 
 private:
-    template<typename T, typename Weights, typename V>
+    template<typename T>
     DAMN_ALWAYS_INLINE static void deposit_(T* __restrict rho, T* __restrict fx, T* __restrict fy,
                                              T* __restrict fz, std::size_t const xStride,
-                                             std::size_t const yStride, Weights const& weights,
-                                             double const deposit, V const& v)
+                                             std::size_t const yStride, auto const& weights,
+                                             double const deposit, auto const& v)
     {
         auto const& [xWeights, yWeights, zWeights] = weights;
         auto const& order_size                     = xWeights.size();
@@ -723,9 +723,9 @@ protected:
 
 
 
-    template<auto centering, typename Fn, typename ICell, typename Delta>
-    DAMN_ALWAYS_INLINE auto indexAndWeights__(Fn const& transformer, ICell const& iCell_,
-                                               Delta const& delta) DAMN_ALL
+    template<auto centering>
+    DAMN_ALWAYS_INLINE auto indexAndWeights__(auto const& transformer, auto const& iCell_,
+                                               auto const& delta) DAMN_ALL
     {
         // dual weights require -.5 to take the correct position weight
         auto constexpr dual_offset = .5;
@@ -748,17 +748,17 @@ protected:
     }
 
 
-    template<auto centering, typename ICell, typename Delta>
-    auto indexAndWeights_(damn::core::Box<int, dim> const& amrbox, ICell const& iCell_,
-                          Delta const& delta) DAMN_ALL
+    template<auto centering>
+    auto indexAndWeights_(damn::core::Box<int, dim> const& amrbox, auto const& iCell_,
+                          auto const& delta) DAMN_ALL
     {
         indexAndWeights__<centering>(
             [&] DAMN_ALL(auto const& point) { return point - amrbox.lower; }, iCell_, delta);
     }
 
-    template<auto centering, typename Layout, typename ICell, typename Delta>
-    auto indexAndWeights_(Layout const& layout, ICell const& iCell_,
-                          Delta const& delta) DAMN_ALL
+    template<auto centering>
+    auto indexAndWeights_(auto const& layout, auto const& iCell_,
+                          auto const& delta) DAMN_ALL
     {
         return indexAndWeights__<centering>(
             [&] DAMN_ALL(auto const& point) { return to_local(layout, point); }, iCell_,
@@ -781,9 +781,8 @@ public:
      * onto the particle.
      */
 
-    template<typename Particle, typename Electromag, typename Layout>
-    DAMN_ALWAYS_INLINE auto m2p(Particle const& particle, Electromag const& Em,
-                                 Layout const& layout) DAMN_ALL
+    DAMN_ALWAYS_INLINE auto m2p(auto const& particle, auto const& Em,
+                                 auto const& layout) DAMN_ALL
     {
         // using E_B_tuple = std::array<std::array<double, 3>, 2>;
         using E_B_tuple = std::tuple<std::array<double, 3>, std::array<double, 3>>;
@@ -872,8 +871,7 @@ public:
 
 
 
-    template<typename Particles, typename Electromag, typename Layout>
-    inline auto m2p(Particles const& particles, Electromag const& Em, Layout const& layout,
+    inline auto m2p(auto const& particles, auto const& Em, auto const& layout,
                     std::size_t idx) DAMN_ALL
     {
         using E_B_tuple = std::tuple<std::array<double, 3>, std::array<double, 3>>;
@@ -915,8 +913,7 @@ public:
         return particle_EB;
     }
 
-    template<typename Particles, typename Electromag, typename Layout>
-    inline auto operator()(Particles& particles, Electromag const& Em, Layout const& layout,
+    inline auto operator()(auto& particles, auto const& Em, auto const& layout,
                            std::size_t idx) DAMN_ALL
     {
         return m2p(particles, Em, layout, idx);
@@ -934,8 +931,8 @@ public:
      * onto the particle.
      */
 
-    template<typename Particle_t, typename VecField, typename Field>
-    void particleToMesh(Particle_t const& particle, Field& particleDensity, VecField& flux,
+    template<typename VecField, typename Field>
+    void particleToMesh(auto const& particle, Field& particleDensity, VecField& flux,
                         damn::core::Box<int, dim> const amrBox, double coef = 1.) DAMN_ALL
     {
         static_assert(not std::is_const_v<Field>);    // bad!
@@ -965,27 +962,25 @@ public:
             particleToMesh_(particleDensity, xFlux, yFlux, zFlux, particle, startIndex_, weights_,
                             coef);
     }
-    template<typename Particle_t, typename VecField, typename Layout, typename Field>
-    void particleToMesh(Particle_t const& particle, Field& particleDensity, VecField& flux,
+    template<typename Layout>
+    void particleToMesh(auto const& particle, auto& particleDensity, auto& flux,
                         Layout const& layout, double coef = 1.) DAMN_ALL
     {
         particleToMesh(particle, particleDensity, flux,
                        damn::core::grow(layout.cells, Layout::options.field_ghost_width), coef);
     }
 
-    template<typename Particle_t, typename Layout>
-    void p2m_setup(Particle_t const& particle, Layout const& layout) DAMN_ALL
+    void p2m_setup(auto const& particle, auto const& layout) DAMN_ALL
     {
         indexAndWeights_<QtyCentering::primal>(layout, particle.iCell(), particle.delta());
     }
     // as particleToMesh(particle, ..., amrBox), for one component at a time via p2m_per_component
-    template<typename Particle_t>
-    void p2m_setup(Particle_t const& particle, damn::core::Box<int, dim> const& amrBox) DAMN_ALL
+    void p2m_setup(auto const& particle, damn::core::Box<int, dim> const& amrBox) DAMN_ALL
     {
         indexAndWeights_<QtyCentering::primal>(amrBox, particle.iCell(), particle.delta());
     }
-    template<std::uint8_t IDX, typename Particle_t, typename Field>
-    void p2m_per_component(Particle_t const& particle, Field& feeld,
+    template<std::uint8_t IDX>
+    void p2m_per_component(auto const& particle, auto& feeld,
                            double coef = 1.) DAMN_ALL
     {
         static_assert(IDX < 4); // noooooo
@@ -1104,9 +1099,9 @@ template<std::size_t dim, std::size_t interpOrder, bool atomic_ops = false>
 class MomentumTensorInterpolator : public Interpolator<dim, interpOrder, false>
 {
 public:
-    template<typename ParticleRange, typename TensorField, typename Layout>
-    inline void operator()(ParticleRange&& particleRange, TensorField& momentumTensor,
-                           Layout const& layout, double mass = 1.)
+    template<typename ParticleRange>
+    inline void operator()(ParticleRange&& particleRange, auto& momentumTensor,
+                           auto const& layout, double mass = 1.)
     {
         auto begin                     = particleRange.begin();
         auto end                       = particleRange.end();

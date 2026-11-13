@@ -20,8 +20,8 @@ namespace plamn::core
 {
 
 
-template<auto layout_mde, typename EM, typename Layout>
-auto default_em_init(EM& em, Layout const& patch_layout)
+template<auto layout_mde, typename Layout>
+auto default_em_init(auto& em, Layout const& patch_layout)
 {
     auto constexpr static dim = Layout::dimension;
 
@@ -111,8 +111,7 @@ class UsableElectromag : public UsableElectromagImpl<opts>::Super_t
 public:
     using Super = UsableElectromagImpl<opts>::Super_t;
 
-    template<typename Layout>
-    UsableElectromag(Layout const& layout, bool const init = true)
+    UsableElectromag(auto const& layout, bool const init = true)
         : Super{"EM"}
         , E{"EM_E", layout, HybridQuantity::Vector::E, 1}
         , B{"EM_B", layout, HybridQuantity::Vector::B, 1}
@@ -123,8 +122,7 @@ public:
     }
 
 
-    template<typename Layout>
-    UsableElectromag(Layout const& layout, plamn::initializer::Dict const& dict)
+    UsableElectromag(auto const& layout, plamn::initializer::Dict const& dict)
         : Super{dict}
         , E{"EM_E", layout, HybridQuantity::Vector::E, 0}
         , B{"EM_B", layout, HybridQuantity::Vector::B, 0}

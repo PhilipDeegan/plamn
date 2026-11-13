@@ -20,8 +20,8 @@
 namespace plamn::core::gpu
 {
 // fn(index, args...) on device, one launch over box
-template<typename Fn, typename T, std::size_t S, typename... Args>
-void eval_on_box(Fn& fn, damn::core::Box<T, S> const& box, Args&... args)
+template<typename T, std::size_t S, typename... Args>
+void eval_on_box(auto& fn, damn::core::Box<T, S> const& box, Args&... args)
 {
     DAMN_LOG_LINE_SS(box.size());
 #if DAMN_HAVE_MKN_GPU || DAMN_HAVE_RAJA || DAMN_HAVE_KOKKOS

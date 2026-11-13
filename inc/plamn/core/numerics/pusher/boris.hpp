@@ -201,8 +201,7 @@ private:
             particles.iCell(idx) = newCell;
     }
 
-    template<typename Particles, typename ParticleEB>
-    void static accelerate_(Particles& particles, ParticleEB const& particleEB, double const coef1,
+    void static accelerate_(auto& particles, auto const& particleEB, double const coef1,
                             std::size_t const idx) DAMN_ALL
     {
         auto particle = particles.begin() + idx;

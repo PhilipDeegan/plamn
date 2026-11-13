@@ -43,8 +43,8 @@ class AmpereTransformer
 {
 public:
     // the box J component Jc is computed on
-    template<typename Layout, typename Field>
-    static auto box_for(Layout const& layout, Field const& Jc)
+    template<typename Layout>
+    static auto box_for(Layout const& layout, auto const& Jc)
     {
         if constexpr (box.mode == AmpereMode::ShrinkedGhost)
             return damn::core::shrink(ghost_box(layout, Jc), amount<Layout>());
@@ -109,8 +109,8 @@ private:
 public:
     // GPU_UNIFIED, as region items (an untiled patch is one region, a tiled one a region per tile)
     //  collected per patch or across a level (see AmpereLevelTransformer), one launch per run_gpu
-    template<typename Layout, typename VecField>
-    static auto region_layout(Layout const& layout, VecField const& J, std::size_t const ti)
+    template<typename VecField>
+    static auto region_layout(auto const& layout, VecField const& J, std::size_t const ti)
     {
         if constexpr (has_tiled_field_type_c<VecField>)
             return J[0][ti].layout();
@@ -127,8 +127,8 @@ public:
             return untiled_view(vf);
     }
 
-    template<typename Layout, typename B_t, typename J_t>
-    static auto make_item(Layout const& layout, B_t const& B, J_t const& J)
+    template<typename J_t>
+    static auto make_item(auto const& layout, auto const& B, J_t const& J)
     {
         auto const boxes = damn::core::for_N_make_array<3>([&](auto c) { return box_for(layout, J[c]); });
         auto const curlB = curl(layout, B);
@@ -142,8 +142,8 @@ public:
         region_view(std::declval<VecField&>(), 0)));
 
     // appends one patch's items
-    template<typename Layout, typename VecField>
-    static void gpu_items(Layout const& layout, VecField const& B, VecField& J, auto& items)
+    template<typename VecField>
+    static void gpu_items(auto const& layout, VecField const& B, VecField& J, auto& items)
     {
         auto const n_regions = [&]() -> std::size_t {
             if constexpr (has_tiled_field_type_c<VecField>)

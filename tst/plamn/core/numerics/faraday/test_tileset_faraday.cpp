@@ -41,8 +41,7 @@ auto static const dt    = damn::core::get_env_as("PLAMN_TIMESTEP", double{.001})
 
 static ::BS::thread_pool pool{4};
 
-template<typename Patch>
-void ref_do(Patch& patch)
+void ref_do(auto& patch)
 {
     FaradayTransformer{}(patch.layout, patch.em.B, patch.em.E, patch.emNew.B, dt);
 }
@@ -67,8 +66,8 @@ void cmp_do(Patch& patch)
 
 
 
-template<auto alloc_mode, typename Layout_t, typename R, typename C>
-void compare(Layout_t const& layout, R& ref, C& cmp)
+template<auto alloc_mode>
+void compare(auto const& layout, auto& ref, auto& cmp)
 {
     using enum LayoutMode;
     using enum damn::AllocatorMode;
@@ -209,8 +208,7 @@ DAMN_WITH_GPU(
 
 TYPED_TEST_SUITE(FaradayTileTest, Permutations_t, );
 
-template<typename FaradayTileTest_t>
-auto run(FaradayTileTest_t& self)
+auto run(auto& self)
 {
     ref_do(self.ref_patch);
     cmp_do(self.cmp_patch);

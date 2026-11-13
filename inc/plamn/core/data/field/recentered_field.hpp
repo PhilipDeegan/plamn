@@ -36,9 +36,8 @@ public:
     static constexpr auto dimension = Field::dimension;
     using value_type                = Field::value_type;
 
-    template<typename Layout>
     RecenteredField(Field const& field, std::array<QtyCentering, dimension> const& destination,
-                    Layout const& layout)
+                    auto const& layout)
         : field_{field}
         , source_{::plamn::core::centering(layout, field)}
         , destination_{destination}
@@ -102,8 +101,7 @@ public:
     static constexpr auto dimension = Field::dimension;
     using value_type                = Field::value_type;
 
-    template<typename Layout>
-    CompileTimeRecenteredField(Field const& field, Layout const& layout)
+    CompileTimeRecenteredField(Field const& field, auto const& layout)
         : field_{field}
     {
         if (::plamn::core::centering(layout, field) != source)

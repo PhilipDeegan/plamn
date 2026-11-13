@@ -208,8 +208,7 @@ namespace core
 
 
         // drops the domain particles of all populations located in `boxes`
-        template<typename Boxes>
-        void eraseDomainParticlesIn(Boxes const& boxes)
+        void eraseDomainParticlesIn(auto const& boxes)
         {
             if (boxes.empty())
                 return;
