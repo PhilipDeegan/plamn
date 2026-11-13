@@ -42,7 +42,6 @@ class AmpereTransformer
 {
 public:
     // the box J component Jc is computed on
-    //  must match the layout evaluator used in the untiled operator() below
     template<typename GridLayout, typename Field>
     static auto box_for(GridLayout const& layout, Field const& Jc)
     {
@@ -71,10 +70,7 @@ public:
         };
 
         auto const eval = [&](auto& Jc, auto const& curlc) {
-            if constexpr (box.mode == AmpereMode::ShrinkedGhost)
-                layout.evalOnShrinkedGhostBox(Jc, amount<GridLayout>(), fn, Jc, curlc);
-            else
-                layout.evalOnBiggerBox(Jc, amount<GridLayout>(), fn, Jc, curlc);
+            eval_on_box(Jc, box_for(layout, Jc), fn, Jc, curlc);
         };
 
         eval(J(Component::X), curlB.x);

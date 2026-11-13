@@ -24,6 +24,18 @@ NO_DISCARD constexpr QtyCentering flip(QtyCentering const c) DAMN_ALL
     return c == QtyCentering::primal ? QtyCentering::dual : QtyCentering::primal;
 }
 
+template<std::size_t dim>
+NO_DISCARD constexpr auto primal_centering() DAMN_ALL
+{
+    return damn::core::ConstArray<QtyCentering, dim>(QtyCentering::primal);
+}
+
+template<std::size_t dim>
+NO_DISCARD constexpr auto dual_centering() DAMN_ALL
+{
+    return damn::core::ConstArray<QtyCentering, dim>(QtyCentering::dual);
+}
+
 NO_DISCARD constexpr std::uint32_t dual_offset(QtyCentering const c) DAMN_ALL
 {
     return c == QtyCentering::dual ? 1 : 0;

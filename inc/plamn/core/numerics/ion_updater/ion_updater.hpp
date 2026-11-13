@@ -307,7 +307,7 @@ void IonUpdater<Particles_t, GridLayout>::updateAndDepositAll_(auto& ions, auto 
                 auto const nearbyBox = damn::core::grow(damn::core::Box(particle.iCell(), particle.iCell()), 3);
                 for (auto const& xyz : em.E)
                     if (auto const overlap = nearbyBox * amr_ghost_box(layout, xyz))
-                        layout.amr_lcl_idx(*overlap, [&](auto const& bix, auto const& lix) {
+                        for_each_amr_local(layout, *overlap, [&](auto const& bix, auto const& lix) {
                             DAMN_LOG_LINE_SS(xyz.name() << " at:" << bix << ":" << xyz(lix));
                         });
             }

@@ -769,7 +769,7 @@ namespace core
             }
             else
             {
-                gpu::GridLayout::evalOnBox(fn, box, args...);
+                gpu::eval_on_box(fn, box, args...);
             }
         }
 

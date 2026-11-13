@@ -47,7 +47,7 @@ public:
     {
     }
 
-    // the box E component Ec is computed on, as layout.evalOnBox below
+    // the box E component Ec is computed on, as eval_on_box below
     template<typename GridLayout, typename Field>
     static auto box_for(GridLayout const& layout, Field const& Ec)
     {
@@ -65,8 +65,8 @@ public:
 
             auto const eval = [&]<auto c>(auto const& gradPe_c) {
                 // captureless kernel: fields and ohm travel as arguments, device-copyable
-                layout.evalOnBox(
-                    Enew(c),
+                eval_on_box(
+                    Enew(c), domain_box(layout, Enew(c)),
                     [] DAMN_ALL(auto const& ijk, auto const& ohm_, auto&&... args) {
                         ohm_.template operator()<c, isResistive, isHyperResistive>(ijk, args...);
                     },

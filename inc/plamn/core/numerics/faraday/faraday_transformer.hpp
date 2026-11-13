@@ -41,7 +41,7 @@ struct FaradayTile
 class FaradayTransformer
 {
 public:
-    // the box Bnew component Bnc is computed on, as layout.evalOnBox below
+    // the box Bnew component Bnc is computed on, as eval_on_box below
     template<typename GridLayout, typename Field>
     static auto box_for(GridLayout const& layout, Field const& Bnc)
     {

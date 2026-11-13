@@ -162,7 +162,7 @@ void assign(Dst& dst, Box_t const& box, E const& e)
     if constexpr (Dst::alloc_mode == damn::AllocatorMode::CPU)
         damn::core::for_each_point(box, [&](auto const& ijk) { fn(ijk, dst, e); });
     else
-        gpu::GridLayout::evalOnBox(fn, box, dst, e);
+        gpu::eval_on_box(fn, box, dst, e);
 }
 
 } // namespace plamn::core

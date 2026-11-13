@@ -196,7 +196,7 @@ template<std::size_t dimdex, typename GridLayout, auto quantity, typename IndexW
 NO_DISCARD auto static resolve_start_index_and_weights(IndexWeights const& indexWeights)
     DAMN_ALL
 {
-    auto constexpr centerings                              = GridLayout::centering(quantity);
+    auto constexpr centerings                              = centering<GridLayout::dimension>(quantity);
     auto const& [d_starts, d_weights, p_starts, p_weights] = indexWeights;
 
     if constexpr (centerings[dimdex] == QtyCentering::primal)
@@ -361,7 +361,7 @@ public:
         }();
 
         auto constexpr centerings = damn::core::for_N<scalar_qts.size(), damn::core::for_N_R_mode::make_array>(
-            [&](auto i) { return GridLayout::centering(scalar_qts[i]); });
+            [&](auto i) { return centering<GridLayout::dimension>(scalar_qts[i]); });
 
         auto&& [qts, starts, weights] = std::forward_as_tuple(args...);
         using Qts                     = std::decay_t<decltype(qts)>;

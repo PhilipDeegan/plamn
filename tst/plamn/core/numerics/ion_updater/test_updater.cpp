@@ -255,8 +255,9 @@ struct IonUpdaterTest : public ::testing::Test
         {
             if constexpr (dim == 1)
             {
-                int firstPhysCell = layout.physicalStartIndex(QtyCentering::dual, Direction::X);
-                int lastPhysCell  = layout.physicalEndIndex(QtyCentering::dual, Direction::X);
+                auto const cells  = domain_box(layout, dual_centering<dim>());
+                int firstPhysCell = cells.lower[0];
+                int lastPhysCell  = cells.upper[0];
                 auto firstAMRCell = to_amr(layout, damn::core::Point{firstPhysCell});
                 auto lastAMRCell  = to_amr(layout, damn::core::Point{lastPhysCell});
 
@@ -432,8 +433,9 @@ struct IonUpdaterTest : public ::testing::Test
         auto const& alphaFz              = reduce_single(populations[1].flux()(Component::Z));
 
 
-        auto ix0 = this->layout.physicalStartIndex(QtyCentering::primal, Direction::X);
-        auto ix1 = this->layout.physicalEndIndex(QtyCentering::primal, Direction::X);
+        auto const nodes = domain_box(this->layout, primal_centering<dim>());
+        auto const ix0   = nodes.lower[0];
+        auto const ix1   = nodes.upper[0];
 
         auto nonZero = [&](auto const& field, std::string const type) {
             auto sum = 0.;
@@ -487,8 +489,9 @@ struct IonUpdaterTest : public ::testing::Test
 
     void checkDensityIsAsPrescribed()
     {
-        auto ix0 = this->layout.physicalStartIndex(QtyCentering::primal, Direction::X);
-        auto ix1 = this->layout.physicalEndIndex(QtyCentering::primal, Direction::X);
+        auto const nodes = domain_box(this->layout, primal_centering<dim>());
+        auto const ix0   = nodes.lower[0];
+        auto const ix1   = nodes.upper[0];
 
         auto check = [&](auto const& density, auto const& function) {
             std::vector<std::size_t> ixes;
@@ -496,10 +499,11 @@ struct IonUpdaterTest : public ::testing::Test
 
             // We do not use the primal box as the last primal is incomplete.
             // This is because level ghosts are only interpolated if they enter the domain
-            this->layout.amr_lcl_idx([&](auto const& amr_idx, auto const& lcl_idx) {
-                ixes.emplace_back(lcl_idx[0]);
-                x.emplace_back(layout.cellCenteredCoordinates(amr_idx)[0]);
-            });
+            for_each_amr_local(this->layout, this->layout.cells,
+                               [&](auto const& amr_idx, auto const& lcl_idx) {
+                                   ixes.emplace_back(lcl_idx[0]);
+                                   x.emplace_back(cell_center(layout, amr_idx)[0]);
+                               });
 
             auto const span   = damn::core::make_const_span(x);
             auto functionXPtr = function(span); // keep alive
@@ -587,7 +591,7 @@ TYPED_TEST(IonUpdaterTest, loadsDomainPatchAndLevelGhostParticles)
 
 TYPED_TEST(IonUpdaterTest, loadsLevelGhostParticlesOnLeftGhostArea)
 {
-    int firstPhysCell = this->layout.physicalStartIndex(QtyCentering::dual, Direction::X);
+    int firstPhysCell = domain_box(this->layout, dual_centering<TypeParam::dimension>()).lower[0];
     auto firstAMRCell = to_amr(this->layout, damn::core::Point{firstPhysCell});
 
     if constexpr (TypeParam::dimension == 1)
@@ -751,8 +755,9 @@ TYPED_TEST(IonUpdaterTest, thatNoNaNsExistOnPhysicalNodesMoments)
 
     this->ions.update();
 
-    auto ix0 = this->layout.physicalStartIndex(QtyCentering::primal, Direction::X);
-    auto ix1 = this->layout.physicalEndIndex(QtyCentering::primal, Direction::X);
+    auto const nodes = domain_box(this->layout, primal_centering<TypeParam::dimension>());
+    auto const ix0   = nodes.lower[0];
+    auto const ix1   = nodes.upper[0];
 
     for (auto& pop : this->ions)
     {

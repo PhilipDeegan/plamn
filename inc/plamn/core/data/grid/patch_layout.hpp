@@ -86,6 +86,13 @@ NO_DISCARD constexpr auto centering(MHDQuantity::Vector const qty)
     return components_centering<dim>(MHDQuantity::componentsQuantities(qty));
 }
 
+// an explicit centering, e.g. domain_box(L, ConstArray<QtyCentering, dim>(dual))
+template<std::size_t dim>
+NO_DISCARD constexpr auto centering(std::array<QtyCentering, dim> const& c) DAMN_ALL
+{
+    return c;
+}
+
 // a quantity, or anything carrying one
 template<std::size_t dim, typename HasQuantity>
     requires HasPhysicalQuantity<HasQuantity>

@@ -13,28 +13,36 @@
 #endif
 
 #include "damn/core/geometry/box.hpp"
+#include "damn/core/geometry/box_spans.hpp"
 
 #include <cstddef>
 
 namespace plamn::core::gpu
 {
-struct GridLayout
+// fn(index, args...) on device, one launch over box
+template<typename Fn, typename T, std::size_t S, typename... Args>
+void eval_on_box(Fn& fn, damn::core::Box<T, S> const& box, Args&... args)
 {
-    template<typename Fn, typename T, std::size_t S, typename... Args>
-    static void evalOnBox(Fn& fn, damn::core::Box<T, S> const& box, Args&... args)
-    {
-        DAMN_LOG_LINE_SS(box.size());
-
-
+    DAMN_LOG_LINE_SS(box.size());
 #if DAMN_HAVE_MKN_GPU || DAMN_HAVE_RAJA || DAMN_HAVE_KOKKOS
-        impl::GridLayout::evalOnBox(fn, box, args...);
+    impl::BoxKernel::evalOnBox(fn, box, args...);
 #endif
-    }
-};
-
-
+}
 } // namespace plamn::core::gpu
 
-
+namespace plamn::core
+{
+// fn(index, args...) for each point of box: a host loop for CPU fields, else one launch
+// field only selects where to run: pass it among args to use it in fn
+template<typename Field, typename Fn, typename T, std::size_t S, typename... Args>
+void eval_on_box(Field const& /*field*/, damn::core::Box<T, S> const& box, Fn&& fn,
+                 Args&&... args)
+{
+    if constexpr (Field::alloc_mode == damn::AllocatorMode::CPU)
+        damn::core::for_each_point(box, [&](auto const& bix) { fn(bix, args...); });
+    else
+        gpu::eval_on_box(fn, box, args...);
+}
+} // namespace plamn::core
 
 #endif /* PLAMN_CORE_GRID_DETAIL_DETAIL_HPP */

@@ -9,7 +9,7 @@
 namespace plamn::core::gpu::impl
 {
 
-struct GridLayout
+struct BoxKernel
 {
     template<typename Fn, typename T, std::size_t S, typename... Args>
     static void evalOnBox(Fn& fn, damn::core::Box<T, S> const& box, Args&... args)

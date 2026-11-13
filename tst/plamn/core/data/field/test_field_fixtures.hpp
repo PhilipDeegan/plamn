@@ -235,7 +235,8 @@ damn::core::EqualityReport compare_field_domains(GridLayout const& layout, Field
         return damn::core::EqualityReport{false, "Tensorfield shape/size mismatch"};
 
     FloatFieldComparator_t eq{diff};
-    layout.evalOnBox(ref, [&](auto const&... idxs) { eq.add(ref(idxs...), cmp(idxs...)); });
+    eval_on_box(ref, domain_box(layout, ref),
+                [&](auto const&... idxs) { eq.add(ref(idxs...), cmp(idxs...)); });
     eq.finalize();
 
     std::stringstream log;
