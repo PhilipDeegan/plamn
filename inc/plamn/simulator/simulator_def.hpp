@@ -11,11 +11,15 @@
 #include <array>
 #include <cassert>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
 namespace plamn
 {
+
+// simulation/time_step/mode: a fixed dt, or recomputed each step
+enum class TimeStepType : std::uint8_t { constant = 0, adaptive };
 
 class ISimulator
 {
