@@ -30,3 +30,18 @@ jobs:
         curl -Lo mkn https://github.com/mkn/mkn/releases/download/latest/mkn_nix
         chmod +x mkn
         KLOG=3 ./mkn clean build test -dtKOqp test_plamn_core -Wx res/mkn/mpi
+
+    # pyplamn runs pyphare's python against plamn's modules: pyphare from a PHARE checkout
+    - uses: actions/checkout@v4
+      with:
+        repository: PhilipDeegan/PHARE
+        ref: tiling_gpu
+        path: phare
+        sparse-checkout: pyphare
+
+    # the python modules without MPI: the tests run serially, without MPI_Init
+    - run: |
+        KLOG=3 ./mkn build -dtKOqp py_etc -x res/mkn/base
+        KLOG=3 ./mkn build -dtKOqp py_sim -x res/mkn/base
+        PYTHONPATH=python:phare/pyphare:tst/plamn/python \
+          python3 -m unittest discover -v -s tst/plamn/python
