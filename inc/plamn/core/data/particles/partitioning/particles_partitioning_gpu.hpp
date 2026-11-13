@@ -1,12 +1,13 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTITIONING_PARTICLES_PARTITIONING_GPU_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTITIONING_PARTICLES_PARTITIONING_GPU_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/def/damn_config.hpp"
+
+#include "plamn/core/def.hpp"
+#include "plamn/core/data/particles/particles_def.hpp"
 
 // #include "damn/core/def/damn_config.hpp"
 
-#include "plamn/core/data/particles/particles_def.hpp"
 #if DAMN_HAVE_THRUST
 
 #include "damn/core/geometry/box.hpp"

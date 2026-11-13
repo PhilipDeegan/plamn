@@ -4,8 +4,9 @@
 // what a quantity is (Phys, Comp: the same in every model) and where it lives (centering:
 // per model, since models discretise the same physics differently)
 
-#include "plamn/core/def.hpp"
 #include "damn/core/def/damn_config.hpp"
+
+#include "plamn/core/def.hpp"
 
 #include <array>
 #include <cstddef>

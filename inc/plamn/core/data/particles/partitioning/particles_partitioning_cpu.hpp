@@ -1,15 +1,14 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTITIONING_PARTICLES_PARTITIONING_CPU_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTITIONING_PARTICLES_PARTITIONING_CPU_HPP
 
-
-#include "plamn/core/def.hpp"
 #include "damn/core/vector.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/range.hpp"
+
+#include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 
 #include <stdexcept>
-
 
 namespace plamn::core
 {

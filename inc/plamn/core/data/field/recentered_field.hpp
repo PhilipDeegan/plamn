@@ -1,9 +1,10 @@
 #ifndef PLAMN_CORE_DATA_FIELD_RECENTERED_FIELD_HPP
 #define PLAMN_CORE_DATA_FIELD_RECENTERED_FIELD_HPP
 
+#include "damn/core/geometry/point.hpp"
+
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/layout_defs.hpp"
-#include "damn/core/geometry/point.hpp"
 #include "plamn/core/models/quantities/quantity.hpp"
 
 #include <array>

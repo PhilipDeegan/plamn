@@ -2,7 +2,6 @@
 #define PLAMN_CORE_DATA_FIELD_FIELD_BASE_HPP
 
 #include "damn/core/logger.hpp"
-#include "plamn/core/def.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/data/ndarray/ndarray_view.hpp"
@@ -10,7 +9,11 @@
 #include "damn/core/math/array.hpp"
 #include "damn/core/meta/type_meta.hpp"
 
-#include <assert.h>
+#include "plamn/core/def.hpp"
+
+// #include <stdexcept>
+
+#include <cassert>
 #include <array>
 #include <string>
 #include <cstddef>
@@ -22,8 +25,6 @@
 #include <type_traits>
 #include <vector>
 #include <version>
-// #include <stdexcept>
-
 
 namespace plamn::core
 {

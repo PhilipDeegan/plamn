@@ -6,13 +6,14 @@
 //   local index space: ghost inclusive, starts at 0 on the first ghost node
 //   gw: field ghost width, the same for primal and dual
 
-#include "plamn/core/def.hpp"
 #include "damn/core/math/numeric.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"
-#include "plamn/core/data/grid/layout_defs.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/math/array.hpp"
+
+#include "plamn/core/def.hpp"
+#include "plamn/core/data/grid/layout_defs.hpp"
 #include "plamn/core/models/quantities/quantity.hpp"
 
 #include <array>

@@ -3,9 +3,6 @@
 
 #include "plamn/core/def.hpp"
 
-
-
-
 /**
  * @brief The PhysicalState class is an interface for concrete states holding data associated with a
  * concrete IPhysicalModel

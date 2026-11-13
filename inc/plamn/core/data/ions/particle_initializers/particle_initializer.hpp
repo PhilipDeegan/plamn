@@ -3,7 +3,6 @@
 
 #include "plamn/core/def.hpp"
 
-
 namespace plamn
 {
 namespace core

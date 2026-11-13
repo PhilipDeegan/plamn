@@ -4,9 +4,10 @@
 // damn's tile overlap maps, with ghost boxes from a quantity's centering or from the
 // grid layout's particle ghost width
 
-#include "plamn/core/def.hpp"
 #include "damn/core/data/tiles/tile_set_overlaps.hpp"
 #include "damn/core/geometry/box.hpp"
+
+#include "plamn/core/def.hpp"
 
 
 namespace plamn::core

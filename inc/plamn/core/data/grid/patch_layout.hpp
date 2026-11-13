@@ -11,15 +11,16 @@
 // quantity centerings come from the model's quantity tables (hybrid::quantities,
 // mhd::quantities): pass a quantity, or anything with physicalQuantity()
 
-#include "plamn/core/def.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/geometry/box_spans.hpp"
+#include "damn/core/def/damn_config.hpp"
+
+#include "plamn/core/def.hpp"
 #include "plamn/core/data/field/field.hpp"
 #include "plamn/core/data/grid/layout.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 #include "plamn/core/models/quantities/mhd_quantities.hpp"
-#include "damn/core/def/damn_config.hpp"
 
 #include <array>
 #include <cstddef>

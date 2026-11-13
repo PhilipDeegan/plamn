@@ -1,30 +1,32 @@
 #ifndef PLAMN_CORE_PUSHER_BORIS_DETAIL_MULTI_BORIS_HPP
 #define PLAMN_CORE_PUSHER_BORIS_DETAIL_MULTI_BORIS_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/logger.hpp"
 #include "damn/core/memory/span.hpp"
 #include "damn/core/exec/kernels.hpp"
 #include "damn/core/exec/thread_pool.hpp"
 #include "damn/core/geometry/box_spans.hpp"
-#include "plamn/core/data/field/field_tiles.hpp"
-#include "plamn/core/data/electromag/electromag.hpp"
-#include "plamn/core/numerics/pusher/boris/basics.hpp"
-#include "plamn/core/data/particles/particles_def.hpp"
-#include "plamn/core/numerics/interpolator/interpolating.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/def/detail/mkn_gpu.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/meta/for_N.hpp"
 #include "damn/core/meta/logic.hpp"
 #include "damn/core/meta/type_meta.hpp"
-#include "mkn/gpu.hpp"
+
+#include "plamn/core/def.hpp"
+#include "plamn/core/data/field/field_tiles.hpp"
+#include "plamn/core/data/electromag/electromag.hpp"
+#include "plamn/core/numerics/pusher/boris/basics.hpp"
+#include "plamn/core/data/particles/particles_def.hpp"
+#include "plamn/core/numerics/interpolator/interpolating.hpp"
 #include "plamn/core/data/particles/arrays/particles_soavx.hpp"
 #include "plamn/core/data/particles/particles.hpp"
 #include "plamn/core/data/tensorfield/tensorfield.hpp"
 #include "plamn/core/numerics/interpolator/interpolator.hpp"
 
-#include <assert.h>
+#include "mkn/gpu.hpp"
+
+#include <cassert>
 #include <algorithm>
 #include <array>
 #include <cstddef>

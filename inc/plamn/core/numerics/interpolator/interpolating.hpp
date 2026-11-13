@@ -1,18 +1,9 @@
 #ifndef PLAMN_CORE_NUMERICS_INTERPOLATOR_INTERPOLATING_HPP
 #define PLAMN_CORE_NUMERICS_INTERPOLATOR_INTERPOLATING_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/exec/kernels.hpp"
-#include "plamn/core/data/field/field_tiles.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/geometry/range.hpp"
-#include "plamn/core/data/electromag/electromag.hpp"
-#include "plamn/core/data/tensorfield/tensorfield.hpp"
-#include "plamn/core/data/particles/particles.hpp"
-#include "plamn/core/data/particles/particles_def.hpp"
-#include "plamn/core/data/particles/arrays/particles_soavx.hpp"
-#include "plamn/core/numerics/pusher/boris/basics.hpp"
-#include "interpolator.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/def/detail/mkn_gpu.hpp"
 #include "damn/core/geometry/box.hpp"
@@ -21,7 +12,18 @@
 #include "damn/core/meta/type_meta.hpp"
 #include "damn/core/sys/env.hpp"
 
-#include <assert.h>
+#include "plamn/core/def.hpp"
+#include "plamn/core/data/field/field_tiles.hpp"
+#include "plamn/core/data/electromag/electromag.hpp"
+#include "plamn/core/data/tensorfield/tensorfield.hpp"
+#include "plamn/core/data/particles/particles.hpp"
+#include "plamn/core/data/particles/particles_def.hpp"
+#include "plamn/core/data/particles/arrays/particles_soavx.hpp"
+#include "plamn/core/numerics/pusher/boris/basics.hpp"
+
+#include "interpolator.hpp"
+
+#include <cassert>
 #include <string>
 #include <iostream>
 #include <optional>
@@ -31,7 +33,6 @@
 #include <cstdint>
 #include <initializer_list>
 #include <type_traits>
-
 
 namespace plamn::core
 {

@@ -2,26 +2,22 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_APPENDING_DETAIL_DEF_APPENDING
 #define PLAMN_CORE_DATA_PARTICLES_APPENDING_DETAIL_DEF_APPENDING
 
-#include "plamn/core/def.hpp"
 #include "damn/core/meta/type_meta.hpp"
 
+#include "plamn/core/def.hpp"
+#include "plamn/core/data/particles/particles_def.hpp"
+
 #include <cstdint>
+#include <cstddef>
 
 namespace damn
 {
 enum class AllocatorMode : std::uint16_t;
 } // namespace damn
+
 namespace plamn::core
 {
 enum class LayoutMode : std::uint16_t;
-} // namespace plamn::core
-
-#include "plamn/core/data/particles/particles_def.hpp"
-
-#include <cstddef>
-
-namespace plamn::core
-{
 
 template<auto src_layout_mde, auto src_alloc_mde, auto dst_layout_mde, auto dst_alloc_mde>
 struct ParticlesAppender

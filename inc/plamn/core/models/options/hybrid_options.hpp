@@ -6,7 +6,6 @@
 
 #include <array>
 
-
 namespace plamn
 {
 

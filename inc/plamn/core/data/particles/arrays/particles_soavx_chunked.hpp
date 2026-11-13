@@ -14,20 +14,22 @@
 //  next sort(), range accessors assert sorted(). GPU_UNIFIED sorts on the device (thrust), the
 //  order of particles within a cell is then not deterministic (atomic slots), CPU is stable.
 
-#include "plamn/core/def.hpp"
 #include "damn/core/vector.hpp"
 #include "damn/core/operators.hpp"
 #include "damn/core/memory/memory.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/box_spans.hpp"
-#include "plamn/core/data/particles/particles_def.hpp"
-#include "plamn/core/data/particles/arrays/particles_soavx.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/logger.hpp"
 #include "damn/core/meta/for_N.hpp"
-#include "phlop/timing/scope.hpp"
+
+#include "plamn/core/def.hpp"
+#include "plamn/core/data/particles/particles_def.hpp"
+#include "plamn/core/data/particles/arrays/particles_soavx.hpp"
 #include "plamn/core/data/particles/particle.hpp"
+
+#include "phlop/timing/scope.hpp"
 
 #include <tuple>
 #include <cstdint>

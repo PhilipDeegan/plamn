@@ -1,17 +1,18 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTICLES_CELL_MAPPED_TILE_SET_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLES_CELL_MAPPED_TILE_SET_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/data/tiles/tile_set.hpp"
-#include "plamn/core/data/particles/particles_def.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/math/array.hpp"
 #include "damn/core/meta/logic.hpp"
 
-#include <assert.h>
+#include "plamn/core/def.hpp"
+#include "plamn/core/data/particles/particles_def.hpp"
+
+#include <cassert>
 #include <algorithm>
 #include <array>
 #include <cstddef>

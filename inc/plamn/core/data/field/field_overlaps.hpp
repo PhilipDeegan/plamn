@@ -1,12 +1,18 @@
 #ifndef PLAMN_CORE_DATA_FIELD_FIELD_OVERLAPS_HPP
 #define PLAMN_CORE_DATA_FIELD_FIELD_OVERLAPS_HPP
 
+#include "damn/core/sys/strings.hpp"
+#include "damn/core/geometry/box.hpp"
+#include "damn/core/data/tiles/tile_set_overlaps.hpp"
 
 #include "plamn/core/def.hpp"
-#include "damn/core/sys/strings.hpp"
 #include "plamn/core/data/field/field.hpp"
-#include "damn/core/geometry/box.hpp"
 #include "plamn/core/data/grid/grid_tiles.hpp"
+#include "plamn/core/data/tiles/tile_set_overlaps.hpp"
+#include "plamn/core/data/field/field_tiles.hpp"
+
+// #include "plamn/core/data/field/field_box.hpp"
+// #include "plamn/core/data/grid/grid_tiles.hpp"
 
 #include <map>
 #include <vector>
@@ -15,13 +21,6 @@
 #include <cstring>
 #include <string>
 #include <type_traits>
-// #include "plamn/core/data/field/field_box.hpp"
-// #include "plamn/core/data/grid/grid_tiles.hpp"
-#include "plamn/core/data/tiles/tile_set_overlaps.hpp"
-#include "damn/core/data/tiles/tile_set_overlaps.hpp"
-#include "plamn/core/data/field/field_tiles.hpp"
-
-
 
 namespace plamn::core
 {

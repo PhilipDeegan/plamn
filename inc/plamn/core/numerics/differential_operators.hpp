@@ -1,11 +1,7 @@
 #ifndef PLAMN_CORE_NUMERICS_DIFFERENTIAL_OPERATORS_HPP
 #define PLAMN_CORE_NUMERICS_DIFFERENTIAL_OPERATORS_HPP
 
-#include "plamn/core/def.hpp"
-#include "plamn/core/data/grid/layout_defs.hpp"
-#include "plamn/core/data/grid/patch_layout.hpp"
 #include "damn/core/data/ndarray/ndarray_vector.hpp"
-#include "plamn/core/data/vecfield/vecfield_component.hpp"
 #include "damn/core/def/constants.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/math/array.hpp"
@@ -18,6 +14,11 @@
 #include "damn/core/sys/env.hpp"
 #include "damn/core/data/ndarray/ndarray_view.hpp"
 #include "damn/core/def/damn_config.hpp"
+
+#include "plamn/core/def.hpp"
+#include "plamn/core/data/grid/layout_defs.hpp"
+#include "plamn/core/data/grid/patch_layout.hpp"
+#include "plamn/core/data/vecfield/vecfield_component.hpp"
 #include "plamn/core/models/quantities/quantity.hpp"
 
 #include <array>

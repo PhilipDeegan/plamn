@@ -2,27 +2,28 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_APPENDING_DETAIL_SOA_APPENDING
 #define PLAMN_CORE_DATA_PARTICLES_APPENDING_DETAIL_SOA_APPENDING
 
-#include "plamn/core/def.hpp"
 #include "damn/core/meta/for_N.hpp"
 #include "damn/core/meta/type_meta.hpp"
-#include "plamn/core/data/particles/appending/particles_appending.hpp"
-#include "plamn/core/data/particles/particles_def.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/memory/memory.hpp"
 #include "damn/core/geometry/box_spans.hpp"
+
+#include "plamn/core/def.hpp"
+#include "plamn/core/data/particles/appending/particles_appending.hpp"
+#include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/arrays/particles_soa.hpp"
 #include "plamn/core/data/particles/arrays/particles_soavx.hpp"
+#include "plamn/core/data/particles/appending/detail/def_appending.hpp"
 
-#include <assert.h>
+// #include "plamn/core/data/particles/particles.hpp"
+// #include "plamn/core/data/particles/particle_packer.hpp"
+// #include "plamn/core/data/particles/converting/particles_converting.hpp"
+
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <tuple>
 #include <utility>
-// #include "plamn/core/data/particles/particles.hpp"
-// #include "plamn/core/data/particles/particle_packer.hpp"
-// #include "plamn/core/data/particles/converting/particles_converting.hpp"
-#include "plamn/core/data/particles/appending/detail/def_appending.hpp"
-
 
 namespace plamn::core
 {

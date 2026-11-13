@@ -1,11 +1,12 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTITIONING_PARTICLES_PARTITIONING_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTITIONING_PARTICLES_PARTITIONING_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/vector.hpp"
 #include "damn/core/geometry/box.hpp"
-#include "plamn/core/data/particles/partitioning/partitionner.hpp"
 #include "damn/core/def/damn_config.hpp"
+
+#include "plamn/core/def.hpp"
+#include "plamn/core/data/particles/partitioning/partitionner.hpp"
 
 #include <cstddef>
 
@@ -15,6 +16,7 @@ template<auto alloc_mode, typename Particles, std::size_t impl = 0>
 class ParticlesPartitioner;
 } // namespace plamn::core
 
+// the specializations: after the primary template above
 #include "particles_partitioning_cpu.hpp"
 
 #if DAMN_HAVE_GPU

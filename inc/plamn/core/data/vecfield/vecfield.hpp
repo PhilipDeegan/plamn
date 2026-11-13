@@ -2,8 +2,9 @@
 #define PLAMN_CORE_DATA_VECFIELD_VECFIELD_HPP
 
 #include "plamn/core/def.hpp"
-#include "vecfield_component.hpp"
 #include "plamn/core/data/tensorfield/tensorfield.hpp"
+
+#include "vecfield_component.hpp"
 
 #include <array>
 #include <utility>

@@ -1,32 +1,27 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_EXPORTING_DETAIL_DEF_EXPORTING
 #define PLAMN_CORE_DATA_PARTICLES_EXPORTING_DETAIL_DEF_EXPORTING
 
-#include "plamn/core/def.hpp"
 #include "damn/core/meta/type_meta.hpp"
 
+#include "plamn/core/def.hpp"
+#include "plamn/core/data/particles/particles_def.hpp"
+
 #include <cstdint>
+#include <cstddef>
 
 namespace damn
 {
 enum class AllocatorMode : std::uint16_t;
-
-namespace core
-{
-    template<typename Type, std::size_t dim>
-    struct Box;
-} // namespace core
 } // namespace damn
+namespace damn::core
+{
+template<typename Type, std::size_t dim>
+struct Box;
+} // namespace damn::core
+
 namespace plamn::core
 {
 enum class LayoutMode : std::uint16_t;
-} // namespace plamn::core
-
-#include "plamn/core/data/particles/particles_def.hpp"
-
-#include <cstddef>
-
-namespace plamn::core
-{
 
 template<auto layout_mde, auto alloc_mde>
 struct ParticlesExporter

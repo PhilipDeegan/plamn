@@ -1,7 +1,6 @@
 #ifndef PLAMN_CORE_DATA_FIELD_FIELD_TILES_HPP
 #define PLAMN_CORE_DATA_FIELD_FIELD_TILES_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/vector.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/data/tiles/tile_set.hpp"
@@ -12,6 +11,8 @@
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/memory/span.hpp"
+
+#include "plamn/core/def.hpp"
 
 #include <tuple>
 #include <utility>
@@ -35,11 +36,12 @@ template<typename D>
 struct SetEqual;
 } // namespace damn::core
 
+// defined in tensorfield.hpp, which includes this file
 namespace plamn::core::basic
 {
 template<typename Field_t, std::size_t rank>
 struct TensorField;
-}
+} // namespace plamn::core::basic
 
 namespace plamn::core
 {

@@ -1,7 +1,6 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTICLES_PER_CELL_TILE_SET_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLES_PER_CELL_TILE_SET_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/operators.hpp"
 #include "damn/core/memory/span.hpp"
 #include "damn/core/exec/kernels.hpp"
@@ -10,8 +9,6 @@
 #include "damn/core/sys/monitoring.hpp"
 #include "damn/core/data/tiles/tile_set.hpp"
 #include "damn/core/data/ndarray/ndarray_vector.hpp"
-#include "plamn/core/data/particles/particles_def.hpp"
-#include "plamn/core/data/particles/particle_translation_tracking.hpp"
 #include "damn/core/data/ndarray/ndarray_view.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/def/detail/mkn_gpu.hpp"
@@ -20,7 +17,11 @@
 #include "damn/core/math/array.hpp"
 #include "damn/core/meta/logic.hpp"
 
-#include <assert.h>
+#include "plamn/core/def.hpp"
+#include "plamn/core/data/particles/particles_def.hpp"
+#include "plamn/core/data/particles/particle_translation_tracking.hpp"
+
+#include <cassert>
 #include <array>
 #include <cstddef>
 #include <cstdint>

@@ -1,9 +1,15 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_EXPORTING_PARTICLES_EXPORTING
 #define PLAMN_CORE_DATA_PARTICLES_EXPORTING_PARTICLES_EXPORTING
 
-#include "plamn/core/def.hpp"
 #include "damn/core/logger.hpp"
 #include "damn/core/sys/strings.hpp"
+#include "damn/core/memory/memory.hpp"
+
+#include "plamn/core/def.hpp"
+#include "plamn/core/data/particles/exporting/detail/def_exporting.hpp"
+#include "plamn/core/data/particles/exporting/detail/aos_exporting.hpp"
+#include "plamn/core/data/particles/exporting/detail/soavx_exporting.hpp"
+#include "plamn/core/data/particles/particles_def.hpp"
 
 #include <cstddef>
 #include <string_view>
@@ -13,12 +19,6 @@ namespace damn::core
 template<typename Type, std::size_t dim>
 struct Box;
 } // namespace damn::core
-
-#include "damn/core/memory/memory.hpp"
-#include "plamn/core/data/particles/exporting/detail/def_exporting.hpp"
-#include "plamn/core/data/particles/exporting/detail/aos_exporting.hpp"
-#include "plamn/core/data/particles/exporting/detail/soavx_exporting.hpp"
-#include "plamn/core/data/particles/particles_def.hpp"
 
 namespace plamn::core
 {

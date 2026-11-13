@@ -1,13 +1,18 @@
 #ifndef PLAMN_CORE_NUMERICS_PARTICLES_SYNCHRONISED_MOVER_HPP
 #define PLAMN_CORE_NUMERICS_PARTICLES_SYNCHRONISED_MOVER_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/def/damn_config.hpp"
-#include "plamn/core/errors.hpp"
 #include "damn/core/logger.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/geometry/range.hpp"
+#include "damn/core/def/detail/mkn_gpu.hpp"
+#include "damn/core/exec/kernels.hpp"
+#include "damn/core/exec/thread_pool.hpp"
+#include "damn/core/meta/logic.hpp"
+
+#include "plamn/core/def.hpp"
+#include "plamn/core/errors.hpp"
 #include "plamn/core/numerics/pusher/boris.hpp"
 #include "plamn/core/numerics/moments/moments.hpp"
 #include "plamn/core/numerics/interpolator/interpolator.hpp"
@@ -15,17 +20,14 @@
 #include "plamn/core/numerics/boundary_condition/boundary_condition.hpp"
 #include "plamn/core/numerics/pusher/boris/detail/multi_boris.hpp"
 #include "plamn/core/data/particles/exporting/particles_exporting.hpp"
-#include "particles_synchronised_mover_def.hpp" // = UpdaterMode
-#include "damn/core/def/detail/mkn_gpu.hpp"
-#include "damn/core/exec/kernels.hpp"
-#include "damn/core/exec/thread_pool.hpp"
-#include "damn/core/meta/logic.hpp"
-#include "mkn/gpu.hpp"
-#include "phlop/timing/scope.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
 #include "plamn/core/data/particles/particles.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
+
+#include "particles_synchronised_mover_def.hpp" // = UpdaterMode
+#include "mkn/gpu.hpp"
+#include "phlop/timing/scope.hpp"
 
 #include <string>
 #include <optional>
@@ -37,7 +39,6 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-
 
 namespace plamn::core
 {

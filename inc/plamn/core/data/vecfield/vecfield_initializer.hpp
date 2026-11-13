@@ -12,7 +12,6 @@
 #include <cstddef>
 #include <stdexcept>
 
-
 namespace plamn
 {
 namespace core

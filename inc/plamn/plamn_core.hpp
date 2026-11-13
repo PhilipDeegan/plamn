@@ -1,8 +1,10 @@
 #ifndef PLAMN_CORE_INCLUDE_HPP
 #define PLAMN_CORE_INCLUDE_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/def/damn_config.hpp" // IWYU pragma: keep
+#include "damn/core/data/ndarray/ndarray_vector.hpp"
+
+#include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/grid.hpp"
 #include "plamn/core/data/ions/ions.hpp"
 #include "plamn/core/data/grid/grid_tiles.hpp"
@@ -11,13 +13,11 @@
 #include "plamn/core/data/electrons/electrons.hpp"
 #include "plamn/core/data/electromag/electromag.hpp"
 #include "plamn/core/models/options/mhd_options.hpp"
-#include "damn/core/data/ndarray/ndarray_vector.hpp"
 #include "plamn/core/data/particles/particles.hpp"
 #include "plamn/core/models/options/hybrid_options.hpp"
 #include "plamn/core/data/ions/ion_population/ion_population.hpp"
 #include "plamn/core/data/ions/particle_initializers/particle_initializer_factory.hpp"
 #include "plamn/core/data/ions/particle_initializers/maxwellian_particle_initializer.hpp"
-#include "dict.hpp"
 #include "plamn/core/data/field/field.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/data/particles/particle.hpp"
@@ -25,6 +25,8 @@
 #include "plamn/core/data/tensorfield/tensorfield.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 #include "plamn/core/models/quantities/mhd_quantities.hpp"
+
+#include "dict.hpp"
 
 #include <string>
 #include <cstddef>

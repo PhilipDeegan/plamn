@@ -6,7 +6,6 @@
 #include "plamn/core/data/grid/ghost_width_calculator.hpp"
 #include "plamn/core/numerics/reconstructions/reconstruction_nghosts.hpp"
 
-
 namespace plamn
 {
 

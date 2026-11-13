@@ -1,8 +1,9 @@
 #ifndef PLAMN_CORE_GRID_DETAIL_RAJA_H
 #define PLAMN_CORE_GRID_DETAIL_RAJA_H
 
-#include "plamn/core/def.hpp"
 #include "damn/core/geometry/box_spans.hpp"
+
+#include "plamn/core/def.hpp"
 
 namespace plamn::core::gpu::impl
 {

@@ -2,12 +2,13 @@
 #define PLAMN_ION_POPULATION_HPP
 
 #include "plamn/core/def.hpp"
-#include "particle_pack.hpp"
 #include "plamn/initializer/data_provider.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
+
+#include "particle_pack.hpp"
 #include "dict.hpp"
 
-#include <assert.h>
+#include <cassert>
 #include <tuple>
 #include <string>
 #include <sstream>

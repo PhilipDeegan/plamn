@@ -1,8 +1,9 @@
 #ifndef PLAMN_CORE_NUMERICS_AMPERE_AMPERE_HPP
 #define PLAMN_CORE_NUMERICS_AMPERE_AMPERE_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/def/damn_config.hpp"
+
+#include "plamn/core/def.hpp"
 
 #include <cstdint>
 

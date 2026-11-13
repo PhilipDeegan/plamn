@@ -1,10 +1,12 @@
 #ifndef PLAMN_CORE_PUSHER_BORIS_BASICS_HPP
 #define PLAMN_CORE_PUSHER_BORIS_BASICS_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/meta/for_N.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/def/detail/mkn_avx.hpp"
+
+#include "plamn/core/def.hpp"
+
 // #include "plamn/core/data/particles/particle.hpp"
 // #include "plamn/core/data/electromag/electromag.hpp"
 // #include "plamn/core/data/tensorfield/tensorfield.hpp"
@@ -15,7 +17,6 @@
 #include <array>
 #include <cstdlib>
 #include <type_traits>
-
 
 namespace plamn::core::boris
 {

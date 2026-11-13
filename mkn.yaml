@@ -43,6 +43,8 @@ profile:
     compile:
       paths: inc
       headers: -x c++-header
+      # namespace a::b in forward declarations, plamn's include mappings
+      args: -Xiwyu --cxx17ns -Xiwyu --mapping_file=res/iwyu.imp
 
 # iwyu's suggestions applied (fix_include): CI builds this and fails on any resulting diff
 # mpicxx adds MPI's include directories itself, iwyu needs them given (Debian/Ubuntu openmpi)
@@ -59,5 +61,7 @@ profile:
               grid/detail/raja.hpp grid/detail/kokkos.hpp
       inc: /usr/lib/x86_64-linux-gnu/openmpi/include /usr/lib/x86_64-linux-gnu/openmpi/include/openmpi
       headers: -x c++-header
+      # namespace a::b in forward declarations, plamn's include mappings
+      args: -Xiwyu --cxx17ns -Xiwyu --mapping_file=res/iwyu.imp
       fix: --nocomments
       system_last: true

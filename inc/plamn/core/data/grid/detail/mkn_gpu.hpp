@@ -1,11 +1,12 @@
 #ifndef PLAMN_CORE_GRID_DETAIL_MKN_GPU_HPP
 #define PLAMN_CORE_GRID_DETAIL_MKN_GPU_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/exec/kernels.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/def/damn_config.hpp"
+
+#include "plamn/core/def.hpp"
 
 #include <cstddef>
 

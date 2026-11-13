@@ -1,5 +1,6 @@
-#include "plamn/core/def.hpp"
 #include "damn/core/math/equality.hpp"
+
+#include "plamn/core/def.hpp"
 #ifndef PLAMN_CORE_DATA_PARTICLES_COMPARING_PARTICLES_COMPARING
 #define PLAMN_CORE_DATA_PARTICLES_COMPARING_PARTICLES_COMPARING
 

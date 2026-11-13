@@ -1,6 +1,8 @@
 #ifndef PLAMN_ELECTRONS_HPP
 #define PLAMN_ELECTRONS_HPP
 
+#include "damn/core/def/damn_config.hpp"
+
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/grid_tiles.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
@@ -9,7 +11,7 @@
 #include "plamn/core/data/tensorfield/tensorfield.hpp"
 #include "plamn/core/data/vecfield/vecfield_component.hpp"
 #include "plamn/initializer/data_provider.hpp"
-#include "damn/core/def/damn_config.hpp"
+
 #include "dict.hpp"
 
 #include <tuple>
@@ -18,7 +20,6 @@
 #include <format>
 #include <string>
 #include <vector>
-
 
 namespace plamn::core
 {

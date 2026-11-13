@@ -1,9 +1,10 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTICLES_DETAIL_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLES_DETAIL_HPP
 
+#include "damn/core/sys/strings.hpp"
+#include "damn/core/meta/logic.hpp"
+
 #include "plamn/core/def.hpp"
-#include "magic_enum/magic_enum_switch.hpp"  // IWYU pragma: keep
-#include "magic_enum/magic_enum_utility.hpp" // IWYU pragma: keep
 #include "plamn/core/data/particles/particles_def.hpp"
 
 #include <string_view>
@@ -20,9 +21,9 @@
 #include "plamn/core/data/particles/arrays/particles_soa.hpp"
 #include "plamn/core/data/particles/arrays/particles_soavx.hpp"
 #include "plamn/core/data/particles/arrays/particles_soavx_chunked.hpp"
-#include "damn/core/sys/strings.hpp"
-#include "damn/core/meta/logic.hpp"
 #include "magic_enum/magic_enum.hpp"
+#include "magic_enum/magic_enum_switch.hpp"  // IWYU pragma: keep
+#include "magic_enum/magic_enum_utility.hpp" // IWYU pragma: keep
 
 namespace damn
 {

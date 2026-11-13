@@ -2,19 +2,19 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_SERIALIZING_DETAIL_AOS_SERIALIZING
 #define PLAMN_CORE_DATA_PARTICLES_SERIALIZING_DETAIL_AOS_SERIALIZING
 
-#include "plamn/core/def.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/meta/logic.hpp"
 #include "damn/core/meta/type_meta.hpp"
-#include "plamn/core/data/particles/particles_def.hpp"
 #include "damn/core/memory/span.hpp"
+
+#include "plamn/core/def.hpp"
+#include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/serializing/detail/def_serializing.hpp"
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
-
 
 namespace plamn::core
 {

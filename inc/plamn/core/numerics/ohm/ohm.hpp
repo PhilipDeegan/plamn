@@ -1,15 +1,17 @@
 #ifndef PLAMN_OHM_HPP
 #define PLAMN_OHM_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/meta/container_meta.hpp"
+#include "damn/core/def/damn_config.hpp"
+
+#include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/layout_defs.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
 #include "plamn/core/data/vecfield/vecfield_component.hpp"
 #include "plamn/core/numerics/differential_operators.hpp"
 #include "plamn/initializer/data_provider.hpp"
-#include "damn/core/def/damn_config.hpp"
+
 #include "dict.hpp"
 
 #include <cmath>

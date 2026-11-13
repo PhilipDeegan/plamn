@@ -1,13 +1,14 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTICLES_DEF_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLES_DEF_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/math/array.hpp"
 #include "damn/core/meta/logic.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"
-#include "plamn/core/data/particles/particle.hpp"
 #include "damn/core/def/damn_config.hpp"
+
+#include "plamn/core/def.hpp"
+#include "plamn/core/data/particles/particle.hpp"
 
 #include <array>
 #include <algorithm>

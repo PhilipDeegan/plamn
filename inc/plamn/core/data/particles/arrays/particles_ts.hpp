@@ -1,8 +1,6 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTICLES_TILE_SET_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLES_TILE_SET_HPP
 
-
-#include "plamn/core/def.hpp"
 #include "damn/core/math/sort.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/def/detail/thrust.hpp"
@@ -14,7 +12,6 @@
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/data/ndarray/ndarray_vector.hpp"
-#include "plamn/core/data/particles/particles_def.hpp"
 #include "damn/core/sys/monitoring.hpp"
 #include "damn/core/data/ndarray/ndarray_view.hpp"
 #include "damn/core/def/detail/mkn_gpu.hpp"
@@ -25,9 +22,13 @@
 #include "damn/core/meta/tuple.hpp"
 #include "damn/core/meta/type_meta.hpp"
 #include "damn/core/vector.hpp"
+
+#include "plamn/core/def.hpp"
+#include "plamn/core/data/particles/particles_def.hpp"
+
 #include "mkn/gpu.hpp"
 
-#include <assert.h>
+#include <cassert>
 #include <tuple>
 #include <iterator>
 #include <stdexcept>
@@ -45,7 +46,6 @@ namespace damn::core
 template<typename Type, std::size_t dim>
 class Point;
 } // namespace damn::core
-
 
 namespace plamn::core
 {
