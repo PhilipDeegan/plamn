@@ -4,9 +4,12 @@ name: plamn
 
 profile:
 
+# subprojects are fetched along the profile/parent chain, before sources are checked
 - name: base
   inc: inc
-  self: damn menum
+       tpp/menum/include
+  sub: menum&tpp/menum(https://github.com/Neargye/magic_enum)
+  self: damn
   arg: -std=c++20
 
 - name: test_plamn_core
@@ -27,7 +30,3 @@ profile:
 # tpp/damn may be a symlink to a local damn checkout, otherwise it is cloned
 - name: damn
   dep: damn&tpp/damn(https://github.com/PhilipDeegan/damn)[damn_core]
-
-- name: menum
-  sub: menum&tpp/menum(https://github.com/Neargye/magic_enum)
-  inc: tpp/menum/include
