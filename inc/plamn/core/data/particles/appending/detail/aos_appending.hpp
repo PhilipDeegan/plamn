@@ -1,15 +1,20 @@
-#include "plamn/core/def.hpp"
-// IWYU pragma: private, include "core/data/particles/appending/particles_appending.hpp"
+// IWYU pragma: private, include "plamn/core/data/particles/appending/particles_appending.hpp"
 #ifndef PLAMN_CORE_DATA_PARTICLES_APPENDING_DETAIL_AOS_APPENDING
 #define PLAMN_CORE_DATA_PARTICLES_APPENDING_DETAIL_AOS_APPENDING
 
-
+#include "plamn/core/def.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/def/detail/mkn_gpu.hpp"
+#include "damn/core/logger.hpp"
+#include "damn/core/meta/type_meta.hpp"
+#include "plamn/core/data/particles/appending/particles_appending.hpp"
+#include "plamn/core/data/particles/particles_def.hpp"
 #include "damn/core/memory/memory.hpp"
 #include "damn/core/exec/kernels.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "plamn/core/data/particles/appending/detail/def_appending.hpp"
 
-
+#include <cstdint>
 #include <iterator>
 
 namespace plamn::core

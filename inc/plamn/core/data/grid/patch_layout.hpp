@@ -19,6 +19,7 @@
 #include "plamn/core/data/grid/layout.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 #include "plamn/core/models/quantities/mhd_quantities.hpp"
+#include "damn/core/def/damn_config.hpp"
 
 #include <array>
 #include <cstddef>
@@ -27,6 +28,12 @@
 #include <concepts>
 #include <stdexcept>
 #include <type_traits>
+#include <utility>
+
+namespace plamn::core
+{
+enum class QtyCentering : std::uint8_t;
+} // namespace plamn::core
 
 namespace plamn::core
 {

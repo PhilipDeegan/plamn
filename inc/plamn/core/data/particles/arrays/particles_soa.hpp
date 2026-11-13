@@ -2,19 +2,29 @@
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLES_SOA_HPP
 
 #include "plamn/core/def.hpp"
-
 #include "damn/core/def/detail/mkn_avx.hpp"
 #include "damn/core/logger.hpp"
 #include "damn/core/vector.hpp"
+
+#include <assert.h>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <stdexcept>
+#include <tuple>
+#include <type_traits>
+#include <utility>
 // #include "damn/core/memory/span.hpp"
 #include "damn/core/meta/tuple.hpp"
 #include "damn/core/meta/for_N.hpp"
 #include "damn/core/sys/monitoring.hpp"
-
 #include "plamn/core/data/particles/particle.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
-
 #include "plamn/core/data/particles/arrays/particles_soa_thrust.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/def/detail/mkn_gpu.hpp"
+#include "damn/core/memory/span.hpp"
+#include "mkn/gpu.hpp"
 
 
 namespace plamn::core

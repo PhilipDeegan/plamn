@@ -43,3 +43,21 @@ profile:
     compile:
       paths: inc
       headers: -x c++-header
+
+# iwyu's suggestions applied (fix_include): CI builds this and fails on any resulting diff
+# mpicxx adds MPI's include directories itself, iwyu needs them given (Debian/Ubuntu openmpi)
+- name: iwyu_fix
+  parent: base
+  mode: none
+  mod:
+  - name: cpp.iwyu
+    compile:
+      paths: inc
+      # fragments (of particles_sorting.hpp, particles_partitioning.hpp), and backends needing
+      # RAJA / Kokkos
+      ignore: sorting/particles_sorting_cpu.hpp partitioning/particles_partitioning_cpu.hpp
+              grid/detail/raja.hpp grid/detail/kokkos.hpp
+      inc: /usr/lib/x86_64-linux-gnu/openmpi/include /usr/lib/x86_64-linux-gnu/openmpi/include/openmpi
+      headers: -x c++-header
+      fix: --nocomments
+      system_last: true

@@ -16,10 +16,20 @@
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/numerics/ampere/ampere.hpp"
 #include "plamn/core/numerics/differential_operators.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/geometry/box.hpp"
+#include "damn/core/geometry/point.hpp"
+#include "plamn/core/data/grid/patch_layout.hpp"
+#include "plamn/core/data/vecfield/vecfield_component.hpp"
 
 #include <array>
 #include <cstdint>
 #include <stdexcept>
+#include <cstddef>
+#include <format>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 namespace plamn::core
 {

@@ -2,12 +2,20 @@
 #define PLAMN_CORE_DATA_PARTICLES_PARTITIONING_PARTITIONNER_HPP
 
 #include "plamn/core/def.hpp"
-
-#include <vector>
-
 #include "damn/core/memory/span.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/range.hpp"
+
+#include <vector>
+#include <algorithm>
+#include <cstddef>
+#include <utility>
+
+namespace damn::core
+{
+template<typename Type, std::size_t dim>
+struct Box;
+} // namespace damn::core
 // #include "plamn/core/data/particles/particle.hpp"
 
 namespace plamn

@@ -12,6 +12,24 @@
 #include "damn/core/data/ndarray/ndarray_vector.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/particle_translation_tracking.hpp"
+#include "damn/core/data/ndarray/ndarray_view.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/def/detail/mkn_gpu.hpp"
+#include "damn/core/geometry/point.hpp"
+#include "damn/core/logger.hpp"
+#include "damn/core/math/array.hpp"
+#include "damn/core/meta/logic.hpp"
+
+#include <assert.h>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <new>
+#include <ostream>
+#include <stdexcept>
+#include <tuple>
+#include <type_traits>
+#include <utility>
 
 namespace plamn::core
 {

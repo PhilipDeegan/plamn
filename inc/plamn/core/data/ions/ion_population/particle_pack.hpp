@@ -3,6 +3,11 @@
 
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles.hpp"
+#include "damn/core/meta/type_meta.hpp"
+
+#include <cstddef>
+#include <stdexcept>
+#include <string>
 
 namespace plamn
 {

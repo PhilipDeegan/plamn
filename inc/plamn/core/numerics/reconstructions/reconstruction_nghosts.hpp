@@ -2,7 +2,6 @@
 #define PLAMN_RECONSTRUCTION_NGHOSTS_HPP
 
 #include "plamn/core/def.hpp"
-
 #include "plamn/core/models/options/mhd_options_def.hpp"
 
 #include <cstdint>

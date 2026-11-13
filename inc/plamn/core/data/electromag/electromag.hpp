@@ -6,11 +6,14 @@
 #include "plamn/core/data/vecfield/vecfield_initializer.hpp"
 #include "plamn/core/data/tensorfield/tensorfield.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
-
 #include "plamn/initializer/data_provider.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "dict.hpp"
 
+#include <assert.h>
 #include <tuple>
 #include <string>
+#include <cstddef>
 
 namespace plamn::core::basic
 {

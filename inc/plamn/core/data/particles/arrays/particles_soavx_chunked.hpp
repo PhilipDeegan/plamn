@@ -22,10 +22,22 @@
 #include "damn/core/geometry/box_spans.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/arrays/particles_soavx.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/geometry/point.hpp"
+#include "damn/core/logger.hpp"
+#include "damn/core/meta/for_N.hpp"
+#include "phlop/timing/scope.hpp"
+#include "plamn/core/data/particles/particle.hpp"
 
 #include <tuple>
 #include <cstdint>
 #include <numeric>
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <stdexcept>
+#include <type_traits>
+#include <utility>
 
 #if DAMN_HAVE_THRUST
 #include <thrust/scan.h>

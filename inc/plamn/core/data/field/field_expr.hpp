@@ -12,6 +12,8 @@
 #include "damn/core/meta/for_N.hpp"
 #include "damn/core/data/ndarray/ndarray_view.hpp"
 #include "plamn/core/data/grid/detail/detail.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/geometry/box_spans.hpp"
 
 #include <cstddef>
 #include <type_traits>

@@ -2,13 +2,12 @@
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLES_SOA_THRUST_HPP
 
 #include "plamn/core/def.hpp"
-
-
 #include "damn/core/logger.hpp"
 #include "damn/core/vector.hpp"
 #include "damn/core/memory/span.hpp"
 #include "plamn/core/data/particles/particle.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
+#include "damn/core/def/damn_config.hpp"
 
 
 #if DAMN_HAVE_THRUST
@@ -21,6 +20,10 @@
 #endif // DAMN_HAVE_THRUST
 
 #include <type_traits>
+#include <array>
+#include <cstddef>
+#include <tuple>
+#include <variant>
 
 
 namespace plamn::core

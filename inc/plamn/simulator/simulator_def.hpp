@@ -5,14 +5,16 @@
 #include "damn/core/logger.hpp"
 #include "plamn/core/models/options/mhd_options_def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
-
 #include "plamn/initializer/data_provider.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "dict.hpp"
 
 #include <array>
 #include <cassert>
 #include <cstddef>
 #include <string>
 #include <vector>
+#include <format>
 
 namespace plamn
 {

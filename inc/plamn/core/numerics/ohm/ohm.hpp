@@ -8,8 +8,15 @@
 #include "plamn/core/data/grid/patch_layout.hpp"
 #include "plamn/core/data/vecfield/vecfield_component.hpp"
 #include "plamn/core/numerics/differential_operators.hpp"
-
 #include "plamn/initializer/data_provider.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "dict.hpp"
+
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <type_traits>
 
 namespace plamn::core
 {

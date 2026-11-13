@@ -2,6 +2,14 @@
 #define PLAMN_CORE_DATA_FIELD_FIELD_BOX_HPP
 
 #include "plamn/core/def.hpp"
+#include "damn/core/data/ndarray/ndarray_mask.hpp"
+#include "damn/core/data/ndarray/ndarray_view.hpp"
+#include "damn/core/geometry/point.hpp"
+#include "damn/core/logger.hpp"
+#include "damn/core/math/array.hpp"
+#include "damn/core/math/numeric.hpp"
+#include "damn/core/meta/type_meta.hpp"
+#include "plamn/core/data/field/field_tiles.hpp"
 
 #ifndef PLAMN_FIELD_BOX_IMPL
 #define PLAMN_FIELD_BOX_IMPL 0
@@ -15,11 +23,18 @@
 #include "damn/core/geometry/box_spans.hpp"
 #include "plamn/core/data/field/field_overlaps.hpp"
 
+#include <assert.h>
+#include <stdlib.h>
 #include <vector>
 #include <cmath>
 #include <cstddef>
 #include <cstring>
 #include <type_traits>
+#include <algorithm>
+#include <cstdint>
+#include <format>
+#include <iterator>
+#include <stdexcept>
 
 namespace plamn::core
 {

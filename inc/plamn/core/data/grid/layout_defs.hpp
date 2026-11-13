@@ -5,6 +5,7 @@
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "plamn/core/models/quantities/quantity.hpp"
+#include "damn/core/def/damn_config.hpp"
 
 #include <array>
 #include <cstddef>
@@ -12,6 +13,7 @@
 #include <tuple>
 #include <type_traits>
 #include <utility>
+#include <variant>
 
 namespace plamn
 {

@@ -1,15 +1,17 @@
 #ifndef PLAMN_ION_POPULATION_HPP
 #define PLAMN_ION_POPULATION_HPP
 
-#include <tuple>
-#include <string>
-#include <sstream>
-
-
 #include "plamn/core/def.hpp"
 #include "particle_pack.hpp"
 #include "plamn/initializer/data_provider.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
+#include "dict.hpp"
+
+#include <assert.h>
+#include <tuple>
+#include <string>
+#include <sstream>
+#include <cstddef>
 
 namespace plamn
 {

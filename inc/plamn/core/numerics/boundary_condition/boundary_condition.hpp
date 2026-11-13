@@ -2,11 +2,18 @@
 #define PLAMN_CORE_NUMERICS_BOUNDARY_CONDITION_BOUNDARY_CONDITION_HPP
 
 #include "plamn/core/def.hpp"
-
-#include <cstddef>
-
 #include "damn/core/geometry/box.hpp"
 #include "plamn/core/data/particles/partitioning/partitionner.hpp"
+
+#include <cstddef>
+#include <utility>
+#include <vector>
+
+namespace damn::core
+{
+template<typename Type, std::size_t dim>
+struct Box;
+} // namespace damn::core
 
 
 namespace plamn

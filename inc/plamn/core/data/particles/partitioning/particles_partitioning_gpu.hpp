@@ -2,6 +2,7 @@
 #define PLAMN_CORE_DATA_PARTICLES_PARTITIONING_PARTICLES_PARTITIONING_GPU_HPP
 
 #include "plamn/core/def.hpp"
+#include "damn/core/def/damn_config.hpp"
 
 // #include "damn/core/def/damn_config.hpp"
 

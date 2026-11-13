@@ -2,7 +2,6 @@
 #define PLAMN_OPTIONS_MHD_OPTIONS_HPP
 
 #include "plamn/core/def.hpp"
-
 #include "plamn/core/models/quantities/mhd_quantities.hpp"
 #include "plamn/core/data/grid/ghost_width_calculator.hpp"
 #include "plamn/core/numerics/reconstructions/reconstruction_nghosts.hpp"

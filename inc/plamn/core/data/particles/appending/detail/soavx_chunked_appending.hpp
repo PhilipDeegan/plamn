@@ -1,6 +1,15 @@
-#include "plamn/core/def.hpp"
 #ifndef PLAMN_CORE_DATA_PARTICLES_APPENDING_DETAIL_SOAVX_CHUNKED_APPENDING
 #define PLAMN_CORE_DATA_PARTICLES_APPENDING_DETAIL_SOAVX_CHUNKED_APPENDING
+
+#include "plamn/core/def.hpp"
+
+#include <cstddef>
+
+namespace plamn::core
+{
+template<auto src_layout_mde, auto src_alloc_mde, auto dst_layout_mde, auto dst_alloc_mde>
+struct ParticlesAppender;
+} // namespace plamn::core
 
 // SoAVXChunked from / to AoS (pack and refine staging) and itself, one particle at a time,
 //  GPU_UNIFIED on the host. The destination's offsets are rebuilt by the caller's on_appended

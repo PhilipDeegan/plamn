@@ -1,11 +1,18 @@
-#include "plamn/core/def.hpp"
-// IWYU pragma: private, include "core/data/particles/serializing/particles_serializing.hpp"
-
+// IWYU pragma: private, include "plamn/core/data/particles/serializing/particles_serializing.hpp"
 #ifndef PLAMN_CORE_DATA_PARTICLES_SERIALIZING_DETAIL_TS_SERIALIZING
 #define PLAMN_CORE_DATA_PARTICLES_SERIALIZING_DETAIL_TS_SERIALIZING
 
+#include "plamn/core/def.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/meta/type_meta.hpp"
+#include "plamn/core/data/particles/particles_def.hpp"
+#include "plamn/core/data/particles/particles_detail.hpp"
 #include "plamn/core/data/particles/particles.hpp"
 #include "plamn/core/data/particles/serializing/detail/def_serializing.hpp"
+
+#include <cstddef>
+#include <cstdint>
+#include <string>
 
 namespace plamn::core
 {

@@ -1,11 +1,13 @@
-#include "plamn/core/def.hpp"
 #ifndef PLAMN_CORE_DATA_PARTICLES_SERIALIZING_PARTICLES_SERIALIZING
 #define PLAMN_CORE_DATA_PARTICLES_SERIALIZING_PARTICLES_SERIALIZING
 
+#include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/serializing/detail/def_serializing.hpp"
 #include "plamn/core/data/particles/serializing/detail/aos_serializing.hpp"
 #include "plamn/core/data/particles/serializing/detail/soa_serializing.hpp"
 #include "plamn/core/data/particles/serializing/detail/ts_serializing.hpp"
+
+#include <string>
 
 namespace plamn::core
 {

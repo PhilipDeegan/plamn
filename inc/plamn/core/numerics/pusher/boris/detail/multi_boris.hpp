@@ -2,7 +2,6 @@
 #define PLAMN_CORE_PUSHER_BORIS_DETAIL_MULTI_BORIS_HPP
 
 #include "plamn/core/def.hpp"
-
 #include "damn/core/logger.hpp"
 #include "damn/core/memory/span.hpp"
 #include "damn/core/exec/kernels.hpp"
@@ -13,6 +12,30 @@
 #include "plamn/core/numerics/pusher/boris/basics.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/numerics/interpolator/interpolating.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/def/detail/mkn_gpu.hpp"
+#include "damn/core/geometry/box.hpp"
+#include "damn/core/meta/for_N.hpp"
+#include "damn/core/meta/logic.hpp"
+#include "damn/core/meta/type_meta.hpp"
+#include "mkn/gpu.hpp"
+#include "plamn/core/data/particles/arrays/particles_soavx.hpp"
+#include "plamn/core/data/particles/particles.hpp"
+#include "plamn/core/data/tensorfield/tensorfield.hpp"
+#include "plamn/core/numerics/interpolator/interpolator.hpp"
+
+#include <assert.h>
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <initializer_list>
+#include <memory>
+#include <stdexcept>
+#include <tuple>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 namespace plamn::core
 {
@@ -26,7 +49,6 @@ struct MultiBorisOptions
 
 template<auto particle_type, auto boris_mode, typename Backend_t>
 struct MultiBorisFunctors;
-
 template<LayoutMode layout, typename ModelAccessor, typename Interpolator>
 struct MultiBorisBackend;
 

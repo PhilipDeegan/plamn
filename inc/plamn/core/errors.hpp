@@ -2,7 +2,6 @@
 #define PLAMN_CORE_ERRORS_HPP
 
 #include "plamn/core/def.hpp"
-
 #include "dict.hpp"
 
 #include <string>

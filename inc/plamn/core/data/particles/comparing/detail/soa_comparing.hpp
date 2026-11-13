@@ -1,13 +1,18 @@
-#include "plamn/core/def.hpp"
-
 #ifndef PLAMN_CORE_DATA_PARTICLES_COMPARING_DETAIL_SOA_COMPARING
 #define PLAMN_CORE_DATA_PARTICLES_COMPARING_DETAIL_SOA_COMPARING
 
+#include "plamn/core/def.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/math/numeric.hpp"
+#include "damn/core/meta/type_meta.hpp"
 #include "damn/core/memory/memory.hpp"
 #include "damn/core/math/equality.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/arrays/particles_soa.hpp"
 #include "plamn/core/data/particles/comparing/detail/def_comparing.hpp"
+
+#include <cstddef>
+#include <string>
 
 namespace plamn::core
 {

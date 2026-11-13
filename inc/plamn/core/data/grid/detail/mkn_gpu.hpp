@@ -5,6 +5,15 @@
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/exec/kernels.hpp"
 #include "damn/core/geometry/box.hpp"
+#include "damn/core/def/damn_config.hpp"
+
+#include <cstddef>
+
+namespace damn::core
+{
+template<typename Type, std::size_t dim>
+struct Box;
+} // namespace damn::core
 
 namespace plamn::core::gpu::impl
 {

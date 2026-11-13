@@ -12,7 +12,9 @@
 #include "damn/core/geometry/range.hpp"
 #include "damn/core/meta/container_meta.hpp"
 #include "damn/core/data/ndarray/ndarray_vector.hpp"
+#include "damn/core/geometry/point.hpp"
 
+#include <assert.h>
 #include <array>
 #include <cstddef>
 #include <type_traits>
@@ -20,6 +22,10 @@
 #include <vector>
 #include <numeric>
 #include <algorithm>
+#include <cstdint>
+#include <iostream>
+#include <stdexcept>
+#include <utility>
 
 
 namespace plamn::core

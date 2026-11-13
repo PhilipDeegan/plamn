@@ -17,9 +17,13 @@
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/numerics/ohm/ohm.hpp"
 #include "plamn/core/numerics/differential_operators.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "plamn/core/data/grid/patch_layout.hpp"
+#include "plamn/core/data/vecfield/vecfield_component.hpp"
 
 #include <array>
 #include <stdexcept>
+#include <cstddef>
 
 namespace plamn::core
 {

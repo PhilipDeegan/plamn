@@ -4,12 +4,20 @@
 #include "plamn/core/def.hpp"
 #include "damn/core/data/tiles/tile_set.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/geometry/box.hpp"
+#include "damn/core/geometry/box_spans.hpp"
+#include "damn/core/math/numeric.hpp"
 
+#include <assert.h>
 #include <cmath>
 #include <tuple>
 #include <string>
 #include <optional>
 #include <stdexcept>
+#include <cstddef>
+#include <cstdint>
+#include <iosfwd>
 
 namespace plamn::core
 {

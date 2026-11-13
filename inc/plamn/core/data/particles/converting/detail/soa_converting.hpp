@@ -1,13 +1,21 @@
-#include "plamn/core/def.hpp"
-// IWYU pragma: private, include "core/data/particles/converting/particles_converting.hpp"
-
+// IWYU pragma: private, include "plamn/core/data/particles/converting/particles_converting.hpp"
 #ifndef PLAMN_CORE_DATA_PARTICLES_CONVERTING_DETAIL_SOA_CONVERTING
 #define PLAMN_CORE_DATA_PARTICLES_CONVERTING_DETAIL_SOA_CONVERTING
 
+#include "plamn/core/def.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/meta/for_N.hpp"
+#include "plamn/core/data/particles/converting/particles_converting.hpp"
 #include "damn/core/memory/memory.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/arrays/particles_soa.hpp"
 #include "plamn/core/data/particles/converting/detail/def_converting.hpp"
+
+#include <assert.h>
+#include <cstddef>
+#include <cstdint>
+#include <tuple>
+#include <utility>
 
 namespace plamn::core
 {

@@ -5,6 +5,13 @@
 #include "plamn/core/data/particles/particle.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/particles_detail.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/geometry/point.hpp"
+#include "damn/core/logger.hpp"
+#include "damn/core/math/array.hpp"
+#include "damn/core/math/numeric.hpp"
+#include "damn/core/meta/logic.hpp"
+#include "damn/core/meta/type_meta.hpp"
 // #include "plamn/core/data/particles/sorting/particles_sorting.hpp"
 // #include "plamn/core/data/particles/particles_selector.hpp"
 // #include "plamn/core/data/particles/partitioning/particles_partitioning.hpp"
@@ -19,6 +26,9 @@
 #include <sstream>
 #include <stdexcept>
 #include <type_traits>
+#include <cstddef>
+#include <format>
+#include <string>
 
 namespace plamn::core
 {

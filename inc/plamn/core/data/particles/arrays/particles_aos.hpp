@@ -2,26 +2,31 @@
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLES_AOS_HPP
 
 #include "plamn/core/def.hpp"
-
-
 #include "damn/core/def/damn_config.hpp"
-
-
 #include "damn/core/vector.hpp"
 #include "damn/core/memory/span.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "plamn/core/data/particles/cellmap.hpp"
 #include "damn/core/sys/monitoring.hpp"
-// #include "damn/core/geometry/point.hpp"
-// #include "damn/core/geometry/range.hpp"
-// #include "plamn/core/data/particles/particle.hpp"
-#include "plamn/core/data/particles/particles_def.hpp"
-
 
 #include <vector>
 #include <cstddef>
 #include <cstdint>
 #include <utility>
+#include <algorithm>
+#include <format>
+#include <iterator>
+#include <stdexcept>
+#include <type_traits>
+// #include "damn/core/geometry/point.hpp"
+// #include "damn/core/geometry/range.hpp"
+// #include "plamn/core/data/particles/particle.hpp"
+#include "plamn/core/data/particles/particles_def.hpp"
+#include "damn/core/def/detail/mkn_gpu.hpp"
+#include "damn/core/logger.hpp"
+#include "damn/core/meta/logic.hpp"
+#include "damn/core/meta/type_meta.hpp"
+#include "mkn/gpu.hpp"
 
 namespace plamn::core
 {

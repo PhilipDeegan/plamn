@@ -5,6 +5,7 @@
 #include "damn/core/vector.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "plamn/core/data/particles/partitioning/partitionner.hpp"
+#include "damn/core/def/damn_config.hpp"
 
 #include <cstddef>
 

@@ -37,3 +37,35 @@ jobs:
           echo "run: git clang-format $mb -- inc src tst"
           exit 1
         fi
+
+  iwyu:
+    # include what you use: applying iwyu's suggestions changes nothing
+    # Debian 13: the same iwyu (8.23) and libstdc++ as development machines, results differ
+    # between versions; also a much smaller image than phare_dep
+    runs-on: ubuntu-24.04
+    container: debian:trixie
+    timeout-minutes: 30
+    steps:
+    - run: |  # git before checkout, so the checkout is a repository
+        apt-get update
+        apt-get install -y --no-install-recommends ca-certificates curl git openssh-client \
+          g++ openmpi-bin libopenmpi-dev iwyu
+
+    - uses: actions/checkout@v4
+
+    # damn is private: check it out where mkn looks for it (tpp/damn), as build_nix.yml
+    - uses: actions/checkout@v4
+      with:
+        repository: PhilipDeegan/damn
+        ssh-key: ${{ secrets.DAMN_DEPLOY_KEY }}
+        path: tpp/damn
+
+    - run: |
+        curl -Lo mkn https://github.com/mkn/mkn/releases/download/latest/mkn_nix
+        chmod +x mkn
+        KLOG=3 ./mkn build -dtKOqp iwyu_fix -Wx res/mkn/mpi # build: the module must link
+        git config --global --add safe.directory "$PWD"
+        if ! git diff --exit-code -- inc src tst; then
+          echo "run: mkn build -p iwyu_fix -x res/mkn/mpi, and commit the result"
+          exit 1
+        fi

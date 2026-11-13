@@ -2,6 +2,11 @@
 #define PLAMN_CORE_GRID_DETAIL_DETAIL_HPP
 
 #include "plamn/core/def.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/def/detail/mkn_gpu.hpp"
+#include "damn/core/def/detail/raja.hpp"
+#include "damn/core/def/kokkos_tools.hpp"
+#include "damn/core/logger.hpp"
 
 // one kernel backend: mkn::gpu launches when present (also on umpire memory), else raja, else kokkos
 #if DAMN_HAVE_MKN_GPU
@@ -16,6 +21,12 @@
 #include "damn/core/geometry/box_spans.hpp"
 
 #include <cstddef>
+
+namespace damn::core
+{
+template<typename Type, std::size_t dim>
+struct Box;
+} // namespace damn::core
 
 namespace plamn::core::gpu
 {

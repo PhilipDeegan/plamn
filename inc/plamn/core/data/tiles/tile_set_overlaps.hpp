@@ -6,6 +6,7 @@
 
 #include "plamn/core/def.hpp"
 #include "damn/core/data/tiles/tile_set_overlaps.hpp"
+#include "damn/core/geometry/box.hpp"
 
 
 namespace plamn::core

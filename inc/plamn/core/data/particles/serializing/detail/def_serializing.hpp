@@ -1,8 +1,21 @@
-#include "plamn/core/def.hpp"
-
-
 #ifndef PLAMN_CORE_DATA_PARTICLES_SERIALIZING_DETAIL_DEF_SERIALIZING
 #define PLAMN_CORE_DATA_PARTICLES_SERIALIZING_DETAIL_DEF_SERIALIZING
+
+#include "plamn/core/def.hpp"
+#include "damn/core/meta/type_meta.hpp"
+
+#include <cstdint>
+#include <fstream>
+#include <string>
+
+namespace damn
+{
+enum class AllocatorMode : std::uint16_t;
+} // namespace damn
+namespace plamn::core
+{
+enum class LayoutMode : std::uint16_t;
+} // namespace plamn::core
 
 #include "plamn/core/data/particles/particles_def.hpp"
 

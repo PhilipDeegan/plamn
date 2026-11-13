@@ -1,7 +1,20 @@
-#include "plamn/core/def.hpp"
-// IWYU pragma: private, include "core/data/particles/appending/particles_appending.hpp"
+// IWYU pragma: private, include "plamn/core/data/particles/appending/particles_appending.hpp"
 #ifndef PLAMN_CORE_DATA_PARTICLES_APPENDING_DETAIL_DEF_APPENDING
 #define PLAMN_CORE_DATA_PARTICLES_APPENDING_DETAIL_DEF_APPENDING
+
+#include "plamn/core/def.hpp"
+#include "damn/core/meta/type_meta.hpp"
+
+#include <cstdint>
+
+namespace damn
+{
+enum class AllocatorMode : std::uint16_t;
+} // namespace damn
+namespace plamn::core
+{
+enum class LayoutMode : std::uint16_t;
+} // namespace plamn::core
 
 #include "plamn/core/data/particles/particles_def.hpp"
 

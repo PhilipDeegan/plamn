@@ -9,6 +9,9 @@
 #include "damn/core/math/array.hpp"
 #include "damn/core/math/numeric.hpp"
 #include "damn/core/geometry/box_spans.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/geometry/point.hpp"
+#include "damn/core/memory/span.hpp"
 
 #include <tuple>
 #include <utility>
@@ -20,6 +23,17 @@
 #include <stdexcept>
 #include <algorithm>
 #include <type_traits>
+#include <array>
+#include <cstdlib>
+#include <iosfwd>
+#include <iterator>
+#include <version>
+
+namespace damn::core
+{
+template<typename D>
+struct SetEqual;
+} // namespace damn::core
 
 namespace plamn::core::basic
 {

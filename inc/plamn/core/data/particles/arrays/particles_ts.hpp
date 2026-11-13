@@ -6,11 +6,9 @@
 #include "damn/core/math/sort.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/def/detail/thrust.hpp"
-
 #include "damn/core/operators.hpp"
 #include "damn/core/data/tiles/tile_set.hpp"
 #include "damn/core/data/tiles/tile_set_traversal.hpp"
-
 #include "damn/core/memory/span.hpp"
 #include "damn/core/exec/kernels.hpp"
 #include "damn/core/geometry/box.hpp"
@@ -18,12 +16,35 @@
 #include "damn/core/data/ndarray/ndarray_vector.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "damn/core/sys/monitoring.hpp"
+#include "damn/core/data/ndarray/ndarray_view.hpp"
+#include "damn/core/def/detail/mkn_gpu.hpp"
+#include "damn/core/logger.hpp"
+#include "damn/core/math/array.hpp"
+#include "damn/core/math/numeric.hpp"
+#include "damn/core/meta/logic.hpp"
+#include "damn/core/meta/tuple.hpp"
+#include "damn/core/meta/type_meta.hpp"
+#include "damn/core/vector.hpp"
+#include "mkn/gpu.hpp"
 
-
-
+#include <assert.h>
 #include <tuple>
 #include <iterator>
 #include <stdexcept>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <format>
+#include <new>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
+namespace damn::core
+{
+template<typename Type, std::size_t dim>
+class Point;
+} // namespace damn::core
 
 
 namespace plamn::core
@@ -89,7 +110,6 @@ private:
 
 template<typename Particles>
 struct CrossTileCopyDAO;
-
 template<typename Span_t>
 struct TileSetBlockDAO;
 

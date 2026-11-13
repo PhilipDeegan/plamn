@@ -6,9 +6,13 @@
 #include "plamn/initializer/data_provider.hpp"
 #include "maxwellian_particle_initializer.hpp"
 #include "particle_initializer.hpp"
+#include "dict.hpp"
 
 #include <memory>
 #include <string>
+#include <array>
+#include <cstddef>
+#include <optional>
 
 namespace plamn
 {

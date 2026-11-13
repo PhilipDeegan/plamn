@@ -3,6 +3,8 @@
 
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/layout_defs.hpp"
+#include "damn/core/geometry/point.hpp"
+#include "plamn/core/models/quantities/quantity.hpp"
 
 #include <array>
 #include <cassert>

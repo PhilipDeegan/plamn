@@ -7,7 +7,6 @@
 #include "plamn/core/data/field/field_tiles.hpp"
 
 #include <type_traits>
-
 #include <stdexcept>
 
 

@@ -5,6 +5,7 @@
 // per model, since models discretise the same physics differently)
 
 #include "plamn/core/def.hpp"
+#include "damn/core/def/damn_config.hpp"
 
 #include <array>
 #include <cstddef>

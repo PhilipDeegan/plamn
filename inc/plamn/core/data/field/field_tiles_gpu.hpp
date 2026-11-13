@@ -9,9 +9,11 @@
 #include "plamn/core/def.hpp"
 #include "damn/core/exec/kernels.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
+#include "damn/core/def/damn_config.hpp"
 
 #include <cstddef>
 #include <stdexcept>
+#include <type_traits>
 
 namespace plamn::core
 {

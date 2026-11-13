@@ -2,12 +2,23 @@
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLE_TRANSLATION_TRACKING_HPP
 
 #include "plamn/core/def.hpp"
-
 #include "damn/core/vector.hpp"
 #include "damn/core/memory/span.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/data/ndarray/ndarray_vector.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
+#include "damn/core/data/ndarray/ndarray_view.hpp"
+#include "damn/core/def/damn_config.hpp"
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+
+namespace damn::core
+{
+template<typename Type, std::size_t dim>
+class Point;
+} // namespace damn::core
 
 namespace plamn::core
 {

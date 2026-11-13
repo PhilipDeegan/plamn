@@ -6,6 +6,22 @@
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/data/tiles/tile_set.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/geometry/point.hpp"
+#include "damn/core/math/array.hpp"
+#include "damn/core/meta/logic.hpp"
+
+#include <assert.h>
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <format>
+#include <functional>
+#include <new>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 namespace plamn::core
 {

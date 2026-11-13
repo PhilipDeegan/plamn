@@ -11,11 +11,15 @@
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "plamn/core/data/grid/layout_defs.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/math/array.hpp"
+#include "plamn/core/models/quantities/quantity.hpp"
 
 #include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 
 namespace plamn::core
 {

@@ -1,7 +1,18 @@
-#include "plamn/core/def.hpp"
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTICLES_PerCell_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLES_PerCell_HPP
 
+#include "plamn/core/def.hpp"
+#include "damn/core/data/ndarray/ndarray_view.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/def/detail/mkn_gpu.hpp"
+#include "damn/core/geometry/box.hpp"
+#include "damn/core/logger.hpp"
+#include "damn/core/math/array.hpp"
+#include "damn/core/math/numeric.hpp"
+#include "damn/core/meta/logic.hpp"
+#include "damn/core/vector.hpp"
+#include "mkn/gpu.hpp"
+#include "phlop/timing/scope.hpp"
 #include "damn/core/operators.hpp"
 #include "damn/core/math/sort.hpp"
 #include "damn/core/memory/span.hpp"
@@ -12,6 +23,17 @@
 #include "damn/core/data/ndarray/ndarray_vector.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/particle_translation_tracking.hpp"
+
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <iterator>
+#include <tuple>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 #if DAMN_HAVE_THRUST
 #include "plamn/core/data/particles/arrays/particles_soa.hpp"

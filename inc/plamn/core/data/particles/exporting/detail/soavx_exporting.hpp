@@ -16,9 +16,18 @@
 #include <cstddef>
 #include <iterator>
 #include <stdexcept>
+#include <type_traits>
+#include <utility>
+
+namespace damn::core
+{
+template<typename Type, std::size_t dim>
+struct Box;
+} // namespace damn::core
 
 #if DAMN_HAVE_THRUST
 #include "plamn/core/data/particles/arrays/particles_soa_thrust.hpp"
+
 #include <thrust/partition.h>
 #include <thrust/execution_policy.h>
 #endif

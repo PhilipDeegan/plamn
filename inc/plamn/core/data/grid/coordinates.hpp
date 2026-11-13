@@ -2,7 +2,6 @@
 #define PLAMN_CORE_DATA_GRID_COORDINATES_HPP
 
 #include "plamn/core/def.hpp"
-
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/memory/span.hpp"
@@ -13,6 +12,17 @@
 #include <array>
 #include <vector>
 #include <cstddef>
+#include <cstdint>
+
+namespace damn::core
+{
+template<typename Type, std::size_t dim>
+struct Box;
+} // namespace damn::core
+namespace plamn::core
+{
+enum class QtyCentering : std::uint8_t;
+} // namespace plamn::core
 
 namespace plamn::core
 {

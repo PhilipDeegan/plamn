@@ -1,8 +1,18 @@
-#include "plamn/core/def.hpp"
-// IWYU pragma: private, include "core/data/particles/particles_appender.hpp"
-
 #ifndef PLAMN_CORE_DATA_PARTICLES_APPENDING_PARTICLES_APPENDING
 #define PLAMN_CORE_DATA_PARTICLES_APPENDING_PARTICLES_APPENDING
+
+#include "plamn/core/def.hpp"
+#include "damn/core/logger.hpp"
+#include "damn/core/sys/strings.hpp"
+
+#include <assert.h>
+#include <string_view>
+
+namespace plamn::core
+{
+template<auto src_layout_mde, auto src_alloc_mde, auto dst_layout_mde, auto dst_alloc_mde>
+struct ParticlesAppender;
+} // namespace plamn::core
 
 #include "plamn/core/data/particles/appending/detail/def_appending.hpp"
 #include "plamn/core/data/particles/appending/detail/aos_appending.hpp"
@@ -10,6 +20,7 @@
 #include "plamn/core/data/particles/appending/detail/soavx_chunked_appending.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "damn/core/geometry/box_spans.hpp"
+
 #include <iterator>
 #include <cstddef>
 

@@ -16,6 +16,9 @@
 #include "damn/core/meta/tuple.hpp"
 #include "damn/core/sys/strings.hpp"
 #include "damn/core/sys/env.hpp"
+#include "damn/core/data/ndarray/ndarray_view.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "plamn/core/models/quantities/quantity.hpp"
 
 #include <array>
 #include <cstddef>

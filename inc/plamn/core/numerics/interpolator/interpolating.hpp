@@ -2,7 +2,6 @@
 #define PLAMN_CORE_NUMERICS_INTERPOLATOR_INTERPOLATING_HPP
 
 #include "plamn/core/def.hpp"
-
 #include "damn/core/exec/kernels.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "damn/core/geometry/box_spans.hpp"
@@ -13,13 +12,25 @@
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/arrays/particles_soavx.hpp"
 #include "plamn/core/numerics/pusher/boris/basics.hpp"
-
 #include "interpolator.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/def/detail/mkn_gpu.hpp"
+#include "damn/core/geometry/box.hpp"
+#include "damn/core/logger.hpp"
+#include "damn/core/meta/logic.hpp"
+#include "damn/core/meta/type_meta.hpp"
+#include "damn/core/sys/env.hpp"
 
+#include <assert.h>
 #include <string>
 #include <iostream>
 #include <optional>
 #include <stdexcept>
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <initializer_list>
+#include <type_traits>
 
 
 namespace plamn::core

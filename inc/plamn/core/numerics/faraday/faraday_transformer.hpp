@@ -16,9 +16,11 @@
 #include "plamn/core/numerics/differential_operators.hpp"
 #include "plamn/core/data/field/field_expr.hpp"
 #include "plamn/core/data/grid/layout.hpp"
+#include "damn/core/def/damn_config.hpp"
 
 #include <array>
 #include <stdexcept>
+#include <cstddef>
 
 namespace plamn::core
 {

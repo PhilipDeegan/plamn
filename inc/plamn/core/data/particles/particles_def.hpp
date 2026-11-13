@@ -2,20 +2,28 @@
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLES_DEF_HPP
 
 #include "plamn/core/def.hpp"
-
-
 #include "damn/core/math/array.hpp"
 #include "damn/core/meta/logic.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "plamn/core/data/particles/particle.hpp"
-
+#include "damn/core/def/damn_config.hpp"
 
 #include <array>
 #include <algorithm>
 #include <tuple>
 #include <cstdint>
 #include <type_traits>
+#include <cstddef>
+#include <iterator>
+#include <utility>
+#include <variant>
+
+namespace damn::core
+{
+template<typename Type, std::size_t dim>
+class Point;
+} // namespace damn::core
 
 namespace plamn::core
 {

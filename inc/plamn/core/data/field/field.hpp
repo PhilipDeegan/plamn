@@ -7,11 +7,21 @@
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/data/ndarray/ndarray_view.hpp"
 #include "damn/core/meta/container_meta.hpp"
+#include "damn/core/math/array.hpp"
+#include "damn/core/meta/type_meta.hpp"
 
-
+#include <assert.h>
 #include <array>
 #include <string>
 #include <cstddef>
+#include <cmath>
+#include <cstdint>
+#include <format>
+#include <ostream>
+#include <stdexcept>
+#include <type_traits>
+#include <vector>
+#include <version>
 // #include <stdexcept>
 
 
