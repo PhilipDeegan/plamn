@@ -76,15 +76,15 @@ damn::core::EqualityReport compare_reduced_fields(Grid<T0s...> const& ref, Grid<
 }
 
 
-template<typename GridLayout_t, auto opts>
-void zero_ghost_layer(basic::Field<opts>& f, GridLayout_t const& layout)
+template<typename Layout_t, auto opts>
+void zero_ghost_layer(basic::Field<opts>& f, Layout_t const& layout)
 {
     for (auto const& ghost : ghost_box(layout, f).remove(domain_box(layout, f)))
         damn::core::for_each_point(ghost, [&](auto const& bix) { f(bix) = 0; });
 }
 
-template<typename GridLayout_t, typename Grid_t, typename Field_t>
-void zero_ghost_layer(FieldTileSet<GridLayout_t, Grid_t, Field_t>& ts, GridLayout_t const& layout)
+template<typename Layout_t, typename Grid_t, typename Field_t>
+void zero_ghost_layer(FieldTileSet<Layout_t, Grid_t, Field_t>& ts, Layout_t const& layout)
 {
     auto const pq = ts.physicalQuantity();
     for (auto const& ghost : ghost_box(layout, pq).remove(domain_box(layout, pq)))

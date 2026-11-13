@@ -6,7 +6,7 @@
 #include "plamn/core/data/field/field.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "plamn/core/numerics/ampere/ampere_transformer.hpp"
-#include "plamn/core/data/grid/gridlayoutdefs.hpp"
+#include "plamn/core/data/grid/layout_defs.hpp"
 
 #include "tst/plamn/core/data/field/test_field.hpp"
 #include "tst/plamn/core/data/vecfield/test_vecfield_fixtures.hpp"
@@ -42,12 +42,12 @@ protected:
     static constexpr std::size_t interp_order = 1;
     using core_types                          = PLAMN_Types<plamn::SimOpts{dim, interp_order}>;
     using HybridTypes                         = core_types::Hybrid;
-    using GridLayout_t                        = HybridTypes::GridLayout_t;
+    using Layout_t                        = HybridTypes::Layout_t;
     using Ampere_t                            = AmpereTransformer<>;
     auto static constexpr field_opts          = TensorFieldOptions<HybridTypes>{};
     using UsableVecFieldND                    = UsableVecField<field_opts>;
 
-    GridLayout_t layout;
+    Layout_t layout;
     UsableVecFieldND B, J;
 
 public:
@@ -67,12 +67,12 @@ protected:
     static constexpr std::size_t interp_order = 1;
     using core_types                          = PLAMN_Types<plamn::SimOpts{dim, interp_order}>;
     using HybridTypes                         = core_types::Hybrid;
-    using GridLayout_t                        = HybridTypes::GridLayout_t;
+    using Layout_t                        = HybridTypes::Layout_t;
     using Ampere_t                            = AmpereTransformer<>;
     auto static constexpr field_opts          = TensorFieldOptions<HybridTypes>{};
     using UsableVecFieldND                    = UsableVecField<field_opts>;
 
-    GridLayout_t layout;
+    Layout_t layout;
     UsableVecFieldND B, J;
 
 public:
@@ -92,12 +92,12 @@ protected:
     static constexpr std::size_t interp_order = 1;
     using core_types                          = PLAMN_Types<plamn::SimOpts{dim, interp_order}>;
     using HybridTypes                         = core_types::Hybrid;
-    using GridLayout_t                        = HybridTypes::GridLayout_t;
+    using Layout_t                        = HybridTypes::Layout_t;
     using Ampere_t                            = AmpereTransformer<>;
     auto static constexpr field_opts          = TensorFieldOptions<HybridTypes>{};
     using UsableVecFieldND                    = UsableVecField<field_opts>;
 
-    GridLayout_t layout;
+    Layout_t layout;
     UsableVecFieldND B, J;
 
 public:
@@ -382,7 +382,7 @@ TEST_F(Ampere2DTest, grownPhysicalBoxIsExactOnQuadraticB)
 
     auto const x
         = [&](auto const& field, std::uint32_t const i, std::uint32_t const iy, Direction const d) {
-              auto const c = layout.centering(field)[static_cast<std::size_t>(d)];
+              auto const c = ::plamn::core::centering(layout, field)[static_cast<std::size_t>(d)];
               auto const n = d == Direction::X ? i : iy;
               auto const s = static_cast<double>(n) - layout.physicalStartIndex(field, d);
               return s * dl[static_cast<std::size_t>(d)]

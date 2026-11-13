@@ -32,7 +32,7 @@ namespace plamn
 {
 namespace core
 {
-    template<typename IonPopulation, typename GridLayout>
+    template<typename IonPopulation, typename Layout>
     class Ions
     {
     public:
@@ -42,8 +42,8 @@ namespace core
         using Float                     = field_type::type;
         using tensorfield_type          = IonPopulation::tensorfield_type;
         using particles_type       = IonPopulation::particles_type;
-        using gridlayout_type           = GridLayout;
-        static constexpr auto dimension = GridLayout::dimension;
+        using layout_type           = Layout;
+        static constexpr auto dimension = Layout::dimension;
 
 
         Ions(Ions const&) = default;

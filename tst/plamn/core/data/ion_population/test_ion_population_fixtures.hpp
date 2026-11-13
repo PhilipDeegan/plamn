@@ -11,7 +11,7 @@
 #include "plamn/core/data/ions/ion_population/ion_population.hpp"
 
 #include "tst/plamn/core/data/particles/test_particles.hpp"
-#include "tst/plamn/core/data/gridlayout/test_gridlayout.hpp"
+#include "tst/plamn/core/data/grid/test_layout_fixtures.hpp"
 #include "tst/plamn/core/data/vecfield/test_vecfield_fixtures.hpp"
 #include "tst/plamn/core/data/particles/test_particles_fixtures.hpp"
 
@@ -28,7 +28,7 @@ struct UsableIonsDefaultTypes
 public:
     using PLAMN_Types     = plamn::core::PLAMN_Types<opts>;
     using Hybrid          = PLAMN_Types::Hybrid;
-    using GridLayout_t    = Hybrid::GridLayout_t;
+    using Layout_t    = Hybrid::Layout_t;
     using Particles_t = Hybrid::Particles_t;
     using Quantity        = HybridQuantity;
 
@@ -62,7 +62,7 @@ template<typename _defaults>
 class UsableIonsPopulation : public _defaults::IonPopulation_t
 {
     using Quantity        = _defaults::Quantity;
-    using GridLayout_t    = _defaults::GridLayout_t;
+    using Layout_t    = _defaults::Layout_t;
     using VecField_t      = _defaults::VecField_t;
     using TensorField_t   = _defaults::TensorField_t;
     using Particles_t = _defaults::Particles_t;
@@ -85,7 +85,7 @@ class UsableIonsPopulation : public _defaults::IonPopulation_t
 
 
 public:
-    UsableIonsPopulation(plamn::initializer::Dict const& dict, GridLayout_t const& layout)
+    UsableIonsPopulation(plamn::initializer::Dict const& dict, Layout_t const& layout)
         : Super{dict}
         , layout_{layout}
         , rhoP{this->name() + "_particleDensity", layout_, Quantity::Scalar::rho, 1}
@@ -119,7 +119,7 @@ public:
     auto& operator*() { return super(); }
     auto& operator*() const { return super(); }
 
-    GridLayout_t layout_;
+    Layout_t layout_;
     _defaults::Grid_t rhoP, rhoC;
     _defaults::UsableVecField_t F;
     _defaults::UsableTensorField_t M;
@@ -129,11 +129,11 @@ public:
 
 template<typename _defaults>
 class UsableIons
-    : public Ions<typename _defaults::IonPopulation_t, typename _defaults::GridLayout_t>
+    : public Ions<typename _defaults::IonPopulation_t, typename _defaults::Layout_t>
 {
     using Quantity     = _defaults::Quantity;
-    using GridLayout_t = _defaults::GridLayout_t;
-    using Super        = Ions<typename _defaults::IonPopulation_t, GridLayout_t>;
+    using Layout_t = _defaults::Layout_t;
+    using Super        = Ions<typename _defaults::IonPopulation_t, Layout_t>;
 
 
 
@@ -177,7 +177,7 @@ class UsableIons
 public:
     using Particles_t = typename _defaults::Particles_t;
 
-    UsableIons(GridLayout_t const& layout, plamn::initializer::Dict const& dict)
+    UsableIons(Layout_t const& layout, plamn::initializer::Dict const& dict)
         : Super{dict}
         , layout_{layout}
         , rhoM{"massDensity", layout_, Quantity::Scalar::rho, 1}
@@ -193,13 +193,13 @@ public:
         set();
     }
 
-    UsableIons(GridLayout_t const& layout, std::vector<std::string> const& pop_names,
+    UsableIons(Layout_t const& layout, std::vector<std::string> const& pop_names,
                std::size_t const ppc = 0)
         : UsableIons{layout, super(pop_names, ppc)}
     {
     }
 
-    UsableIons(GridLayout_t const& layout, std::string const& pop_name, std::size_t const ppc = 0)
+    UsableIons(Layout_t const& layout, std::string const& pop_name, std::size_t const ppc = 0)
         : UsableIons{layout, std::vector<std::string>{pop_name}, ppc}
     {
     }
@@ -238,7 +238,7 @@ public:
     auto& operator*() { return super(); }
     auto& operator*() const { return super(); }
 
-    GridLayout_t layout_;
+    Layout_t layout_;
     _defaults::Grid_t rhoM, rhoC;
     _defaults::UsableVecField_t Vi, chargeFlux;
     _defaults::UsableTensorField_t M;

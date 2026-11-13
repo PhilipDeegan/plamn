@@ -16,9 +16,9 @@ namespace plamn::core
 
 // generic fallthrough
 template<auto src_layout_mde, auto src_alloc_mde, auto dst_layout_mde, auto dst_alloc_mde>
-template<typename Dst, typename Src, typename GridLayout>
+template<typename Dst, typename Src, typename Layout>
 Dst ParticlesConverter<src_layout_mde, src_alloc_mde, dst_layout_mde, dst_alloc_mde>::operator()(
-    Src const& src, GridLayout const& layout)
+    Src const& src, Layout const& layout)
 {
     auto dst = make_particles<Dst>(layout);
 
@@ -41,8 +41,8 @@ namespace plamn::core
 {
 
 
-template<typename Dst, typename Src, typename GridLayout>
-auto static convert_particles_from(Src const& src, GridLayout const& layout)
+template<typename Dst, typename Src, typename Layout>
+auto static convert_particles_from(Src const& src, Layout const& layout)
 {
     using Converter
         = ParticlesConverter<Src::layout_mode, Src::alloc_mode, Dst::layout_mode, Dst::alloc_mode>;
@@ -54,8 +54,8 @@ auto static convert_particles_from(Src const& src, GridLayout const& layout)
     return Converter{}.template operator()<Dst>(src, layout);
 }
 
-template<typename Dst, typename Src, typename GridLayout>
-auto static convert_particles(Src const& src, GridLayout const& layout)
+template<typename Dst, typename Src, typename Layout>
+auto static convert_particles(Src const& src, Layout const& layout)
 {
     if constexpr (std::is_same_v<Dst, Src>)
         return src;
@@ -63,20 +63,20 @@ auto static convert_particles(Src const& src, GridLayout const& layout)
         return convert_particles_from<Dst>(src, layout);
 }
 
-template<typename Dst, typename Src, typename GridLayout>
-auto static convert_particles_and_sort(Src const& src, GridLayout const& layout)
+template<typename Dst, typename Src, typename Layout>
+auto static convert_particles_and_sort(Src const& src, Layout const& layout)
 {
     std::string_view constexpr static FN_ID = "convert_particles_and_sort,";
     auto constexpr function_id              = damn::core::join_string_views_v<FN_ID, Dst::type_id>;
     DAMN_LOG_SCOPE(1, function_id);
 
     auto out = convert_particles<Dst>(src, layout);
-    sort_particles(out, damn::core::grow(layout.cells, GridLayout::options.particle_ghost_width));
+    sort_particles(out, damn::core::grow(layout.cells, Layout::options.particle_ghost_width));
     return out;
 }
 
-template<auto layout_mode, auto O, typename GridLayout>
-auto convert_to(Particles<O> const& src, GridLayout const& layout)
+template<auto layout_mode, auto O, typename Layout>
+auto convert_to(Particles<O> const& src, Layout const& layout)
 {
     using Parts = Particles<O.with_layout(layout_mode).with_storage(StorageMode::VECTOR)>;
 

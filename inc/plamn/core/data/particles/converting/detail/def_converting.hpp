@@ -23,8 +23,8 @@ struct ParticlesConverter
     auto constexpr static dst_layout_mode = dst_layout_mde;
     auto constexpr static dst_alloc_mode  = dst_alloc_mde;
 
-    template<typename Dst, typename Src, typename GridLayout>
-    Dst operator()(Src const& src, GridLayout const& layout);
+    template<typename Dst, typename Src, typename Layout>
+    Dst operator()(Src const& src, Layout const& layout);
 };
 
 

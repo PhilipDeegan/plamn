@@ -9,7 +9,7 @@
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/math/random.hpp"
 #include "plamn/core/data/particles/particle.hpp"
-#include "plamn/core/data/grid/gridlayoutdefs.hpp"
+#include "plamn/core/data/grid/layout_defs.hpp"
 #include "plamn/core/data/particles/particles.hpp"
 #include "plamn/core/data/particles/appending/particles_appending.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
@@ -27,7 +27,7 @@
 #include <functional>
 #include <stdexcept>
 
-#include "plamn/core/data/grid/gridlayoutdefs.hpp"
+#include "plamn/core/data/grid/layout_defs.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 #include "damn/core/meta/for_N.hpp"
 #include "damn/core/math/random.hpp"
@@ -66,11 +66,11 @@ void maxwellianVelocity(std::array<double, 3> const& V, std::array<double, 3> co
  * Seeded values are reproducible for a given standard library only, since the std distributions
  * used to draw positions and velocities are implementation-defined.
  */
-template<typename Particles, typename GridLayout>
-class MaxwellianParticleInitializer : public ParticleInitializer<Particles, GridLayout>
+template<typename Particles, typename Layout>
+class MaxwellianParticleInitializer : public ParticleInitializer<Particles, Layout>
 {
 public:
-    static constexpr auto dimension = GridLayout::dimension;
+    static constexpr auto dimension = Layout::dimension;
     using InputFunction             = plamn::initializer::InitFunction<dimension>;
 
     MaxwellianParticleInitializer(
@@ -100,7 +100,7 @@ public:
     /**
      * @brief load particles in a Particles in a domain defined by the given layout
      */
-    void loadParticles(Particles& particles, GridLayout const& layout) const override;
+    void loadParticles(Particles& particles, Layout const& layout) const override;
 
 
     virtual ~MaxwellianParticleInitializer() = default;
@@ -182,9 +182,9 @@ private:
 
 
 
-template<typename Particles_t, typename GridLayout>
-void MaxwellianParticleInitializer<Particles_t, GridLayout>::loadParticles(
-    Particles_t& particles, GridLayout const& layout) const
+template<typename Particles_t, typename Layout>
+void MaxwellianParticleInitializer<Particles_t, Layout>::loadParticles(
+    Particles_t& particles, Layout const& layout) const
 {
     auto const deltas = [](auto& pos, auto& gen) {
         return damn::core::for_N_make_array<dimension>([&](auto) { return pos(gen); });

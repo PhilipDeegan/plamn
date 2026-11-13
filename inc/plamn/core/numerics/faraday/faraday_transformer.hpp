@@ -42,20 +42,20 @@ class FaradayTransformer
 {
 public:
     // the box Bnew component Bnc is computed on, as eval_on_box below
-    template<typename GridLayout, typename Field>
-    static auto box_for(GridLayout const& layout, Field const& Bnc)
+    template<typename Layout, typename Field>
+    static auto box_for(Layout const& layout, Field const& Bnc)
     {
-        auto constexpr static dim = GridLayout::dimension;
+        auto constexpr static dim = Layout::dimension;
         return local_domain_box(layout.cells, centering_of<dim>(Bnc),
-                                GridLayout::options.field_ghost_width);
+                                Layout::options.field_ghost_width);
     }
 
-    template<typename GridLayout, typename VecField>
-    void operator()(GridLayout const& layout, VecField const& B, VecField const& E, VecField& Bnew,
+    template<typename Layout, typename VecField>
+    void operator()(Layout const& layout, VecField const& B, VecField const& E, VecField& Bnew,
                     double const dt) const
         requires(not has_tiled_field_type_c<VecField>)
     {
-        auto constexpr static dim = GridLayout::dimension;
+        auto constexpr static dim = Layout::dimension;
         auto const curlE          = curl<dim>(layout.dx, E);
 
         damn::core::for_N<3>([&](auto c) {
@@ -63,8 +63,8 @@ public:
         });
     }
 
-    template<typename GridLayout, typename VecField>
-    void operator()(GridLayout const& /*patch layout*/, VecField const& B, VecField const& E,
+    template<typename Layout, typename VecField>
+    void operator()(Layout const& /*patch layout*/, VecField const& B, VecField const& E,
                     VecField& Bnew, double const dt) const
         requires(has_tiled_field_type_c<VecField>)
     {

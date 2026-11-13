@@ -38,9 +38,9 @@ struct MultiBorisBackend;
 template<typename ModelAccessor, typename Interpolator>
 struct MultiBoris
 {
-    static constexpr auto dim = ModelAccessor::GridLayout_t::dimension;
+    static constexpr auto dim = ModelAccessor::Layout_t::dimension;
     using Model_t             = ModelAccessor::Model_t;
-    using GridLayout_t        = ModelAccessor::GridLayout_t;
+    using Layout_t        = ModelAccessor::Layout_t;
     using Particles_t     = Model_t::particles_type;
     using Electromag_t        = Model_t::electromag_type;
     using Vecfield_t          = Electromag_t::vecfield_type;
@@ -90,12 +90,12 @@ template<LayoutMode layout, typename ModelAccessor, typename Interpolator>
 struct MultiBorisBackend
 {
     using MultiBoris_t   = MultiBoris<ModelAccessor, Interpolator>;
-    using GridLayout_t   = MultiBoris_t::GridLayout_t;
+    using Layout_t   = MultiBoris_t::Layout_t;
     using Particles_t    = MultiBoris_t::Particles_t;
     using Electromag_t   = MultiBoris_t::Electromag_t;
     using Interpolator_t = Interpolator;
 
-    static constexpr auto dim = GridLayout_t::dimension;
+    static constexpr auto dim = Layout_t::dimension;
 
     // only flat tiles have a push+deposit GPU kernel, AoSPCTS GPU COPY uses move_rest
     static constexpr bool has_gpu_copy = damn::core::any_in(layout, LayoutMode::AoSTS, LayoutMode::AoSMapped);
@@ -398,7 +398,7 @@ void MultiBorisBackend<layout, ModelAccessor, Interpolator>::move_gpu_copy(
 #if DAMN_HAVE_GPU
     static_assert(has_gpu_copy);
     using Tile_vt_       = Electromag_t::vecfield_type::field_type::value_type;
-    using Interpolating_ = Interpolating<dim, GridLayout_t::options.interp_order,
+    using Interpolating_ = Interpolating<dim, Layout_t::options.interp_order,
                                          /*atomic_ops=*/true, Interpolator_t>;
 
     auto view       = in.accessor[i];
@@ -460,11 +460,11 @@ template<typename ModelAccessor, typename Interpolator>
 struct MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>
 {
     using MultiBoris_t   = MultiBoris<ModelAccessor, Interpolator>;
-    using GridLayout_t   = MultiBoris_t::GridLayout_t;
+    using Layout_t   = MultiBoris_t::Layout_t;
     using Particles_t    = MultiBoris_t::Particles_t;
     using Interpolator_t = Interpolator;
 
-    static constexpr auto dim        = GridLayout_t::dimension;
+    static constexpr auto dim        = Layout_t::dimension;
     static constexpr auto alloc_mode = Particles_t::alloc_mode;
 
     // mkn_xyz::MultiBoris dispatch: untiled, untracked (leavers partitioned after, see
@@ -700,13 +700,13 @@ void MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>::move_gpu_c
 
 #if DAMN_HAVE_MKN_GPU
     static_assert(has_gpu_copy);
-    using Deposit_t = core::Interpolator<dim, GridLayout_t::options.interp_order, /*atomic=*/true>;
+    using Deposit_t = core::Interpolator<dim, Layout_t::options.interp_order, /*atomic=*/true>;
 
     auto view            = in.accessor[i];
     auto [ions, em]      = view.args;
     auto const layout    = view.layout;
     auto const halfdt    = in.mesh(layout.dx, in.dt);
-    auto const ghostBox  = damn::core::grow(layout.cells, GridLayout_t::options.particle_ghost_width);
+    auto const ghostBox  = damn::core::grow(layout.cells, Layout_t::options.particle_ghost_width);
     auto const nlgb      = in.gpu_nlgb[i];
     auto const domain    = in.gpu_domain[i];
     auto const non_owned = in.gpu_non_owned[i];
@@ -794,7 +794,7 @@ struct MultiBorisFunctors
 {
     static_assert(damn::core::all_are<ParticleType>(particle_type));
 
-    using GridLayout_t    = Backend_t::GridLayout_t;
+    using Layout_t    = Backend_t::Layout_t;
     using Particles_t     = Backend_t::Particles_t;
     using Electromag_t    = Backend_t::Electromag_t;
     using Interpolator_t  = Backend_t::Interpolator_t;
@@ -806,7 +806,7 @@ struct MultiBorisFunctors
     using VecField_vt   = basic::TensorField<Tile_vt, 1>;
     using Electromag_vt = basic::Electromag<VecField_vt>;
 
-    static constexpr auto dim = GridLayout_t::dimension;
+    static constexpr auto dim = Layout_t::dimension;
     using Particle_t          = ParticleDefaults<dim>::Particle_t;
 
     static constexpr std::size_t copy_batch_size = 1024;

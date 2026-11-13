@@ -16,7 +16,7 @@
 #endif
 
 #include "plamn/core/numerics/ohm/ohm_transformer.hpp"
-#include "plamn/core/data/grid/gridlayoutdefs.hpp"
+#include "plamn/core/data/grid/layout_defs.hpp"
 
 #include "plamn/simulator/simulator_def.hpp"
 
@@ -37,7 +37,7 @@ class NDlayout
 {
     NDlayout() {}
 
-    using nDL = plamn::core::PLAMN_Types<plamn::SimOpts{dim, interp}>::Hybrid::GridLayout_t;
+    using nDL = plamn::core::PLAMN_Types<plamn::SimOpts{dim, interp}>::Hybrid::Layout_t;
 
 public:
     static nDL create()
@@ -79,7 +79,7 @@ struct OhmTest : public ::testing::Test
     static constexpr auto interp = typename TypeInfo::second_type{}();
 
     using HybridTypes = plamn::core::PLAMN_Types<plamn::SimOpts{dim, interp}>::Hybrid;
-    using GridYee     = HybridTypes::GridLayout_t;
+    using GridYee     = HybridTypes::Layout_t;
     auto static constexpr field_opts = plamn::core::TensorFieldOptions<HybridTypes>{};
     using UsableVecFieldND           = UsableVecField<field_opts>;
     using Grid_t                     = Grid<damn::core::NdArrayVector<dim>, HybridQuantity::Scalar>;

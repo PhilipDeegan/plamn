@@ -2,6 +2,7 @@
 #define PLAMN_CORE_NUMERICS_OHM_OHM_TRANSFORMER_HPP
 
 #include "plamn/core/def.hpp"
+#include "plamn/core/data/grid/detail/detail.hpp"
 #include "damn/core/meta/constexprifier.hpp"
 #include "damn/core/math/array.hpp"
 #include "damn/core/math/numeric.hpp"
@@ -48,20 +49,20 @@ public:
     }
 
     // the box E component Ec is computed on, as eval_on_box below
-    template<typename GridLayout, typename Field>
-    static auto box_for(GridLayout const& layout, Field const& Ec)
+    template<typename Layout, typename Field>
+    static auto box_for(Layout const& layout, Field const& Ec)
     {
         return domain_box(layout, Ec);
     }
 
-    template<typename GridLayout, typename VecField, typename Field>
-    void operator()(GridLayout const& layout, Field const& n, VecField const& Ve, Field const& Pe,
+    template<typename Layout, typename VecField, typename Field>
+    void operator()(Layout const& layout, Field const& n, VecField const& Ve, Field const& Pe,
                     VecField const& B, VecField const& J, VecField& Enew) const
         requires(not is_field_tile_set_v<Field>)
     {
         with_flags([&]<bool isResistive, bool isHyperResistive>() {
             auto const gradPe = grad(layout, Pe);
-            Ohm<GridLayout> const ohm{info_, layout};
+            Ohm<Layout> const ohm{info_, layout};
 
             auto const eval = [&]<auto c>(auto const& gradPe_c) {
                 // captureless kernel: fields and ohm travel as arguments, device-copyable
@@ -79,8 +80,8 @@ public:
         });
     }
 
-    template<typename GridLayout, typename VecField, typename Field>
-    void operator()(GridLayout const& /*patch layout*/, Field const& n, VecField const& Ve,
+    template<typename Layout, typename VecField, typename Field>
+    void operator()(Layout const& /*patch layout*/, Field const& n, VecField const& Ve,
                     Field const& Pe, VecField const& B, VecField const& J, VecField& Enew) const
         requires(is_field_tile_set_v<Field>)
     {

@@ -2,7 +2,7 @@
 #define PLAMN_CORE_DATA_FIELD_RECENTERED_FIELD_HPP
 
 #include "plamn/core/def.hpp"
-#include "plamn/core/data/grid/gridlayoutdefs.hpp"
+#include "plamn/core/data/grid/layout_defs.hpp"
 
 #include <array>
 #include <cassert>
@@ -24,7 +24,7 @@ namespace plamn::core
  * primal ghost node of each side (asserted in debug builds).
  *
  * Centerings are compared on every read: meant for reading whole fields (diagnostics,
- * tagging), not for solver loops, which use the compile-time GridLayout::project.
+ * tagging), not for solver loops, which use the compile-time project<src, dst>.
  *
  * Holds a copy of the Field (pointer and shape): rebuild it once the field is set on
  * another patch.
@@ -36,11 +36,11 @@ public:
     static constexpr auto dimension = Field::dimension;
     using value_type                = Field::value_type;
 
-    template<typename GridLayout>
+    template<typename Layout>
     RecenteredField(Field const& field, std::array<QtyCentering, dimension> const& destination,
-                    GridLayout const& layout)
+                    Layout const& layout)
         : field_{field}
-        , source_{layout.centering(field)}
+        , source_{::plamn::core::centering(layout, field)}
         , destination_{destination}
     {
     }
@@ -102,11 +102,11 @@ public:
     static constexpr auto dimension = Field::dimension;
     using value_type                = Field::value_type;
 
-    template<typename GridLayout>
-    CompileTimeRecenteredField(Field const& field, GridLayout const& layout)
+    template<typename Layout>
+    CompileTimeRecenteredField(Field const& field, Layout const& layout)
         : field_{field}
     {
-        if (layout.centering(field) != source)
+        if (::plamn::core::centering(layout, field) != source)
             throw std::runtime_error(
                 "CompileTimeRecenteredField: field centering does not match the source centering: "
                 + field.name());

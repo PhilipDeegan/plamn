@@ -2,7 +2,8 @@
 #define PLAMN_CORE_NUMERICS_DIFFERENTIAL_OPERATORS_HPP
 
 #include "plamn/core/def.hpp"
-#include "plamn/core/data/grid/gridlayoutdefs.hpp"
+#include "plamn/core/data/grid/layout_defs.hpp"
+#include "plamn/core/data/grid/patch_layout.hpp"
 #include "damn/core/data/ndarray/ndarray_vector.hpp"
 #include "plamn/core/data/vecfield/vecfield_component.hpp"
 #include "damn/core/def/constants.hpp"
@@ -74,9 +75,9 @@ public:
         centering_[d] = detail::flipped(srcCentering[d]);
     }
 
-    template<typename GridLayout, typename Src>
-    Partial(GridLayout const& layout, Src const& src)
-        : Partial{layout.dx, layout.centering(src), src}
+    template<typename Layout, typename Src>
+    Partial(Layout const& layout, Src const& src)
+        : Partial{layout.dx, ::plamn::core::centering(layout, src), src}
     {
     }
 
@@ -111,9 +112,9 @@ public:
     {
     }
 
-    template<typename GridLayout, typename Src>
-    Partial(GridLayout const& layout, Src const& src)
-        : centering_{layout.centering(src)}
+    template<typename Layout, typename Src>
+    Partial(Layout const& layout, Src const& src)
+        : centering_{::plamn::core::centering(layout, src)}
     {
     }
 
@@ -148,8 +149,8 @@ namespace detail
             check_();
         }
 
-        template<typename GridLayout, typename VecField>
-        CurlComponent(GridLayout const& layout, VecField const& v)
+        template<typename Layout, typename VecField>
+        CurlComponent(Layout const& layout, VecField const& v)
             : dj_vk_{layout, v[k]}
             , dk_vj_{layout, v[j]}
         {
@@ -218,8 +219,8 @@ class Div
 public:
     using expr_tag = void;
 
-    template<typename GridLayout, typename VecField>
-    Div(GridLayout const& layout, VecField const& v)
+    template<typename Layout, typename VecField>
+    Div(Layout const& layout, VecField const& v)
         : dx_vx_{layout, v[0]}
         , dy_vy_{layout, v[1]}
         , dz_vz_{layout, v[2]}
@@ -247,10 +248,10 @@ private:
 
 
 
-template<auto dir, typename GridLayout, typename Src>
-auto partial(GridLayout const& layout, Src const& src)
+template<auto dir, typename Layout, typename Src>
+auto partial(Layout const& layout, Src const& src)
 {
-    return Partial<dir, GridLayout::dimension>{layout, src};
+    return Partial<dir, Layout::dimension>{layout, src};
 }
 
 // centering of a field from its quantity, no layout needed
@@ -268,34 +269,34 @@ auto curl(std::array<double, dim> const& dx, VecField const& v)
     return Curl<dim>{{dx, c, v}, {dx, c, v}, {dx, c, v}};
 }
 
-template<typename GridLayout, typename VecField>
-auto curl(GridLayout const& layout, VecField const& v)
+template<typename Layout, typename VecField>
+auto curl(Layout const& layout, VecField const& v)
 {
-    return Curl<GridLayout::dimension>{{layout, v}, {layout, v}, {layout, v}};
+    return Curl<Layout::dimension>{{layout, v}, {layout, v}, {layout, v}};
 }
 
-template<typename GridLayout, typename Src>
-auto grad(GridLayout const& layout, Src const& src)
+template<typename Layout, typename Src>
+auto grad(Layout const& layout, Src const& src)
 {
-    return Grad<GridLayout::dimension>{{layout, src}, {layout, src}, {layout, src}};
+    return Grad<Layout::dimension>{{layout, src}, {layout, src}, {layout, src}};
 }
 
-template<typename GridLayout, typename VecField>
-auto div(GridLayout const& layout, VecField const& v)
+template<typename Layout, typename VecField>
+auto div(Layout const& layout, VecField const& v)
 {
-    return Div<GridLayout::dimension>{layout, v};
+    return Div<Layout::dimension>{layout, v};
 }
 
-template<typename GridLayout, typename Src>
-NO_DISCARD double laplacian(GridLayout const& layout, Src const& f,
-                            damn::core::Point<std::size_t, GridLayout::dimension> const idx) DAMN_ALL
+template<typename Layout, typename Src>
+NO_DISCARD double laplacian(Layout const& layout, Src const& f,
+                            damn::core::Point<std::size_t, Layout::dimension> const idx) DAMN_ALL
 {
-    static_assert(Src::dimension == GridLayout::dimension,
+    static_assert(Src::dimension == Layout::dimension,
                   "field and layout dimensions must match");
 
     // plain accumulation rather than sum(array): sum is host-only (std::accumulate)
     double lap = 0;
-    damn::core::for_N<GridLayout::dimension>([&](auto ic) {
+    damn::core::for_N<Layout::dimension>([&](auto ic) {
         constexpr auto d = ic();
         auto const inv   = 1.0 / layout.dx[d];
         lap += inv * inv

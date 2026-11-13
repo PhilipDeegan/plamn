@@ -341,9 +341,9 @@ public:
 #endif // DAMN_HAVE_MKN_GPU_HW
     }
 
-    template<bool in_box = false, typename Particles, typename GridLayout, typename VecField,
+    template<bool in_box = false, typename Particles, typename Layout, typename VecField,
              typename Field>
-    static void box_kernel(Particles& particles, GridLayout& layout, VecField& flux, Field& density,
+    static void box_kernel(Particles& particles, Layout& layout, VecField& flux, Field& density,
                            double coef = 1.) DAMN_ALL
     {
 #if DAMN_HAVE_MKN_GPU_HW
@@ -374,8 +374,8 @@ public:
     }
 
 #if 0 // old unused
-    template<typename Particles, typename GridLayout, typename VecField, typename Field>
-    static void chunk_kernel_ts(Particles& particles, GridLayout& layout, VecField& flux,
+    template<typename Particles, typename Layout, typename VecField, typename Field>
+    static void chunk_kernel_ts(Particles& particles, Layout& layout, VecField& flux,
                                 Field& density, double coef = 1.) DAMN_ALL
     {
 #if DAMN_HAVE_MKN_GPU_HW
@@ -659,8 +659,8 @@ public:
     }
 
 
-    template<typename Field, typename Particles, typename GridLayout>
-    static void on_cpu_tiles(Particles& particles, GridLayout& layout,
+    template<typename Field, typename Particles, typename Layout>
+    static void on_cpu_tiles(Particles& particles, Layout& layout,
                              double coef = 1.) DAMN_ALL
     {
         using TensorField_t = basic::TensorField<typename Field::Super, 1>;
@@ -683,12 +683,12 @@ public:
 
 
 
-    template<typename Particles, typename GridLayout, typename VecField, typename Field>
-    static void chunk_kernel(Particles& particles, GridLayout& layout, VecField& flux,
+    template<typename Particles, typename Layout, typename VecField, typename Field>
+    static void chunk_kernel(Particles& particles, Layout& layout, VecField& flux,
                              Field& density, double coef = 1.) DAMN_DEV
     {
 #if DAMN_HAVE_MKN_GPU_HW
-        auto constexpr static nghosts = GridLayout::options.field_ghost_width;
+        auto constexpr static nghosts = Layout::options.field_ghost_width;
         extern __shared__ double data[];
         auto const& lobox = particles.local_box();
         auto const ziz    = 9 * 9 * 9;

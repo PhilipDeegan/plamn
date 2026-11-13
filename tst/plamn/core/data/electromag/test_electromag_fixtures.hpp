@@ -20,10 +20,10 @@ namespace plamn::core
 {
 
 
-template<auto layout_mde, typename EM, typename GridLayout>
-auto default_em_init(EM& em, GridLayout const& patch_layout)
+template<auto layout_mde, typename EM, typename Layout>
+auto default_em_init(EM& em, Layout const& patch_layout)
 {
-    auto constexpr static dim = GridLayout::dimension;
+    auto constexpr static dim = Layout::dimension;
 
     auto const setter = [](auto& v, auto& layout) {
         auto const box = ghost_box(layout, v);
@@ -89,7 +89,7 @@ template<auto opts>
 struct UsableElectromagImpl
 {
     using Options      = decltype(opts);
-    using GridLayout_t = Options::GridLayout_t;
+    using Layout_t = Options::Layout_t;
     using Field_t      = Options::Field_t;
     using Super_t      = Electromag<TensorField<Field_t, HybridQuantity, /*rank*/ 1>>;
 };
@@ -99,7 +99,7 @@ template<auto opts>
 class UsableElectromag : public UsableElectromagImpl<opts>::Super_t
 {
     using Options     = decltype(opts);
-    using GridLayout_ = Options::GridLayout_t;
+    using Layout_ = Options::Layout_t;
 
     void _set()
     {
@@ -111,8 +111,8 @@ class UsableElectromag : public UsableElectromagImpl<opts>::Super_t
 public:
     using Super = UsableElectromagImpl<opts>::Super_t;
 
-    template<typename GridLayout>
-    UsableElectromag(GridLayout const& layout, bool const init = true)
+    template<typename Layout>
+    UsableElectromag(Layout const& layout, bool const init = true)
         : Super{"EM"}
         , E{"EM_E", layout, HybridQuantity::Vector::E, 1}
         , B{"EM_B", layout, HybridQuantity::Vector::B, 1}
@@ -123,8 +123,8 @@ public:
     }
 
 
-    template<typename GridLayout>
-    UsableElectromag(GridLayout const& layout, plamn::initializer::Dict const& dict)
+    template<typename Layout>
+    UsableElectromag(Layout const& layout, plamn::initializer::Dict const& dict)
         : Super{dict}
         , E{"EM_E", layout, HybridQuantity::Vector::E, 0}
         , B{"EM_B", layout, HybridQuantity::Vector::B, 0}

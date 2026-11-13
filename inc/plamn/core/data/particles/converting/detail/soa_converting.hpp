@@ -15,9 +15,9 @@ using enum LayoutMode;
 using enum damn::AllocatorMode;
 
 template<>
-template<typename Dst, typename Src, typename GridLayout>
+template<typename Dst, typename Src, typename Layout>
 Dst ParticlesConverter<SoA, CPU, AoS, CPU>::operator()( //
-    Src const& src, GridLayout const& layout)
+    Src const& src, Layout const& layout)
 {
     auto out = make_particles<Dst>(layout);
     out.reserve(src.size());
@@ -28,9 +28,9 @@ Dst ParticlesConverter<SoA, CPU, AoS, CPU>::operator()( //
 }
 
 template<>
-template<typename Dst, typename Src, typename GridLayout>
+template<typename Dst, typename Src, typename Layout>
 Dst ParticlesConverter<SoAVX, CPU, AoS, CPU>::operator()( //
-    Src const& src, GridLayout const& layout)
+    Src const& src, Layout const& layout)
 {
     auto out = make_particles<Dst>(layout);
     out.reserve(src.size());
@@ -42,9 +42,9 @@ Dst ParticlesConverter<SoAVX, CPU, AoS, CPU>::operator()( //
 
 
 template<>
-template<typename Dst, typename Src, typename GridLayout>
+template<typename Dst, typename Src, typename Layout>
 Dst ParticlesConverter<SoATS, CPU, AoS, CPU>::operator()( //
-    Src const& src, GridLayout const& layout)
+    Src const& src, Layout const& layout)
 {
     static constexpr std::uint8_t N = 128;
 
@@ -59,7 +59,7 @@ Dst ParticlesConverter<SoATS, CPU, AoS, CPU>::operator()( //
         });
     };
 
-    SoAArray<GridLayout::dimension, N> tmp;
+    SoAArray<Layout::dimension, N> tmp;
     auto out = make_particles<Dst>(layout);
     out.reserve(src.size());
 
@@ -85,9 +85,9 @@ Dst ParticlesConverter<SoATS, CPU, AoS, CPU>::operator()( //
 
 
 template<>
-template<typename Dst, typename Src, typename GridLayout>
+template<typename Dst, typename Src, typename Layout>
 Dst ParticlesConverter<SoATS, GPU_UNIFIED, AoS, CPU>::operator()( //
-    Src const& src, GridLayout const& layout)
+    Src const& src, Layout const& layout)
 {
     static constexpr std::uint8_t N = 128;
 
@@ -102,7 +102,7 @@ Dst ParticlesConverter<SoATS, GPU_UNIFIED, AoS, CPU>::operator()( //
         });
     };
 
-    SoAArray<GridLayout::dimension, N> tmp;
+    SoAArray<Layout::dimension, N> tmp;
     auto out = make_particles<Dst>(layout);
     out.reserve(src.size());
 

@@ -19,8 +19,8 @@ namespace plamn::core
 template<typename Particles_t>
 struct UsableParticlesPopulation
 {
-    template<typename GridLayout_t>
-    UsableParticlesPopulation(std::string const& _name, GridLayout_t const& layout)
+    template<typename Layout_t>
+    UsableParticlesPopulation(std::string const& _name, Layout_t const& layout)
         : name{_name}
         , domain_particles{make_particles<Particles_t>(layout)}
     {

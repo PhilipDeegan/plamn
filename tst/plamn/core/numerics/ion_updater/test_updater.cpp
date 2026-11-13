@@ -193,13 +193,13 @@ struct IonUpdaterTest : public ::testing::Test
     using DAMNTypes                   = plamn::core::PLAMN_Types<opts>;
     using Ions                         = DAMNTypes::Hybrid::Ions_t;
     using Electromag                   = DAMNTypes::Hybrid::Electromag_t;
-    using GridLayout                   = DAMNTypes::Hybrid::GridLayout_t;
+    using Layout                   = DAMNTypes::Hybrid::Layout_t;
     using Particles                = DAMNTypes::Hybrid::Particles_t;
     using ParticleInitializerFactory   = DAMNTypes::Hybrid::ParticleInitializerFactory_t;
 
     using IonUpdater_t = std::conditional_t<Particles::layout_mode == LayoutMode::AoSMapped,
-                                            core::IonUpdater<Particles, GridLayout>,
-                                            core::ParallelIonUpdater<Particles, GridLayout>>;
+                                            core::IonUpdater<Particles, Layout>,
+                                            core::ParallelIonUpdater<Particles, Layout>>;
     using Boxing_t     = IonUpdater_t::Boxing_t;
     using Interpolator = Interpolating<dim, interp_order>;
 
@@ -212,7 +212,7 @@ struct IonUpdaterTest : public ::testing::Test
     double const dt{0.01};
 
     // grid configuration
-    GridLayout const layout{{0.1}, {100u}, {{0.}}};
+    Layout const layout{damn::core::Box<int, 1>{{0}, {99}}, {0.1}}; // 100 cells
 
 
     Boxing_t const boxing{layout, {layout.cells}};
@@ -327,7 +327,7 @@ struct IonUpdaterTest : public ::testing::Test
 
                 EXPECT_EQ(pop.domainParticles().size(), 100 * nbrPartPerCell);
                 EXPECT_EQ(levelGhostPartOld.size(),
-                          GridLayout::options.particle_ghost_width * nbrPartPerCell);
+                          Layout::options.particle_ghost_width * nbrPartPerCell);
                 EXPECT_EQ(patchGhostPart.size(), 0);
 
 
@@ -797,10 +797,10 @@ void pseudo_randomize_deltas(auto& parts)
     });
 }
 
-template<typename GridLayout>
-void populate_particles(auto& ions, GridLayout& layout)
+template<typename Layout>
+void populate_particles(auto& ions, Layout& layout)
 {
-    auto constexpr dim = GridLayout::dimension;
+    auto constexpr dim = Layout::dimension;
     Particle<dim> const particle{1.0 / nbrPartPerCell, damn::core::ConstArray<int, dim>(),
                                  damn::core::ConstArray<double, dim>(.5), damn::core::ConstArray<double, 3>(1)};
     auto const ghost_box = damn::core::grow(layout.cells, 1);
@@ -864,7 +864,7 @@ struct IonUpdaterOwnershipTest : public IonUpdaterTest<TestParam_t>
     Boxing_t makeBoxing(std::vector<Box_t> const& nonOwned) const
     {
         return {this->layout,
-                {damn::core::grow(this->layout.cells, Super::GridLayout::options.particle_ghost_width)},
+                {damn::core::grow(this->layout.cells, Super::Layout::options.particle_ghost_width)},
                 nonOwned};
     }
 

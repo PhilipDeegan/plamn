@@ -5,7 +5,7 @@
 
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/geometry/point.hpp"
-#include "plamn/core/data/grid/gridlayoutdefs.hpp"
+#include "plamn/core/data/grid/layout_defs.hpp"
 #include "plamn/core/numerics/faraday/faraday_transformer.hpp"
 
 #include "plamn/simulator/simulator_def.hpp"
@@ -46,12 +46,12 @@ protected:
 
     using core_types                 = plamn::core::PLAMN_Types<plamn::SimOpts{dim, interp_order}>;
     using HybridTypes                = core_types::Hybrid;
-    using GridLayout_t               = HybridTypes::GridLayout_t;
+    using Layout_t               = HybridTypes::Layout_t;
     using Faraday_t                  = FaradayTransformer;
     auto static constexpr field_opts = plamn::core::TensorFieldOptions<HybridTypes>{};
     using UsableVecFieldND           = UsableVecField<field_opts>;
 
-    GridLayout_t layout;
+    Layout_t layout;
 
     UsableVecFieldND B, E, Bnew;
 
@@ -76,12 +76,12 @@ protected:
 
     using core_types                 = plamn::core::PLAMN_Types<plamn::SimOpts{dim, interp_order}>;
     using HybridTypes                = core_types::Hybrid;
-    using GridLayout_t               = HybridTypes::GridLayout_t;
+    using Layout_t               = HybridTypes::Layout_t;
     using Faraday_t                  = FaradayTransformer;
     auto static constexpr field_opts = plamn::core::TensorFieldOptions<HybridTypes>{};
     using UsableVecFieldND           = UsableVecField<field_opts>;
 
-    GridLayout_t layout;
+    Layout_t layout;
     UsableVecFieldND B, E, Bnew;
 
 public:
@@ -105,12 +105,12 @@ protected:
 
     using core_types                 = plamn::core::PLAMN_Types<plamn::SimOpts{dim, interp_order}>;
     using HybridTypes                = core_types::Hybrid;
-    using GridLayout_t               = HybridTypes::GridLayout_t;
+    using Layout_t               = HybridTypes::Layout_t;
     using Faraday_t                  = FaradayTransformer;
     auto static constexpr field_opts = plamn::core::TensorFieldOptions<HybridTypes>{};
     using UsableVecFieldND           = UsableVecField<field_opts>;
 
-    GridLayout_t layout;
+    Layout_t layout;
     UsableVecFieldND B, E, Bnew;
 
 public:

@@ -77,24 +77,24 @@ bool static const premain = []() {
     return true;
 }();
 
-template<typename IonUpdater_t, typename Ions, typename EM, typename GridLayout_t>
-auto construct_(Ions& ions, EM const& em, GridLayout_t const& layout)
+template<typename IonUpdater_t, typename Ions, typename EM, typename Layout_t>
+auto construct_(Ions& ions, EM const& em, Layout_t const& layout)
 {
     plamn::initializer::Dict dict;
     dict["simulation"]["algo"]["ion_updater"]["pusher"]["name"] = std::string{"modified_boris"};
     return IonUpdater_t{dict["simulation"]["algo"]["ion_updater"]};
 }
 
-template<typename Ions, typename EM, typename GridLayout_t>
-auto get_updater_for(Ions& ions, EM const& em, GridLayout_t const& layout)
+template<typename Ions, typename EM, typename Layout_t>
+auto get_updater_for(Ions& ions, EM const& em, Layout_t const& layout)
 {
     using Particles = typename Ions::particles_type;
     if constexpr (damn::core::any_in(Particles::layout_mode, LayoutMode::AoSMapped))
-        return construct_<IonUpdater<Ions, EM, GridLayout_t>>(ions, em, layout);
+        return construct_<IonUpdater<Ions, EM, Layout_t>>(ions, em, layout);
     else if constexpr (Particles::layout_mode == LayoutMode::AoSPC)
-        return construct_<IonUpdaterPC<Ions, EM, GridLayout_t>>(ions, em, layout);
+        return construct_<IonUpdaterPC<Ions, EM, Layout_t>>(ions, em, layout);
     else
-        return construct_<IonUpdaterPP<Ions, EM, GridLayout_t>>(ions, em, layout);
+        return construct_<IonUpdaterPP<Ions, EM, Layout_t>>(ions, em, layout);
 }
 
 
@@ -105,21 +105,21 @@ namespace detail::strings
 } // namespace detail::strings
 
 
-template<typename Ions, typename EM, typename GridLayout_t>
-void udpate(Ions& ions, EM const& em, GridLayout_t const& layout)
+template<typename Ions, typename EM, typename Layout_t>
+void udpate(Ions& ions, EM const& em, Layout_t const& layout)
 {
     // no timings
     auto updater       = get_updater_for(ions, em, layout);
     using IonUpdater_t = std::decay_t<decltype(updater)>;
-    using Boxing_t = std::decay_t<decltype(*selection_boxing_impl<IonUpdater_t, GridLayout_t>())>;
+    using Boxing_t = std::decay_t<decltype(*selection_boxing_impl<IonUpdater_t, Layout_t>())>;
 
     Boxing_t const boxing{layout,
-                          damn::core::grow(layout.cells, GridLayout_t::options.particle_ghost_width)};
+                          damn::core::grow(layout.cells, Layout_t::options.particle_ghost_width)};
     updater.updatePopulations(ions, em, boxing, dt);
 }
 
-template<typename Ions, typename EM, typename GridLayout_t>
-void update(Ions& ions, EM const& em, GridLayout_t const& layout)
+template<typename Ions, typename EM, typename Layout_t>
+void update(Ions& ions, EM const& em, Layout_t const& layout)
 {
     using Particles = typename Ions::particles_type;
     auto constexpr function_id
@@ -132,12 +132,12 @@ void update(Ions& ions, EM const& em, GridLayout_t const& layout)
 }
 
 
-template<typename Particles_t, typename GridLayout_t>
-auto make_ions(GridLayout_t const& layout)
+template<typename Particles_t, typename Layout_t>
+auto make_ions(Layout_t const& layout)
 {
     auto constexpr static alloc_mode = Particles_t::alloc_mode;
-    auto constexpr static dim        = GridLayout_t::dimension;
-    auto constexpr static interp     = GridLayout_t::options.interp_order;
+    auto constexpr static dim        = Layout_t::dimension;
+    auto constexpr static interp     = Layout_t::options.interp_order;
 
     auto ions_p = std::make_shared<UsableIons_t<Particles_t, interp>>(layout, "protons");
     auto& ions  = *ions_p;
@@ -164,7 +164,7 @@ auto make_ions(GridLayout_t const& layout)
         add_particles_in(particles.domain_particles, layout.cells, ppc);
         if constexpr (WITH_PATCH_GHOST)
             add_ghost_particles(particles.patch_ghost_particles, layout.cells, ppc,
-                                GridLayout_t::options.particle_ghost_width);
+                                Layout_t::options.particle_ghost_width);
     };
 
     add_particles(ions.populations[0].particles);
@@ -181,13 +181,13 @@ auto make_ions(GridLayout_t const& layout)
 
 
 
-template<typename Particles_t, typename GridLayout_t, typename Ions>
-auto from_ions(GridLayout_t const& layout, Ions const& from)
+template<typename Particles_t, typename Layout_t, typename Ions>
+auto from_ions(Layout_t const& layout, Ions const& from)
 {
     using FromParticles_t            = typename Ions::particles_type;
     auto constexpr static alloc_mode = Particles_t::alloc_mode;
-    auto constexpr static dim        = GridLayout_t::dimension;
-    auto constexpr static interp     = GridLayout::options.interp_order;
+    auto constexpr static dim        = Layout_t::dimension;
+    auto constexpr static interp     = Layout::options.interp_order;
     auto ions_p = std::make_shared<UsableIons_t<Particles_t, interp>>(layout, "protons");
     auto& ions  = *ions_p;
     EXPECT_EQ(ions.populations[0].particles.domain_particles.size(), 0);
@@ -214,13 +214,13 @@ auto from_ions(GridLayout_t const& layout, Ions const& from)
     return ions_p;
 }
 
-template<bool quiet = false, typename Ions, typename GridLayout_t>
-auto& evolve(Ions& ions, GridLayout_t const& layout)
+template<bool quiet = false, typename Ions, typename Layout_t>
+auto& evolve(Ions& ions, Layout_t const& layout)
 {
     using Particles_t                = typename Ions::particles_type;
     auto constexpr static alloc_mode = Particles_t::alloc_mode;
-    auto constexpr static dim        = GridLayout_t::dimension;
-    auto constexpr static interp     = GridLayout::options.interp_order;
+    auto constexpr static dim        = Layout_t::dimension;
+    auto constexpr static interp     = Layout::options.interp_order;
 
     assert(ions.populations[0].particles.domain_particles.size() > 0);
     auto constexpr static sim_opts
@@ -237,8 +237,8 @@ auto& evolve(Ions& ions, GridLayout_t const& layout)
 }
 
 
-template<typename GridLayout_t, typename P0, typename P1>
-void check_particles(GridLayout_t const& layout, P0& ref, P1& cmp, std::size_t ghosts = 0)
+template<typename Layout_t, typename P0, typename P1>
+void check_particles(Layout_t const& layout, P0& ref, P1& cmp, std::size_t ghosts = 0)
 {
     using CPU_ref = Particles<ParticlesOptions{P0::dimension, LayoutMode::AoS,
                                                        StorageMode::VECTOR, damn::AllocatorMode::CPU}>;
@@ -261,8 +261,8 @@ void check_particles(GridLayout_t const& layout, P0& ref, P1& cmp, std::size_t g
     EXPECT_TRUE(report);
 }
 
-template<typename GridLayout_t, typename R, typename C>
-void compare(GridLayout_t const& layout, R& ref, C& cmp)
+template<typename Layout_t, typename R, typename C>
+void compare(Layout_t const& layout, R& ref, C& cmp)
 {
     if (!do_cmp)
         return;
@@ -317,10 +317,10 @@ struct TestParam
 template<typename Ions, std::size_t dim, std::size_t interp>
 struct DefaultIons
 {
-    using GridLayout_t
-        = TestGridLayout<typename PLAMN_Types<SimOpts{dim, interp}>::Hybrid::GridLayout_t>;
+    using Layout_t
+        = TestLayout<typename PLAMN_Types<SimOpts{dim, interp}>::Hybrid::Layout_t>;
 
-    GridLayout_t const layout{cells};
+    Layout_t const layout{cells};
     std::shared_ptr<Ions> init; // = make_ions<typename Ions::particles_type>(layout);
     std::shared_ptr<Ions> ions; // = make_ions<typename Ions::particles_type>(layout);
 
@@ -360,8 +360,8 @@ struct IonUpdaterPPTest : public ::testing::Test
     auto constexpr static alloc_mode  = Param::alloc_mode;
 
 
-    using GridLayout_t
-        = TestGridLayout<typename PLAMN_Types<SimOpts{dim, interp}>::Hybrid::GridLayout_t>;
+    using Layout_t
+        = TestLayout<typename PLAMN_Types<SimOpts{dim, interp}>::Hybrid::Layout_t>;
     using RefParticles_t = ParticlesAoSMapped<dim>;
     using CmpParticles_t
         = Particles<ParticlesOptions{dim, layout_mode, StorageMode::VECTOR, alloc_mode}>;
@@ -371,7 +371,7 @@ struct IonUpdaterPPTest : public ::testing::Test
     using DefIons   = DefaultIons<RefIons_t, dim, interp>;
 
     DefIons& ref = std::get<dim - 1>(refs);
-    GridLayout_t const layout{cells};
+    Layout_t const layout{cells};
 
 
     IonUpdaterPPTest() {}

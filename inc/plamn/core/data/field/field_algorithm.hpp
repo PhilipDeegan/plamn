@@ -12,7 +12,7 @@
 #include "plamn/core/data/field/recentered_field.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/meta/constexprifier.hpp"
-#include "plamn/core/data/grid/gridlayoutdefs.hpp"
+#include "plamn/core/data/grid/layout_defs.hpp"
 #include "damn/core/data/ndarray/ndarray_vector.hpp"
 #include "plamn/core/data/tensorfield/tensorfield.hpp"
 
@@ -93,11 +93,11 @@ auto& convert_to_fortran_primal(      // DOES NOT WORK ON GHOST BOX!
 {
     bool static constexpr c_ordering = false;
 
-    if (not all(layout.centering(dst), [](auto const c) { return c == QtyCentering::primal; }))
+    if (not all(::plamn::core::centering(layout, dst), [](auto const c) { return c == QtyCentering::primal; }))
         throw std::runtime_error("Invalid operation, all directions must be primal");
 
     auto const all_primal
-        = all(layout.centering(src), [](auto const c) { return c == QtyCentering::primal; });
+        = all(::plamn::core::centering(layout, src), [](auto const c) { return c == QtyCentering::primal; });
 
     auto const lcl_src_box = to_local(layout, layout.AMRBoxFor(dst));
     auto dst_view          = damn::core::make_array_view<c_ordering>(dst.data(), *lcl_src_box.shape());
@@ -117,7 +117,7 @@ auto& convert_to_fortran_primal(      // DOES NOT WORK ON GHOST BOX!
     {
         auto const isDual = std::apply(
             [](auto... dual) { return damn::core::Constexprifier{dual...}; },
-            damn::core::generate_from([](auto c) { return c == QtyCentering::dual; }, layout.centering(src)));
+            damn::core::generate_from([](auto c) { return c == QtyCentering::dual; }, ::plamn::core::centering(layout, src)));
 
         isDual([&]<bool... dual>() {
             constexpr std::array source{(dual ? QtyCentering::dual : QtyCentering::primal)...};
@@ -424,7 +424,7 @@ void operate(TensorField<Field_t, PQ, rank>& dst, TensorField<Field_t, PQ, rank>
 /** \brief calls fn(dst.data()[i], fields.data()[i]...) for every cell i of dst (and the
  * co-located fields, which must share dst's shape/tiling). Meant for callbacks that only
  * need the value at the same cell across several fields (no neighbor/projection access) -
- * unlike GridLayout::evalOnAnyBox, this works for tiled fields.
+ * unlike eval_on_box, this works for tiled fields.
  */
 template<typename Fn, typename Field_t, typename... Fields>
 void operate_on_fields(Fn&& fn, Field_t& dst, Fields&... fields)

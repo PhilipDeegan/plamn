@@ -5,7 +5,6 @@
 
 #include "plamn/core/models/quantities/mhd_quantities.hpp"
 #include "plamn/core/data/grid/ghost_width_calculator.hpp"
-#include "plamn/core/data/grid/impl/yee/gridlayout_mhd_yee.hpp"
 #include "plamn/core/numerics/reconstructions/reconstruction_nghosts.hpp"
 
 
@@ -34,7 +33,6 @@ struct MHDFieldOptions
 template<MHDFieldOptions opts>
 struct MHDOptions
 {
-    using GridLayoutImpl = core::mhd::GridLayoutImplYee<opts>;
     using FieldOptions   = decltype(opts);
 
     auto static constexpr field_options     = opts;

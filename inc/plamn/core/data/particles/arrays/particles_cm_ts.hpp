@@ -78,7 +78,7 @@ public:
         return damn::core::Box<std::uint32_t, dim>{local_cell(from.lower), local_cell(from.upper)};
     }
 
-    // fn(amr, lcl) for each cell of box, as GridLayout::amr_lcl_idx
+    // fn(amr, lcl) for each cell of box, as for_each_amr_local
     void amr_lcl_idx(damn::core::Box<int, dim> const& box, auto&& fn) const
     {
         damn::core::for_each_point_zip(box, local_box(box), fn);

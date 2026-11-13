@@ -1,5 +1,5 @@
-#ifndef PLAMN_CORE_GRID_GRIDLAYOUTDEFS_HPP
-#define PLAMN_CORE_GRID_GRIDLAYOUTDEFS_HPP
+#ifndef PLAMN_CORE_DATA_GRID_LAYOUT_DEFS_HPP
+#define PLAMN_CORE_DATA_GRID_LAYOUT_DEFS_HPP
 
 #include "plamn/core/def.hpp"
 #include "damn/core/geometry/box.hpp"
@@ -32,7 +32,6 @@ namespace core
 
     // using LinearCombination = std::vector<WeightPoint>;
 
-    enum class Layout { Yee };
 
 
     template<typename T, std::size_t dim>
@@ -51,7 +50,9 @@ namespace core
     NO_DISCARD consteval auto recenteringStencil();
 
 
+    // src, dst: centerings; for quantities see patch_layout.hpp
     template<auto src, auto dst, std::size_t order = 2, typename Field>
+        requires(not std::is_enum_v<decltype(src)>)
     NO_DISCARD inline auto project(Field const& field,
                                    damn::core::Point<std::size_t, Field::dimension> const& index) DAMN_ALL
     {

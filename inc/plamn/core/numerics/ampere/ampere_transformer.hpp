@@ -2,6 +2,7 @@
 #define PLAMN_CORE_NUMERICS_AMPERE_AMPERE_TRANSFORMER_HPP
 
 #include "plamn/core/def.hpp"
+#include "plamn/core/data/grid/detail/detail.hpp"
 #include "damn/core/math/array.hpp"
 #include "damn/core/math/numeric.hpp"
 #include "damn/core/meta/logic.hpp"
@@ -42,17 +43,17 @@ class AmpereTransformer
 {
 public:
     // the box J component Jc is computed on
-    template<typename GridLayout, typename Field>
-    static auto box_for(GridLayout const& layout, Field const& Jc)
+    template<typename Layout, typename Field>
+    static auto box_for(Layout const& layout, Field const& Jc)
     {
         if constexpr (box.mode == AmpereMode::ShrinkedGhost)
-            return damn::core::shrink(ghost_box(layout, Jc), amount<GridLayout>());
+            return damn::core::shrink(ghost_box(layout, Jc), amount<Layout>());
         else
-            return damn::core::grow(domain_box(layout, Jc), amount<GridLayout>());
+            return damn::core::grow(domain_box(layout, Jc), amount<Layout>());
     }
 
-    template<typename GridLayout, typename VecField>
-    void operator()(GridLayout const& layout, VecField const& B, VecField& J) const
+    template<typename Layout, typename VecField>
+    void operator()(Layout const& layout, VecField const& B, VecField& J) const
         requires(not has_tiled_field_type_c<VecField>)
     {
         if constexpr (VecField::field_type::alloc_mode == damn::AllocatorMode::GPU_UNIFIED)
@@ -78,8 +79,8 @@ public:
         eval(J(Component::Z), curlB.z);
     }
 
-    template<typename GridLayout, typename VecField>
-    void operator()(GridLayout const& /*patch layout*/, VecField const& B, VecField& J) const
+    template<typename Layout, typename VecField>
+    void operator()(Layout const& /*patch layout*/, VecField const& B, VecField& J) const
         requires(has_tiled_field_type_c<VecField>)
     {
         if constexpr (VecField::field_type::alloc_mode == damn::AllocatorMode::GPU_UNIFIED)
@@ -98,18 +99,18 @@ public:
     }
 
 private:
-    template<typename GridLayout>
+    template<typename Layout>
     static auto amount()
     {
-        auto constexpr dim = GridLayout::dimension;
+        auto constexpr dim = Layout::dimension;
         return damn::core::Point<std::uint32_t, dim>{damn::core::ConstArray<std::uint32_t, dim>(box.amount)};
     }
 
 public:
     // GPU_UNIFIED, as region items (an untiled patch is one region, a tiled one a region per tile)
     //  collected per patch or across a level (see AmpereLevelTransformer), one launch per run_gpu
-    template<typename GridLayout, typename VecField>
-    static auto region_layout(GridLayout const& layout, VecField const& J, std::size_t const ti)
+    template<typename Layout, typename VecField>
+    static auto region_layout(Layout const& layout, VecField const& J, std::size_t const ti)
     {
         if constexpr (has_tiled_field_type_c<VecField>)
             return J[0][ti].layout();
@@ -126,8 +127,8 @@ public:
             return untiled_view(vf);
     }
 
-    template<typename GridLayout, typename B_t, typename J_t>
-    static auto make_item(GridLayout const& layout, B_t const& B, J_t const& J)
+    template<typename Layout, typename B_t, typename J_t>
+    static auto make_item(Layout const& layout, B_t const& B, J_t const& J)
     {
         auto const boxes = damn::core::for_N_make_array<3>([&](auto c) { return box_for(layout, J[c]); });
         auto const curlB = curl(layout, B);
@@ -135,14 +136,14 @@ public:
         return AmpereTile<std::decay_t<decltype(curlB)>, J_t, Box_t>{curlB, J, boxes};
     }
 
-    template<typename GridLayout, typename VecField>
+    template<typename Layout, typename VecField>
     using item_t = decltype(make_item(
-        std::declval<GridLayout const&>(), region_view(std::declval<VecField const&>(), 0),
+        std::declval<Layout const&>(), region_view(std::declval<VecField const&>(), 0),
         region_view(std::declval<VecField&>(), 0)));
 
     // appends one patch's items
-    template<typename GridLayout, typename VecField>
-    static void gpu_items(GridLayout const& layout, VecField const& B, VecField& J, auto& items)
+    template<typename Layout, typename VecField>
+    static void gpu_items(Layout const& layout, VecField const& B, VecField& J, auto& items)
     {
         auto const n_regions = [&]() -> std::size_t {
             if constexpr (has_tiled_field_type_c<VecField>)
@@ -155,20 +156,20 @@ public:
                                          region_view(J, ti)));
     }
 
-    template<typename GridLayout, typename VecField>
-    static auto gpu_items(GridLayout const& layout, VecField const& B, VecField& J)
+    template<typename Layout, typename VecField>
+    static auto gpu_items(Layout const& layout, VecField const& B, VecField& J)
     {
-        gpu_item_list_t<GridLayout, VecField> items;
+        gpu_item_list_t<Layout, VecField> items;
         gpu_items(layout, B, J, items);
         return items;
     }
 
 #if DAMN_HAVE_GPU
-    template<typename GridLayout, typename VecField>
-    using gpu_item_list_t = damn::core::gpu::Vec_t<item_t<GridLayout, VecField>>;
+    template<typename Layout, typename VecField>
+    using gpu_item_list_t = damn::core::gpu::Vec_t<item_t<Layout, VecField>>;
 #else
-    template<typename GridLayout, typename VecField>
-    using gpu_item_list_t = std::vector<item_t<GridLayout, VecField>>;
+    template<typename Layout, typename VecField>
+    using gpu_item_list_t = std::vector<item_t<Layout, VecField>>;
 #endif
 
     static void run_gpu(auto& items)

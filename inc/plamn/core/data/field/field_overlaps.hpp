@@ -2,7 +2,6 @@
 #define PLAMN_CORE_DATA_FIELD_FIELD_OVERLAPS_HPP
 
 
-// #include "plamn/core/data/grid/gridlayout.hpp"
 #include "plamn/core/def.hpp"
 #include "damn/core/sys/strings.hpp"
 #include "plamn/core/data/field/field.hpp"
@@ -25,11 +24,11 @@ namespace plamn::core
 {
 
 
-template<typename GridLayout_, auto opts>
+template<typename Layout_, auto opts>
 struct FieldTileOverlaps
 {
     using Field_t     = basic::Field<opts>;
-    using FieldTile_t = FieldTile<GridLayout_, Field_t>;
+    using FieldTile_t = FieldTile<Layout_, Field_t>;
     using Quantity    = decltype(opts)::physical_quantity_type;
 
 

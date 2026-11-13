@@ -3,7 +3,7 @@
 //
 //  fixed values for the stateless layout functions (layout.hpp) and the hybrid Yee
 //  centerings, worked out by hand from the Yee definitions: the reference for
-//  replacing GridLayout with layout.hpp
+//  replacing Layout with layout.hpp
 
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"

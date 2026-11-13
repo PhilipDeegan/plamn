@@ -36,11 +36,11 @@ namespace core
         }
 
 
-        template<typename VecField, typename GridLayout>
-        void initialize(VecField& v, GridLayout const& layout)
+        template<typename VecField, typename Layout>
+        void initialize(VecField& v, Layout const& layout)
         {
-            static_assert(GridLayout::dimension == VecField::dimension,
-                          "dimension mismatch between vecfield and gridlayout");
+            static_assert(Layout::dimension == VecField::dimension,
+                          "dimension mismatch between vecfield and layout");
 
             FieldUserFunctionInitializer::initialize(v.getComponent(Component::X), layout, x_);
             FieldUserFunctionInitializer::initialize(v.getComponent(Component::Y), layout, y_);

@@ -23,7 +23,10 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <concepts>
+#include <stdexcept>
+#include <type_traits>
 
 namespace plamn::core
 {
@@ -105,6 +108,29 @@ template<auto o>
 NO_DISCARD constexpr auto centering(PatchLayout<o> const&, auto const& qty) DAMN_ALL
 {
     return centering<PatchLayout<o>::dimension>(qty);
+}
+
+
+// value of field, a src quantity, recentered at index of the dst quantity's grid
+template<auto src, auto dst, std::size_t order = 2, typename Field>
+    requires(std::is_enum_v<decltype(src)>)
+NO_DISCARD auto project(Field const& field,
+                        damn::core::Point<std::size_t, Field::dimension> const& index) DAMN_ALL
+{
+    auto constexpr dim = Field::dimension;
+    if constexpr (not DAMN_DEVICE_PASS) // host only: std::string, throw
+    {
+        DAMN_DEBUG_DO(if constexpr (HasPhysicalQuantity<Field>) {
+            if (centering<dim>(field) != centering<dim>(src))
+            {
+                std::string msg = "project: field centering does not match the source quantity";
+                if constexpr (requires { field.name(); }) // basic:: tile views: no name
+                    msg += ": " + field.name();
+                throw std::runtime_error(msg);
+            }
+        })
+    }
+    return project<centering<dim>(src), centering<dim>(dst), order>(field, index);
 }
 
 

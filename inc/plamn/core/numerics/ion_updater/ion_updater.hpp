@@ -164,11 +164,11 @@ void post_move_sync(Particles_t& domain, Particles_t& patchGhost,
 /**
  * @brief IonUpdater moves/deposits a single patch's ions/electromag, given directly.
  */
-template<typename Particles_t, typename GridLayout>
+template<typename Particles_t, typename Layout>
 class IonUpdater
 {
-    static constexpr auto dimension    = GridLayout::dimension;
-    static constexpr auto interp_order = GridLayout::options.interp_order;
+    static constexpr auto dimension    = Layout::dimension;
+    static constexpr auto interp_order = Layout::options.interp_order;
     using ParticleRange                = damn::core::IndexRange<Particles_t>;
     using Selector_t                   = std::function<ParticleRange(ParticleRange&)>;
     using Interpolator                 = plamn::core::Interpolator<dimension, interp_order>;
@@ -176,7 +176,7 @@ class IonUpdater
     using Pusher                       = plamn::core::BorisPusher<dimension>;
 
 public:
-    using Boxing_t = UpdaterCellMapSelectionBoxing<Selector_t, GridLayout>;
+    using Boxing_t = UpdaterCellMapSelectionBoxing<Selector_t, Layout>;
 
     void updatePopulations(auto& ions, auto const& em, Boxing_t const& boxing, double dt,
                            UpdaterMode mode = UpdaterMode::all);
@@ -193,8 +193,8 @@ private:
 };
 
 
-template<typename Particles_t, typename GridLayout>
-void IonUpdater<Particles_t, GridLayout>::updatePopulations(auto& ions, auto const& em,
+template<typename Particles_t, typename Layout>
+void IonUpdater<Particles_t, Layout>::updatePopulations(auto& ions, auto const& em,
                                                                 Boxing_t const& boxing, double dt,
                                                                 UpdaterMode mode)
 {
@@ -214,8 +214,8 @@ void IonUpdater<Particles_t, GridLayout>::updatePopulations(auto& ions, auto con
  * @brief IonUpdater::updateAndDepositDomain_
    evolves moments from time n to n+1 without updating particles, which stay at time n
  */
-template<typename Particles_t, typename GridLayout>
-void IonUpdater<Particles_t, GridLayout>::updateAndDepositDomain_(auto& ions, auto const& em,
+template<typename Particles_t, typename Layout>
+void IonUpdater<Particles_t, Layout>::updateAndDepositDomain_(auto& ions, auto const& em,
                                                                       Boxing_t const& boxing)
 {
     DAMN_LOG_SCOPE(3, "IonUpdater::updateAndDepositDomain_");
@@ -271,8 +271,8 @@ void IonUpdater<Particles_t, GridLayout>::updateAndDepositDomain_(auto& ions, au
  * @brief IonUpdater::updateAndDepositAll_
    evolves moments and particles from time n to n+1
  */
-template<typename Particles_t, typename GridLayout>
-void IonUpdater<Particles_t, GridLayout>::updateAndDepositAll_(auto& ions, auto const& em,
+template<typename Particles_t, typename Layout>
+void IonUpdater<Particles_t, Layout>::updateAndDepositAll_(auto& ions, auto const& em,
                                                                    Boxing_t const& boxing)
 {
     DAMN_LOG_SCOPE(1, "IonUpdater::updateAndDepositAll_");
@@ -344,16 +344,16 @@ void IonUpdater<Particles_t, GridLayout>::updateAndDepositAll_(auto& ions, auto 
  * @brief ParallelIonUpdater moves/deposits ions across every patch of a level in parallel,
  * given a ModelAccessor rather than direct ions/electromag references.
  */
-template<typename Particles_t, typename GridLayout>
+template<typename Particles_t, typename Layout>
 class ParallelIonUpdater
 {
-    static constexpr auto dimension    = GridLayout::dimension;
-    static constexpr auto interp_order = GridLayout::options.interp_order;
+    static constexpr auto dimension    = Layout::dimension;
+    static constexpr auto interp_order = Layout::options.interp_order;
     using Interpolator_t               = Interpolator<dimension, interp_order, /*atomic=*/false>;
     using Interpolating_t              = Interpolating<dimension, interp_order, /*atomic=*/false>;
 
 public:
-    using Boxing_t = UpdaterSelectionBoxing<GridLayout>;
+    using Boxing_t = UpdaterSelectionBoxing<Layout>;
 
     auto constexpr static use_main_thread = MultiBorisOptions{}.use_main_thread;
 
@@ -387,8 +387,8 @@ private:
 };
 
 
-template<typename Particles_t, typename GridLayout>
-void ParallelIonUpdater<Particles_t, GridLayout>::reset_moments(auto& accessor)
+template<typename Particles_t, typename Layout>
+void ParallelIonUpdater<Particles_t, Layout>::reset_moments(auto& accessor)
 {
     if constexpr (use_main_thread or not is_tiled(Particles_t::layout_mode))
         for (std::size_t i = 0; i < accessor.size(); ++i)
@@ -405,8 +405,8 @@ void ParallelIonUpdater<Particles_t, GridLayout>::reset_moments(auto& accessor)
 }
 
 
-template<typename Particles_t, typename GridLayout>
-void ParallelIonUpdater<Particles_t, GridLayout>::post_move_sync_(auto& view,
+template<typename Particles_t, typename Layout>
+void ParallelIonUpdater<Particles_t, Layout>::post_move_sync_(auto& view,
                                                                       auto const& boxings)
 {
     auto& [ions, _]           = view.args;
@@ -425,8 +425,8 @@ void ParallelIonUpdater<Particles_t, GridLayout>::post_move_sync_(auto& view,
     }
 }
 
-template<typename Particles_t, typename GridLayout>
-void ParallelIonUpdater<Particles_t, GridLayout>::post_move_sync(auto& accessor,
+template<typename Particles_t, typename Layout>
+void ParallelIonUpdater<Particles_t, Layout>::post_move_sync(auto& accessor,
                                                                      auto const& boxings,
                                                                      std::size_t const i)
 {
@@ -436,8 +436,8 @@ void ParallelIonUpdater<Particles_t, GridLayout>::post_move_sync(auto& accessor,
 
 
 // only writes the moments of tile t, domain and patch ghosts of a tile in the same task
-template<typename Particles_t, typename GridLayout>
-void ParallelIonUpdater<Particles_t, GridLayout>::deposit_tile_(auto& view, std::size_t const t)
+template<typename Particles_t, typename Layout>
+void ParallelIonUpdater<Particles_t, Layout>::deposit_tile_(auto& view, std::size_t const t)
 {
     Interpolating_t interp;
     for (auto& pop : std::get<0>(view.args))
@@ -447,8 +447,8 @@ void ParallelIonUpdater<Particles_t, GridLayout>::deposit_tile_(auto& view, std:
     }
 }
 
-template<typename Particles_t, typename GridLayout>
-void ParallelIonUpdater<Particles_t, GridLayout>::deposit(auto& accessor, auto const& boxings,
+template<typename Particles_t, typename Layout>
+void ParallelIonUpdater<Particles_t, Layout>::deposit(auto& accessor, auto const& boxings,
                                                               std::size_t const i)
 {
     auto view            = accessor[i];
@@ -466,8 +466,8 @@ void ParallelIonUpdater<Particles_t, GridLayout>::deposit(auto& accessor, auto c
 }
 
 
-template<typename Particles_t, typename GridLayout>
-void ParallelIonUpdater<Particles_t, GridLayout>::updatePopulations(
+template<typename Particles_t, typename Layout>
+void ParallelIonUpdater<Particles_t, Layout>::updatePopulations(
     auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings, double const& dt,
     UpdaterMode mode)
 {
@@ -482,8 +482,8 @@ void ParallelIonUpdater<Particles_t, GridLayout>::updatePopulations(
 }
 
 
-template<typename Particles_t, typename GridLayout>
-void ParallelIonUpdater<Particles_t, GridLayout>::updateAndDepositDomain_(
+template<typename Particles_t, typename Layout>
+void ParallelIonUpdater<Particles_t, Layout>::updateAndDepositDomain_(
     auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings)
 {
     DAMN_LOG_SCOPE(1, "IonUpdater::updateAndDepositDomain_");
@@ -497,8 +497,8 @@ void ParallelIonUpdater<Particles_t, GridLayout>::updateAndDepositDomain_(
 }
 
 
-template<typename Particles_t, typename GridLayout>
-void ParallelIonUpdater<Particles_t, GridLayout>::updateAndDepositAll_(
+template<typename Particles_t, typename Layout>
+void ParallelIonUpdater<Particles_t, Layout>::updateAndDepositAll_(
     auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings)
 {
     DAMN_LOG_SCOPE(1, "IonUpdater::updateAndDepositAll_");
@@ -576,15 +576,15 @@ void ParallelIonUpdater<Particles_t, GridLayout>::updateAndDepositAll_(
  * @brief FlatParallelIonUpdater is ParallelIonUpdater for untiled layouts (AoS): untiled
  * fields, so a patch is the unit of work rather than a tile.
  */
-template<typename Particles_t, typename GridLayout>
+template<typename Particles_t, typename Layout>
 class FlatParallelIonUpdater
 {
-    static constexpr auto dimension    = GridLayout::dimension;
-    static constexpr auto interp_order = GridLayout::options.interp_order;
+    static constexpr auto dimension    = Layout::dimension;
+    static constexpr auto interp_order = Layout::options.interp_order;
     using Interpolator_t               = Interpolator<dimension, interp_order, /*atomic=*/false>;
 
 public:
-    using Boxing_t = UpdaterSelectionBoxing<GridLayout>;
+    using Boxing_t = UpdaterSelectionBoxing<Layout>;
 
     auto constexpr static use_main_thread = MultiBorisOptions{}.use_main_thread;
 
@@ -600,8 +600,8 @@ private:
 };
 
 
-template<typename Particles_t, typename GridLayout>
-void FlatParallelIonUpdater<Particles_t, GridLayout>::per_patch(auto& accessor, auto const& fn)
+template<typename Particles_t, typename Layout>
+void FlatParallelIonUpdater<Particles_t, Layout>::per_patch(auto& accessor, auto const& fn)
 {
     if constexpr (use_main_thread)
         for (std::size_t i = 0; i < accessor.size(); ++i)
@@ -615,8 +615,8 @@ void FlatParallelIonUpdater<Particles_t, GridLayout>::per_patch(auto& accessor, 
 }
 
 
-template<typename Particles_t, typename GridLayout>
-void FlatParallelIonUpdater<Particles_t, GridLayout>::updatePopulations(
+template<typename Particles_t, typename Layout>
+void FlatParallelIonUpdater<Particles_t, Layout>::updatePopulations(
     auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings, double const& dt,
     UpdaterMode mode)
 {
@@ -685,13 +685,13 @@ namespace plamn::core::mkn_xyz
  * @brief mkn_xyz::ParallelIonUpdater: core::ParallelIonUpdater steps dispatched with mkn.gpu
  * ThreadedStreamLauncher (one host thread + stream per patch), and GPU deposit kernels
  */
-template<typename Particles_t, typename GridLayout>
-class ParallelIonUpdater : public core::ParallelIonUpdater<Particles_t, GridLayout>
+template<typename Particles_t, typename Layout>
+class ParallelIonUpdater : public core::ParallelIonUpdater<Particles_t, Layout>
 {
-    using Super = core::ParallelIonUpdater<Particles_t, GridLayout>;
+    using Super = core::ParallelIonUpdater<Particles_t, Layout>;
 
-    static constexpr auto dimension     = GridLayout::dimension;
-    static constexpr auto interp_order  = GridLayout::options.interp_order;
+    static constexpr auto dimension     = Layout::dimension;
+    static constexpr auto interp_order  = Layout::options.interp_order;
     static constexpr bool atomic_interp = Particles_t::alloc_mode == damn::AllocatorMode::GPU_UNIFIED;
     using Interpolator_t                = Interpolator<dimension, interp_order, atomic_interp>;
     using Interpolating_t               = Interpolating<dimension, interp_order, atomic_interp>;
@@ -719,8 +719,8 @@ private:
 };
 
 
-template<typename Particles_t, typename GridLayout>
-void ParallelIonUpdater<Particles_t, GridLayout>::reset_moments_(auto& accessor, auto& in)
+template<typename Particles_t, typename Layout>
+void ParallelIonUpdater<Particles_t, Layout>::reset_moments_(auto& accessor, auto& in)
 {
     if constexpr (moments_on_streams)
     {
@@ -746,8 +746,8 @@ void ParallelIonUpdater<Particles_t, GridLayout>::reset_moments_(auto& accessor,
 }
 
 
-template<typename Particles_t, typename GridLayout>
-void ParallelIonUpdater<Particles_t, GridLayout>::updatePopulations(
+template<typename Particles_t, typename Layout>
+void ParallelIonUpdater<Particles_t, Layout>::updatePopulations(
     auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings, double const& dt,
     UpdaterMode mode)
 {
@@ -763,8 +763,8 @@ void ParallelIonUpdater<Particles_t, GridLayout>::updatePopulations(
 }
 
 
-template<typename Particles_t, typename GridLayout>
-void ParallelIonUpdater<Particles_t, GridLayout>::updateAndDepositDomain_(
+template<typename Particles_t, typename Layout>
+void ParallelIonUpdater<Particles_t, Layout>::updateAndDepositDomain_(
     auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings)
 {
     DAMN_LOG_SCOPE(1, "mkn_xyz::IonUpdater::updateAndDepositDomain_");
@@ -785,8 +785,8 @@ void ParallelIonUpdater<Particles_t, GridLayout>::updateAndDepositDomain_(
 }
 
 
-template<typename Particles_t, typename GridLayout>
-void ParallelIonUpdater<Particles_t, GridLayout>::updateAndDepositAll_(
+template<typename Particles_t, typename Layout>
+void ParallelIonUpdater<Particles_t, Layout>::updateAndDepositAll_(
     auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings)
 {
     DAMN_LOG_SCOPE(1, "mkn_xyz::IonUpdater::updateAndDepositAll_");
@@ -941,26 +941,26 @@ namespace detail
 {
     // layouts in unified memory update on the device: mkn_xyz::ParallelIonUpdater, as
     //  test_multi_updater checks them (UpdaterVersion::mkn_parallel), CPU tiled: ParallelIonUpdater
-    template<typename Particles_t, typename GridLayout>
+    template<typename Particles_t, typename Layout>
     using TiledIonUpdaterFor_t =
 #if DAMN_HAVE_MKN_GPU
         std::conditional_t<Particles_t::alloc_mode == damn::AllocatorMode::GPU_UNIFIED,
-                           mkn_xyz::ParallelIonUpdater<Particles_t, GridLayout>,
-                           ParallelIonUpdater<Particles_t, GridLayout>>;
+                           mkn_xyz::ParallelIonUpdater<Particles_t, Layout>,
+                           ParallelIonUpdater<Particles_t, Layout>>;
 #else
-        ParallelIonUpdater<Particles_t, GridLayout>;
+        ParallelIonUpdater<Particles_t, Layout>;
 #endif
 } // namespace detail
 
 // unified memory updates on the device (mkn_xyz::ParallelIonUpdater), tiled or not: untiled
 //  GPU_UNIFIED (SoAVXChunked) through FlatParallelIonUpdater deposited on the host
-template<typename Particles_t, typename GridLayout>
+template<typename Particles_t, typename Layout>
 using IonUpdaterFor_t = std::conditional_t<
-    Particles_t::layout_mode == LayoutMode::AoSMapped, IonUpdater<Particles_t, GridLayout>,
+    Particles_t::layout_mode == LayoutMode::AoSMapped, IonUpdater<Particles_t, Layout>,
     std::conditional_t<is_tiled(Particles_t::layout_mode)
                            or Particles_t::alloc_mode == damn::AllocatorMode::GPU_UNIFIED,
-                       detail::TiledIonUpdaterFor_t<Particles_t, GridLayout>,
-                       FlatParallelIonUpdater<Particles_t, GridLayout>>>;
+                       detail::TiledIonUpdaterFor_t<Particles_t, Layout>,
+                       FlatParallelIonUpdater<Particles_t, Layout>>>;
 
 } // namespace plamn::core
 

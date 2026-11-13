@@ -16,11 +16,11 @@ namespace plamn::core
 
 class FieldUserFunctionInitializer
 {
-    template<typename Field, typename GridLayout, typename InitFunction>
-    void static _initialize(Field& field, GridLayout const& layout, InitFunction const& init)
+    template<typename Field, typename Layout, typename InitFunction>
+    void static _initialize(Field& field, Layout const& layout, InitFunction const& init)
     {
         auto const coords = coordinate_vectors(layout.dx, amr_ghost_box(layout, field),
-                                               layout.centering(field));
+                                               centering(layout, field));
 
         std::shared_ptr<damn::core::Span<double>> gridPtr // keep grid data alive
             = std::apply([&](auto const&... args) { return init(args...); }, coords.spans());
@@ -32,8 +32,8 @@ class FieldUserFunctionInitializer
     }
 
 public:
-    template<typename Field, typename GridLayout, typename InitFunction>
-    void static initialize(Field& field, GridLayout const& layout, InitFunction const& init)
+    template<typename Field, typename Layout, typename InitFunction>
+    void static initialize(Field& field, Layout const& layout, InitFunction const& init)
     {
         auto constexpr static is_field_tile_set = is_field_tile_set_v<Field>;
 

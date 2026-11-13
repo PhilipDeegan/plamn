@@ -15,15 +15,15 @@ using enum LayoutMode;
 using enum damn::AllocatorMode;
 
 template<>
-template<typename Dst, typename Src, typename GridLayout>
-Dst ParticlesConverter<AoS, CPU, AoS, CPU>::operator()(Src const& src, GridLayout const& layout)
+template<typename Dst, typename Src, typename Layout>
+Dst ParticlesConverter<AoS, CPU, AoS, CPU>::operator()(Src const& src, Layout const& layout)
 {
     return src;
 }
 
 template<>
-template<typename Dst, typename Src, typename GridLayout>
-Dst ParticlesConverter<AoSTS, CPU, AoS, CPU>::operator()(Src const& src, GridLayout const& layout)
+template<typename Dst, typename Src, typename Layout>
+Dst ParticlesConverter<AoSTS, CPU, AoS, CPU>::operator()(Src const& src, Layout const& layout)
 {
     auto out = make_particles<Dst>(layout);
     out.reserve(src.size());
@@ -34,8 +34,8 @@ Dst ParticlesConverter<AoSTS, CPU, AoS, CPU>::operator()(Src const& src, GridLay
     return out;
 }
 template<>
-template<typename Dst, typename Src, typename GridLayout>
-Dst ParticlesConverter<AoSCMTS, CPU, AoS, CPU>::operator()(Src const& src, GridLayout const& layout)
+template<typename Dst, typename Src, typename Layout>
+Dst ParticlesConverter<AoSCMTS, CPU, AoS, CPU>::operator()(Src const& src, Layout const& layout)
 {
     auto out = make_particles<Dst>(layout);
     out.reserve(src.size());
@@ -45,9 +45,9 @@ Dst ParticlesConverter<AoSCMTS, CPU, AoS, CPU>::operator()(Src const& src, GridL
 }
 
 template<>
-template<typename Dst, typename Src, typename GridLayout>
+template<typename Dst, typename Src, typename Layout>
 Dst ParticlesConverter<AoSPCTS, CPU, AoS, CPU>::operator()(Src const& src,
-                                                            GridLayout const& layout)
+                                                            Layout const& layout)
 {
     auto out = make_particles<Dst>(layout);
     out.reserve(src.size());
@@ -64,17 +64,17 @@ Dst ParticlesConverter<AoSPCTS, CPU, AoS, CPU>::operator()(Src const& src,
 }
 
 template<> // unified memory is host readable, so the CPU path works as is
-template<typename Dst, typename Src, typename GridLayout>
+template<typename Dst, typename Src, typename Layout>
 Dst ParticlesConverter<AoSPCTS, GPU_UNIFIED, AoS, CPU>::operator()(Src const& src,
-                                                                    GridLayout const& layout)
+                                                                    Layout const& layout)
 {
     return ParticlesConverter<AoSPCTS, CPU, AoS, CPU>{}.template operator()<Dst>(src, layout);
 }
 
 template<>
-template<typename Dst, typename Src, typename GridLayout>
+template<typename Dst, typename Src, typename Layout>
 Dst ParticlesConverter<AoSTS, GPU_UNIFIED, AoS, CPU>::operator()( //
-    Src const& src, GridLayout const& layout)
+    Src const& src, Layout const& layout)
 {
     auto out = make_particles<Dst>(layout);
     out.resize(src.size());

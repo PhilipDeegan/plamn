@@ -5,7 +5,7 @@
 #include "plamn/core/def.hpp"
 #include "damn/core/logger.hpp"
 #include "damn/core/geometry/point.hpp"
-#include "plamn/core/data/grid/gridlayoutdefs.hpp"
+#include "plamn/core/data/grid/layout_defs.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 
 #include <array>
@@ -20,7 +20,7 @@
 #include "damn/core/operators.hpp"
 #include "damn/core/meta/logic.hpp"
 #include "damn/core/meta/for_N.hpp"
-#include "plamn/core/data/grid/gridlayout.hpp"
+#include "plamn/core/data/grid/patch_layout.hpp"
 #include "plamn/core/models/physical_state.hpp"
 #include "plamn/core/data/vecfield/vecfield_component.hpp"
 
@@ -192,11 +192,11 @@ class MeshToParticle
 };
 
 
-template<std::size_t dimdex, typename GridLayout, auto quantity, typename IndexWeights>
+template<std::size_t dimdex, typename Layout, auto quantity, typename IndexWeights>
 NO_DISCARD auto static resolve_start_index_and_weights(IndexWeights const& indexWeights)
     DAMN_ALL
 {
-    auto constexpr centerings                              = centering<GridLayout::dimension>(quantity);
+    auto constexpr centerings                              = centering<Layout::dimension>(quantity);
     auto const& [d_starts, d_weights, p_starts, p_weights] = indexWeights;
 
     if constexpr (centerings[dimdex] == QtyCentering::primal)
@@ -217,12 +217,12 @@ public:
      * \param[in] startIndex is the first of the nbrPointsSupport indices where to interpolate
      * the field \param[in] weights are the nbrPointsSupport weights used for the interpolation
      */
-    template<typename GridLayout, auto quantity, typename Field, typename IndexWeights>
+    template<typename Layout, auto quantity, typename Field, typename IndexWeights>
     NO_DISCARD DAMN_ALWAYS_INLINE auto op(Field const& field,
                                            IndexWeights const& indexWeights) const DAMN_ALL
     {
         auto const& [xStartIndex, xWeights]
-            = resolve_start_index_and_weights<0, GridLayout, quantity>(indexWeights);
+            = resolve_start_index_and_weights<0, Layout, quantity>(indexWeights);
 
         auto const& order_size = xWeights.size();
         auto fieldAtParticle   = 0.;
@@ -261,14 +261,14 @@ public:
      * interpolate the field in both directions \param[in] weights are the nbrPointsSupport
      * weights used for the interpolation in both directions
      */
-    template<typename GridLayout, auto quantity, typename Field, typename IndexWeights>
+    template<typename Layout, auto quantity, typename Field, typename IndexWeights>
     NO_DISCARD DAMN_ALWAYS_INLINE auto op(Field const& field,
                                            IndexWeights const& indexWeights) const DAMN_ALL
     {
         auto const& [xStartIndex, xWeights]
-            = resolve_start_index_and_weights<0, GridLayout, quantity>(indexWeights);
+            = resolve_start_index_and_weights<0, Layout, quantity>(indexWeights);
         auto const& [yStartIndex, yWeights]
-            = resolve_start_index_and_weights<1, GridLayout, quantity>(indexWeights);
+            = resolve_start_index_and_weights<1, Layout, quantity>(indexWeights);
 
         auto const& order_size = xWeights.size();
 
@@ -314,16 +314,16 @@ public:
      * interpolate the field in the 3 directions \param[in] weights are the nbrPointsSupport
      * weights used for the interpolation in the 3 directions
      */
-    template<typename GridLayout, auto quantity, typename Field, typename IndexWeights>
+    template<typename Layout, auto quantity, typename Field, typename IndexWeights>
     NO_DISCARD DAMN_ALWAYS_INLINE auto op(Field const& field,
                                            IndexWeights const& indexWeights) const DAMN_ALL
     {
         auto const& [xStartIndex, xWeights]
-            = resolve_start_index_and_weights<0, GridLayout, quantity>(indexWeights);
+            = resolve_start_index_and_weights<0, Layout, quantity>(indexWeights);
         auto const& [yStartIndex, yWeights]
-            = resolve_start_index_and_weights<1, GridLayout, quantity>(indexWeights);
+            = resolve_start_index_and_weights<1, Layout, quantity>(indexWeights);
         auto const& [zStartIndex, zWeights]
-            = resolve_start_index_and_weights<2, GridLayout, quantity>(indexWeights);
+            = resolve_start_index_and_weights<2, Layout, quantity>(indexWeights);
 
         std::uint8_t const order_size = xWeights.size();
 
@@ -352,7 +352,7 @@ public:
         return fieldAtParticle;
     }
 
-    template<typename GridLayout, typename... Args>
+    template<typename Layout, typename... Args>
     inline auto avx(Args&&... args) const DAMN_ALL
     {
         auto constexpr scalar_qts = []() constexpr {
@@ -361,7 +361,7 @@ public:
         }();
 
         auto constexpr centerings = damn::core::for_N<scalar_qts.size(), damn::core::for_N_R_mode::make_array>(
-            [&](auto i) { return centering<GridLayout::dimension>(scalar_qts[i]); });
+            [&](auto i) { return centering<Layout::dimension>(scalar_qts[i]); });
 
         auto&& [qts, starts, weights] = std::forward_as_tuple(args...);
         using Qts                     = std::decay_t<decltype(qts)>;
@@ -756,8 +756,8 @@ protected:
             [&] DAMN_ALL(auto const& point) { return point - amrbox.lower; }, iCell_, delta);
     }
 
-    template<auto centering, typename GridLayout, typename ICell, typename Delta>
-    auto indexAndWeights_(GridLayout const& layout, ICell const& iCell_,
+    template<auto centering, typename Layout, typename ICell, typename Delta>
+    auto indexAndWeights_(Layout const& layout, ICell const& iCell_,
                           Delta const& delta) DAMN_ALL
     {
         return indexAndWeights__<centering>(
@@ -781,9 +781,9 @@ public:
      * onto the particle.
      */
 
-    template<typename Particle, typename Electromag, typename GridLayout>
+    template<typename Particle, typename Electromag, typename Layout>
     DAMN_ALWAYS_INLINE auto m2p(Particle const& particle, Electromag const& Em,
-                                 GridLayout const& layout) DAMN_ALL
+                                 Layout const& layout) DAMN_ALL
     {
         // using E_B_tuple = std::array<std::array<double, 3>, 2>;
         using E_B_tuple = std::tuple<std::array<double, 3>, std::array<double, 3>>;
@@ -815,9 +815,9 @@ public:
 
 
 
-    template<std::uint8_t N, template<typename, std::size_t> typename Array_t, typename GridLayout,
+    template<std::uint8_t N, template<typename, std::size_t> typename Array_t, typename Layout,
              typename... Args>
-    inline auto m2p_avx(GridLayout const& layout, Args&&... args) DAMN_ALL
+    inline auto m2p_avx(Layout const& layout, Args&&... args) DAMN_ALL
     {
         static_assert(interpOrder == 1);
 
@@ -829,7 +829,7 @@ public:
         auto const& deltas                 = particles.delta();
         auto const& iCells                 = particles.iCell().data() + start;
 
-        auto const delts = damn::core::for_N<GridLayout::dimension, damn::core::for_N_R_mode::make_array>(
+        auto const delts = damn::core::for_N<Layout::dimension, damn::core::for_N_R_mode::make_array>(
             [&](auto i) { return deltas[i].data() + start; });
 
         auto const fpiCells = [&]() {
@@ -867,13 +867,13 @@ public:
         });
 
 
-        return meshToParticle_.template avx<GridLayout>(Em, centered_starts, centered_weights);
+        return meshToParticle_.template avx<Layout>(Em, centered_starts, centered_weights);
     }
 
 
 
-    template<typename Particles, typename Electromag, typename GridLayout>
-    inline auto m2p(Particles const& particles, Electromag const& Em, GridLayout const& layout,
+    template<typename Particles, typename Electromag, typename Layout>
+    inline auto m2p(Particles const& particles, Electromag const& Em, Layout const& layout,
                     std::size_t idx) DAMN_ALL
     {
         using E_B_tuple = std::tuple<std::array<double, 3>, std::array<double, 3>>;
@@ -915,8 +915,8 @@ public:
         return particle_EB;
     }
 
-    template<typename Particles, typename Electromag, typename GridLayout>
-    inline auto operator()(Particles& particles, Electromag const& Em, GridLayout const& layout,
+    template<typename Particles, typename Electromag, typename Layout>
+    inline auto operator()(Particles& particles, Electromag const& Em, Layout const& layout,
                            std::size_t idx) DAMN_ALL
     {
         return m2p(particles, Em, layout, idx);
@@ -965,16 +965,16 @@ public:
             particleToMesh_(particleDensity, xFlux, yFlux, zFlux, particle, startIndex_, weights_,
                             coef);
     }
-    template<typename Particle_t, typename VecField, typename GridLayout, typename Field>
+    template<typename Particle_t, typename VecField, typename Layout, typename Field>
     void particleToMesh(Particle_t const& particle, Field& particleDensity, VecField& flux,
-                        GridLayout const& layout, double coef = 1.) DAMN_ALL
+                        Layout const& layout, double coef = 1.) DAMN_ALL
     {
         particleToMesh(particle, particleDensity, flux,
-                       damn::core::grow(layout.cells, GridLayout::options.field_ghost_width), coef);
+                       damn::core::grow(layout.cells, Layout::options.field_ghost_width), coef);
     }
 
-    template<typename Particle_t, typename GridLayout>
-    void p2m_setup(Particle_t const& particle, GridLayout const& layout) DAMN_ALL
+    template<typename Particle_t, typename Layout>
+    void p2m_setup(Particle_t const& particle, Layout const& layout) DAMN_ALL
     {
         indexAndWeights_<QtyCentering::primal>(layout, particle.iCell(), particle.delta());
     }
@@ -1007,10 +1007,10 @@ public:
 
 
 
-    template<typename Particles, typename VecField, typename GridLayout, typename Field>
+    template<typename Particles, typename VecField, typename Layout, typename Field>
     inline void operator()(Particles const& particles, Field& particleDensity, VecField& flux,
-                           GridLayout const& layout, double coef = 1.)
-        requires(!std::is_arithmetic_v<GridLayout>)
+                           Layout const& layout, double coef = 1.)
+        requires(!std::is_arithmetic_v<Layout>)
     {
         // for each particle, first calculate the startIndex and weights
         // for dual and primal quantities.
@@ -1091,11 +1091,11 @@ protected:
     Weights primal_weights_;
 
 private:
-    template<auto quantity, typename GridLayout>
-    NO_DISCARD auto meshToParticle(auto const& field, GridLayout const&,
+    template<auto quantity, typename Layout>
+    NO_DISCARD auto meshToParticle(auto const& field, Layout const&,
                                    auto const& indexWeights) DAMN_ALL
     {
-        return meshToParticle_.template op<GridLayout, quantity>(field, indexWeights);
+        return meshToParticle_.template op<Layout, quantity>(field, indexWeights);
     }
 };
 
@@ -1104,9 +1104,9 @@ template<std::size_t dim, std::size_t interpOrder, bool atomic_ops = false>
 class MomentumTensorInterpolator : public Interpolator<dim, interpOrder, false>
 {
 public:
-    template<typename ParticleRange, typename TensorField, typename GridLayout>
+    template<typename ParticleRange, typename TensorField, typename Layout>
     inline void operator()(ParticleRange&& particleRange, TensorField& momentumTensor,
-                           GridLayout const& layout, double mass = 1.)
+                           Layout const& layout, double mass = 1.)
     {
         auto begin                     = particleRange.begin();
         auto end                       = particleRange.end();

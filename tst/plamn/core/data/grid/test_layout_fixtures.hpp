@@ -1,0 +1,54 @@
+#include "plamn/core/def.hpp"
+#ifndef PLAMN_TEST_CORE_DATA_GRID_TEST_LAYOUT_FIXTURES_HPP
+#define PLAMN_TEST_CORE_DATA_GRID_TEST_LAYOUT_FIXTURES_HPP
+
+#include "damn/core/geometry/box.hpp"
+#include "damn/core/geometry/point.hpp"
+#include "damn/core/math/array.hpp"
+
+#include <cstdint>
+
+
+// a Layout (PatchLayout) made from a cell count and mesh size, origin 0, level 0
+//   cells only: mesh size 1/cells, AMR box from 0
+//   amrbox only: mesh size .1
+template<typename Layout>
+class TestLayout : public Layout
+{
+public:
+    using Super               = Layout;
+    auto static constexpr dim = Layout::dimension;
+
+    TestLayout() = default;
+
+    TestLayout(Super const& layout)
+        : Super{layout}
+    {
+    }
+
+    TestLayout(double dl, std::uint32_t cells)
+        : Super{damn::core::Box<int, dim>{damn::core::ConstArray<int, dim>(0),
+                                          damn::core::ConstArray<int, dim>(cells - 1)},
+                damn::core::ConstArray<double, dim>(dl)}
+    {
+    }
+
+    TestLayout(std::uint32_t const cells)
+        : TestLayout{1.0 / cells, cells}
+    {
+    }
+
+    TestLayout(damn::core::Box<int, dim> const& amrbox)
+        : Super{amrbox, damn::core::ConstArray<double, dim>(.1)}
+    {
+    }
+
+    auto static make(std::uint32_t cells) { return TestLayout{cells}; }
+    auto static make(double dl, std::uint32_t cells) { return TestLayout{dl, cells}; }
+    auto static make(damn::core::Box<int, dim> const& amrbox) { return TestLayout{amrbox}; }
+
+    Super& operator*() { return *this; }
+    Super const& operator*() const { return *this; }
+};
+
+#endif /*PLAMN_TEST_CORE_DATA_GRID_TEST_LAYOUT_FIXTURES_HPP*/
