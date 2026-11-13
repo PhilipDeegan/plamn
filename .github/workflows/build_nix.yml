@@ -15,15 +15,18 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    # damn is private: check it out where mkn looks for it (tpp/damn) instead of cloning
+    - run: |
+        apt update && apt install -y curl git openssh-client
+
+    # damn is private: check it out where mkn looks for it (tpp/damn) instead of cloning,
+    # using a read-only deploy key on damn
     - uses: actions/checkout@v4
       with:
         repository: PhilipDeegan/damn
-        token: ${{ secrets.DAMN_READ_TOKEN }}
+        ssh-key: ${{ secrets.DAMN_DEPLOY_KEY }}
         path: tpp/damn
 
     - run: |
-        apt update && apt install -y curl
         curl -Lo mkn https://github.com/mkn/mkn/releases/download/latest/mkn_nix
         chmod +x mkn
         KLOG=3 ./mkn clean build test -dtKOqp test_plamn_core -Wx res/mkn/mpi
