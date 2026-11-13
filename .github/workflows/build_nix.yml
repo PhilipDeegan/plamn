@@ -39,9 +39,10 @@ jobs:
         path: phare
         sparse-checkout: pyphare
 
-    # the python modules without MPI: the tests run serially, without MPI_Init
+    # the python modules, with the same settings as above (C++20, also for mkn's own modules);
+    # the tests run serially, without MPI_Init
     - run: |
-        KLOG=3 ./mkn build -dtKOqp py_etc -x res/mkn/base
-        KLOG=3 ./mkn build -dtKOqp py_sim -x res/mkn/base
+        KLOG=3 ./mkn build -dtKOqp py_etc -Wx res/mkn/mpi
+        KLOG=3 ./mkn build -dtKOqp py_sim -Wx res/mkn/mpi
         PYTHONPATH=python:phare/pyphare:tst/plamn/python \
           python3 -m unittest discover -v -s tst/plamn/python
