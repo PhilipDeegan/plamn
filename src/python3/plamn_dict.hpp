@@ -23,7 +23,7 @@ namespace plamn::python3
 {
 using initializer::InitFunction;
 
-using CArray = nb::ndarray<nb::numpy, double const, nb::ndim<1>>;
+using CArray  = nb::ndarray<nb::numpy, double const, nb::ndim<1>>;
 using InArray = nb::ndarray<double const, nb::ndim<1>, nb::c_contig, nb::device::cpu>;
 
 // x as a numpy array over x's memory; x outlives the call

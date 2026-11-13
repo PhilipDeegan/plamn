@@ -42,7 +42,7 @@ protected:
     static constexpr std::size_t interp_order = 1;
     using core_types                          = PLAMN_Types<plamn::SimOpts{dim, interp_order}>;
     using HybridTypes                         = core_types::Hybrid;
-    using Layout_t                        = HybridTypes::Layout_t;
+    using Layout_t                            = HybridTypes::Layout_t;
     using Ampere_t                            = AmpereTransformer<>;
     auto static constexpr field_opts          = TensorFieldOptions<HybridTypes>{};
     using UsableVecFieldND                    = UsableVecField<field_opts>;
@@ -67,7 +67,7 @@ protected:
     static constexpr std::size_t interp_order = 1;
     using core_types                          = PLAMN_Types<plamn::SimOpts{dim, interp_order}>;
     using HybridTypes                         = core_types::Hybrid;
-    using Layout_t                        = HybridTypes::Layout_t;
+    using Layout_t                            = HybridTypes::Layout_t;
     using Ampere_t                            = AmpereTransformer<>;
     auto static constexpr field_opts          = TensorFieldOptions<HybridTypes>{};
     using UsableVecFieldND                    = UsableVecField<field_opts>;
@@ -92,7 +92,7 @@ protected:
     static constexpr std::size_t interp_order = 1;
     using core_types                          = PLAMN_Types<plamn::SimOpts{dim, interp_order}>;
     using HybridTypes                         = core_types::Hybrid;
-    using Layout_t                        = HybridTypes::Layout_t;
+    using Layout_t                            = HybridTypes::Layout_t;
     using Ampere_t                            = AmpereTransformer<>;
     auto static constexpr field_opts          = TensorFieldOptions<HybridTypes>{};
     using UsableVecFieldND                    = UsableVecField<field_opts>;
@@ -126,8 +126,8 @@ TEST_F(Ampere1DTest, ampere1DCalculatedOk)
 
     for (std::uint32_t ix = gsi_d_X; ix <= gei_d_X; ++ix)
     {
-        auto point
-            = coordinate(this->layout, By, this->layout.localToAMR(damn::core::Point{ix}.as_signed()));
+        auto point = coordinate(this->layout, By,
+                                this->layout.localToAMR(damn::core::Point{ix}.as_signed()));
         By(ix) = std::cos(2 * M_PI / 5. * point[0]);
         Bz(ix) = std::sin(2 * M_PI / 5. * point[0]);
     }
@@ -170,8 +170,8 @@ TEST_F(Ampere2DTest, ampere2DCalculatedOk)
     {
         for (std::uint32_t iy = gsi_d_Y; iy <= gei_d_Y; ++iy)
         {
-            auto point = coordinate(this->layout, 
-                Bx, layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
+            auto point = coordinate(this->layout, Bx,
+                                    layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
             Bx(ix, iy) = std::cos(2 * M_PI / 5. * point[0]) * std::sin(2 * M_PI / 6. * point[1]);
         }
     }
@@ -180,8 +180,8 @@ TEST_F(Ampere2DTest, ampere2DCalculatedOk)
     {
         for (std::uint32_t iy = gsi_p_Y; iy <= gei_p_Y; ++iy)
         {
-            auto point = coordinate(this->layout, 
-                By, layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
+            auto point = coordinate(this->layout, By,
+                                    layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
             By(ix, iy) = std::cos(2 * M_PI / 5. * point[0]) * std::tanh(2 * M_PI / 6. * point[1]);
         }
     }
@@ -190,8 +190,8 @@ TEST_F(Ampere2DTest, ampere2DCalculatedOk)
     {
         for (std::uint32_t iy = gsi_d_Y; iy <= gei_d_Y; ++iy)
         {
-            auto point = coordinate(this->layout, 
-                Bz, layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
+            auto point = coordinate(this->layout, Bz,
+                                    layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
             Bz(ix, iy) = std::sin(2 * M_PI / 5. * point[0]) * std::tanh(2 * M_PI / 6. * point[1]);
         }
     }
@@ -274,8 +274,8 @@ TEST_F(Ampere3DTest, ampere3DCalculatedOk)
         {
             for (std::uint32_t iz = gsi_d_Z; iz <= gei_d_Z; ++iz)
             {
-                damn::core::Point<double, 3> point = coordinate(this->layout, 
-                    Bx, layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+                damn::core::Point<double, 3> point = coordinate(
+                    this->layout, Bx, layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
                 Bx(ix, iy, iz) = std::sin(2 * M_PI / 5. * point[0])
                                  * std::cos(2 * M_PI / 6. * point[1])
                                  * std::tanh(2 * M_PI / 12. * point[2]);
@@ -289,8 +289,8 @@ TEST_F(Ampere3DTest, ampere3DCalculatedOk)
         {
             for (std::uint32_t iz = gsi_d_Z; iz <= gei_d_Z; ++iz)
             {
-                damn::core::Point<double, 3> point = coordinate(this->layout, 
-                    By, layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+                damn::core::Point<double, 3> point = coordinate(
+                    this->layout, By, layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
                 By(ix, iy, iz) = std::tanh(2 * M_PI / 5. * point[0])
                                  * std::sin(2 * M_PI / 6. * point[1])
                                  * std::cos(2 * M_PI / 12. * point[2]);
@@ -304,8 +304,8 @@ TEST_F(Ampere3DTest, ampere3DCalculatedOk)
         {
             for (std::uint32_t iz = gsi_p_Z; iz <= gei_p_Z; ++iz)
             {
-                damn::core::Point<double, 3> point = coordinate(this->layout, 
-                    Bz, layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+                damn::core::Point<double, 3> point = coordinate(
+                    this->layout, Bz, layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
                 Bz(ix, iy, iz) = std::cos(2 * M_PI / 5. * point[0])
                                  * std::tanh(2 * M_PI / 6. * point[1])
                                  * std::sin(2 * M_PI / 12. * point[2]);

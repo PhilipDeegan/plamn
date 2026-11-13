@@ -38,7 +38,7 @@ template<typename Field, std::uint32_t gw>
 NO_DISCARD auto domain_box(FieldResource<Field, gw> const& r,
                            damn::core::Box<int, Field::dimension> const& cells)
 {
-    return core::amr_box(cells, core::centering<Field::dimension>(*r.field));
+    return core::qty_box(cells, core::centering<Field::dimension>(*r.field));
 }
 
 template<typename Field, std::uint32_t gw>
@@ -46,7 +46,7 @@ NO_DISCARD auto ghost_box(FieldResource<Field, gw> const& r,
                           damn::core::Box<int, Field::dimension> const& cells)
 {
     return damn::core::Box<int, Field::dimension>{
-        core::amr_ghost_box(cells, core::centering<Field::dimension>(*r.field), gw)};
+        core::qty_ghost_box(cells, core::centering<Field::dimension>(*r.field), gw)};
 }
 
 template<typename Field, std::uint32_t gw>

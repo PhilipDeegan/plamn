@@ -79,7 +79,7 @@ struct OhmTest : public ::testing::Test
     static constexpr auto interp = typename TypeInfo::second_type{}();
 
     using HybridTypes = plamn::core::PLAMN_Types<plamn::SimOpts{dim, interp}>::Hybrid;
-    using GridYee     = HybridTypes::Layout_t;
+    using GridYee                    = HybridTypes::Layout_t;
     auto static constexpr field_opts = plamn::core::TensorFieldOptions<HybridTypes>{};
     using UsableVecFieldND           = UsableVecField<field_opts>;
     using Grid_t                     = Grid<damn::core::NdArrayVector<dim>, HybridQuantity::Scalar>;
@@ -116,8 +116,8 @@ struct OhmTest : public ::testing::Test
 
             for (auto ix = gsi_p_X; ix <= gei_p_X; ++ix)
             {
-                auto point = coordinate(this->layout, 
-                    n, this->layout.localToAMR(damn::core::Point{ix}.as_signed()));
+                auto point = coordinate(this->layout, n,
+                                        this->layout.localToAMR(damn::core::Point{ix}.as_signed()));
 
                 n(ix)  = std::cosh(0.5 * point[0]);
                 Vx(ix) = std::sinh(0.2 * point[0]);
@@ -131,8 +131,8 @@ struct OhmTest : public ::testing::Test
 
             for (auto ix = gsi_d_X; ix <= gei_d_X; ++ix)
             {
-                auto point = coordinate(this->layout, 
-                    Bz, this->layout.localToAMR(damn::core::Point{ix}.as_signed()));
+                auto point = coordinate(this->layout, Bz,
+                                        this->layout.localToAMR(damn::core::Point{ix}.as_signed()));
 
                 By(ix) = std::cosh(0.3 * point[0]);
                 Bz(ix) = std::cosh(0.4 * point[0]);
@@ -155,8 +155,9 @@ struct OhmTest : public ::testing::Test
             {
                 for (auto iy = gsi_p_Y; iy <= gei_p_Y; ++iy)
                 {
-                    auto point = coordinate(this->layout, 
-                        n, this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
+                    auto point = coordinate(
+                        this->layout, n,
+                        this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
 
                     n(ix, iy)  = std::cosh(0.5 * point[0]) * std::cosh(0.5 * point[1]);
                     Vx(ix, iy) = std::sinh(0.2 * point[0]) * std::sinh(0.2 * point[1]);
@@ -167,8 +168,9 @@ struct OhmTest : public ::testing::Test
                 }
                 for (auto iy = gsi_d_Y; iy <= gei_d_Y; ++iy)
                 {
-                    auto point = coordinate(this->layout, 
-                        Bx, this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
+                    auto point = coordinate(
+                        this->layout, Bx,
+                        this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
 
                     Bx(ix, iy) = std::cosh(0.2 * point[0]) * std::cosh(0.2 * point[1]);
                     Jy(ix, iy) = std::tanh(0.3 * point[0]) * std::tanh(0.3 * point[1]);
@@ -178,16 +180,18 @@ struct OhmTest : public ::testing::Test
             {
                 for (auto iy = gsi_p_Y; iy <= gei_p_Y; ++iy)
                 {
-                    auto point = coordinate(this->layout, 
-                        Jx, this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
+                    auto point = coordinate(
+                        this->layout, Jx,
+                        this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
 
                     By(ix, iy) = std::cosh(0.3 * point[0]) * std::cosh(0.3 * point[1]);
                     Jx(ix, iy) = std::tanh(0.2 * point[0]) * std::tanh(0.2 * point[1]);
                 }
                 for (auto iy = gsi_d_Y; iy <= gei_d_Y; ++iy)
                 {
-                    auto point = coordinate(this->layout, 
-                        Bz, this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
+                    auto point = coordinate(
+                        this->layout, Bz,
+                        this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
 
                     Bz(ix, iy) = std::cosh(0.4 * point[0]) * std::cosh(0.4 * point[1]);
                 }
@@ -215,8 +219,9 @@ struct OhmTest : public ::testing::Test
                 {
                     for (auto iz = gsi_p_Z; iz <= gei_p_Z; ++iz)
                     {
-                        auto point = coordinate(this->layout, 
-                            n, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+                        auto point = coordinate(
+                            this->layout, n,
+                            this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
 
                         n(ix, iy, iz) = std::cosh(0.5 * point[0]) * std::cosh(0.5 * point[1])
                                         * std::cosh(0.5 * point[2]);
@@ -231,8 +236,9 @@ struct OhmTest : public ::testing::Test
                     }
                     for (auto iz = gsi_d_Z; iz <= gei_d_Z; ++iz)
                     {
-                        auto point = coordinate(this->layout, 
-                            Jz, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+                        auto point = coordinate(
+                            this->layout, Jz,
+                            this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
 
                         Jz(ix, iy, iz) = std::tanh(0.4 * point[0]) * std::tanh(0.4 * point[1])
                                          * std::tanh(0.4 * point[2]);
@@ -242,16 +248,18 @@ struct OhmTest : public ::testing::Test
                 {
                     for (auto iz = gsi_p_Z; iz <= gei_p_Z; ++iz)
                     {
-                        auto point = coordinate(this->layout, 
-                            Jy, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+                        auto point = coordinate(
+                            this->layout, Jy,
+                            this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
 
                         Jy(ix, iy, iz) = std::tanh(0.3 * point[0]) * std::tanh(0.3 * point[1])
                                          * std::tanh(0.3 * point[2]);
                     }
                     for (auto iz = gsi_d_Z; iz <= gei_d_Z; ++iz)
                     {
-                        auto point = coordinate(this->layout, 
-                            Bx, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+                        auto point = coordinate(
+                            this->layout, Bx,
+                            this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
 
                         Bx(ix, iy, iz) = std::cosh(0.2 * point[0]) * std::cosh(0.2 * point[1])
                                          * std::cosh(0.2 * point[2]);
@@ -264,16 +272,18 @@ struct OhmTest : public ::testing::Test
                 {
                     for (auto iz = gsi_p_Z; iz <= gei_p_Z; ++iz)
                     {
-                        auto point = coordinate(this->layout, 
-                            Jx, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+                        auto point = coordinate(
+                            this->layout, Jx,
+                            this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
 
                         Jx(ix, iy, iz) = std::tanh(0.2 * point[0]) * std::tanh(0.2 * point[1])
                                          * std::tanh(0.2 * point[2]);
                     }
                     for (auto iz = gsi_d_Z; iz <= gei_d_Z; ++iz)
                     {
-                        auto point = coordinate(this->layout, 
-                            By, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+                        auto point = coordinate(
+                            this->layout, By,
+                            this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
 
                         By(ix, iy, iz) = std::cosh(0.3 * point[0]) * std::cosh(0.3 * point[1])
                                          * std::cosh(0.3 * point[2]);
@@ -283,8 +293,9 @@ struct OhmTest : public ::testing::Test
                 {
                     for (auto iz = gsi_p_Z; iz <= gei_p_Z; ++iz)
                     {
-                        auto point = coordinate(this->layout, 
-                            Bz, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+                        auto point = coordinate(
+                            this->layout, Bz,
+                            this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
 
                         Bz(ix, iy, iz) = std::cosh(0.4 * point[0]) * std::cosh(0.4 * point[1])
                                          * std::cosh(0.4 * point[2]);

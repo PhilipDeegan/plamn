@@ -20,7 +20,7 @@
 #include "plamn/plamn_core.hpp"
 #include "plamn/amr/resources.hpp"
 #include "plamn/core/data/ions/ion_population/particle_pack.hpp"
-#include "plamn/core/numerics/ion_updater/ion_updater.hpp"
+#include "plamn/core/numerics/particles_synchronised_mover/particles_synchronised_mover.hpp"
 #include "plamn/initializer/data_provider.hpp"
 
 #include "damn/amr/hierarchy.hpp"
@@ -47,13 +47,13 @@ struct HybridPatch
     auto static constexpr field_ghost_width    = Layout_t::ghost_width;
     auto static constexpr particle_ghost_width = Layout_t::options.particle_ghost_width;
 
-    using Electromag_t = Types::Electromag_t;
-    using VecField_t   = Types::VecField_t;
-    using Ions_t       = Types::Ions_t;
-    using Electrons_t  = Types::Electrons_t;
-    using IonUpdater_t = core::IonUpdater<Particles_t, Layout_t>;
-    using Boxing_t     = IonUpdater_t::Boxing_t;
-    using Box_t        = damn::core::Box<int, dimension>;
+    using Electromag_t                 = Types::Electromag_t;
+    using VecField_t                   = Types::VecField_t;
+    using Ions_t                       = Types::Ions_t;
+    using Electrons_t                  = Types::Electrons_t;
+    using ParticlesSynchronisedMover_t = core::ParticlesSynchronisedMover<Particles_t, Layout_t>;
+    using Boxing_t                     = ParticlesSynchronisedMover_t::Boxing_t;
+    using Box_t                        = damn::core::Box<int, dimension>;
 
     template<std::size_t N>
     using Grids = std::array<Grid_t, N>;

@@ -1,5 +1,5 @@
 #include "plamn/core/def.hpp"
-//  tests/core/numerics/ion_updater/test_multi_updater.cpp
+//  tests/core/numerics/particles_synchronised_mover/test_multi_updater.cpp
 //
 //  requires
 //  - cmake:    -DwithPhlop
@@ -14,7 +14,7 @@
 #include "damn/core/sys/monitoring.hpp"
 #include "damn/core/exec/thread_pool.hpp" // defaults to 1 thread, setup during static init!
 #include "plamn/core/data/particles/particles.hpp"
-#include "plamn/core/numerics/ion_updater/ion_updater.hpp" // IWYU pragma: keep
+#include "plamn/core/numerics/particles_synchronised_mover/particles_synchronised_mover.hpp" // IWYU pragma: keep
 #include "plamn/core/data/particles/appending/particles_appending.hpp"
 
 #include "plamn/simulator/simulator_def.hpp"
@@ -36,7 +36,8 @@
 namespace plamn::core
 {
 // RUNTIME ENV VAR OVERRIDES
-auto static const bytes     = damn::core::get_env_as("PLAMN_GPU_BYTES", std::uint64_t{500000000}); // .5GB
+auto static const bytes
+    = damn::core::get_env_as("PLAMN_GPU_BYTES", std::uint64_t{500000000}); // .5GB
 auto static const cells     = damn::core::get_env_as("PLAMN_CELLS", std::uint32_t{20});
 auto static const ppc       = damn::core::get_env_as("PLAMN_PPC", std::size_t{33});
 auto static const seed      = damn::core::get_env_as("PLAMN_SEED", std::size_t{1067});
@@ -74,21 +75,22 @@ bool static const premain = []() {
 auto& pool = *damn::core::ThreadPool::INSTANCE().thread_pools[0];
 
 
-// serial       = IonUpdater, one patch at a time (always used for the ref patches)
-// parallel     = ParallelIonUpdater, all patches via BS thread pool
-// mkn_parallel = mkn_xyz::ParallelIonUpdater, all patches via mkn.gpu ThreadedStreamLauncher
+// serial       = ParticlesSynchronisedMover, one patch at a time (always used for the ref patches)
+// parallel     = ParallelParticlesSynchronisedMover, all patches via BS thread pool
+// mkn_parallel = mkn_xyz::ParallelParticlesSynchronisedMover, all patches via mkn.gpu
+// ThreadedStreamLauncher
 enum class UpdaterVersion : std::uint16_t { serial = 0, parallel, mkn_parallel };
 
 template<UpdaterVersion version, typename Particles_t, typename Layout_t>
 auto constexpr updater_impl()
 {
     if constexpr (version == UpdaterVersion::serial)
-        return static_cast<IonUpdater<Particles_t, Layout_t>*>(0);
+        return static_cast<ParticlesSynchronisedMover<Particles_t, Layout_t>*>(0);
     else if constexpr (version == UpdaterVersion::parallel) // Parallel or FlatParallel (AoS)
-        return static_cast<IonUpdaterFor_t<Particles_t, Layout_t>*>(0);
+        return static_cast<ParticlesSynchronisedMoverFor_t<Particles_t, Layout_t>*>(0);
 #if DAMN_HAVE_MKN_GPU
     else if constexpr (version == UpdaterVersion::mkn_parallel)
-        return static_cast<mkn_xyz::ParallelIonUpdater<Particles_t, Layout_t>*>(0);
+        return static_cast<mkn_xyz::ParallelParticlesSynchronisedMover<Particles_t, Layout_t>*>(0);
 #endif
 }
 
@@ -104,10 +106,10 @@ namespace detail::strings
 } // namespace detail::strings
 
 
-template<typename IonUpdater_t, typename Patches>
-void update_serial(UpdaterMode mode, Patches& patches)
+template<typename ParticlesSynchronisedMover_t>
+void update_serial(UpdaterMode mode, auto& patches)
 {
-    using Boxing_t = IonUpdater_t::Boxing_t;
+    using Boxing_t = ParticlesSynchronisedMover_t::Boxing_t;
 
     for (std::size_t i = 0; i < n_push; ++i)
         for (auto& patch : patches)
@@ -115,16 +117,16 @@ void update_serial(UpdaterMode mode, Patches& patches)
             auto& [layout, ions, em, electromag] = patch.model.state;
 
             Boxing_t const boxing{layout, {layout.cells}};
-            IonUpdater_t{}.updatePopulations(ions, electromag, boxing, dt, mode);
+            ParticlesSynchronisedMover_t{}.updatePopulations(ions, electromag, boxing, dt, mode);
             ions.computeChargeDensity();
             ions.computeBulkVelocity();
         }
 }
 
-template<typename IonUpdater_t, typename Patches>
-void update_parallel(UpdaterMode mode, Patches& patches)
+template<typename ParticlesSynchronisedMover_t>
+void update_parallel(UpdaterMode mode, auto& patches)
 {
-    using Boxing_t = IonUpdater_t::Boxing_t;
+    using Boxing_t = ParticlesSynchronisedMover_t::Boxing_t;
 
     auto const& layout = patches[0].layout;
     std::unordered_map<std::string, Boxing_t> boxings;
@@ -151,7 +153,7 @@ void update_parallel(UpdaterMode mode, Patches& patches)
     {
         for (std::size_t i = 0; i < n_push; ++i)
         {
-            IonUpdater_t{}.updatePopulations(accessor, boxings, dt, mode);
+            ParticlesSynchronisedMover_t{}.updatePopulations(accessor, boxings, dt, mode);
 
             for (auto& patch : patches)
             {
@@ -171,18 +173,19 @@ void update_parallel(UpdaterMode mode, Patches& patches)
 template<UpdaterVersion version, typename Patches>
 void update(UpdaterMode mode, Patches& patches)
 {
-    using Layout_t = Patches::value_type::Layout_t;
-    using Particles    = Patches::value_type::Model_t::particles_type;
-    using IonUpdater_t = Updater_t<version, Particles, Layout_t>;
+    using Layout_t                     = Patches::value_type::Layout_t;
+    using Particles                    = Patches::value_type::Model_t::particles_type;
+    using ParticlesSynchronisedMover_t = Updater_t<version, Particles, Layout_t>;
     auto constexpr function_id
-        = damn::core::join_string_views_v<detail::strings::update, Particles::type_id, detail::strings::cma>;
+        = damn::core::join_string_views_v<detail::strings::update, Particles::type_id,
+                                          detail::strings::cma>;
     DAMN_LOG_LINE_STR(function_id);
     DAMN_LOG_SCOPE(1, function_id);
 
     if constexpr (version == UpdaterVersion::serial)
-        update_serial<IonUpdater_t>(mode, patches);
+        update_serial<ParticlesSynchronisedMover_t>(mode, patches);
     else
-        update_parallel<IonUpdater_t>(mode, patches);
+        update_parallel<ParticlesSynchronisedMover_t>(mode, patches);
 }
 
 
@@ -254,8 +257,8 @@ void check_particles(Layout_t const& layout, P0& ref, P1& cmp_, double const ato
 {
     static_assert(std::is_same_v<decltype(type), ParticleType>);
 
-    using CPU_ref = Particles<ParticlesOptions{P0::dimension, LayoutMode::AoS,
-                                                       StorageMode::VECTOR, damn::AllocatorMode::CPU}>;
+    using CPU_ref = Particles<ParticlesOptions{P0::dimension, LayoutMode::AoS, StorageMode::VECTOR,
+                                               damn::AllocatorMode::CPU}>;
 
     auto const box = layout.cells;
     // level/patch ghost particles live outside the domain box entirely - the sorter's
@@ -327,26 +330,25 @@ void check_particles(Layout_t const& layout, P0& ref, P1& cmp_, double const ato
             for (std::size_t d = 0; d < 3; ++d)
                 max_dv = std::max(max_dv, std::abs(ref[i].v()[d] - cmp[i].v()[d]));
             for (std::size_t d = 0; d < Layout_t::dimension; ++d)
-                max_ddelta
-                    = std::max(max_ddelta, std::abs(ref[i].delta()[d] - cmp[i].delta()[d]));
+                max_ddelta = std::max(max_ddelta, std::abs(ref[i].delta()[d] - cmp[i].delta()[d]));
             if (not particle_compare(ref[i], cmp[i], i, p_atol))
                 ++n_bad;
         }
         DAMN_LOG_LINE_SS("atol " << p_atol << ", max |dv| " << max_dv << ", max |ddelta| "
-                                  << max_ddelta << ", " << n_bad << " of " << ref.size()
-                                  << " particles differ");
+                                 << max_ddelta << ", " << n_bad << " of " << ref.size()
+                                 << " particles differ");
     }
 
     EXPECT_TRUE(report);
 }
 
-template<typename Layout_t, typename R, typename C>
-void compare(Layout_t const& layout, R& ref, C& cmp)
+template<typename C>
+void compare(auto const& layout, auto& ref, C& cmp)
 {
     using Particles_t = C::Particles_t;
     auto constexpr function_id
         = damn::core::join_string_views_v<detail::strings::compare, Particles_t::type_id,
-                              detail::strings::cma>;
+                                          detail::strings::cma>;
     DAMN_LOG_SCOPE(1, function_id);
 
     using enum LayoutMode;
@@ -418,7 +420,7 @@ struct TestParam
 
 
 template<typename Param>
-struct MultiPatchIonUpdaterTest : public ::testing::Test
+struct MultiPatchParticlesSynchronisedMoverTest : public ::testing::Test
 {
     auto constexpr static dim          = Param::dim;
     auto constexpr static layout_mode  = Param::layout_mode;
@@ -453,7 +455,7 @@ struct MultiPatchIonUpdaterTest : public ::testing::Test
     RefLayout_t const ref_layout = *TestRefLayout_t{cells};
     CmpLayout_t const cmp_layout = *TestCmpLayout_t{cells};
 
-    MultiPatchIonUpdaterTest() {}
+    MultiPatchParticlesSynchronisedMoverTest() {}
 
     void run()
     {
@@ -574,9 +576,9 @@ DAMN_WITH_THRUST( // SoAVX* GPU needs thrust (rocThrust on ROCm)
 >;
 // clang-format on
 
-TYPED_TEST_SUITE(MultiPatchIonUpdaterTest, Permutations_t, );
+TYPED_TEST_SUITE(MultiPatchParticlesSynchronisedMoverTest, Permutations_t, );
 
-TYPED_TEST(MultiPatchIonUpdaterTest, test_updater)
+TYPED_TEST(MultiPatchParticlesSynchronisedMoverTest, test_updater)
 {
     this->run();
 }

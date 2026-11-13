@@ -63,8 +63,7 @@ namespace core
 
                 if (basisName == "cartesian")
                 {
-                    return std::make_unique<
-                        MaxwellianParticleInitializer<Particles, Layout>>(
+                    return std::make_unique<MaxwellianParticleInitializer<Particles, Layout>>(
                         density, v, vth, nbrPartPerCell, seed, Basis::Cartesian, magneticField,
                         densityCutOff, populationName);
                 }
@@ -74,8 +73,7 @@ namespace core
                     magneticField[1] = dict["magnetic_x"].template to<FunctionType>();
                     magneticField[2] = dict["magnetic_x"].template to<FunctionType>();
 
-                    return std::make_unique<
-                        MaxwellianParticleInitializer<Particles, Layout>>(
+                    return std::make_unique<MaxwellianParticleInitializer<Particles, Layout>>(
                         density, v, vth, nbrPartPerCell, seed, Basis::Magnetic, magneticField,
                         densityCutOff, populationName);
                 }

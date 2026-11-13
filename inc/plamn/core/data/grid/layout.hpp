@@ -129,18 +129,19 @@ NO_DISCARD constexpr auto local_ghost_box(damn::core::Box<int, dim> const& cells
 
 
 template<std::size_t dim>
-NO_DISCARD constexpr auto amr_box(damn::core::Box<int, dim> const& cells,
+NO_DISCARD constexpr auto qty_box(damn::core::Box<int, dim> const& cells,
                                   std::array<QtyCentering, dim> const& centering)
 {
     return toCenteredBox(cells, centering);
 }
 
 template<std::size_t dim>
-NO_DISCARD constexpr auto amr_ghost_box(damn::core::Box<int, dim> const& cells,
+NO_DISCARD constexpr auto qty_ghost_box(damn::core::Box<int, dim> const& cells,
                                         std::array<QtyCentering, dim> const& centering,
                                         std::uint32_t const gw)
 {
-    return damn::core::grow(amr_box(cells, centering), damn::core::ConstArray<std::uint32_t, dim>(gw));
+    return damn::core::grow(qty_box(cells, centering),
+                            damn::core::ConstArray<std::uint32_t, dim>(gw));
 }
 
 

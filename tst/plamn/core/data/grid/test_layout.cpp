@@ -114,20 +114,19 @@ TEST_F(Layout2D, localBoxes)
 
 TEST_F(Layout2D, amrBoxes)
 {
-    EXPECT_EQ(amr_box(cells, c), (box<int, 2>({5, -3}, {15, 4})));
-    EXPECT_EQ(amr_ghost_box(cells, c, gw), (box<int, 2>({3, -5}, {17, 6})));
+    EXPECT_EQ(qty_box(cells, c), (box<int, 2>({5, -3}, {15, 4})));
+    EXPECT_EQ(qty_ghost_box(cells, c, gw), (box<int, 2>({3, -5}, {17, 6})));
 }
 
 TEST_F(Layout2D, amrLocalConversions)
 {
     EXPECT_EQ(amr_to_local(cells, point<int, 2>({5, -3}), gw), (point<std::uint32_t, 2>({2, 2})));
     EXPECT_EQ(amr_to_local(cells, point<int, 2>({3, -5}), gw), (point<std::uint32_t, 2>({0, 0})));
-    EXPECT_EQ(local_to_amr(cells, point<std::uint32_t, 2>({14, 11}), gw),
-              (point<int, 2>({17, 6})));
+    EXPECT_EQ(local_to_amr(cells, point<std::uint32_t, 2>({14, 11}), gw), (point<int, 2>({17, 6})));
 
     // the ghost box is the same box in both index spaces
-    EXPECT_EQ(amr_to_local(cells, amr_ghost_box(cells, c, gw), gw), local_ghost_box(cells, c, gw));
-    EXPECT_EQ(local_to_amr(cells, local_ghost_box(cells, c, gw), gw), amr_ghost_box(cells, c, gw));
+    EXPECT_EQ(amr_to_local(cells, qty_ghost_box(cells, c, gw), gw), local_ghost_box(cells, c, gw));
+    EXPECT_EQ(local_to_amr(cells, local_ghost_box(cells, c, gw), gw), qty_ghost_box(cells, c, gw));
 }
 
 TEST_F(Layout2D, coordinates)
@@ -213,18 +212,18 @@ TEST_F(PatchLayout2D, sizesAndBoxes)
     EXPECT_EQ(alloc_shape(L, S::rho), (std::array<std::uint32_t, 2>{15, 13}));
     EXPECT_EQ(domain_box(L, S::Bx), (box<std::uint32_t, 2>({2, 2}, {12, 9})));
     EXPECT_EQ(ghost_box(L, S::Bx), (box<std::uint32_t, 2>({0, 0}, {14, 11})));
-    EXPECT_EQ(amr_box(L, S::Bx), (box<int, 2>({5, -3}, {15, 4})));
-    EXPECT_EQ(amr_ghost_box(L, S::Bx), (box<int, 2>({3, -5}, {17, 6})));
+    EXPECT_EQ(qty_box(L, S::Bx), (box<int, 2>({5, -3}, {15, 4})));
+    EXPECT_EQ(qty_ghost_box(L, S::Bx), (box<int, 2>({3, -5}, {17, 6})));
 }
 
 TEST_F(PatchLayout2D, indexSpaces)
 {
     EXPECT_EQ(to_local(L, point<int, 2>({5, -3})), (point<std::uint32_t, 2>({2, 2})));
     EXPECT_EQ(to_amr(L, point<std::uint32_t, 2>({14, 11})), (point<int, 2>({17, 6})));
-    EXPECT_EQ(to_local(L, amr_ghost_box(L, S::Bx)), ghost_box(L, S::Bx));
+    EXPECT_EQ(to_local(L, qty_ghost_box(L, S::Bx)), ghost_box(L, S::Bx));
 
     std::size_t n_points = 0;
-    for_each_amr_local(L, amr_box(L, S::Bx), [&](auto const& amr, auto const& lcl) {
+    for_each_amr_local(L, qty_box(L, S::Bx), [&](auto const& amr, auto const& lcl) {
         EXPECT_EQ(to_local(L, amr), lcl);
         ++n_points;
     });

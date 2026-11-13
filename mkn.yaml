@@ -40,8 +40,8 @@ profile:
   dep: google.test
   mode: none
   test: tst/plamn/core/data/grid/test_layout.cpp
-        tst/plamn/core/numerics/ion_updater/test_updater.cpp
-        tst/plamn/core/numerics/ion_updater/test_multi_updater.cpp
+        tst/plamn/core/numerics/particles_synchronised_mover/test_updater.cpp
+        tst/plamn/core/numerics/particles_synchronised_mover/test_multi_updater.cpp
         tst/plamn/core/numerics/faraday/test_tileset_faraday.cpp
         tst/plamn/core/numerics/ampere/test_tileset_ampere.cpp
         tst/plamn/core/numerics/ohm/test_tileset_ohm.cpp
@@ -53,3 +53,13 @@ profile:
 # tpp/damn may be a symlink to a local damn checkout, otherwise it is cloned
 - name: damn
   dep: damn&tpp/damn(https://github.com/PhilipDeegan/damn)[damn_core]
+
+# include-what-you-use report for inc/, needs iwyu on PATH
+- name: iwyu
+  parent: base
+  mode: none
+  mod:
+  - name: cpp.iwyu
+    compile:
+      paths: inc
+      headers: -x c++-header

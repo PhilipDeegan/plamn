@@ -51,8 +51,7 @@ bool static const premain = []() {
 auto& pool = *damn::core::ThreadPool::INSTANCE().thread_pools[0];
 
 
-template<typename Patch>
-void ref_do(Patch& patch)
+void ref_do(auto& patch)
 {
     AmpereTransformer<>{}(patch.layout, patch.em.B, patch.J);
 }
@@ -76,8 +75,8 @@ void cmp_do(Patch& patch)
 
 
 
-template<auto alloc_mode, typename Layout_t, typename R, typename C>
-void compare(Layout_t const& layout, R& ref, C& cmp)
+template<auto alloc_mode>
+void compare(auto const& layout, auto& ref, auto& cmp)
 {
     using enum LayoutMode;
     using enum damn::AllocatorMode;
@@ -132,7 +131,7 @@ struct AmpereTileTest : public ::testing::Test
                                                     .alloc_mode   = alloc_mode};
 
         using DamnTypes                 = PLAMN_Types<opts>;
-        using Layout_t               = DamnTypes::Hybrid::Layout_t;
+        using Layout_t                   = DamnTypes::Hybrid::Layout_t;
         using Field_t                    = DamnTypes::Hybrid::Grid_t;
         using Hybrid_t                   = DamnTypes::Hybrid;
         auto constexpr static field_opts = TensorFieldOptions<Hybrid_t>{};
@@ -157,7 +156,7 @@ struct AmpereTileTest : public ::testing::Test
         auto constexpr static opts   = SimOpts{.dimension = dim, .interp_order = interp};
 
         using DamnTypes                 = PLAMN_Types<opts>;
-        using Layout_t               = DamnTypes::Hybrid::Layout_t;
+        using Layout_t                   = DamnTypes::Hybrid::Layout_t;
         using Hybrid_t                   = DamnTypes::Hybrid;
         auto constexpr static field_opts = TensorFieldOptions<Hybrid_t>{};
         using UsableElectromag_t         = UsableElectromag<field_opts>;
@@ -200,8 +199,7 @@ DAMN_WITH_GPU(
 
 TYPED_TEST_SUITE(AmpereTileTest, Permutations_t, );
 
-template<typename AmpereTileTest_t>
-auto run(AmpereTileTest_t& self)
+auto run(auto& self)
 {
     ref_do(self.ref_patch);
     cmp_do(self.cmp_patch);

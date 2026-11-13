@@ -28,7 +28,7 @@ class StandardHybridElectronFluxComputer
 public:
     using VecField   = Ions::vecfield_type;
     using Field      = Ions::field_type;
-    using Layout = Ions::layout_type;
+    using Layout     = Ions::layout_type;
     using Scalar     = std::decay_t<decltype(Layout::options)>::FieldOptions::Scalar;
 
     StandardHybridElectronFluxComputer(Ions& ions, VecField& J)
@@ -142,7 +142,7 @@ private:
 template<typename Ions>
 class IsothermalElectronPressureClosure
 {
-    using Layout = Ions::layout_type;
+    using Layout     = Ions::layout_type;
     using VecField   = Ions::vecfield_type;
     using Field      = Ions::field_type;
 
@@ -225,7 +225,7 @@ class ElectronMomentModel
 {
     using VecField     = Ions::vecfield_type;
     using Field        = Ions::field_type;
-    using Layout   = Ions::layout_type;
+    using Layout       = Ions::layout_type;
     using FluxComputer = StandardHybridElectronFluxComputer<Ions>;
 
 public:
@@ -298,7 +298,7 @@ class Electrons
 {
     using VecField   = Ions::vecfield_type;
     using Field      = Ions::field_type;
-    using Layout = Ions::layout_type;
+    using Layout     = Ions::layout_type;
 
 public:
     Electrons(plamn::initializer::Dict const& dict, Ions& ions, VecField& J)

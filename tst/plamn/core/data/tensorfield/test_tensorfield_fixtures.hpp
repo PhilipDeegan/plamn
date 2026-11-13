@@ -24,7 +24,7 @@ namespace plamn::core
 template<typename core_types>
 struct TensorFieldOptions
 {
-    using Layout_t         = core_types::Layout_t;
+    using Layout_t             = core_types::Layout_t;
     using Grid_t               = core_types::Grid_t;
     using Field_t              = core_types::Field_t;
     auto constexpr static opts = core_types::opts;
@@ -43,7 +43,7 @@ template<auto opts>
 struct UsableTensorFieldImpl
 {
     using Options      = decltype(opts);
-    using Layout_t = Options::Layout_t;
+    using Layout_t     = Options::Layout_t;
     using Grid_t       = Options::Grid_t;
     using Field_t      = Options::Field_t;
     using Super_t      = TensorField<Field_t, HybridQuantity, opts.rank>;
@@ -70,7 +70,7 @@ class UsableTensorField : public UsableTensorFieldImpl<opts>::Super_t
     using This                       = UsableTensorField;
 
 public:
-    using Layout_               = Options::Layout_t;
+    using Layout_                   = Options::Layout_t;
     auto static constexpr dimension = Layout_::dimension;
     using Super                     = Impl_t::Super_t;
     using Grid_t                    = Impl_t::Grid_t;
@@ -162,8 +162,7 @@ public:
     friend std::ostream& operator<<(std::ostream&, UsableTensorField<o> const&);
 
 protected:
-    template<typename ComponentNames, typename Layout>
-    auto static make_grids(ComponentNames const& compNames, Layout const& layout, tensor_t qty)
+    auto static make_grids(auto const& compNames, auto const& layout, tensor_t qty)
     {
         auto qts = HybridQuantity::componentsQuantities(qty);
         return damn::core::for_N<N_elements, damn::core::for_N_R_mode::make_array>(

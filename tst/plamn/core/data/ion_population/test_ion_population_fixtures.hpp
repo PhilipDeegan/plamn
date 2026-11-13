@@ -28,7 +28,7 @@ struct UsableIonsDefaultTypes
 public:
     using PLAMN_Types     = plamn::core::PLAMN_Types<opts>;
     using Hybrid          = PLAMN_Types::Hybrid;
-    using Layout_t    = Hybrid::Layout_t;
+    using Layout_t        = Hybrid::Layout_t;
     using Particles_t = Hybrid::Particles_t;
     using Quantity        = HybridQuantity;
 
@@ -62,7 +62,7 @@ template<typename _defaults>
 class UsableIonsPopulation : public _defaults::IonPopulation_t
 {
     using Quantity        = _defaults::Quantity;
-    using Layout_t    = _defaults::Layout_t;
+    using Layout_t        = _defaults::Layout_t;
     using VecField_t      = _defaults::VecField_t;
     using TensorField_t   = _defaults::TensorField_t;
     using Particles_t = _defaults::Particles_t;
@@ -128,17 +128,15 @@ public:
 
 
 template<typename _defaults>
-class UsableIons
-    : public Ions<typename _defaults::IonPopulation_t, typename _defaults::Layout_t>
+class UsableIons : public Ions<typename _defaults::IonPopulation_t, typename _defaults::Layout_t>
 {
     using Quantity     = _defaults::Quantity;
-    using Layout_t = _defaults::Layout_t;
+    using Layout_t     = _defaults::Layout_t;
     using Super        = Ions<typename _defaults::IonPopulation_t, Layout_t>;
 
 
 
-    template<typename PopNames>
-    auto static super(PopNames const& pop_names, std::size_t const ppc)
+    auto static super(auto const& pop_names, std::size_t const ppc)
     {
         plamn::initializer::Dict dict;
         dict["nbrPopulations"] = pop_names.size();

@@ -113,8 +113,7 @@ public:
     using per_tile_particles = Particles;
     using Tile_t             = MappedParticlesTile<Particles>;
 
-    template<typename MappedTileSetArray>
-    MappedTileSetSpan(MappedTileSetArray& arr)
+    MappedTileSetSpan(auto& arr)
         : Base{arr.box(), arr.ghost_cells()}
         , size_{arr.size()}
         , particles_{resolve(arr)}

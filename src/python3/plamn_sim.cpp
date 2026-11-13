@@ -46,8 +46,7 @@ NB_MODULE(PLAMN_SIM_MODULE, m)
         .def("cell_width", &Simulator::cellWidth)
         .def("dump_diagnostics", &Simulator::dump_diagnostics, nb::arg("timestamp"),
              nb::arg("timestep"))
-        .def("dump_restarts", &Simulator::dump_restarts, nb::arg("timestamp"),
-             nb::arg("timestep"))
+        .def("dump_restarts", &Simulator::dump_restarts, nb::arg("timestamp"), nb::arg("timestep"))
         // read back, for tests
         .def("domain_values", &Simulator::domain_values)
         .def("particle_count", &Simulator::particle_count)
@@ -57,7 +56,6 @@ NB_MODULE(PLAMN_SIM_MODULE, m)
         .def_prop_ro_static("refined_particle_nbr",
                             [](nb::handle) { return Simulator::nbRefinedPart; });
 
-    m.def("make_simulator", [](plamn::python3::Dict const& dict) {
-        return std::make_unique<Simulator>(dict.dict);
-    });
+    m.def("make_simulator",
+          [](plamn::python3::Dict const& dict) { return std::make_unique<Simulator>(dict.dict); });
 }

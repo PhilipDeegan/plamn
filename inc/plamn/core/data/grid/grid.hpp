@@ -49,8 +49,7 @@ public:
     {
     }
 
-    template<typename Layout_t>
-    Grid(std::string const& name, Layout_t const& layout, PhysicalQuantity qty,
+    Grid(std::string const& name, auto const& layout, PhysicalQuantity qty,
          std::optional<value_type> const value = std::nullopt)
         : Grid{name, qty, alloc_shape(layout, qty), value}
     {
@@ -74,8 +73,7 @@ public:
     NO_DISCARD std::string name() const { return name_; }
     NO_DISCARD constexpr PhysicalQuantity physicalQuantity() const { return qty_; }
 
-    template<typename That>
-    void copyData(That const& that)
+    void copyData(auto const& that)
     {
         if (damn::core::for_N_any<dimension>([&](auto i) { return this->shape()[i] != that.shape()[i]; }))
             throw std::runtime_error("Grid::copyData: Incompatible input shape");

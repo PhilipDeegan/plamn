@@ -1,5 +1,5 @@
 #include "plamn/core/def.hpp"
-// tests/core/numerics/ion_updater/test_updater_pp_main.cpp
+// tests/core/numerics/particles_synchronised_mover/test_updater_pp_main.cpp
 //
 //  requires
 //  - cmake:    -DwithPhlop
@@ -18,9 +18,9 @@
 #include "damn/core/meta/logic.hpp"
 #include "damn/core/sys/strings.hpp"
 #include "damn/core/sys/env.hpp"
-#include "plamn/core/numerics/ion_updater/ion_updater.hpp"
-#include "plamn/core/numerics/ion_updater/ion_updater_pc.hpp"
-#include "plamn/core/numerics/ion_updater/ion_updater_per_particle.hpp"
+#include "plamn/core/numerics/particles_synchronised_mover/particles_synchronised_mover.hpp"
+#include "plamn/core/numerics/particles_synchronised_mover/particles_synchronised_mover_pc.hpp"
+#include "plamn/core/numerics/particles_synchronised_mover/particles_synchronised_mover_per_particle.hpp"
 
 #include "plamn/core/data/particles/appending/particles_appending.hpp"
 #include "plamn/core/data/particles/serializing/particles_serializing.hpp"
@@ -46,19 +46,19 @@ void PrintTo(Particles<opts> const& arr, std::ostream* os)
 bool constexpr static WITH_PATCH_GHOST  = false;
 bool constexpr static USE_SERIALIZATION = 0;
 
-auto static const bytes   = damn::core::get_env_as("PLAMN_GPU_BYTES", std::uint64_t{500000000});
-auto static const cells   = damn::core::get_env_as("PLAMN_CELLS", std::uint32_t{4});
-auto static const ppc     = damn::core::get_env_as("PLAMN_PPC", std::size_t{4});
-auto static const seed    = damn::core::get_env_as("PLAMN_SEED", std::size_t{1012});
-auto static const dt      = damn::core::get_env_as("PLAMN_TIMESTEP", double{.001});
-auto static const shufle  = damn::core::get_env_as("PLAMN_UNSORTED", std::size_t{0});
-auto static const do_cmp  = damn::core::get_env_as("PLAMN_COMPARE", std::size_t{!USE_SERIALIZATION});
+auto static const bytes  = damn::core::get_env_as("PLAMN_GPU_BYTES", std::uint64_t{500000000});
+auto static const cells  = damn::core::get_env_as("PLAMN_CELLS", std::uint32_t{4});
+auto static const ppc    = damn::core::get_env_as("PLAMN_PPC", std::size_t{4});
+auto static const seed   = damn::core::get_env_as("PLAMN_SEED", std::size_t{1012});
+auto static const dt     = damn::core::get_env_as("PLAMN_TIMESTEP", double{.001});
+auto static const shufle = damn::core::get_env_as("PLAMN_UNSORTED", std::size_t{0});
+auto static const do_cmp = damn::core::get_env_as("PLAMN_COMPARE", std::size_t{!USE_SERIALIZATION});
 auto static const gen_bin = damn::core::get_env_as("PLAMN_GENERATE_PARTICLES_BIN", std::size_t{0});
 
 std::string static const aos_particles_bin = "aos_particles.bin";
 
 bool static const premain = []() {
-    DAMN_WITH_MKN_GPU(                          //
+    DAMN_WITH_MKN_GPU(                           //
         mkn::gpu::setLimitMallocHeapSize(bytes); //
     )
     DAMN_WITH_PHLOP( //
@@ -77,12 +77,12 @@ bool static const premain = []() {
     return true;
 }();
 
-template<typename IonUpdater_t, typename Ions, typename EM, typename Layout_t>
-auto construct_(Ions& ions, EM const& em, Layout_t const& layout)
+template<typename ParticlesSynchronisedMover_t>
+auto construct_(auto& ions, auto const& em, auto const& layout)
 {
     plamn::initializer::Dict dict;
     dict["simulation"]["algo"]["ion_updater"]["pusher"]["name"] = std::string{"modified_boris"};
-    return IonUpdater_t{dict["simulation"]["algo"]["ion_updater"]};
+    return ParticlesSynchronisedMover_t{dict["simulation"]["algo"]["ion_updater"]};
 }
 
 template<typename Ions, typename EM, typename Layout_t>
@@ -90,11 +90,11 @@ auto get_updater_for(Ions& ions, EM const& em, Layout_t const& layout)
 {
     using Particles = typename Ions::particles_type;
     if constexpr (damn::core::any_in(Particles::layout_mode, LayoutMode::AoSMapped))
-        return construct_<IonUpdater<Ions, EM, Layout_t>>(ions, em, layout);
+        return construct_<ParticlesSynchronisedMover<Ions, EM, Layout_t>>(ions, em, layout);
     else if constexpr (Particles::layout_mode == LayoutMode::AoSPC)
-        return construct_<IonUpdaterPC<Ions, EM, Layout_t>>(ions, em, layout);
+        return construct_<ParticlesSynchronisedMoverPC<Ions, EM, Layout_t>>(ions, em, layout);
     else
-        return construct_<IonUpdaterPP<Ions, EM, Layout_t>>(ions, em, layout);
+        return construct_<ParticlesSynchronisedMoverPP<Ions, EM, Layout_t>>(ions, em, layout);
 }
 
 
@@ -105,25 +105,27 @@ namespace detail::strings
 } // namespace detail::strings
 
 
-template<typename Ions, typename EM, typename Layout_t>
-void udpate(Ions& ions, EM const& em, Layout_t const& layout)
+template<typename Layout_t>
+void udpate(auto& ions, auto const& em, Layout_t const& layout)
 {
     // no timings
-    auto updater       = get_updater_for(ions, em, layout);
-    using IonUpdater_t = std::decay_t<decltype(updater)>;
-    using Boxing_t = std::decay_t<decltype(*selection_boxing_impl<IonUpdater_t, Layout_t>())>;
+    auto updater                       = get_updater_for(ions, em, layout);
+    using ParticlesSynchronisedMover_t = std::decay_t<decltype(updater)>;
+    using Boxing_t
+        = std::decay_t<decltype(*selection_boxing_impl<ParticlesSynchronisedMover_t, Layout_t>())>;
 
     Boxing_t const boxing{layout,
                           damn::core::grow(layout.cells, Layout_t::options.particle_ghost_width)};
     updater.updatePopulations(ions, em, boxing, dt);
 }
 
-template<typename Ions, typename EM, typename Layout_t>
-void update(Ions& ions, EM const& em, Layout_t const& layout)
+template<typename Ions>
+void update(Ions& ions, auto const& em, auto const& layout)
 {
     using Particles = typename Ions::particles_type;
     auto constexpr function_id
-        = damn::core::join_string_views_v<detail::strings::update, Particles::type_id, detail::strings::cma>;
+        = damn::core::join_string_views_v<detail::strings::update, Particles::type_id,
+                                          detail::strings::cma>;
     DAMN_LOG_LINE_STR(function_id);
     DAMN_LOG_SCOPE(1, function_id);
 
@@ -237,11 +239,11 @@ auto& evolve(Ions& ions, Layout_t const& layout)
 }
 
 
-template<typename Layout_t, typename P0, typename P1>
-void check_particles(Layout_t const& layout, P0& ref, P1& cmp, std::size_t ghosts = 0)
+template<typename P0, typename P1>
+void check_particles(auto const& layout, P0& ref, P1& cmp, std::size_t ghosts = 0)
 {
-    using CPU_ref = Particles<ParticlesOptions{P0::dimension, LayoutMode::AoS,
-                                                       StorageMode::VECTOR, damn::AllocatorMode::CPU}>;
+    using CPU_ref = Particles<ParticlesOptions{P0::dimension, LayoutMode::AoS, StorageMode::VECTOR,
+                                               damn::AllocatorMode::CPU}>;
 
     auto const box = damn::core::grow(layout.cells, ghosts);
 
@@ -261,8 +263,8 @@ void check_particles(Layout_t const& layout, P0& ref, P1& cmp, std::size_t ghost
     EXPECT_TRUE(report);
 }
 
-template<typename Layout_t, typename R, typename C>
-void compare(Layout_t const& layout, R& ref, C& cmp)
+template<typename C>
+void compare(auto const& layout, auto& ref, C& cmp)
 {
     if (!do_cmp)
         return;
@@ -317,8 +319,7 @@ struct TestParam
 template<typename Ions, std::size_t dim, std::size_t interp>
 struct DefaultIons
 {
-    using Layout_t
-        = TestLayout<typename PLAMN_Types<SimOpts{dim, interp}>::Hybrid::Layout_t>;
+    using Layout_t = TestLayout<typename PLAMN_Types<SimOpts{dim, interp}>::Hybrid::Layout_t>;
 
     Layout_t const layout{cells};
     std::shared_ptr<Ions> init; // = make_ions<typename Ions::particles_type>(layout);
@@ -352,7 +353,7 @@ static inline auto refs = std::tuple<int, int, DefaultIons_t<3, 1>>{}; // only 3
 
 
 template<typename Param>
-struct IonUpdaterPPTest : public ::testing::Test
+struct ParticlesSynchronisedMoverPPTest : public ::testing::Test
 {
     auto constexpr static dim         = Param::dim;
     auto constexpr static interp      = 1;
@@ -360,8 +361,7 @@ struct IonUpdaterPPTest : public ::testing::Test
     auto constexpr static alloc_mode  = Param::alloc_mode;
 
 
-    using Layout_t
-        = TestLayout<typename PLAMN_Types<SimOpts{dim, interp}>::Hybrid::Layout_t>;
+    using Layout_t       = TestLayout<typename PLAMN_Types<SimOpts{dim, interp}>::Hybrid::Layout_t>;
     using RefParticles_t = ParticlesAoSMapped<dim>;
     using CmpParticles_t
         = Particles<ParticlesOptions{dim, layout_mode, StorageMode::VECTOR, alloc_mode}>;
@@ -374,7 +374,7 @@ struct IonUpdaterPPTest : public ::testing::Test
     Layout_t const layout{cells};
 
 
-    IonUpdaterPPTest() {}
+    ParticlesSynchronisedMoverPPTest() {}
 
     auto make_ions() const { return from_ions<CmpParticles_t>(layout, *ref.init); }
 };
@@ -446,10 +446,10 @@ DAMN_WITH_MKN_GPU(
 >;
 // clang-format on
 
-TYPED_TEST_SUITE(IonUpdaterPPTest, Permutations_t);
+TYPED_TEST_SUITE(ParticlesSynchronisedMoverPPTest, Permutations_t);
 
 
-TYPED_TEST(IonUpdaterPPTest, updater)
+TYPED_TEST(ParticlesSynchronisedMoverPPTest, updater)
 {
     if constexpr (plamn::core::USE_SERIALIZATION)
         if (gen_bin)

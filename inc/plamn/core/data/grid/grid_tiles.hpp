@@ -73,8 +73,9 @@ private:
 };
 
 template<typename Layout_t, typename Grid_t, typename Field_t>
-class GridTileSet : public damn::core::TileSet<GridTile<Layout_t, Grid_t, Field_t>, Grid_t::alloc_mode>,
-                    public FieldTileSet<Layout_t, Grid_t, Field_t>
+class GridTileSet
+    : public damn::core::TileSet<GridTile<Layout_t, Grid_t, Field_t>, Grid_t::alloc_mode>,
+      public FieldTileSet<Layout_t, Grid_t, Field_t>
 
 {
 public:
@@ -92,8 +93,8 @@ public:
     auto constexpr static alloc_mode = Grid_t::alloc_mode;
     auto constexpr static dimension  = Grid_t::dimension;
 
-    GridTileSet(std::string const& name, Layout_t const& layout,
-                physical_quantity_type const qty, std::optional<type> val = std::nullopt)
+    GridTileSet(std::string const& name, Layout_t const& layout, physical_quantity_type const qty,
+                std::optional<type> val = std::nullopt)
         : Super{layout.cells, layout, qty}
         , View{name, qty}
         , name_{name}
@@ -240,16 +241,16 @@ inline auto sum_not_nan(FieldTileSet<Layout_t, Grid_t, Field_t> const& ts)
 
 
 template<typename Layout_t, typename Grid_t, typename Field_t>
-void check_field(basic::FieldTileSet<Layout_t, Grid_t, Field_t> const& f,
-                 Layout_t const& layout)
+void check_field(basic::FieldTileSet<Layout_t, Grid_t, Field_t> const& f, Layout_t const& layout)
 {
 #if DAMN_DEBUG
-    auto const domainBox = amr_box(layout, f);
+    auto const domainBox = qty_box(layout, f);
 
     for (auto& tile : f())
         if (auto const overlap = **tile * domainBox)
-            damn::core::for_each_point(to_local(tile.layout(), *overlap),
-                           [&](auto const& bix) { assert(not std::isnan(tile()(bix))); });
+            damn::core::for_each_point(to_local(tile.layout(), *overlap), [&](auto const& bix) {
+                assert(not std::isnan(tile()(bix)));
+            });
 #endif // DAMN_DEBUG
 }
 

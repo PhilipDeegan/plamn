@@ -42,8 +42,8 @@ class FaradayTransformer
 {
 public:
     // the box Bnew component Bnc is computed on, as eval_on_box below
-    template<typename Layout, typename Field>
-    static auto box_for(Layout const& layout, Field const& Bnc)
+    template<typename Layout>
+    static auto box_for(Layout const& layout, auto const& Bnc)
     {
         auto constexpr static dim = Layout::dimension;
         return local_domain_box(layout.cells, centering_of<dim>(Bnc),

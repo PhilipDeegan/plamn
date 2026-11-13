@@ -1,5 +1,5 @@
-#ifndef PLAMN_ION_UPDATER_DEF_HPP
-#define PLAMN_ION_UPDATER_DEF_HPP
+#ifndef PLAMN_CORE_NUMERICS_PARTICLES_SYNCHRONISED_MOVER_DEF_HPP
+#define PLAMN_CORE_NUMERICS_PARTICLES_SYNCHRONISED_MOVER_DEF_HPP
 
 #include "plamn/core/def.hpp"
 
@@ -44,7 +44,7 @@ template<typename Layout>
 struct UpdaterSelectionBoxing
 {
     auto constexpr static partGhostWidth = Layout::options.particle_ghost_width;
-    using Layout_t                   = Layout;
+    using Layout_t                       = Layout;
     using Box_t                          = damn::core::Box<int, Layout_t::dimension>;
 
     UpdaterSelectionBoxing(Layout_t const& layout_, std::vector<Box_t> const& nonLevelGhostBox_,
@@ -78,7 +78,7 @@ template<typename Selector_t, typename Layout>
 struct UpdaterCellMapSelectionBoxing : public UpdaterSelectionBoxing<Layout>
 {
     auto constexpr static partGhostWidth = Layout::options.particle_ghost_width;
-    using Layout_t                   = Layout;
+    using Layout_t                       = Layout;
     using Box_t                          = damn::core::Box<int, Layout_t::dimension>;
     using Super                          = UpdaterSelectionBoxing<Layout>;
 
@@ -130,7 +130,7 @@ struct UpdaterTileSetSelectionBoxing : public UpdaterSelectionBoxing<Layout>
 {
     auto constexpr static dimension      = Layout::dimension;
     auto constexpr static partGhostWidth = Layout::options.particle_ghost_width;
-    using Layout_t                   = Layout;
+    using Layout_t                       = Layout;
     using Box_t                          = damn::core::Box<int, Layout_t::dimension>;
     using Super                          = UpdaterSelectionBoxing<Layout>;
     using BoxSpanSet_t                   = damn::core::TileBoxSpanSet<dimension>;
@@ -203,7 +203,7 @@ namespace plamn::core::detail
 auto static const timings_dir_str
     = damn::core::get_env_as("PLAMN_ASYNC_TIMES", std::string{".damn/async/multi_updater"});
 
-static bool ion_updater_io_setup = []() {
+static bool particles_synchronised_mover_io_setup = []() {
     mkn::kul::Dir timings{timings_dir_str};
     timings.mk();
     return true;

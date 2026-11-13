@@ -150,7 +150,7 @@ private:
     int rank_ = 0;
 
     std::optional<core::OhmInfo> ohm_info_; // const members: set once, in setup_
-    typename Patch_t::IonUpdater_t ionUpdater_{};
+    typename Patch_t::ParticlesSynchronisedMover_t mover_{};
 
     std::array<int, dimension> patch_size_{};
     std::vector<int> domainBox_;
@@ -192,10 +192,10 @@ void Simulator<opts>::setup_()
     std::array<int, dimension> cells{};
     for (std::size_t i = 0; i < dimension; ++i)
     {
-        cells[i]                 = sim["grid"]["nbr_cells"][xyz[i]].template to<int>();
-        hierarchy_.dx[i]         = sim["grid"]["meshsize"][xyz[i]].template to<double>();
-        hierarchy_.periodic[i]   = sim["grid"]["periodicities"][xyz[i]].template to<bool>();
-        patch_size_[i]           = cells[i];
+        cells[i]                   = sim["grid"]["nbr_cells"][xyz[i]].template to<int>();
+        hierarchy_.dx[i]           = sim["grid"]["meshsize"][xyz[i]].template to<double>();
+        hierarchy_.periodic[i]     = sim["grid"]["periodicities"][xyz[i]].template to<bool>();
+        patch_size_[i]             = cells[i];
         hierarchy_.domain.lower[i] = 0;
         hierarchy_.domain.upper[i] = cells[i] - 1;
         domainBox_.push_back(cells[i] - 1);
@@ -232,8 +232,7 @@ void Simulator<opts>::register_schedules_()
     auto const nbr_pops = ions["nbrPopulations"].template to<std::size_t>();
     for (std::size_t i = 0; i < nbr_pops; ++i)
     {
-        auto const name
-            = ions["pop" + std::to_string(i)]["name"].template to<std::string>();
+        auto const name = ions["pop" + std::to_string(i)]["name"].template to<std::string>();
 
         // every population's moments in one exchange, PHAREHUB/PHARE#1079
         auto names = components(name + "_flux");
@@ -350,8 +349,8 @@ void Simulator<opts>::ampere_ohm_()
         core::AmpereTransformer{}(patch.layout, em.B, patch.J);
         patch.electrons().update(patch.layout);
         core::OhmTransformer{*ohm_info_}(patch.layout, patch.electrons().density(),
-                                        patch.electrons().velocity(), patch.electrons().pressure(),
-                                        em.B, patch.J, em.E);
+                                         patch.electrons().velocity(), patch.electrons().pressure(),
+                                         em.B, patch.J, em.E);
     });
 }
 
@@ -373,7 +372,7 @@ void Simulator<opts>::move_ions_(double const dt, core::UpdaterMode const mode)
 {
     DAMN_LOG_SCOPE(1, "Simulator::move_ions");
     per_patch_([&](auto& patch) {
-        ionUpdater_.updatePopulations(patch.ions, patch.emAvg, patch.boxing, dt, mode);
+        mover_.updatePopulations(patch.ions, patch.emAvg, patch.boxing, dt, mode);
     });
     fill_ion_borders_();
 
@@ -403,8 +402,7 @@ template<auto opts>
 void Simulator<opts>::predictor2_(double const dt)
 {
     per_patch_([&](auto& patch) {
-        core::FaradayTransformer{}(patch.layout, patch.em.B, patch.emAvg.E, patch.emPred.B,
-                                   dt);
+        core::FaradayTransformer{}(patch.layout, patch.em.B, patch.emAvg.E, patch.emPred.B, dt);
     });
     fill_<damn::amr::Transfer::PatchGhost>("EMPred_B");
     ampere_ohm_<&Patch_t::emPred>();
