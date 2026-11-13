@@ -15,6 +15,7 @@
 
 #include "gridlayoutdefs.hpp"
 #include "plamn/core/data/grid/layout.hpp"
+#include "plamn/core/data/grid/patch_layout.hpp"
 
 #include "plamn/core/data/grid/detail/detail.hpp"
 
@@ -89,7 +90,7 @@ namespace core
      *
      */
     template<auto options_>
-    class GridLayout
+    class GridLayout : public PatchLayout<options_>
     {
         using Options      = decltype(options_);
         using FieldOptions = Options::FieldOptions;
@@ -119,16 +120,14 @@ namespace core
                    std::array<std::uint32_t, dimension> const& nbrCells,
                    damn::core::Point<double, dimension> const& origin,
                    std::optional<AMRBox_t> const AMRBox = std::nullopt, int level_number = 0)
-            : meshSize_{meshSize}
-            , origin_{origin}
+            : PatchLayout<options_>{AMRBox ? *AMRBox : boxFromNbrCells(nbrCells), meshSize, origin,
+                                    level_number}
             , nbrPhysicalCells_{nbrCells}
-            , AMRBox_{AMRBox ? *AMRBox : boxFromNbrCells(nbrCells)}
-            , levelNumber_{level_number}
         {
-            if (AMRBox_.size() != boxFromNbrCells(nbrCells).size())
+            if (this->cells.size() != boxFromNbrCells(nbrCells).size())
                 throw std::runtime_error("Error - invalid AMR box, incorrect number of cells");
 
-            inverseMeshSize_ = damn::core::generate_from([](auto const e) { return 1. / e; }, meshSize_);
+            inverseMeshSize_ = damn::core::generate_from([](auto const e) { return 1. / e; }, this->dx);
         }
 
 
@@ -142,7 +141,7 @@ namespace core
          * @brief origin return the lower point of the grid described by the GridLayout
          * in physical coordinates
          */
-        NO_DISCARD damn::core::Point<double, dimension> origin() const noexcept { return origin_; }
+        NO_DISCARD damn::core::Point<double, dimension> origin() const noexcept { return PatchLayout<options_>::origin; }
 
 
 
@@ -151,7 +150,7 @@ namespace core
          */
         NO_DISCARD std::array<double, dimension> const& meshSize() const noexcept DAMN_ALL
         {
-            return meshSize_;
+            return this->dx;
         }
 
 
@@ -177,7 +176,7 @@ namespace core
         NO_DISCARD auto& nbrCells() const DAMN_ALL { return nbrPhysicalCells_; }
 
 
-        NO_DISCARD auto const& AMRBox() const DAMN_ALL { return AMRBox_; }
+        NO_DISCARD auto const& AMRBox() const DAMN_ALL { return this->cells; }
 
 
 
@@ -210,7 +209,7 @@ namespace core
         }
 
 
-        NO_DISCARD double cellVolume() const { return cell_volume(meshSize_); }
+        NO_DISCARD double cellVolume() const { return cell_volume(this->dx); }
 
         /**
          * @brief physicalStartIndex returns the index of the first node of a given
@@ -360,7 +359,7 @@ namespace core
         NO_DISCARD damn::core::Point<double, dimension>
         fieldNodeCoordinates(Field_t const& field, damn::core::Point<int, dimension> amr_idx) const
         {
-            return coordinate(meshSize_, amr_idx, centering(field));
+            return coordinate(this->dx, amr_idx, centering(field));
         }
 
         template<typename Field_t, typename... Indexes>
@@ -381,7 +380,7 @@ namespace core
         NO_DISCARD damn::core::Point<double, dimension>
         cellCenteredCoordinates(damn::core::Point<int, dimension> coord) const
         {
-            return cell_center(meshSize_, coord);
+            return cell_center(this->dx, coord);
         }
 
         template<typename... Indexes>
@@ -447,7 +446,7 @@ namespace core
         template<typename T>
         NO_DISCARD auto localToAMR(damn::core::Point<T, dimension> const& localPoint) const
         {
-            return local_to_amr(AMRBox_, localPoint, options.field_ghost_width);
+            return local_to_amr(this->cells, localPoint, options.field_ghost_width);
         }
 
 
@@ -458,7 +457,7 @@ namespace core
         template<typename T>
         NO_DISCARD auto localToAMR(damn::core::Box<T, dimension> const& localBox) const
         {
-            return local_to_amr(AMRBox_, localBox, options.field_ghost_width);
+            return local_to_amr(this->cells, localBox, options.field_ghost_width);
         }
 
 
@@ -469,7 +468,7 @@ namespace core
         template<typename T>
         NO_DISCARD auto AMRToLocal(damn::core::Point<T, dimension> const& AMRPoint) const DAMN_ALL
         {
-            return amr_to_local(AMRBox_, AMRPoint, options.field_ghost_width);
+            return amr_to_local(this->cells, AMRPoint, options.field_ghost_width);
         }
 
 
@@ -480,7 +479,7 @@ namespace core
         template<typename T>
         NO_DISCARD auto AMRToLocal(damn::core::Box<T, dimension> const& AMRBox) const
         {
-            return amr_to_local(AMRBox_, AMRBox, options.field_ghost_width);
+            return amr_to_local(this->cells, AMRBox, options.field_ghost_width);
         }
 
 
@@ -591,7 +590,7 @@ namespace core
          */
         NO_DISCARD std::array<std::uint32_t, dimension> allocSize(Scalar qty) const DAMN_ALL
         {
-            return alloc_shape(AMRBox_, centering(qty), options.field_ghost_width);
+            return alloc_shape(this->cells, centering(qty), options.field_ghost_width);
         }
 
 
@@ -604,7 +603,7 @@ namespace core
         {
             auto c                            = centering(qty);
             c[static_cast<std::uint32_t>(dir)] = flip(c[static_cast<std::uint32_t>(dir)]);
-            return alloc_shape(AMRBox_, c, options.field_ghost_width);
+            return alloc_shape(this->cells, c, options.field_ghost_width);
         }
 
 
@@ -628,7 +627,7 @@ namespace core
          */
         NO_DISCARD std::array<std::uint32_t, dimension> nbrPhysicalNodes(Scalar hybQty) const
         {
-            return physical_nodes(AMRBox_, centering(hybQty));
+            return physical_nodes(this->cells, centering(hybQty));
         }
 
 
@@ -659,11 +658,11 @@ namespace core
         }
 
 
-        auto AMRBoxFor(auto const& field) const { return amr_box(AMRBox_, centering(field)); }
+        auto AMRBoxFor(auto const& field) const { return amr_box(this->cells, centering(field)); }
 
         auto AMRGhostBoxFor(auto const& field) const
         {
-            return amr_ghost_box(AMRBox_, centering(field), options.field_ghost_width);
+            return amr_ghost_box(this->cells, centering(field), options.field_ghost_width);
         }
 
 
@@ -683,13 +682,13 @@ namespace core
         template<typename Field>
         damn::core::Box<std::uint32_t, dimension> ghostBoxFor(Field const& field) const
         {
-            return local_ghost_box(AMRBox_, centering(field), options.field_ghost_width);
+            return local_ghost_box(this->cells, centering(field), options.field_ghost_width);
         }
 
         template<typename Field>
         auto domainBoxFor(Field const& field) const
         {
-            return local_domain_box(AMRBox_, centering(field), options.field_ghost_width);
+            return local_domain_box(this->cells, centering(field), options.field_ghost_width);
         }
 
         template<typename Field, typename Fn, typename... Args>
@@ -724,14 +723,14 @@ namespace core
             evalOnAnyBox(field, damn::core::shrink(ghostBoxFor(field), shrinkby), fn, args...);
         }
 
-        auto levelNumber() const DAMN_ALL { return levelNumber_; }
+        auto levelNumber() const DAMN_ALL { return this->level; }
 
 
         // function to take a part of a gridlayout
         This copy_as(damn::core::Box<int, dimension> const box) const
         {
-            auto const shifted_origin = damn::core::Point<double, dimension>{meshSize_} * box.lower;
-            return {meshSize_, box.shape().as_unsigned(), shifted_origin, box, levelNumber_};
+            auto const shifted_origin = damn::core::Point<double, dimension>{this->dx} * box.lower;
+            return {this->dx, box.shape().as_unsigned(), shifted_origin, box, this->level};
         }
 
         // call fn(amr_idx, lcl_idx) for each point of the AMR box
@@ -768,15 +767,11 @@ namespace core
         }
 
     private:
-        std::array<double, dimension> meshSize_;
-        damn::core::Point<double, dimension> origin_;
         std::array<std::uint32_t, dimension> nbrPhysicalCells_;
         std::array<double, dimension> inverseMeshSize_;
         static constexpr GridData data{};
 
-        AMRBox_t AMRBox_;
 
-        int levelNumber_ = 0;
     };
 
 
