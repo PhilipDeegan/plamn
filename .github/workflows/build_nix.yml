@@ -10,13 +10,13 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    container: ghcr.io/pharchive/phare_dep/ubuntu:24.04
+    container: ghcr.io/pharchive/phare_dep/ubuntu:26.04
 
     steps:
     - uses: actions/checkout@v4
 
-    - run: |
-        apt update && apt install -y curl git openssh-client
+    - run: |  # numpy: pyphare's only third party import for the python tests
+        apt update && apt install -y curl git openssh-client python3-numpy
 
     # damn is private: check it out where mkn looks for it (tpp/damn) instead of cloning,
     # using a read-only deploy key on damn
