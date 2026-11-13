@@ -8,7 +8,7 @@
 #include "plamn/core/data/vecfield/vecfield_component.hpp"
 #include "plamn/core/numerics/differential_operators.hpp"
 
-#include "damn/initializer/data_provider.hpp"
+#include "plamn/initializer/data_provider.hpp"
 
 namespace plamn::core
 {
@@ -23,7 +23,7 @@ struct OhmInfo
     bool isResistive() const { return eta > 0.0; }
     bool isHyperResistive() const { return nu > 0.0; }
 
-    OhmInfo static FROM(damn::initializer::DAMNDict const& dict)
+    OhmInfo static FROM(plamn::initializer::Dict const& dict)
     {
         return {dict["resistivity"].template to<double>(),
                 dict["hyper_resistivity"].template to<double>(),

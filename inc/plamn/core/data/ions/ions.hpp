@@ -5,7 +5,7 @@
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/field/field_algorithm.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
-#include "damn/initializer/data_provider.hpp"
+#include "plamn/initializer/data_provider.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 #include "plamn/core/data/vecfield/vecfield_component.hpp"
 #include "plamn/core/data/particles/exporting/particles_exporting.hpp"
@@ -21,7 +21,7 @@
 #include <iterator>
 #include <stdexcept>
 #include <functional>
-#include "damn/initializer/data_provider.hpp"
+#include "plamn/initializer/data_provider.hpp"
 #include "plamn/core/data/field/field_algorithm.hpp"
 #include "damn/core/meta/logic.hpp"
 #include "damn/core/math/array.hpp"
@@ -50,7 +50,7 @@ namespace core
         Ions(Ions&&)      = default;
 
 
-        explicit Ions(damn::initializer::DAMNDict const& dict)
+        explicit Ions(plamn::initializer::Dict const& dict)
             : massDensity_{massDensityName(), HybridQuantity::Scalar::rho}
             , chargeDensity_{chargeDensityName(), HybridQuantity::Scalar::rho}
             , bulkVelocity_{"bulkVel", HybridQuantity::Vector::V}

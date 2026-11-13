@@ -4,7 +4,7 @@
 #include "plamn/core/def.hpp"
 
 #include "damn/core/logger.hpp"
-#include "damn/core/errors.hpp"
+#include "plamn/core/errors.hpp"
 #include "plamn/core/numerics/pusher/boris/basics.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 
@@ -100,7 +100,7 @@ public:
             {
                 postPushStep_(rangeOut.array(), idx, halfDtOverDl_);
             }
-            catch (damn::core::DictionaryException const& bex)
+            catch (plamn::core::DictionaryException const& bex)
             {
                 auto ex            = bex;
                 auto const& [e, b] = local_em;
@@ -159,7 +159,7 @@ private:
                 std::stringstream ss;
                 ss << "PrePush Particle moved 2 cells with delta/vel: ";
                 ss << e.delta << "/" << e.vel;
-                throw damn::core::DictionaryException{}("cause", ss.str());
+                throw plamn::core::DictionaryException{}("cause", ss.str());
             }
 
             if constexpr (damn::core::any_in(Particles::layout_mode, LayoutMode::AoSMapped))
@@ -189,7 +189,7 @@ private:
             std::stringstream ss;
             ss << "PostPush Particle moved 2 cells with delta/vel: ";
             ss << e.delta << "/" << e.vel;
-            throw damn::core::DictionaryException{}("cause", ss.str());
+            throw plamn::core::DictionaryException{}("cause", ss.str());
         }
 
         if constexpr (damn::core::any_in(Particles::layout_mode, LayoutMode::AoSMapped))

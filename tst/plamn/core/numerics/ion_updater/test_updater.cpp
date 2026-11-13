@@ -89,11 +89,11 @@ Return bz(Param x)
 
 std::size_t nbrPartPerCell = 1000;
 
-using InitFunctionT = damn::initializer::InitFunction<1>;
+using InitFunctionT = plamn::initializer::InitFunction<1>;
 
-damn::initializer::DAMNDict createDict()
+plamn::initializer::Dict createDict()
 {
-    damn::initializer::DAMNDict dict;
+    plamn::initializer::Dict dict;
 
     dict["simulation"]["algo"]["ion_updater"]["pusher"]["name"] = std::string{"modified_boris"};
 
@@ -546,7 +546,7 @@ TYPED_TEST_SUITE(IonUpdaterTest, Permutations, );
 
 
 
-TYPED_TEST(IonUpdaterTest, ionUpdaterTakesPusherParamsFromDAMNDictAtConstruction)
+TYPED_TEST(IonUpdaterTest, ionUpdaterTakesPusherParamsFromDictAtConstruction)
 {
     typename IonUpdaterTest<TypeParam>::IonUpdater_t ionUpdater{};
 }

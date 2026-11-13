@@ -7,7 +7,7 @@
 #include "plamn/core/data/tensorfield/tensorfield.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 
-#include "damn/initializer/data_provider.hpp"
+#include "plamn/initializer/data_provider.hpp"
 
 #include <tuple>
 #include <string>
@@ -63,7 +63,7 @@ namespace core
         {
         }
 
-        explicit Electromag(damn::initializer::DAMNDict const& dict)
+        explicit Electromag(plamn::initializer::Dict const& dict)
             : Super{{dict["name"].template to<std::string>() + "_"
                          + dict["electric"]["name"].template to<std::string>(),
                      HybridQuantity::Vector::E},
