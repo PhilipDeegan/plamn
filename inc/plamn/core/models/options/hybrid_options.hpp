@@ -1,0 +1,52 @@
+#ifndef PLAMN_OPTIONS_HYBRID_OPTIONS_HPP
+#define PLAMN_OPTIONS_HYBRID_OPTIONS_HPP
+
+#include "plamn/core/def.hpp"
+
+
+#include "plamn/core/models/quantities/hybrid_quantities.hpp"
+#include "plamn/core/data/grid/impl/yee/gridlayout_hybrid_yee.hpp"
+
+#include <array>
+
+
+namespace plamn
+{
+
+template<auto opts_>
+struct HybridFieldOptions
+{
+    using Quantity = core::HybridQuantity;
+    using Scalar   = Quantity::Scalar;
+    using Vector   = Quantity::Vector;
+    using Tensor   = Quantity::Tensor;
+
+    auto static constexpr opts         = opts_;
+    auto static constexpr dimension    = opts.dimension;
+    auto static constexpr interp_order = opts.interp_order;
+    auto static constexpr field_ghost_width
+        = std::array{2, 4, 4}[interp_order == 0 ? 0 : interp_order - 1];
+    auto static constexpr particle_ghost_width
+        = std::array{1, 2, 2}[interp_order == 0 ? 0 : interp_order - 1];
+};
+
+template<HybridFieldOptions opts>
+struct HybridOptions
+{
+    using GridLayoutImpl = core::hybrid::GridLayoutImplYee<opts>;
+    using FieldOptions   = decltype(opts);
+
+    auto static constexpr field_options        = opts;
+    auto static constexpr dimension            = opts.dimension;
+    auto static constexpr interp_order         = opts.interp_order;
+    auto static constexpr field_ghost_width    = opts.field_ghost_width;
+    auto static constexpr particle_ghost_width = opts.particle_ghost_width;
+    auto static constexpr nbRefinedPart        = opts.opts.nbRefinedPart;
+};
+
+
+
+
+} // namespace plamn
+
+#endif // PLAMN_OPTIONS_HYBRID_OPTIONS_HPP

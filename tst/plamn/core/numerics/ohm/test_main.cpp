@@ -1,0 +1,534 @@
+#include "plamn/core/def.hpp"
+
+
+#include "damn/core/meta/enum_meta.hpp"
+#include "plamn/plamn_core.hpp"
+#include "plamn/simulator/simulator_def.hpp"
+
+#if defined(HAVE_RAJA) and defined(HAVE_UMPIRE)
+#include "SAMRAI/tbox/Collectives.h" // tbox::parallel_synchronize();
+#include "plamn/simulator/simulator.h"     // static allocator init - probably should be isolated
+#endif
+
+#if defined(HAVE_RAJA) and defined(HAVE_UMPIRE)
+#include "SAMRAI/tbox/Collectives.h" // tbox::parallel_synchronize();
+#include "plamn/simulator/simulator.h"     // static allocator init - probably should be isolated
+#endif
+
+#include "plamn/core/numerics/ohm/ohm_transformer.hpp"
+#include "plamn/core/data/grid/gridlayoutdefs.hpp"
+
+#include "plamn/simulator/simulator_def.hpp"
+
+
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
+
+#include "tst/plamn/core/data/vecfield/test_vecfield_fixtures.hpp"
+
+#include <fstream>
+#include <variant>
+
+using namespace plamn::core;
+
+
+template<int dim, int interp>
+class NDlayout
+{
+    NDlayout() {}
+
+    using nDL = plamn::core::PLAMN_Types<plamn::SimOpts{dim, interp}>::Hybrid::GridLayout_t;
+
+public:
+    static nDL create()
+    {
+        if constexpr (dim == 1)
+        {
+            return {{{0.1}}, {{50}}, {0.}};
+        }
+        else if constexpr (dim == 2)
+        {
+            return {{{0.1, 0.2}}, {{50, 40}}, {0., 0.}};
+        }
+        else if constexpr (dim == 3)
+        {
+            return {{{0.1, 0.2, 0.3}}, {{50, 40, 30}}, {0., 0., 0.}};
+        }
+    }
+};
+
+
+
+
+damn::initializer::DAMNDict createDict()
+{
+    damn::initializer::DAMNDict dict;
+
+    dict["resistivity"]       = 1.0;
+    dict["hyper_resistivity"] = 0.01;
+
+    return dict;
+}
+
+
+
+template<typename TypeInfo /*= std::pair<DimConst<1>, InterpConst<1>>*/>
+struct OhmTest : public ::testing::Test
+{
+    static constexpr auto dim    = typename TypeInfo::first_type{}();
+    static constexpr auto interp = typename TypeInfo::second_type{}();
+
+    using HybridTypes = plamn::core::PLAMN_Types<plamn::SimOpts{dim, interp}>::Hybrid;
+    using GridYee     = HybridTypes::GridLayout_t;
+    auto static constexpr field_opts = plamn::core::TensorFieldOptions<HybridTypes>{};
+    using UsableVecFieldND           = UsableVecField<field_opts>;
+    using Grid_t                     = Grid<damn::core::NdArrayVector<dim>, HybridQuantity::Scalar>;
+    using Ohm_t                      = Ohm<GridYee>;
+
+    GridYee layout = NDlayout<dim, interp>::create();
+
+    Grid_t n;
+    Grid_t P;
+    UsableVecFieldND V, B, J, Enew;
+
+    OhmInfo ohm_info;
+
+    OhmTest()
+        : n{"n", HybridQuantity::Scalar::rho, layout.allocSize(HybridQuantity::Scalar::rho)}
+        , P{"P", HybridQuantity::Scalar::P, layout.allocSize(HybridQuantity::Scalar::P)}
+        , V{"V", layout, HybridQuantity::Vector::V}
+        , B{"B", layout, HybridQuantity::Vector::B}
+        , J{"J", layout, HybridQuantity::Vector::J}
+        , Enew{"Enew", layout, HybridQuantity::Vector::E}
+        , ohm_info{OhmInfo::FROM(createDict())}
+    {
+        auto& [Bx, By, Bz] = B();
+        auto& [Jx, Jy, Jz] = J();
+        auto& [Vx, Vy, Vz] = V();
+        // auto const& [Exnew, Eynew, Eznew] = Enew();
+
+        if constexpr (dim == 1)
+        {
+            auto gsi_p_X = this->layout.ghostStartIndex(QtyCentering::primal, Direction::X);
+            auto gei_p_X = this->layout.ghostEndIndex(QtyCentering::primal, Direction::X);
+            auto gsi_d_X = this->layout.ghostStartIndex(QtyCentering::dual, Direction::X);
+            auto gei_d_X = this->layout.ghostEndIndex(QtyCentering::dual, Direction::X);
+
+            for (auto ix = gsi_p_X; ix <= gei_p_X; ++ix)
+            {
+                auto point = this->layout.fieldNodeCoordinates(
+                    n, this->layout.localToAMR(damn::core::Point{ix}.as_signed()));
+
+                n(ix)  = std::cosh(0.5 * point[0]);
+                Vx(ix) = std::sinh(0.2 * point[0]);
+                Vy(ix) = std::sinh(0.3 * point[0]);
+                Vz(ix) = std::sinh(0.4 * point[0]);
+                P(ix)  = std::cosh(0.5 * point[0]);
+                Bx(ix) = std::cosh(0.2 * point[0]);
+                Jy(ix) = std::tanh(0.3 * point[0]);
+                Jz(ix) = std::tanh(0.4 * point[0]);
+            }
+
+            for (auto ix = gsi_d_X; ix <= gei_d_X; ++ix)
+            {
+                auto point = this->layout.fieldNodeCoordinates(
+                    Bz, this->layout.localToAMR(damn::core::Point{ix}.as_signed()));
+
+                By(ix) = std::cosh(0.3 * point[0]);
+                Bz(ix) = std::cosh(0.4 * point[0]);
+                Jx(ix) = std::tanh(0.2 * point[0]);
+            }
+        }
+
+        if constexpr (dim == 2)
+        {
+            auto gsi_p_X = this->layout.ghostStartIndex(QtyCentering::primal, Direction::X);
+            auto gei_p_X = this->layout.ghostEndIndex(QtyCentering::primal, Direction::X);
+            auto gsi_p_Y = this->layout.ghostStartIndex(QtyCentering::primal, Direction::Y);
+            auto gei_p_Y = this->layout.ghostEndIndex(QtyCentering::primal, Direction::Y);
+            auto gsi_d_X = this->layout.ghostStartIndex(QtyCentering::dual, Direction::X);
+            auto gei_d_X = this->layout.ghostEndIndex(QtyCentering::dual, Direction::X);
+            auto gsi_d_Y = this->layout.ghostStartIndex(QtyCentering::dual, Direction::Y);
+            auto gei_d_Y = this->layout.ghostEndIndex(QtyCentering::dual, Direction::Y);
+
+            for (auto ix = gsi_p_X; ix <= gei_p_X; ++ix)
+            {
+                for (auto iy = gsi_p_Y; iy <= gei_p_Y; ++iy)
+                {
+                    auto point = this->layout.fieldNodeCoordinates(
+                        n, this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
+
+                    n(ix, iy)  = std::cosh(0.5 * point[0]) * std::cosh(0.5 * point[1]);
+                    Vx(ix, iy) = std::sinh(0.2 * point[0]) * std::sinh(0.2 * point[1]);
+                    Vy(ix, iy) = std::sinh(0.3 * point[0]) * std::sinh(0.3 * point[1]);
+                    Vz(ix, iy) = std::sinh(0.4 * point[0]) * std::sinh(0.4 * point[1]);
+                    P(ix, iy)  = std::cosh(0.5 * point[0]) * std::cosh(0.5 * point[1]);
+                    Jz(ix, iy) = std::tanh(0.4 * point[0]) * std::tanh(0.4 * point[1]);
+                }
+                for (auto iy = gsi_d_Y; iy <= gei_d_Y; ++iy)
+                {
+                    auto point = this->layout.fieldNodeCoordinates(
+                        Bx, this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
+
+                    Bx(ix, iy) = std::cosh(0.2 * point[0]) * std::cosh(0.2 * point[1]);
+                    Jy(ix, iy) = std::tanh(0.3 * point[0]) * std::tanh(0.3 * point[1]);
+                }
+            }
+            for (auto ix = gsi_d_X; ix <= gei_d_X; ++ix)
+            {
+                for (auto iy = gsi_p_Y; iy <= gei_p_Y; ++iy)
+                {
+                    auto point = this->layout.fieldNodeCoordinates(
+                        Jx, this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
+
+                    By(ix, iy) = std::cosh(0.3 * point[0]) * std::cosh(0.3 * point[1]);
+                    Jx(ix, iy) = std::tanh(0.2 * point[0]) * std::tanh(0.2 * point[1]);
+                }
+                for (auto iy = gsi_d_Y; iy <= gei_d_Y; ++iy)
+                {
+                    auto point = this->layout.fieldNodeCoordinates(
+                        Bz, this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
+
+                    Bz(ix, iy) = std::cosh(0.4 * point[0]) * std::cosh(0.4 * point[1]);
+                }
+            }
+        }
+
+        if constexpr (dim == 3)
+        {
+            auto gsi_p_X = this->layout.ghostStartIndex(QtyCentering::primal, Direction::X);
+            auto gei_p_X = this->layout.ghostEndIndex(QtyCentering::primal, Direction::X);
+            auto gsi_p_Y = this->layout.ghostStartIndex(QtyCentering::primal, Direction::Y);
+            auto gei_p_Y = this->layout.ghostEndIndex(QtyCentering::primal, Direction::Y);
+            auto gsi_p_Z = this->layout.ghostStartIndex(QtyCentering::primal, Direction::Z);
+            auto gei_p_Z = this->layout.ghostEndIndex(QtyCentering::primal, Direction::Z);
+            auto gsi_d_X = this->layout.ghostStartIndex(QtyCentering::dual, Direction::X);
+            auto gei_d_X = this->layout.ghostEndIndex(QtyCentering::dual, Direction::X);
+            auto gsi_d_Y = this->layout.ghostStartIndex(QtyCentering::dual, Direction::Y);
+            auto gei_d_Y = this->layout.ghostEndIndex(QtyCentering::dual, Direction::Y);
+            auto gsi_d_Z = this->layout.ghostStartIndex(QtyCentering::dual, Direction::Z);
+            auto gei_d_Z = this->layout.ghostEndIndex(QtyCentering::dual, Direction::Z);
+
+            for (auto ix = gsi_p_X; ix <= gei_p_X; ++ix)
+            {
+                for (auto iy = gsi_p_Y; iy <= gei_p_Y; ++iy)
+                {
+                    for (auto iz = gsi_p_Z; iz <= gei_p_Z; ++iz)
+                    {
+                        auto point = this->layout.fieldNodeCoordinates(
+                            n, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+
+                        n(ix, iy, iz) = std::cosh(0.5 * point[0]) * std::cosh(0.5 * point[1])
+                                        * std::cosh(0.5 * point[2]);
+                        Vx(ix, iy, iz) = std::sinh(0.2 * point[0]) * std::sinh(0.2 * point[1])
+                                         * std::sinh(0.2 * point[2]);
+                        Vy(ix, iy, iz) = std::sinh(0.3 * point[0]) * std::sinh(0.3 * point[1])
+                                         * std::sinh(0.3 * point[2]);
+                        Vz(ix, iy, iz) = std::sinh(0.4 * point[0]) * std::sinh(0.4 * point[1])
+                                         * std::sinh(0.4 * point[2]);
+                        P(ix, iy, iz) = std::cosh(0.5 * point[0]) * std::cosh(0.5 * point[1])
+                                        * std::cosh(0.5 * point[2]);
+                    }
+                    for (auto iz = gsi_d_Z; iz <= gei_d_Z; ++iz)
+                    {
+                        auto point = this->layout.fieldNodeCoordinates(
+                            Jz, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+
+                        Jz(ix, iy, iz) = std::tanh(0.4 * point[0]) * std::tanh(0.4 * point[1])
+                                         * std::tanh(0.4 * point[2]);
+                    }
+                }
+                for (auto iy = gsi_d_Y; iy <= gei_d_Y; ++iy)
+                {
+                    for (auto iz = gsi_p_Z; iz <= gei_p_Z; ++iz)
+                    {
+                        auto point = this->layout.fieldNodeCoordinates(
+                            Jy, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+
+                        Jy(ix, iy, iz) = std::tanh(0.3 * point[0]) * std::tanh(0.3 * point[1])
+                                         * std::tanh(0.3 * point[2]);
+                    }
+                    for (auto iz = gsi_d_Z; iz <= gei_d_Z; ++iz)
+                    {
+                        auto point = this->layout.fieldNodeCoordinates(
+                            Bx, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+
+                        Bx(ix, iy, iz) = std::cosh(0.2 * point[0]) * std::cosh(0.2 * point[1])
+                                         * std::cosh(0.2 * point[2]);
+                    }
+                }
+            }
+            for (auto ix = gsi_d_X; ix <= gei_d_X; ++ix)
+            {
+                for (auto iy = gsi_p_Y; iy <= gei_p_Y; ++iy)
+                {
+                    for (auto iz = gsi_p_Z; iz <= gei_p_Z; ++iz)
+                    {
+                        auto point = this->layout.fieldNodeCoordinates(
+                            Jx, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+
+                        Jx(ix, iy, iz) = std::tanh(0.2 * point[0]) * std::tanh(0.2 * point[1])
+                                         * std::tanh(0.2 * point[2]);
+                    }
+                    for (auto iz = gsi_d_Z; iz <= gei_d_Z; ++iz)
+                    {
+                        auto point = this->layout.fieldNodeCoordinates(
+                            By, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+
+                        By(ix, iy, iz) = std::cosh(0.3 * point[0]) * std::cosh(0.3 * point[1])
+                                         * std::cosh(0.3 * point[2]);
+                    }
+                }
+                for (auto iy = gsi_d_Y; iy <= gei_d_Y; ++iy)
+                {
+                    for (auto iz = gsi_p_Z; iz <= gei_p_Z; ++iz)
+                    {
+                        auto point = this->layout.fieldNodeCoordinates(
+                            Bz, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+
+                        Bz(ix, iy, iz) = std::cosh(0.4 * point[0]) * std::cosh(0.4 * point[1])
+                                         * std::cosh(0.4 * point[2]);
+                    }
+                }
+            }
+        }
+    }
+
+    ~OhmTest() {}
+};
+
+
+
+using OhmTupleInfos
+    = testing::Types<std::pair<damn::core::DimConst<1>, damn::core::InterpConst<1>>, std::pair<damn::core::DimConst<2>, damn::core::InterpConst<1>>,
+                     std::pair<damn::core::DimConst<3>, damn::core::InterpConst<1>>>;
+
+TYPED_TEST_SUITE(OhmTest, OhmTupleInfos);
+
+
+
+
+TYPED_TEST(OhmTest, ThatOhmInfoCanBeBuiltFromDict)
+{
+    auto info = OhmInfo::FROM(createDict());
+}
+
+
+// asEnumConstant enumerates [0, Enum::count), which is what replaced the EnumTraits value table
+static_assert(std::is_same_v<damn::core::EnumConstantVariant_t<HyperMode>,
+                             std::variant<std::integral_constant<HyperMode, HyperMode::constant>,
+                                          std::integral_constant<HyperMode, HyperMode::spatial>>>);
+
+TYPED_TEST(OhmTest, ThatAsEnumConstantLiftsEveryHyperMode)
+{
+    for (auto const mode : {HyperMode::constant, HyperMode::spatial})
+        std::visit([&](auto const tag) { EXPECT_EQ(mode, decltype(tag)::value); },
+                   damn::core::asEnumConstant(mode));
+
+    EXPECT_THROW(damn::core::asEnumConstant(HyperMode::count), std::runtime_error);
+}
+
+
+// hyper_mode is written to the dict as the int of the HyperMode member exposed to python by
+// cpp_etc (see damnin.initialize.add_enum_int), and read back as the enum
+TYPED_TEST(OhmTest, ThatHyperModeIsReadFromDictAsAnEnum)
+{
+    EXPECT_EQ(HyperMode::constant, OhmInfo::FROM(createDict()).hyper_mode); // absent, defaulted
+
+    auto dict          = createDict();
+    dict["hyper_mode"] = static_cast<int>(HyperMode::spatial);
+    EXPECT_EQ(HyperMode::spatial, OhmInfo::FROM(dict).hyper_mode);
+
+    dict["hyper_mode"] = static_cast<int>(HyperMode::constant);
+    EXPECT_EQ(HyperMode::constant, OhmInfo::FROM(dict).hyper_mode);
+}
+
+
+
+std::vector<double> read(std::string filename)
+{
+    std::ifstream readFile(filename);
+    assert(readFile.is_open());
+    std::vector<double> x;
+
+    std::copy(std::istream_iterator<double>(readFile), std::istream_iterator<double>(),
+              std::back_inserter(x));
+    return x;
+}
+
+
+
+TYPED_TEST(OhmTest, ThatElectricFieldIsOkFromOhmsLaw)
+{
+    TypeParam pair;
+    auto constexpr dim    = pair.first();
+    auto constexpr interp = pair.second();
+
+    std::string prefix{"ohm"};
+
+    auto filenameX
+        = prefix + "x_yee_" + std::to_string(dim) + "D_order" + std::to_string(interp) + ".txt";
+    auto filenameY
+        = prefix + "y_yee_" + std::to_string(dim) + "D_order" + std::to_string(interp) + ".txt";
+    auto filenameZ
+        = prefix + "z_yee_" + std::to_string(dim) + "D_order" + std::to_string(interp) + ".txt";
+    auto expected_ohmX = read(filenameX);
+    auto expected_ohmY = read(filenameY);
+    auto expected_ohmZ = read(filenameZ);
+
+    auto const layout = NDlayout<dim, interp>::create();
+
+    OhmTransformer{this->ohm_info}(layout, this->n, this->V, this->P, this->B, this->J, this->Enew);
+
+
+    auto const& [Exnew, Eynew, Eznew] = this->Enew();
+
+    if constexpr (dim == 1)
+    {
+        auto psi_X = this->layout.physicalStartIndex(Exnew, Direction::X);
+        auto pei_X = this->layout.physicalEndIndex(Exnew, Direction::X);
+
+        for (auto ix = psi_X; ix <= pei_X; ++ix)
+        {
+            EXPECT_THAT(Exnew(ix), ::testing::DoubleNear((expected_ohmX[ix]), 1e-12));
+        }
+
+        psi_X = this->layout.physicalStartIndex(Eynew, Direction::X);
+        pei_X = this->layout.physicalEndIndex(Eynew, Direction::X);
+
+        for (auto ix = psi_X; ix <= pei_X; ++ix)
+        {
+            EXPECT_THAT(Eynew(ix), ::testing::DoubleNear((expected_ohmY[ix]), 1e-12));
+        }
+
+        psi_X = this->layout.physicalStartIndex(Eznew, Direction::X);
+        pei_X = this->layout.physicalEndIndex(Eznew, Direction::X);
+
+        for (auto ix = psi_X; ix <= pei_X; ++ix)
+        {
+            EXPECT_THAT(Eznew(ix), ::testing::DoubleNear((expected_ohmZ[ix]), 1e-12));
+        }
+    }
+
+    if constexpr (dim == 2)
+    {
+        auto psi_X = this->layout.physicalStartIndex(Exnew, Direction::X);
+        auto pei_X = this->layout.physicalEndIndex(Exnew, Direction::X);
+        auto psi_Y = this->layout.physicalStartIndex(Exnew, Direction::Y);
+        auto pei_Y = this->layout.physicalEndIndex(Exnew, Direction::Y);
+
+        for (auto ix = psi_X; ix <= pei_X; ++ix)
+        {
+            for (auto iy = psi_Y; iy <= pei_Y; ++iy)
+            {
+                auto nPts_  = this->layout.allocSize(HybridQuantity::Scalar::Ex);
+                auto index_ = ix * nPts_[1] + iy;
+                EXPECT_THAT(Exnew(ix, iy), ::testing::DoubleNear((expected_ohmX[index_]), 1e-12));
+            }
+        }
+
+        psi_X = this->layout.physicalStartIndex(Eynew, Direction::X);
+        pei_X = this->layout.physicalEndIndex(Eynew, Direction::X);
+        psi_Y = this->layout.physicalStartIndex(Eynew, Direction::Y);
+        pei_Y = this->layout.physicalEndIndex(Eynew, Direction::Y);
+
+        for (auto ix = psi_X; ix <= pei_X; ++ix)
+        {
+            for (auto iy = psi_Y; iy <= pei_Y; ++iy)
+            {
+                auto nPts_  = this->layout.allocSize(HybridQuantity::Scalar::Ey);
+                auto index_ = ix * nPts_[1] + iy;
+                EXPECT_THAT(Eynew(ix, iy), ::testing::DoubleNear((expected_ohmY[index_]), 1e-12));
+            }
+        }
+
+        psi_X = this->layout.physicalStartIndex(Eznew, Direction::X);
+        pei_X = this->layout.physicalEndIndex(Eznew, Direction::X);
+        psi_Y = this->layout.physicalStartIndex(Eznew, Direction::Y);
+        pei_Y = this->layout.physicalEndIndex(Eznew, Direction::Y);
+
+        for (auto ix = psi_X; ix <= pei_X; ++ix)
+        {
+            for (auto iy = psi_Y; iy <= pei_Y; ++iy)
+            {
+                auto nPts_  = this->layout.allocSize(HybridQuantity::Scalar::Ez);
+                auto index_ = ix * nPts_[1] + iy;
+                EXPECT_THAT(Eznew(ix, iy), ::testing::DoubleNear((expected_ohmZ[index_]), 1e-12));
+            }
+        }
+    }
+
+    if constexpr (dim == 3)
+    {
+        auto psi_X = this->layout.physicalStartIndex(Exnew, Direction::X);
+        auto pei_X = this->layout.physicalEndIndex(Exnew, Direction::X);
+        auto psi_Y = this->layout.physicalStartIndex(Exnew, Direction::Y);
+        auto pei_Y = this->layout.physicalEndIndex(Exnew, Direction::Y);
+        auto psi_Z = this->layout.physicalStartIndex(Exnew, Direction::Z);
+        auto pei_Z = this->layout.physicalEndIndex(Exnew, Direction::Z);
+
+        for (auto ix = psi_X; ix <= pei_X; ++ix)
+        {
+            for (auto iy = psi_Y; iy <= pei_Y; ++iy)
+            {
+                for (auto iz = psi_Z; iz <= pei_Z; ++iz)
+                {
+                    auto nPts_  = this->layout.allocSize(HybridQuantity::Scalar::Ex);
+                    auto index_ = ix * nPts_[1] * nPts_[2] + iy * nPts_[2] + iz;
+                    EXPECT_THAT(Exnew(ix, iy, iz),
+                                ::testing::DoubleNear((expected_ohmX[index_]), 1e-10));
+                }
+            }
+        }
+
+        psi_X = this->layout.physicalStartIndex(Eynew, Direction::X);
+        pei_X = this->layout.physicalEndIndex(Eynew, Direction::X);
+        psi_Y = this->layout.physicalStartIndex(Eynew, Direction::Y);
+        pei_Y = this->layout.physicalEndIndex(Eynew, Direction::Y);
+        psi_Z = this->layout.physicalStartIndex(Eynew, Direction::Z);
+        pei_Z = this->layout.physicalEndIndex(Eynew, Direction::Z);
+
+        for (auto ix = psi_X; ix <= pei_X; ++ix)
+        {
+            for (auto iy = psi_Y; iy <= pei_Y; ++iy)
+            {
+                for (auto iz = psi_Z; iz <= pei_Z; ++iz)
+                {
+                    auto nPts_  = this->layout.allocSize(HybridQuantity::Scalar::Ey);
+                    auto index_ = ix * nPts_[1] * nPts_[2] + iy * nPts_[2] + iz;
+                    EXPECT_THAT(Eynew(ix, iy, iz),
+                                ::testing::DoubleNear((expected_ohmY[index_]), 1e-10));
+                }
+            }
+        }
+
+        psi_X = this->layout.physicalStartIndex(Eznew, Direction::X);
+        pei_X = this->layout.physicalEndIndex(Eznew, Direction::X);
+        psi_Y = this->layout.physicalStartIndex(Eznew, Direction::Y);
+        pei_Y = this->layout.physicalEndIndex(Eznew, Direction::Y);
+        psi_Z = this->layout.physicalStartIndex(Eznew, Direction::Z);
+        pei_Z = this->layout.physicalEndIndex(Eznew, Direction::Z);
+
+        for (auto ix = psi_X; ix <= pei_X; ++ix)
+        {
+            for (auto iy = psi_Y; iy <= pei_Y; ++iy)
+            {
+                for (auto iz = psi_Z; iz <= pei_Z; ++iz)
+                {
+                    auto nPts_  = this->layout.allocSize(HybridQuantity::Scalar::Ez);
+                    auto index_ = ix * nPts_[1] * nPts_[2] + iy * nPts_[2] + iz;
+                    EXPECT_THAT(Eznew(ix, iy, iz),
+                                ::testing::DoubleNear((expected_ohmZ[index_]), 1e-10));
+                }
+            }
+        }
+    }
+}
+
+
+int main(int argc, char** argv)
+{
+    ::testing::InitGoogleTest(&argc, argv);
+
+    return RUN_ALL_TESTS();
+}

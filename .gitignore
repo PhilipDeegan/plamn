@@ -1,0 +1,8 @@
+bin
+tpp
+.mkn*
+.clangd
+__pycache__
+.damn*
+.plamn*
+.phlop

@@ -1,0 +1,371 @@
+#ifndef PLAMN_ELECTRONS_HPP
+#define PLAMN_ELECTRONS_HPP
+
+#include "plamn/core/def.hpp"
+#include "plamn/core/data/grid/grid_tiles.hpp"
+#include "plamn/core/data/field/field_tiles.hpp"
+#include "plamn/core/models/quantities/hybrid_quantities.hpp"
+#include "plamn/core/data/tensorfield/tensorfield.hpp"
+#include "plamn/core/data/vecfield/vecfield_component.hpp"
+
+#include "damn/initializer/data_provider.hpp"
+
+
+#include <tuple>
+#include <cstddef>
+#include <stdexcept>
+
+
+namespace plamn::core
+{
+
+
+template<typename Ions>
+class StandardHybridElectronFluxComputer
+{
+public:
+    using VecField   = Ions::vecfield_type;
+    using Field      = Ions::field_type;
+    using GridLayout = Ions::gridlayout_type;
+    using Scalar     = GridLayout::Scalar;
+
+    StandardHybridElectronFluxComputer(Ions& ions, VecField& J)
+        : ions_{ions}
+        , J_{J}
+        , Ve_{"StandardHybridElectronFluxComputer_Ve", HybridQuantity::Vector::V}
+    {
+    }
+
+    //-------------------------------------------------------------------------
+    //                  start the ResourcesUser interface
+    //-------------------------------------------------------------------------
+
+
+    NO_DISCARD bool isUsable() const { return ions_.isUsable() && J_.isUsable() && Ve_.isUsable(); }
+
+    NO_DISCARD bool isSettable() const
+    {
+        return Ve_.isSettable() && ions_.isSettable() && J_.isSettable();
+    }
+
+    NO_DISCARD auto getCompileTimeResourcesViewList() const
+    {
+        return std::forward_as_tuple(Ve_, ions_, J_);
+    }
+
+    NO_DISCARD auto getCompileTimeResourcesViewList()
+    {
+        return std::forward_as_tuple(Ve_, ions_, J_);
+    }
+
+    //-------------------------------------------------------------------------
+    //                  ends the ResourcesUser interface
+    //-------------------------------------------------------------------------
+
+
+
+
+    NO_DISCARD Field const& density() const { return ions_.chargeDensity(); }
+
+    NO_DISCARD Field& density() { return ions_.chargeDensity(); }
+
+
+    NO_DISCARD VecField& velocity() { return Ve_; }
+
+
+    void computeChargeDensity() {}
+
+
+
+    void static Vxyz(auto const& layout, auto const& Ne, auto&&... args)
+    {
+        // Ve = (sum_s q_s F_s - J) / Ne, with Ne the total ion charge density.
+        // The ion bulk velocity is mass weighted and cannot be used here, see #1466
+        auto&& [J, F, Ve] = std::forward_as_tuple(args...);
+        auto const& Jx    = J(Component::X);
+        auto const& Jy    = J(Component::Y);
+        auto const& Jz    = J(Component::Z);
+        auto const& Fx    = F(Component::X);
+        auto const& Fy    = F(Component::Y);
+        auto const& Fz    = F(Component::Z);
+        auto& Vex         = Ve(Component::X);
+        auto& Vey         = Ve(Component::Y);
+        auto& Vez         = Ve(Component::Z);
+
+        layout.evalGrownOnBox(Ne, 0, [=] DAMN_ALL(auto const& ijk) mutable {
+            auto const JxOnVx = GridLayout::template project<Scalar::Jx, Scalar::Vx>(Jx, ijk);
+            auto const JyOnVy = GridLayout::template project<Scalar::Jy, Scalar::Vy>(Jy, ijk);
+            auto const JzOnVz = GridLayout::template project<Scalar::Jz, Scalar::Vz>(Jz, ijk);
+
+            Vex(ijk) = (Fx(ijk) - JxOnVx) / Ne(ijk);
+            Vey(ijk) = (Fy(ijk) - JyOnVy) / Ne(ijk);
+            Vez(ijk) = (Fz(ijk) - JzOnVz) / Ne(ijk);
+        });
+    }
+
+    void computeBulkVelocity(GridLayout const& layout)
+    {
+        check_field(ions_.chargeDensity(), layout);
+        check_tensor_field(ions_.chargeFlux(), layout);
+        check_tensor_field(J_, layout);
+
+        if constexpr (is_field_tile_set_v<Field>)
+            core::tile_exec_with_layout([&](auto&&... args) { Vxyz(args...); },
+                                        ions_.chargeDensity(), J_, ions_.chargeFlux(), Ve_);
+        else
+            Vxyz(layout, ions_.chargeDensity(), J_, ions_.chargeFlux(), Ve_);
+
+        check_tensor_field(Ve_, layout);
+    }
+
+    void computeBulkVelocity(std::size_t const tile_idx)
+        requires(is_field_tile_set_v<Field>)
+    {
+        core::tile_exec_with_layout_at(
+            tile_idx, [&](auto&&... args) { Vxyz(args...); }, ions_.chargeDensity(), J_,
+            ions_.chargeFlux(), Ve_);
+    }
+
+
+    auto& getIons() const { return ions_; }
+
+private:
+    Ions ions_;
+    VecField J_;
+    VecField Ve_;
+};
+
+
+
+template<typename Ions>
+class IsothermalElectronPressureClosure
+{
+    using GridLayout = Ions::gridlayout_type;
+    using VecField   = Ions::vecfield_type;
+    using Field      = Ions::field_type;
+
+public:
+    using field_type = Field;
+
+    IsothermalElectronPressureClosure(damn::initializer::DAMNDict const& dict, Ions const& ions)
+        : ions_{ions}
+        , Te_{dict["Te"].template to<double>()}
+        , Pe_{"Pe", HybridQuantity::Scalar::P}
+    {
+    }
+
+
+    //-------------------------------------------------------------------------
+    //                  start the ResourcesUser interface
+    //-------------------------------------------------------------------------
+
+
+    NO_DISCARD bool isUsable() const { return Pe_.isUsable() and ions_.isUsable(); }
+
+    NO_DISCARD bool isSettable() const { return Pe_.isSettable(); }
+
+    struct PressureProperty
+    {
+        std::string name;
+        HybridQuantity::Scalar qty;
+    };
+
+    using PressureProperties = std::vector<PressureProperty>;
+
+    NO_DISCARD auto getCompileTimeResourcesViewList() const
+    {
+        return std::forward_as_tuple(ions_, Pe_);
+    }
+
+    NO_DISCARD auto getCompileTimeResourcesViewList() { return std::forward_as_tuple(ions_, Pe_); }
+
+    //-------------------------------------------------------------------------
+    //                  ends the ResourcesUser interface
+    //-------------------------------------------------------------------------
+
+
+
+    NO_DISCARD Field& pressure() { return Pe_; }
+    NO_DISCARD Field const& pressure() const { return Pe_; }
+
+    void computePressure(GridLayout const& /*layout*/)
+    {
+        // static_assert(Field::is_contiguous, "Error - assumes Field date is contiguous");
+
+        if (!Pe_.isUsable())
+            throw std::runtime_error("Error - isothermal closure pressure not usable");
+
+        auto const& Ne_ = ions_.chargeDensity();
+        transform(Ne_, Pe_, [this](auto n) { return n * Te_; });
+    }
+
+    void computePressure(std::size_t const tile_idx)
+        requires(is_field_tile_set_v<Field>)
+    {
+        if (!Pe_.isUsable())
+            throw std::runtime_error("Error - isothermal closure pressure not usable");
+
+        auto const& Ne_ = ions_.chargeDensity();
+        transform(Ne_[tile_idx](), Pe_[tile_idx](), [this](auto n) { return n * Te_; });
+    }
+
+private:
+    Ions ions_;
+    double const Te_ = 0;
+    Field Pe_;
+};
+
+
+
+
+template<typename Ions>
+class ElectronMomentModel
+{
+    using VecField     = Ions::vecfield_type;
+    using Field        = Ions::field_type;
+    using GridLayout   = Ions::gridlayout_type;
+    using FluxComputer = StandardHybridElectronFluxComputer<Ions>;
+
+public:
+    ElectronMomentModel(damn::initializer::DAMNDict const& dict, Ions& ions, VecField& J)
+        : fluxComput_{ions, J}
+        , pressureClosure_{dict["pressure_closure"], fluxComput_.getIons()}
+    {
+    }
+
+    //-------------------------------------------------------------------------
+    //                  start the ResourcesUser interface
+    //-------------------------------------------------------------------------
+
+    NO_DISCARD bool isUsable() const
+    {
+        return fluxComput_.isUsable() and pressureClosure_.isUsable();
+    }
+
+    NO_DISCARD bool isSettable() const { return fluxComput_.isSettable(); }
+
+    NO_DISCARD auto getCompileTimeResourcesViewList() const
+    {
+        return std::forward_as_tuple(fluxComput_, pressureClosure_);
+    }
+
+    NO_DISCARD auto getCompileTimeResourcesViewList()
+    {
+        return std::forward_as_tuple(fluxComput_, pressureClosure_);
+    }
+
+    //-------------------------------------------------------------------------
+    //                  ends the ResourcesUser interface
+    //-------------------------------------------------------------------------
+
+
+    NO_DISCARD Field const& density() const { return fluxComput_.density(); }
+
+    NO_DISCARD Field& density() { return fluxComput_.density(); }
+
+
+    NO_DISCARD VecField const& velocity() const { return fluxComput_.velocity(); }
+
+    NO_DISCARD VecField& velocity() { return fluxComput_.velocity(); }
+
+
+    NO_DISCARD Field const& pressure() const { return pressureClosure_.pressure(); }
+    NO_DISCARD Field& pressure() { return pressureClosure_.pressure(); }
+
+
+
+    void computeChargeDensity() { fluxComput_.computeChargeDensity(); }
+    void computeBulkVelocity(auto const& layout_or_tile_idx)
+    {
+        fluxComput_.computeBulkVelocity(layout_or_tile_idx);
+    }
+    void computePressure(auto const& layout_or_tile_idx)
+    {
+        pressureClosure_.computePressure(layout_or_tile_idx);
+    }
+
+private:
+    FluxComputer fluxComput_;
+    IsothermalElectronPressureClosure<Ions> pressureClosure_;
+};
+
+
+
+template<typename Ions>
+class Electrons
+{
+    using VecField   = Ions::vecfield_type;
+    using Field      = Ions::field_type;
+    using GridLayout = Ions::gridlayout_type;
+
+public:
+    Electrons(damn::initializer::DAMNDict const& dict, Ions& ions, VecField& J)
+        : momentModel_{dict, ions, J}
+    {
+    }
+
+
+    void update(GridLayout const& layout) { update_(layout); }
+
+    // one tile's worth of work, tiles can be updated concurrently
+    void update(std::size_t const tile_idx)
+        requires(is_field_tile_set_v<Field>)
+    {
+        update_(tile_idx);
+    }
+
+
+    //-------------------------------------------------------------------------
+    //                  start the ResourcesUser interface
+    //-------------------------------------------------------------------------
+
+    NO_DISCARD bool isUsable() const { return momentModel_.isUsable(); }
+
+    NO_DISCARD bool isSettable() const { return momentModel_.isSettable(); }
+
+    NO_DISCARD auto getCompileTimeResourcesViewList() const
+    {
+        return std::forward_as_tuple(momentModel_);
+    }
+
+    NO_DISCARD auto getCompileTimeResourcesViewList()
+    {
+        return std::forward_as_tuple(momentModel_);
+    }
+
+
+
+    //-------------------------------------------------------------------------
+    //                  ends the ResourcesUser interface
+    //-------------------------------------------------------------------------
+
+
+
+
+    NO_DISCARD Field const& density() const { return momentModel_.density(); }
+    NO_DISCARD VecField const& velocity() const { return momentModel_.velocity(); }
+    NO_DISCARD Field const& pressure() const { return momentModel_.pressure(); }
+
+
+    NO_DISCARD Field& density() { return momentModel_.density(); }
+    NO_DISCARD VecField& velocity() { return momentModel_.velocity(); }
+    NO_DISCARD Field& pressure() { return momentModel_.pressure(); }
+
+private:
+    void update_(auto const& layout_or_tile_idx)
+    {
+        if (!isUsable())
+            throw std::runtime_error("Error - Electron is not usable");
+
+        momentModel_.computeChargeDensity();
+        momentModel_.computeBulkVelocity(layout_or_tile_idx);
+        momentModel_.computePressure(layout_or_tile_idx);
+    }
+
+    ElectronMomentModel<Ions> momentModel_;
+};
+
+} // namespace plamn::core
+
+
+#endif

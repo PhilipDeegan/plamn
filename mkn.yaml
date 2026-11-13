@@ -1,0 +1,33 @@
+#! clean build test -p test_plamn_core -dKO -t 8
+
+name: plamn
+
+profile:
+
+- name: base
+  inc: inc
+  self: damn menum
+  arg: -std=c++20
+
+- name: test_plamn_core
+  inc: . tpp/damn
+  self: base
+  dep: google.test
+  mode: none
+  test: tst/plamn/core/numerics/ion_updater/test_updater.cpp
+        tst/plamn/core/numerics/ion_updater/test_multi_updater.cpp
+        tst/plamn/core/numerics/faraday/test_tileset_faraday.cpp
+        tst/plamn/core/numerics/ampere/test_tileset_ampere.cpp
+        tst/plamn/core/numerics/ohm/test_tileset_ohm.cpp
+
+- name: test_plamn_core_slow # ~17M particles, >10 min unoptimised
+  parent: test_plamn_core
+  test: tst/plamn/core/data/particles/test_particles_partitioning.cpp
+
+# tpp/damn may be a symlink to a local damn checkout, otherwise it is cloned
+- name: damn
+  dep: damn&tpp/damn(https://github.com/PhilipDeegan/damn)[damn_core]
+
+- name: menum
+  sub: menum&tpp/menum(https://github.com/Neargye/magic_enum)
+  inc: tpp/menum/include

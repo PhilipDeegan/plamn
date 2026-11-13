@@ -1,0 +1,439 @@
+#include "plamn/core/def.hpp"
+
+#include "plamn/plamn_core.hpp"
+#include "plamn/simulator/simulator_def.hpp"
+
+#include "plamn/core/data/field/field.hpp"
+#include "damn/core/geometry/point.hpp"
+#include "plamn/core/numerics/ampere/ampere_transformer.hpp"
+#include "plamn/core/data/grid/gridlayoutdefs.hpp"
+
+#include "tst/plamn/core/data/field/test_field.hpp"
+#include "tst/plamn/core/data/vecfield/test_vecfield_fixtures.hpp"
+
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
+
+#include <fstream>
+
+
+using namespace plamn::core;
+
+
+
+
+std::vector<double> read(std::string filename)
+{
+    std::ifstream readFile(filename);
+    assert(readFile.is_open());
+    std::vector<double> x;
+
+    std::copy(std::istream_iterator<double>(readFile), std::istream_iterator<double>(),
+              std::back_inserter(x));
+    return x;
+}
+
+
+
+class Ampere1DTest : public ::testing::Test
+{
+protected:
+    static constexpr std::size_t dim          = 1;
+    static constexpr std::size_t interp_order = 1;
+    using core_types                          = PLAMN_Types<plamn::SimOpts{dim, interp_order}>;
+    using HybridTypes                         = core_types::Hybrid;
+    using GridLayout_t                        = HybridTypes::GridLayout_t;
+    using Ampere_t                            = AmpereTransformer<>;
+    auto static constexpr field_opts          = TensorFieldOptions<HybridTypes>{};
+    using UsableVecFieldND                    = UsableVecField<field_opts>;
+
+    GridLayout_t layout;
+    UsableVecFieldND B, J;
+
+public:
+    Ampere1DTest()
+        : layout{{{0.1}}, {{50}}, damn::core::Point{0.}}
+        , B{"B", layout, HybridQuantity::Vector::B}
+        , J{"J", layout, HybridQuantity::Vector::J}
+    {
+    }
+};
+
+
+class Ampere2DTest : public ::testing::Test
+{
+protected:
+    static constexpr std::size_t dim          = 2;
+    static constexpr std::size_t interp_order = 1;
+    using core_types                          = PLAMN_Types<plamn::SimOpts{dim, interp_order}>;
+    using HybridTypes                         = core_types::Hybrid;
+    using GridLayout_t                        = HybridTypes::GridLayout_t;
+    using Ampere_t                            = AmpereTransformer<>;
+    auto static constexpr field_opts          = TensorFieldOptions<HybridTypes>{};
+    using UsableVecFieldND                    = UsableVecField<field_opts>;
+
+    GridLayout_t layout;
+    UsableVecFieldND B, J;
+
+public:
+    Ampere2DTest()
+        : layout{{{0.1, 0.2}}, {{50, 30}}, damn::core::Point{0., 0.}}
+        , B{"B", layout, HybridQuantity::Vector::B}
+        , J{"J", layout, HybridQuantity::Vector::J}
+    {
+    }
+};
+
+
+class Ampere3DTest : public ::testing::Test
+{
+protected:
+    static constexpr std::size_t dim          = 3;
+    static constexpr std::size_t interp_order = 1;
+    using core_types                          = PLAMN_Types<plamn::SimOpts{dim, interp_order}>;
+    using HybridTypes                         = core_types::Hybrid;
+    using GridLayout_t                        = HybridTypes::GridLayout_t;
+    using Ampere_t                            = AmpereTransformer<>;
+    auto static constexpr field_opts          = TensorFieldOptions<HybridTypes>{};
+    using UsableVecFieldND                    = UsableVecField<field_opts>;
+
+    GridLayout_t layout;
+    UsableVecFieldND B, J;
+
+public:
+    Ampere3DTest()
+        : layout{{{0.1, 0.2, 0.3}}, {{50, 30, 40}}, damn::core::Point{0., 0., 0.}}
+        , B{"B", layout, HybridQuantity::Vector::B}
+        , J{"J", layout, HybridQuantity::Vector::J}
+    {
+    }
+};
+
+
+
+TEST_F(Ampere1DTest, ampere1DCalculatedOk)
+{
+    auto filename_jy = std::string{"jy_yee_1D_order1.txt"};
+    auto filename_jz = std::string{"jz_yee_1D_order1.txt"};
+    auto expectedJy  = read(filename_jy);
+    auto expectedJz  = read(filename_jz);
+
+    std::uint32_t gsi_d_X = this->layout.ghostStartIndex(QtyCentering::dual, Direction::X);
+    std::uint32_t gei_d_X = this->layout.ghostEndIndex(QtyCentering::dual, Direction::X);
+
+    auto& [Bx, By, Bz]       = B();
+    auto const& [Jx, Jy, Jz] = J();
+
+    for (std::uint32_t ix = gsi_d_X; ix <= gei_d_X; ++ix)
+    {
+        auto point
+            = this->layout.fieldNodeCoordinates(By, this->layout.localToAMR(damn::core::Point{ix}.as_signed()));
+        By(ix) = std::cos(2 * M_PI / 5. * point[0]);
+        Bz(ix) = std::sin(2 * M_PI / 5. * point[0]);
+    }
+
+    Ampere_t{}(layout, B, J);
+
+    auto psi_p_X = this->layout.physicalStartIndex(QtyCentering::primal, Direction::X);
+    auto pei_p_X = this->layout.physicalEndIndex(QtyCentering::primal, Direction::X);
+
+    for (std::uint32_t ix = psi_p_X; ix <= pei_p_X; ++ix)
+    {
+        EXPECT_THAT(Jy(ix), ::testing::DoubleNear((expectedJy[ix]), 1e-12));
+        EXPECT_THAT(Jz(ix), ::testing::DoubleNear((expectedJz[ix]), 1e-12));
+    }
+}
+
+
+TEST_F(Ampere2DTest, ampere2DCalculatedOk)
+{
+    auto filename_jx = std::string{"jx_yee_2D_order1.txt"};
+    auto filename_jy = std::string{"jy_yee_2D_order1.txt"};
+    auto filename_jz = std::string{"jz_yee_2D_order1.txt"};
+    auto expectedJx  = read(filename_jx);
+    auto expectedJy  = read(filename_jy);
+    auto expectedJz  = read(filename_jz);
+
+    std::uint32_t gsi_p_X = this->layout.ghostStartIndex(QtyCentering::primal, Direction::X);
+    std::uint32_t gei_p_X = this->layout.ghostEndIndex(QtyCentering::primal, Direction::X);
+    std::uint32_t gsi_d_X = this->layout.ghostStartIndex(QtyCentering::dual, Direction::X);
+    std::uint32_t gei_d_X = this->layout.ghostEndIndex(QtyCentering::dual, Direction::X);
+    std::uint32_t gsi_p_Y = this->layout.ghostStartIndex(QtyCentering::primal, Direction::Y);
+    std::uint32_t gei_p_Y = this->layout.ghostEndIndex(QtyCentering::primal, Direction::Y);
+    std::uint32_t gsi_d_Y = this->layout.ghostStartIndex(QtyCentering::dual, Direction::Y);
+    std::uint32_t gei_d_Y = this->layout.ghostEndIndex(QtyCentering::dual, Direction::Y);
+
+    auto& [Bx, By, Bz]       = B();
+    auto const& [Jx, Jy, Jz] = J();
+
+    for (std::uint32_t ix = gsi_p_X; ix <= gei_p_X; ++ix)
+    {
+        for (std::uint32_t iy = gsi_d_Y; iy <= gei_d_Y; ++iy)
+        {
+            auto point = this->layout.fieldNodeCoordinates(
+                Bx, layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
+            Bx(ix, iy) = std::cos(2 * M_PI / 5. * point[0]) * std::sin(2 * M_PI / 6. * point[1]);
+        }
+    }
+
+    for (std::uint32_t ix = gsi_d_X; ix <= gei_d_X; ++ix)
+    {
+        for (std::uint32_t iy = gsi_p_Y; iy <= gei_p_Y; ++iy)
+        {
+            auto point = this->layout.fieldNodeCoordinates(
+                By, layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
+            By(ix, iy) = std::cos(2 * M_PI / 5. * point[0]) * std::tanh(2 * M_PI / 6. * point[1]);
+        }
+    }
+
+    for (std::uint32_t ix = gsi_d_X; ix <= gei_d_X; ++ix)
+    {
+        for (std::uint32_t iy = gsi_d_Y; iy <= gei_d_Y; ++iy)
+        {
+            auto point = this->layout.fieldNodeCoordinates(
+                Bz, layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
+            Bz(ix, iy) = std::sin(2 * M_PI / 5. * point[0]) * std::tanh(2 * M_PI / 6. * point[1]);
+        }
+    }
+
+    Ampere_t{}(layout, B, J);
+
+    auto psi_p_X = this->layout.physicalStartIndex(QtyCentering::primal, Direction::X);
+    auto pei_p_X = this->layout.physicalEndIndex(QtyCentering::primal, Direction::X);
+    auto psi_d_X = this->layout.physicalStartIndex(QtyCentering::dual, Direction::X);
+    auto pei_d_X = this->layout.physicalEndIndex(QtyCentering::dual, Direction::X);
+    auto psi_p_Y = this->layout.physicalStartIndex(QtyCentering::primal, Direction::Y);
+    auto pei_p_Y = this->layout.physicalEndIndex(QtyCentering::primal, Direction::Y);
+    auto psi_d_Y = this->layout.physicalStartIndex(QtyCentering::dual, Direction::Y);
+    auto pei_d_Y = this->layout.physicalEndIndex(QtyCentering::dual, Direction::Y);
+
+    std::array<std::uint32_t, 2> nPts_ = this->layout.allocSize(HybridQuantity::Scalar::Jx);
+
+    for (auto ix = psi_d_X; ix <= pei_d_X; ++ix)
+    {
+        for (auto iy = psi_p_Y; iy <= pei_p_Y; ++iy)
+        {
+            std::uint32_t index_ = ix * nPts_[1] + iy;
+            EXPECT_THAT(Jx(ix, iy), ::testing::DoubleNear((expectedJx[index_]), 1e-12));
+        }
+    }
+
+    nPts_ = this->layout.allocSize(HybridQuantity::Scalar::Jy);
+
+    for (auto ix = psi_p_X; ix <= pei_p_X; ++ix)
+    {
+        for (auto iy = psi_d_Y; iy <= pei_d_Y; ++iy)
+        {
+            std::uint32_t index_ = ix * nPts_[1] + iy;
+            EXPECT_THAT(Jy(ix, iy), ::testing::DoubleNear((expectedJy[index_]), 1e-12));
+        }
+    }
+
+    nPts_ = this->layout.allocSize(HybridQuantity::Scalar::Jz);
+
+    for (auto ix = psi_p_X; ix <= pei_p_X; ++ix)
+    {
+        for (auto iy = psi_p_Y; iy <= pei_p_Y; ++iy)
+        {
+            std::uint32_t index_ = ix * nPts_[1] + iy;
+            EXPECT_THAT(Jz(ix, iy), ::testing::DoubleNear((expectedJz[index_]), 1e-12));
+        }
+    }
+}
+
+
+
+TEST_F(Ampere3DTest, ampere3DCalculatedOk)
+{
+    auto filename_jx = std::string{"jx_yee_3D_order1.txt"};
+    auto filename_jy = std::string{"jy_yee_3D_order1.txt"};
+    auto filename_jz = std::string{"jz_yee_3D_order1.txt"};
+    auto expectedJx  = read(filename_jx);
+    auto expectedJy  = read(filename_jy);
+    auto expectedJz  = read(filename_jz);
+
+    std::uint32_t gsi_p_X = this->layout.ghostStartIndex(QtyCentering::primal, Direction::X);
+    std::uint32_t gei_p_X = this->layout.ghostEndIndex(QtyCentering::primal, Direction::X);
+    std::uint32_t gsi_d_X = this->layout.ghostStartIndex(QtyCentering::dual, Direction::X);
+    std::uint32_t gei_d_X = this->layout.ghostEndIndex(QtyCentering::dual, Direction::X);
+    std::uint32_t gsi_p_Y = this->layout.ghostStartIndex(QtyCentering::primal, Direction::Y);
+    std::uint32_t gei_p_Y = this->layout.ghostEndIndex(QtyCentering::primal, Direction::Y);
+    std::uint32_t gsi_d_Y = this->layout.ghostStartIndex(QtyCentering::dual, Direction::Y);
+    std::uint32_t gei_d_Y = this->layout.ghostEndIndex(QtyCentering::dual, Direction::Y);
+    std::uint32_t gsi_p_Z = this->layout.ghostStartIndex(QtyCentering::primal, Direction::Z);
+    std::uint32_t gei_p_Z = this->layout.ghostEndIndex(QtyCentering::primal, Direction::Z);
+    std::uint32_t gsi_d_Z = this->layout.ghostStartIndex(QtyCentering::dual, Direction::Z);
+    std::uint32_t gei_d_Z = this->layout.ghostEndIndex(QtyCentering::dual, Direction::Z);
+
+    auto& [Bx, By, Bz]       = B();
+    auto const& [Jx, Jy, Jz] = J();
+
+    for (std::uint32_t ix = gsi_p_X; ix <= gei_p_X; ++ix)
+    {
+        for (std::uint32_t iy = gsi_d_Y; iy <= gei_d_Y; ++iy)
+        {
+            for (std::uint32_t iz = gsi_d_Z; iz <= gei_d_Z; ++iz)
+            {
+                damn::core::Point<double, 3> point = this->layout.fieldNodeCoordinates(
+                    Bx, layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+                Bx(ix, iy, iz) = std::sin(2 * M_PI / 5. * point[0])
+                                 * std::cos(2 * M_PI / 6. * point[1])
+                                 * std::tanh(2 * M_PI / 12. * point[2]);
+            }
+        }
+    }
+
+    for (std::uint32_t ix = gsi_d_X; ix <= gei_d_X; ++ix)
+    {
+        for (std::uint32_t iy = gsi_p_Y; iy <= gei_p_Y; ++iy)
+        {
+            for (std::uint32_t iz = gsi_d_Z; iz <= gei_d_Z; ++iz)
+            {
+                damn::core::Point<double, 3> point = this->layout.fieldNodeCoordinates(
+                    By, layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+                By(ix, iy, iz) = std::tanh(2 * M_PI / 5. * point[0])
+                                 * std::sin(2 * M_PI / 6. * point[1])
+                                 * std::cos(2 * M_PI / 12. * point[2]);
+            }
+        }
+    }
+
+    for (std::uint32_t ix = gsi_d_X; ix <= gei_d_X; ++ix)
+    {
+        for (std::uint32_t iy = gsi_d_Y; iy <= gei_d_Y; ++iy)
+        {
+            for (std::uint32_t iz = gsi_p_Z; iz <= gei_p_Z; ++iz)
+            {
+                damn::core::Point<double, 3> point = this->layout.fieldNodeCoordinates(
+                    Bz, layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+                Bz(ix, iy, iz) = std::cos(2 * M_PI / 5. * point[0])
+                                 * std::tanh(2 * M_PI / 6. * point[1])
+                                 * std::sin(2 * M_PI / 12. * point[2]);
+            }
+        }
+    }
+
+    Ampere_t{}(layout, B, J);
+
+    auto psi_p_X = this->layout.physicalStartIndex(QtyCentering::primal, Direction::X);
+    auto pei_p_X = this->layout.physicalEndIndex(QtyCentering::primal, Direction::X);
+    auto psi_d_X = this->layout.physicalStartIndex(QtyCentering::dual, Direction::X);
+    auto pei_d_X = this->layout.physicalEndIndex(QtyCentering::dual, Direction::X);
+
+    auto psi_p_Y = this->layout.physicalStartIndex(QtyCentering::primal, Direction::Y);
+    auto pei_p_Y = this->layout.physicalEndIndex(QtyCentering::primal, Direction::Y);
+    auto psi_d_Y = this->layout.physicalStartIndex(QtyCentering::dual, Direction::Y);
+    auto pei_d_Y = this->layout.physicalEndIndex(QtyCentering::dual, Direction::Y);
+
+    auto psi_p_Z = this->layout.physicalStartIndex(QtyCentering::primal, Direction::Z);
+    auto pei_p_Z = this->layout.physicalEndIndex(QtyCentering::primal, Direction::Z);
+    auto psi_d_Z = this->layout.physicalStartIndex(QtyCentering::dual, Direction::Z);
+    auto pei_d_Z = this->layout.physicalEndIndex(QtyCentering::dual, Direction::Z);
+
+    std::array<std::uint32_t, 3> nPts_ = this->layout.allocSize(HybridQuantity::Scalar::Jx);
+
+    for (std::uint32_t ix = psi_d_X; ix <= pei_d_X; ++ix)
+    {
+        for (std::uint32_t iy = psi_p_Y; iy <= pei_p_Y; ++iy)
+        {
+            for (std::uint32_t iz = psi_p_Z; iz <= pei_p_Z; ++iz)
+            {
+                std::uint32_t index_ = ix * nPts_[1] * nPts_[2] + iy * nPts_[2] + iz;
+                EXPECT_THAT(Jx(ix, iy, iz), ::testing::DoubleNear((expectedJx[index_]), 1e-12));
+            }
+        }
+    }
+
+    nPts_ = this->layout.allocSize(HybridQuantity::Scalar::Jy);
+
+    for (std::uint32_t ix = psi_p_X; ix <= pei_p_X; ++ix)
+    {
+        for (std::uint32_t iy = psi_d_Y; iy <= pei_d_Y; ++iy)
+        {
+            for (std::uint32_t iz = psi_p_Z; iz <= pei_p_Z; ++iz)
+            {
+                std::uint32_t index_ = ix * nPts_[1] * nPts_[2] + iy * nPts_[2] + iz;
+                EXPECT_THAT(Jy(ix, iy, iz), ::testing::DoubleNear((expectedJy[index_]), 1e-12));
+            }
+        }
+    }
+
+    nPts_ = this->layout.allocSize(HybridQuantity::Scalar::Jz);
+
+    for (std::uint32_t ix = psi_p_X; ix <= pei_p_X; ++ix)
+    {
+        for (std::uint32_t iy = psi_p_Y; iy <= pei_p_Y; ++iy)
+        {
+            for (std::uint32_t iz = psi_d_Z; iz <= pei_d_Z; ++iz)
+            {
+                std::uint32_t index_ = ix * nPts_[1] * nPts_[2] + iy * nPts_[2] + iz;
+                EXPECT_THAT(Jz(ix, iy, iz), ::testing::DoubleNear((expectedJz[index_]), 1e-12));
+            }
+        }
+    }
+}
+
+
+TEST_F(Ampere2DTest, grownPhysicalBoxIsExactOnQuadraticB)
+{
+    using GrownAmpere = AmpereTransformer<AmpereBox{AmpereMode::GrownPhysical, 1}>;
+
+    auto const dl = layout.meshSize();
+
+    auto const x
+        = [&](auto const& field, std::uint32_t const i, std::uint32_t const iy, Direction const d) {
+              auto const c = layout.centering(field)[static_cast<std::size_t>(d)];
+              auto const n = d == Direction::X ? i : iy;
+              auto const s = static_cast<double>(n) - layout.physicalStartIndex(field, d);
+              return s * dl[static_cast<std::size_t>(d)]
+                     + (c == QtyCentering::dual ? 0.5 * dl[static_cast<std::size_t>(d)] : 0.);
+          };
+
+    auto const bx = [](double const X, double const Y) { return 0.3 * Y * Y + 0.5 * X * Y; };
+    auto const by = [](double const X, double const Y) { return -0.4 * X * X + 0.2 * X * Y; };
+    auto const bz = [](double const X, double const Y) { return 0.7 * X * Y + 0.1 * X * X; };
+
+    auto const fill = [&](auto& field, auto const& fn) {
+        auto const nx = field.shape()[0];
+        auto const ny = field.shape()[1];
+        for (std::uint32_t ix = 0; ix < nx; ++ix)
+            for (std::uint32_t iy = 0; iy < ny; ++iy)
+                field(ix, iy) = fn(x(field, ix, iy, Direction::X), x(field, ix, iy, Direction::Y));
+    };
+
+    auto& [Bx, By, Bz]       = B();
+    auto const& [Jx, Jy, Jz] = J();
+
+    fill(Bx, bx);
+    fill(By, by);
+    fill(Bz, bz);
+
+    GrownAmpere{}(layout, B, J);
+
+    auto const check = [&](auto const& Jc, auto const& expected) {
+        auto const sx = layout.physicalStartIndex(Jc, Direction::X) - 1;
+        auto const ex = layout.physicalEndIndex(Jc, Direction::X) + 1;
+        auto const sy = layout.physicalStartIndex(Jc, Direction::Y) - 1;
+        auto const ey = layout.physicalEndIndex(Jc, Direction::Y) + 1;
+        for (auto ix = sx; ix <= ex; ++ix)
+            for (auto iy = sy; iy <= ey; ++iy)
+                EXPECT_NEAR(Jc(ix, iy),
+                            expected(x(Jc, ix, iy, Direction::X), x(Jc, ix, iy, Direction::Y)),
+                            1e-10);
+    };
+
+    check(Jx, [](double const X, double const) { return 0.7 * X; });
+    check(Jy, [](double const X, double const Y) { return -(0.7 * Y + 0.2 * X); });
+    check(Jz, [](double const X, double const Y) {
+        return (-0.8 * X + 0.2 * Y) - (0.6 * Y + 0.5 * X);
+    });
+}
+
+
+
+int main(int argc, char** argv)
+{
+    ::testing::InitGoogleTest(&argc, argv);
+
+    return RUN_ALL_TESTS();
+}
