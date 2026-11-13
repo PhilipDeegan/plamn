@@ -10,6 +10,14 @@
 #include "tst/plamn/core/data/field/test_field_fixtures.hpp"
 #include "tst/plamn/core/data/tensorfield/test_tensorfield_fixtures.hpp"
 
-// UsableVecField: plamn/core/data/tensorfield/usable_tensorfield.hpp
+namespace plamn::core
+{
+
+
+template<auto opts>
+using UsableVecField = UsableTensorField<opts.with_rank(1)>;
+
+
+} // namespace plamn::core
 
 #endif /*PLAMN_TEST_CORE_DATA_TEST_VECFIELD_FIXTURES_HPP*/

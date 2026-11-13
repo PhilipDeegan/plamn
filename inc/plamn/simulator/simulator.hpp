@@ -14,6 +14,7 @@
 #include "plamn/core/errors.hpp"
 #include "damn/core/logger.hpp"
 #include "plamn/core/numerics/ohm/ohm.hpp"
+#include "plamn/core/models/electromag_initializer.hpp"
 #include "plamn/core/numerics/ohm/ohm_transformer.hpp"
 #include "plamn/core/numerics/ampere/ampere_transformer.hpp"
 #include "plamn/core/numerics/faraday/faraday_transformer.hpp"
@@ -109,8 +110,8 @@ public:
     {
         std::size_t n = 0;
         per_patch_([&](auto& patch) {
-            for (auto& pop : patch.ions.populations)
-                n += pop.particles.domain_particles.size();
+            for (auto& pop : patch.ions)
+                n += pop.domainParticles().size();
         });
         return n;
     }
@@ -272,8 +273,8 @@ void Simulator<opts>::initialize()
 
     // the model: fields and particles from the user's functions
     per_patch_([&](auto& patch) {
-        patch.em.initialize(patch.layout);
-        for (auto& pop : *patch.ions)
+        core::ElectromagInitializer<dimension>{sim["electromag"]}(patch.em, patch.layout);
+        for (auto& pop : patch.ions)
         {
             auto initializer = Patch_t::Types::ParticleInitializerFactory_t::create(
                 pop.particleInitializerInfo(), pop.name());
@@ -285,8 +286,8 @@ void Simulator<opts>::initialize()
 
     // moments from the particles, completed across patch borders
     per_patch_([&](auto& patch) {
-        core::resetMoments(*patch.ions);
-        core::depositParticles(*patch.ions, patch.layout, Interpolator{}, core::DomainDeposit{});
+        core::resetMoments(patch.ions);
+        core::depositParticles(patch.ions, patch.layout, Interpolator{}, core::DomainDeposit{});
     });
     fill_ion_borders_();
     compute_moments_();
@@ -346,11 +347,11 @@ void Simulator<opts>::ampere_ohm_()
 {
     per_patch_([&](auto& patch) {
         auto& em = patch.*electromag;
-        core::AmpereTransformer{}(patch.layout, *em.B, *patch.J);
-        patch.electrons.update(patch.layout);
-        core::OhmTransformer{*ohm_info_}(patch.layout, patch.electrons.density(),
-                                        patch.electrons.velocity(), patch.electrons.pressure(),
-                                        *em.B, *patch.J, *em.E);
+        core::AmpereTransformer{}(patch.layout, em.B, patch.J);
+        patch.electrons().update(patch.layout);
+        core::OhmTransformer{*ohm_info_}(patch.layout, patch.electrons().density(),
+                                        patch.electrons().velocity(), patch.electrons().pressure(),
+                                        em.B, patch.J, em.E);
     });
 }
 
@@ -360,8 +361,8 @@ void Simulator<opts>::average_()
     per_patch_([](auto& patch) {
         for (std::size_t i = 0; i < 3; ++i)
         {
-            core::average((*patch.em.B)[i], (*patch.emPred.B)[i], (*patch.emAvg.B)[i]);
-            core::average((*patch.em.E)[i], (*patch.emPred.E)[i], (*patch.emAvg.E)[i]);
+            core::average(patch.em.B[i], patch.emPred.B[i], patch.emAvg.B[i]);
+            core::average(patch.em.E[i], patch.emPred.E[i], patch.emAvg.E[i]);
         }
     });
     fill_<damn::amr::Transfer::PatchGhost>("EMAvg_E");
@@ -372,7 +373,7 @@ void Simulator<opts>::move_ions_(double const dt, core::UpdaterMode const mode)
 {
     DAMN_LOG_SCOPE(1, "Simulator::move_ions");
     per_patch_([&](auto& patch) {
-        ionUpdater_.updatePopulations(*patch.ions, *patch.emAvg, patch.boxing, dt, mode);
+        ionUpdater_.updatePopulations(patch.ions, patch.emAvg, patch.boxing, dt, mode);
     });
     fill_ion_borders_();
 
@@ -381,7 +382,7 @@ void Simulator<opts>::move_ions_(double const dt, core::UpdaterMode const mode)
         // particles that left their patch go to the patch owning their cell
         fill_<damn::amr::Transfer::GhostToDomain>("IonGhostParticles");
         per_patch_([](auto& patch) {
-            for (auto& pop : *patch.ions)
+            for (auto& pop : patch.ions)
                 pop.patchGhostParticles().clear();
         });
     }
@@ -392,7 +393,7 @@ template<auto opts>
 void Simulator<opts>::predictor1_(double const dt)
 {
     per_patch_([&](auto& patch) {
-        core::FaradayTransformer{}(patch.layout, *patch.em.B, *patch.em.E, *patch.emPred.B, dt);
+        core::FaradayTransformer{}(patch.layout, patch.em.B, patch.em.E, patch.emPred.B, dt);
     });
     fill_<damn::amr::Transfer::PatchGhost>("EMPred_B");
     ampere_ohm_<&Patch_t::emPred>();
@@ -402,7 +403,7 @@ template<auto opts>
 void Simulator<opts>::predictor2_(double const dt)
 {
     per_patch_([&](auto& patch) {
-        core::FaradayTransformer{}(patch.layout, *patch.em.B, *patch.emAvg.E, *patch.emPred.B,
+        core::FaradayTransformer{}(patch.layout, patch.em.B, patch.emAvg.E, patch.emPred.B,
                                    dt);
     });
     fill_<damn::amr::Transfer::PatchGhost>("EMPred_B");
@@ -413,7 +414,7 @@ template<auto opts>
 void Simulator<opts>::corrector_(double const dt)
 {
     per_patch_([&](auto& patch) {
-        core::FaradayTransformer{}(patch.layout, *patch.em.B, *patch.emAvg.E, *patch.em.B, dt);
+        core::FaradayTransformer{}(patch.layout, patch.em.B, patch.emAvg.E, patch.em.B, dt);
     });
     fill_<damn::amr::Transfer::PatchGhost>("EM_B");
     ampere_ohm_<&Patch_t::em>();

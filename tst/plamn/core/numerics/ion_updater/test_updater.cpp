@@ -6,6 +6,7 @@
 #include "damn/core/math/array.hpp"
 #include "damn/core/math/numeric.hpp"
 #include "plamn/core/numerics/ion_updater/ion_updater.hpp"
+#include "plamn/core/models/electromag_initializer.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/numerics/interpolator/interpolating.hpp"
 #include "plamn/core/numerics/interpolator/interpolating.hpp"
@@ -230,7 +231,7 @@ struct IonUpdaterTest : public ::testing::Test
         // and ion population particles to user supplied moments
 
         assert(no_nans(ions.velocity()(Component::X)));
-        EM.initialize(layout);
+        ElectromagInitializer<dim>{init_dict["electromag"]}(*EM, layout);
         for (auto& pop : ions)
         {
             auto const& info         = pop.particleInitializerInfo();
