@@ -15,8 +15,15 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - run: |  # numpy, matplotlib: pyphare's third party imports for the python tests
-        apt update && apt install -y curl git openssh-client python3-numpy python3-matplotlib
+    - run: apt update && apt install -y curl git openssh-client
+
+    # the image has PHARE's requirements.txt (numpy, dill, matplotlib, ...) in a venv only
+    # ~/.bashrc activates, which run steps don't source: put it first on PATH for later steps
+    - run: |
+        for venv in /.venv /root/.venv; do
+          if [ -x $venv/bin/python3 ]; then echo "$venv/bin" >> $GITHUB_PATH; break; fi
+        done
+    - run: python3 -c "import dill, numpy, matplotlib; print('pyphare requirements from', __import__('sys').prefix)"
 
     # damn is private: check it out where mkn looks for it (tpp/damn) instead of cloning,
     # using a read-only deploy key on damn
