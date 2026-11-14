@@ -2,7 +2,7 @@
 (PHAREHUB/PHARE#1400): needs a pyphare with the DataWrangler of PHAREHUB/PHARE#1171
 
     PYTHONPATH=python:$PHARE_WRANGLER/pyphare:tst/plamn/python \
-        python3 -m unittest tst/plamn/python/test_data_wrangler.py
+        python3 -m phlop.run.test_cases -i tst/plamn/python/test_data_wrangler.py
 """
 
 import unittest
