@@ -24,7 +24,8 @@ jobs:
           if [ -x $venv/bin/python3 ]; then echo "$venv/bin" >> $GITHUB_PATH; break; fi
         done
     - run: python3 -c "import dill, numpy, matplotlib; print('pyphare requirements from', __import__('sys').prefix)"
-    # phlop.run.test_cases: one process per test, in parallel; .phlop.exec.yaml for special cases
+    # phlop.run.test_cases: one process per test, in parallel; tst/plamn/python/.phlop.exec.yaml:
+    #  --tags mpi also runs the simulator tests on 3 ranks (mpirun)
     - run: python3 -m pip install phlop
 
     # damn is private: check it out where mkn looks for it (tpp/damn) instead of cloning,
@@ -53,7 +54,7 @@ jobs:
     - run: |
         PATH=$PWD:$PATH KLOG=3 ./mkn.py --dim 1 2 -- -qW -x res/mkn/mpi
         PYTHONPATH=python:phare/pyphare:tst/plamn/python \
-          python3 -m phlop.run.test_cases -i tst -c 2
+          python3 -m phlop.run.test_cases -i tst -c 4 --tags mpi
 
     # again with the pyphare of PHAREHUB/PHARE#1171 (live DataWrangler, PHARE master based)
     - uses: actions/checkout@v4
@@ -65,4 +66,4 @@ jobs:
 
     - run: |
         PYTHONPATH=python:phare_wrangler/pyphare:tst/plamn/python \
-          python3 -m phlop.run.test_cases -i tst -c 2
+          python3 -m phlop.run.test_cases -i tst -c 4 --tags mpi

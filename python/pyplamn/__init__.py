@@ -10,7 +10,8 @@ patch() points pyphare at plamn:
   - pyphare.cpp.cpp_etc_lib() returns pyplamn.etc
   - pyphare.cpp.cpp_lib(sim) returns pyplamn's simulator module for sim's permutation,
     built from the Dict (pyplamn.etc.make_hierarchy() hands it to make_simulator)
-  - no SAMRAI/MPI start up, no pybindlibs build checks
+  - MPI started by pyphare's startMPI() (plamn_etc's MpiLifeCycle), no SAMRAI, no pybindlibs
+    build checks
 """
 
 import atexit
@@ -86,6 +87,14 @@ def _patch_layout_for():
     fromsim.make_layout_for = make_layout_for
 
 
+def _finalize_mpi():
+    import pyphare.simulator.simulator as simulator
+
+    life_cycle = simulator.life_cycles.pop("samrai", None)
+    if life_cycle is not None:
+        life_cycle.finalize()
+
+
 def patch():
     import pyphare.cpp as cpp
     import pyphare.cpp.validate as validate
@@ -101,9 +110,10 @@ def patch():
 
     _patch_layout_for()
 
-    simulator.startMPI = lambda: None
     validate.log_runtime_config = lambda *a, **k: None
     validate.check_build_config_is_runtime_compatible = lambda *a, **k: None
 
     # the Dict holds python functions: release them before the interpreter goes
     atexit.register(clear_dict)
+    # MPI, if started (pyphare's startMPI): finalized before the interpreter goes
+    atexit.register(_finalize_mpi)

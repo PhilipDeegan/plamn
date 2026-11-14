@@ -1,7 +1,7 @@
 """plamn's stand-in for pyphare's pybindlibs.cpp_etc
 
-pyphare.cpp.cpp_etc_lib() returns this module once pyplamn.patch() ran. Serial for now:
-the mpi_* functions answer for a single rank.
+pyphare.cpp.cpp_etc_lib() returns this module once pyplamn.patch() ran. MPI is plamn_etc's:
+started by pyphare's startMPI() (SamraiLifeCycle is MPI's life cycle), finalized at exit.
 """
 
 import socket
@@ -10,39 +10,25 @@ import numpy as np
 
 from .plamn_etc import (  # noqa: F401
     AllocatorMode,
+    MpiLifeCycle,
     BoundaryType,
     Dict,
     HyperMode,
     LayoutMode,
     TimeStepType,
+    mpi_barrier,
+    mpi_initialized,
+    mpi_is_root_rank_for_host,
+    mpi_rank,
+    mpi_size,
 )
 
 
-# ---------------------------------------------------------------- mpi, serial
-
-
-def mpi_size():
-    return 1
-
-
-def mpi_rank():
-    return 0
-
-
-def mpi_barrier():
-    pass
-
-
-def mpi_initialized():
-    return False
+# ---------------------------------------------------------------- mpi
 
 
 def mpi_hostname():
     return socket.gethostname()
-
-
-def mpi_is_root_rank_for_host():
-    return True
 
 
 def make_hierarchy():
@@ -53,12 +39,8 @@ def make_hierarchy():
     return current_dict()
 
 
-class SamraiLifeCycle:
-    """nothing to start or stop without SAMRAI"""
-
-    @staticmethod
-    def reset():
-        pass
+# pyphare's startMPI() makes a SamraiLifeCycle: here MPI's, no SAMRAI
+SamraiLifeCycle = MpiLifeCycle
 
 
 # ---------------------------------------------------------------- init function arrays

@@ -1,0 +1,23 @@
+# phlop.run.test_cases (python3 -m phlop.run.test_cases -i tst): every test runs once in its own
+# process; the files below also run on 3 ranks with --tags mpi (CI). See phlop's
+# phlop/testing/test_cases.py load_config_tests for the format.
+
+test_load_balancing.py:
+  - {}
+  - tags: [mpi]
+    prefix: "mpirun --oversubscribe -n 3"
+
+test_hybrid_alfven1d.py:
+  - {}
+  - tags: [mpi]
+    prefix: "mpirun --oversubscribe -n 3"
+
+test_data_wrangler.py:
+  - {}
+  - tags: [mpi]
+    prefix: "mpirun --oversubscribe -n 3"
+
+test_multi_species_momentum.py:
+  - {}
+  - tags: [mpi]
+    prefix: "mpirun --oversubscribe -n 3"

@@ -4,11 +4,12 @@
     ./mkn.py                              # 1D, interp 1: plamn_cpp_1_1_2_AoSMapped_CPU
     ./mkn.py --dim 1 2 --interp 1 2       # every combination
     ./mkn.py --dim 2 --refined 5          # a refined particle number other than the default
-    ./mkn.py --dim 2 -- -x res/mkn/mpi    # anything after -- goes to mkn
+    ./mkn.py --dim 2 -- -W                # anything after -- goes to mkn
 
 The permutation is set with compile definitions (PLAMN_SIM_*, see src/python3/plamn_sim.cpp)
 and the module named as pyplamn looks for it: plamn_cpp_<dim>_<interp>_<refined>_<layout>_<alloc>,
 pyphare's simulator id. Run from the plamn root; py_etc is built once first unless --no-etc.
+The modules use MPI: built with res/mkn/mpi's settings (mpicxx) unless -x is given after --.
 """
 
 import argparse
@@ -81,6 +82,8 @@ def main(argv):
     else:
         extra = []
     args = parser.parse_args(argv)
+    if "-x" not in extra:
+        extra += ["-x", "res/mkn/mpi"]
 
     if not args.no_etc and mkn("py_etc", extra):
         return 1

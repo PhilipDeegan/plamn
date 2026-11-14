@@ -49,7 +49,8 @@ class DataWranglerTest(unittest.TestCase):
 
     def test_fields_match_the_simulation(self):
         hier = hierarchy_from_sim(self.simulator, qty="EM_B_y")
-        self.assertEqual(len(hier.level(0).patches), CELLS // PATCH)
+        self.assertEqual(len(hier.level(0).patches), self.cpp.patch_count())  # this rank's
+        self.assertEqual(self.cpp.all_patch_count(), CELLS // PATCH)
         np.testing.assert_array_equal(
             domain(hier, "EM_B_y"), self.cpp.domain_values("EM_B_y")
         )
@@ -157,30 +158,39 @@ class DataWrangler2DTest(unittest.TestCase):
         self.simulator.reset()
 
     def test_fields(self):
+        # sync: every rank's patches gathered on rank 0 (in rank order), none on the others
         hier = None
         for qty in ["EM_B_x", "EM_B_y", "density"]:
             hier = hierarchy_from_sim(self.simulator, qty=qty, hier=hier, sync=True)
-        self.assertEqual(len(hier.level(0).patches), (CELLS_2D // PATCH_2D) ** 2)
-        for qty, name in [("EM_B_y", "EM_B_y"), ("EM_B_x", "EM_B_x")]:
-            np.testing.assert_array_equal(domain(hier, qty), self.cpp.domain_values(name))
+        everywhere = {name: self.cpp.all_domain_values(name) for name in ["EM_B_x", "EM_B_y"]}
+        self.assertEqual(self.cpp.all_patch_count(), (CELLS_2D // PATCH_2D) ** 2)
+        if self.cpp.rank() != 0:
+            return
+
+        self.assertEqual(len(hier.level(0).patches), self.cpp.all_patch_count())
+        for name, values in everywhere.items():
+            if self.cpp.ranks() == 1:  # the same order
+                np.testing.assert_array_equal(domain(hier, name), values)
+            else:
+                np.testing.assert_array_equal(np.sort(domain(hier, name)), np.sort(values))
         self.assertTrue(np.isfinite(domain(hier, "density")).all())
 
     def test_particles(self):
         hier = hierarchy_from_sim(self.simulator, qty="particles", pop="protons")
         total = sum(p.patch_datas["particles"].size() for p in hier.level(0).patches)
-        self.assertEqual(total, self.cpp.particle_count())
-        self.assertGreaterEqual(total, 0.95 * PPC_2D * CELLS_2D**2)
+        self.assertEqual(total, self.cpp.particle_count())  # this rank's
+        self.assertGreaterEqual(self.cpp.total_particle_count(), 0.95 * PPC_2D * CELLS_2D**2)
 
     def test_views_are_live_across_advances(self):
         dw = self.simulator.data_wrangler()
         views = [pd.data for pd in dw.getPatchLevel(0).getE("y")]
-        particles = self.cpp.particle_count()
+        particles = self.cpp.total_particle_count()
         for _ in range(5):
             self.simulator.advance()
         hier = hierarchy_from_sim(self.simulator, qty="EM_E_y")
         np.testing.assert_array_equal(domain(hier, "EM_E_y"), self.cpp.domain_values("EM_E_y"))
         self.assertTrue(all(np.isfinite(v).all() for v in views))
-        self.assertEqual(self.cpp.particle_count(), particles)  # periodic
+        self.assertEqual(self.cpp.total_particle_count(), particles)  # periodic, over ranks
 
 
 if __name__ == "__main__":
