@@ -92,6 +92,52 @@
 
 namespace plamn
 {
+namespace detail
+{
+    // PHARE's CoarsestRebalanceCheck: once per step, whether level 0 is rebalanced in automatic
+    //  mode. Workloads are only gathered (collective) when a check is due; every rank holds the
+    //  same state so they agree on when. After a balanced check the interval grows by backoff
+    //  up to max_interval, after a rebalance it restarts from interval
+    struct CoarsestRebalanceCheck
+    {
+        std::size_t first = 200, backoff = 2, max_interval = 1000;
+        double tolerance = 0.05;
+        std::size_t interval{std::max<std::size_t>(first, 1)};
+        std::size_t steps_to_next_check = 0;
+
+        NO_DISCARD static bool imbalanced(std::vector<double> const& workloads,
+                                          double const tolerance)
+        {
+            if (workloads.empty())
+                return false;
+            double total = 0;
+            for (auto const w : workloads)
+                total += w;
+            if (total <= 0)
+                return false;
+            auto const average = total / static_cast<double>(workloads.size());
+            return *std::max_element(workloads.begin(), workloads.end()) / average - 1 > tolerance;
+        }
+
+        NO_DISCARD bool operator()(auto&& gather_workloads)
+        {
+            if (steps_to_next_check > 0)
+            {
+                --steps_to_next_check;
+                return false;
+            }
+            bool const rebalance = imbalanced(gather_workloads(), tolerance);
+            if (rebalance)
+                interval = std::max<std::size_t>(first, 1);
+            steps_to_next_check = interval - 1;
+            if (!rebalance)
+                interval = std::min(interval * std::max<std::size_t>(backoff, 1),
+                                    std::max<std::size_t>(max_interval, 1));
+            return rebalance;
+        }
+    };
+} // namespace detail
+
 template<auto opts>
 class Simulator : public ISimulator
 {
@@ -277,6 +323,14 @@ private:
     // a box's load balancing weight: the particles it will hold, plus its cells for the field
     // work. Each rank evaluates its share of the boxes, then they are summed over ranks
     std::vector<double> box_weights_(int ln, std::vector<Box_t> const& boxes);
+    // once running: the particles each box (level ln's cells) holds now, as PHARE's nppc load
+    //  balancing counts them (cells for mode homogeneous). A level being made or regridded: its
+    //  old particles where it was, the coarser level's under the rest times the split. Each
+    //  rank counts its patches', then they are summed over ranks
+    std::vector<double> particle_weights_(int ln, std::vector<Box_t> const& boxes);
+    // PHARE's: a rebalance of level 0 (and so of the finer levels) due at this step
+    NO_DISCARD bool should_rebalance_();
+    void rebalance_(double t); // level 0 onto new owners, then each finer level
 
     void register_resources_();
     // level ln's patches from its boxes (that level's cells): chopped into the largest patch
@@ -339,6 +393,16 @@ private:
     std::vector<std::vector<Box_t>> clustered_; // per level: the boxes it was clustered to
     int regrid_interval_ = 2;                   // SAMRAI's for ratio 2 with time refinement
     int steps_           = 0;
+    // simulation/AMR/loadbalancing (pyphare's LoadBalancer), with refinement="tagging"
+    struct LoadBalancing
+    {
+        bool active = false, automatic = false, on_init = false;
+        std::size_t every          = 0;
+        std::string mode           = "nppc";
+        double tolerance           = 0.05;
+        std::size_t next_rebalance = 200, backoff = 2, max_next_rebalance = 1000;
+    } lb_;
+    std::optional<detail::CoarsestRebalanceCheck> rebalance_check_;
     int rank_    = 0;
     int n_ranks_ = 1;
     damn::amr::Topology topology_;
@@ -521,6 +585,28 @@ void Simulator<opts>::setup_()
         }
     }
 
+    if (tagging_ and amr.contains("loadbalancing"))
+    {
+        auto const& lb = amr["loadbalancing"];
+        auto const get = [&](std::string const& key, auto const fallback) {
+            return lb.contains(key) ? lb[key].template to<std::decay_t<decltype(fallback)>>()
+                                    : fallback;
+        };
+        lb_.active             = get("active", false);
+        lb_.automatic          = get("auto", false);
+        lb_.on_init            = get("on_init", false);
+        lb_.every              = get("every", std::size_t{0});
+        lb_.mode               = get("mode", std::string{"nppc"});
+        lb_.tolerance          = get("tolerance", 0.05);
+        lb_.next_rebalance     = get("next_rebalance", std::size_t{200});
+        lb_.backoff            = get("next_rebalance_backoff_multiplier", std::size_t{2});
+        lb_.max_next_rebalance = get("max_next_rebalance", std::size_t{1000});
+        detail::CoarsestRebalanceCheck check{lb_.next_rebalance, lb_.backoff,
+                                             lb_.max_next_rebalance, lb_.tolerance};
+        check.steps_to_next_check = lb_.on_init ? 0 : check.interval;
+        rebalance_check_.emplace(check);
+    }
+
     ohm_info_.emplace(core::OhmInfo::FROM(sim["algo"]["ohm"]));
 
     register_resources_();
@@ -687,7 +773,10 @@ Simulator<opts>::level_of_(int const ln, std::vector<Box_t> const& boxes)
         for (auto const& b : damn::amr::chop(box, size))
             patches.push_back(b);
     return damn::amr::make_level(
-        ln, patches, damn::amr::partition(patches, box_weights_(ln, patches), n_ranks_));
+        ln, patches,
+        damn::amr::partition(
+            patches, isInitialized_ ? particle_weights_(ln, patches) : box_weights_(ln, patches),
+            n_ranks_));
 }
 
 template<auto opts>
@@ -898,6 +987,162 @@ std::vector<typename Simulator<opts>::Box_t> Simulator<opts>::cluster_(int const
     return damn::amr::cluster(
         hierarchy_, ln, damn::amr::tagged_tiles(hierarchy_, ln, tagged, clustering_), clustering_);
 }
+
+template<auto opts>
+std::vector<double> Simulator<opts>::particle_weights_(int const ln,
+                                                       std::vector<Box_t> const& boxes)
+{
+    DAMN_LOG_SCOPE(1, "Simulator::particle_weights_");
+    std::vector<double> weights(boxes.size(), 0.);
+    if (lb_.mode == "homogeneous")
+    {
+        for (std::size_t b = 0; b < boxes.size(); ++b)
+            weights[b] = static_cast<double>(boxes[b].size());
+        return weights;
+    }
+
+    // fn(cells box, count of cell(p)) for every local patch of level l: its domain particles per
+    //  cell
+    auto const per_cell = [&](std::size_t const l, auto&& fn) {
+        auto& ld = levels_[l].data;
+        for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
+        {
+            auto const& cells = ld.patches[i].box;
+            std::vector<double> count(cells.size(), 0.);
+            auto const index = [&](auto const& c) {
+                std::size_t k = 0, stride = 1;
+                for (std::size_t d = 0; d < dimension; ++d)
+                {
+                    k += static_cast<std::size_t>(c[d] - cells.lower[d]) * stride;
+                    stride *= static_cast<std::size_t>(cells.upper[d] - cells.lower[d] + 1);
+                }
+                return k;
+            };
+            for (auto& pop : ld.data[i]->ions)
+            {
+                auto const& particles = pop.domainParticles();
+                for (std::size_t p = 0; p < particles.size(); ++p)
+                {
+                    damn::core::Point<int, dimension> const c{particles[p].iCell()};
+                    if (damn::core::isIn(c, cells))
+                        count[index(c)] += 1;
+                }
+            }
+            fn(cells, [&](auto const& c) { return count[index(c)]; });
+        }
+    };
+
+    auto const fine = static_cast<std::size_t>(ln);
+    // the level's own particles, where it is
+    if (fine < levels_.size())
+        per_cell(fine, [&](auto const& cells, auto&& count) {
+            for (std::size_t b = 0; b < boxes.size(); ++b)
+                if (auto const overlap = boxes[b] * cells)
+                    damn::core::for_each_point(*overlap,
+                                               [&](auto const& c) { weights[b] += count(c); });
+        });
+    // where it is not (yet): the coarser level's particles, split
+    if (ln > 0)
+    {
+        auto const covered = fine < levels_.size() ? hierarchy_.levels[ln].patches
+                                                   : std::vector<damn::amr::Patch<dimension>>{};
+        per_cell(fine - 1, [&](auto const& cells, auto&& count) {
+            for (std::size_t b = 0; b < boxes.size(); ++b)
+                if (auto const overlap = damn::core::coarsen(boxes[b], hierarchy_.ratio) * cells)
+                    damn::core::for_each_point(*overlap, [&](auto const& c) {
+                        auto const under = damn::core::refine(Box_t{c, c}, hierarchy_.ratio);
+                        for (auto const& p : covered)
+                            if (damn::core::isIn(under.lower, p.box))
+                                return; // the old level's particles, counted above
+                        weights[b] += count(c) * static_cast<double>(nbRefinedPart);
+                    });
+        });
+    }
+    if (n_ranks_ > 1)
+        MPI_Allreduce(MPI_IN_PLACE, weights.data(), static_cast<int>(weights.size()), MPI_DOUBLE,
+                      MPI_SUM, MPI_COMM_WORLD);
+    return weights;
+}
+
+template<auto opts>
+bool Simulator<opts>::should_rebalance_()
+{
+    if (!lb_.active or !tagging_ or n_ranks_ == 1)
+        return false;
+    if (!lb_.automatic)
+        return (steps_ == 0 and lb_.on_init)
+               or (lb_.every > 0 and steps_ > 0 and steps_ % static_cast<int>(lb_.every) == 0);
+    return (*rebalance_check_)([&] {
+        DAMN_LOG_SCOPE(1, "Simulator::should_rebalance_::automatic");
+        // every rank's level 0 workload
+        double const mine = lb_.mode == "homogeneous" ? [&] {
+            double cells = 0;
+            for (auto const& p : levels_[0].data.patches)
+                cells += static_cast<double>(p.box.size());
+            return cells;
+        }()
+                                                      : static_cast<double>(particle_count(0));
+        std::vector<double> all(static_cast<std::size_t>(n_ranks_));
+        MPI_Allgather(&mine, 1, MPI_DOUBLE, all.data(), 1, MPI_DOUBLE, MPI_COMM_WORLD);
+        return all;
+    });
+}
+
+// level 0's patches (the same boxes) partitioned again by the particles they hold, its data
+// moved to the new owners, its ghosts and moments refilled; then each finer level the same
+// (regrid_level_ onto its own boxes: nothing new to refine)
+template<auto opts>
+void Simulator<opts>::rebalance_(double const t)
+{
+    DAMN_LOG_SCOPE(1, "Simulator::rebalance_");
+    auto const pgw = Patch_t::particle_ghost_width;
+
+    std::vector<Box_t> boxes;
+    for (auto const& p : hierarchy_.levels[0].patches)
+        boxes.push_back(p.box);
+    auto const old0 = hierarchy_.levels[0];
+    auto level0     = damn::amr::make_level(
+        0, boxes, damn::amr::partition(boxes, particle_weights_(0, boxes), n_ranks_));
+
+    if (!damn::amr::same_decomposition(old0, level0))
+    {
+        auto const finer = std::vector<damn::amr::Level<dimension>>(hierarchy_.levels.begin() + 1,
+                                                                    hierarchy_.levels.end());
+        damn::amr::set_level(hierarchy_, level0); // drops the finer: put back below
+        for (auto const& level : finer)
+            damn::amr::set_level(hierarchy_, level);
+
+        auto const map  = damn::amr::make_regrid_map(old0, hierarchy_.levels[0], rank_,
+                                                     damn::amr::periodic_shifts(hierarchy_, 0));
+        auto const& sim = dict_["simulation"];
+        auto& l         = levels_[0];
+        l.data          = damn::mpi::regrid(map, std::move(l.data), [&](auto const& p) {
+            Layout_t const layout{p.box, damn::amr::mesh_size(hierarchy_, 0),
+                                  damn::amr::position(hierarchy_, 0, p.box.lower), 0};
+            auto const ghost = damn::core::grow(p.box, damn::core::ConstArray<int, dimension>(pgw));
+            return std::make_unique<Patch_t>(layout, sim,
+                                             damn::amr::covered_by_level(hierarchy_, 0, ghost));
+        });
+        for (std::size_t i = 0; i < damn::amr::size(l.data); ++i)
+        {
+            auto const ghost = damn::core::grow(l.data.patches[i].box,
+                                                damn::core::ConstArray<int, dimension>(pgw));
+            l.data.data[i]->rebox(damn::amr::covered_by_level(hierarchy_, 0, ghost));
+            for (auto& pop : l.data.data[i]->ions)
+                pop.patchGhostParticles().clear();
+        }
+        link_level_(0);
+        fill_magnetic_ghosts_(0, "EM_B", t);
+        fill_electric_ghosts_(0, "EM_E", t);
+        copy_(0, damn::amr::fill_ghosts, "IonPopMoments");
+        compute_moments_(0);
+        prepare_step_(0, t);
+    }
+
+    for (std::size_t ln = 1; ln < levels_.size(); ++ln)
+        regrid_level_(static_cast<int>(ln), clustered_[ln], t);
+}
+
 
 // every level but the finest allowed tagged and clustered again: a finer level whose boxes
 // changed is regridded (made, if new; removed, with the finer, if nothing is tagged)
@@ -1124,10 +1369,14 @@ double Simulator<opts>::advance()
     if (!isInitialized_)
         throw std::runtime_error("plamn Simulator: initialize() first");
 
+    if (should_rebalance_())
+        rebalance_(currentTime_);
+
     Hooks hooks{*this};
     damn::amr::advance(hierarchy_, hooks, currentTime_, dt_, time_ratio());
     currentTime_ += dt_;
-    if (tagging_ and ++steps_ % regrid_interval_ == 0)
+    ++steps_;
+    if (tagging_ and steps_ % regrid_interval_ == 0)
         regrid_(currentTime_);
     return dt_;
 }
