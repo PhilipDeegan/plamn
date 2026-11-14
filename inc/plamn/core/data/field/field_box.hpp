@@ -11,7 +11,6 @@
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 
-#include "plamn/core/def.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/data/grid/grid.hpp"
 #include "plamn/core/data/field/field.hpp"
@@ -22,7 +21,6 @@
 #include <cstdlib>
 #include <vector>
 #include <cmath>
-#include <cstddef>
 #include <cstring>
 #include <type_traits>
 #include <algorithm>

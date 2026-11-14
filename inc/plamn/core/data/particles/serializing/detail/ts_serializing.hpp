@@ -3,9 +3,7 @@
 #define PLAMN_CORE_DATA_PARTICLES_SERIALIZING_DETAIL_TS_SERIALIZING
 
 #include "damn/core/def/damn_config.hpp"
-#include "damn/core/meta/type_meta.hpp"
 
-#include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/particles_detail.hpp"
 #include "plamn/core/data/particles/particles.hpp"

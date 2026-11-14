@@ -95,8 +95,6 @@ private:
 };
 
 
-template<typename Particles>
-struct PCCrossTileCopyDAO;
 
 
 template<typename Particles>

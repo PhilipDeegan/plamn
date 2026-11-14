@@ -1,7 +1,6 @@
 #ifndef PLAMN_CORE_DATA_GRID_GRID_BASE_HPP
 #define PLAMN_CORE_DATA_GRID_GRID_BASE_HPP
 
-#include "damn/core/def/damn_config.hpp"
 #include "damn/core/meta/for_N.hpp"
 
 #include "plamn/core/def.hpp"
@@ -9,7 +8,6 @@
 
 #include <array>
 #include <string>
-#include <cassert>
 #include <optional>
 #include <algorithm>
 #include <cstdint>

@@ -4,7 +4,6 @@
 #include "damn/core/math/array.hpp"
 #include "damn/core/meta/logic.hpp"
 #include "damn/core/geometry/box.hpp"
-#include "damn/core/geometry/point.hpp"
 #include "damn/core/def/damn_config.hpp"
 
 #include "plamn/core/def.hpp"

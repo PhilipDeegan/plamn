@@ -2,9 +2,7 @@
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLES_SOA_HPP
 
 #include "damn/core/def/detail/mkn_avx.hpp"
-#include "damn/core/logger.hpp"
 #include "damn/core/vector.hpp"
-#include "damn/core/meta/tuple.hpp"
 #include "damn/core/meta/for_N.hpp"
 #include "damn/core/sys/monitoring.hpp"
 #include "damn/core/def/damn_config.hpp"

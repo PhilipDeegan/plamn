@@ -2,20 +2,12 @@
 #define PLAMN_CORE_NUMERICS_AMPERE_AMPERE_TRANSFORMER_HPP
 
 #include "damn/core/math/array.hpp"
-#include "damn/core/math/numeric.hpp"
-#include "damn/core/meta/logic.hpp"
 #include "damn/core/meta/for_N.hpp"
-#include "damn/core/meta/type_meta.hpp"
-#include "damn/core/meta/tuple.hpp"
-#include "damn/core/sys/strings.hpp"
-#include "damn/core/sys/env.hpp"
-#include "damn/core/exec/kernels.hpp"
 #include "damn/core/exec/kernels/region_chunks.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"
 
-#include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/detail/detail.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/numerics/ampere/ampere.hpp"
@@ -25,7 +17,6 @@
 
 #include <array>
 #include <cstdint>
-#include <stdexcept>
 #include <cstddef>
 #include <format>
 #include <type_traits>

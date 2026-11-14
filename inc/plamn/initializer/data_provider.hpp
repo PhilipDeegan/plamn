@@ -6,8 +6,6 @@
 
 #include "damn/core/memory/span.hpp"
 
-#include "plamn/core/def.hpp"
-
 #include "dict.hpp"
 
 #include <memory>

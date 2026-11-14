@@ -8,8 +8,6 @@
 #include "damn/core/math/numeric.hpp"
 #include "damn/core/meta/logic.hpp"
 #include "damn/core/meta/type_meta.hpp"
-#include "damn/core/memory/span.hpp"
-#include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/math/equality.hpp"
 #include "damn/core/sys/monitoring.hpp"
@@ -26,7 +24,6 @@
 #include <utility>
 #include <sstream>
 #include <stdexcept>
-#include <type_traits>
 #include <cstddef>
 #include <format>
 #include <string>

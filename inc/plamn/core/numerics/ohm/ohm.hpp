@@ -2,10 +2,8 @@
 #define PLAMN_OHM_HPP
 
 #include "damn/core/geometry/point.hpp"
-#include "damn/core/meta/container_meta.hpp"
 #include "damn/core/def/damn_config.hpp"
 
-#include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/layout_defs.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
 #include "plamn/core/data/vecfield/vecfield_component.hpp"

@@ -9,33 +9,11 @@
 #include "plamn/core/data/particles/appending/detail/def_appending.hpp"
 #include "plamn/core/data/particles/appending/detail/aos_appending.hpp"
 #include "plamn/core/data/particles/appending/detail/soa_appending.hpp"
-#include "plamn/core/data/particles/appending/detail/soavx_chunked_appending.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 
 #include <cassert>
 #include <string_view>
-#include <iterator>
 #include <cstddef>
-
-namespace plamn::core
-{
-
-// generic fallthrough
-// template<auto src_layout_mde, auto src_alloc_mde, auto dst_layout_mde, auto dst_alloc_mde>
-// template<auto type, typename Src, typename Dst>
-// void ParticlesAppender<src_layout_mde, src_alloc_mde, dst_layout_mde, dst_alloc_mde>::operator()(
-//     Src const& src, Dst& dst)
-// {
-//     // not optimized but *should work*
-//     // if it doesn't, make a new impl
-
-//     // assert(dst.capacity() > dst.size() + src.size());
-//     dst.reserve(dst.size() + src.size()); // BAD!
-//     std::copy(src.begin(), src.end(), std::back_inserter(dst));
-// }
-
-
-} // namespace plamn::core
 
 namespace plamn::core
 {

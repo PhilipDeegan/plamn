@@ -4,7 +4,6 @@
 #include "damn/core/meta/type_meta.hpp"
 
 #include "plamn/core/def.hpp"
-#include "plamn/core/data/particles/particles.hpp"
 
 #include <cstddef>
 #include <stdexcept>

@@ -1,8 +1,6 @@
 #ifndef PLAMN_PARTICLE_INITIALIZER_HPP
 #define PLAMN_PARTICLE_INITIALIZER_HPP
 
-#include "plamn/core/def.hpp"
-
 namespace plamn
 {
 namespace core

@@ -4,9 +4,7 @@
 // SoAVXChunked from / to AoS (pack and refine staging) and itself, one particle at a time,
 //  GPU_UNIFIED on the host. The destination's offsets are rebuilt by the caller's on_appended
 
-#include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
-#include "plamn/core/data/particles/appending/detail/def_appending.hpp"
 
 #include <cstddef>
 

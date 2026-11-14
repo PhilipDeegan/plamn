@@ -18,7 +18,6 @@
 #include "plamn/core/data/electromag/electromag.hpp"
 #include "plamn/core/numerics/pusher/boris/basics.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
-#include "plamn/core/numerics/interpolator/interpolating.hpp"
 #include "plamn/core/data/particles/arrays/particles_soavx.hpp"
 #include "plamn/core/data/particles/particles.hpp"
 #include "plamn/core/data/tensorfield/tensorfield.hpp"

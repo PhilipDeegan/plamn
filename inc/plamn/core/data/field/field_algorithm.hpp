@@ -2,8 +2,6 @@
 #define PLAMN_CORE_DATA_FIELD_FIELD_ALGORITHM_HPP
 
 #include "damn/core/memory/span.hpp"
-#include "damn/core/exec/kernels.hpp"
-#include "damn/core/meta/logic.hpp"
 #include "damn/core/math/array.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/meta/constexprifier.hpp"
@@ -14,10 +12,7 @@
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/field/field.hpp"
 #include "plamn/core/data/field/recentered_field.hpp"
-#include "plamn/core/data/grid/layout_defs.hpp"
 #include "plamn/core/data/tensorfield/tensorfield.hpp"
-#include "plamn/core/data/grid/grid.hpp"
-#include "plamn/core/data/grid/grid_tiles.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/models/quantities/quantity.hpp"
 

@@ -1,8 +1,6 @@
 #ifndef PLAMN_CORE_DATA_VECFIELD_VECFIELD_COMPONENT_HPP
 #define PLAMN_CORE_DATA_VECFIELD_VECFIELD_COMPONENT_HPP
 
-#include "plamn/core/def.hpp"
-
 #include <unordered_map>
 #include <string>
 #include <stdexcept>

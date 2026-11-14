@@ -3,14 +3,11 @@
 #define PLAMN_CORE_DATA_PARTICLES_CONVERTING_DETAIL_AOS_CONVERTING
 
 #include "damn/core/def/damn_config.hpp"
-#include "damn/core/meta/type_meta.hpp"
 #include "damn/core/memory/memory.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 
-#include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/converting/particles_converting.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
-#include "plamn/core/data/particles/converting/detail/def_converting.hpp"
 
 #include <algorithm>
 #include <cstddef>

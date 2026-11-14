@@ -3,8 +3,6 @@
 
 #include "damn/core/memory/span.hpp"
 
-#include "plamn/core/def.hpp"
-#include "plamn/core/data/grid/grid_tiles.hpp"
 #include "plamn/core/data/grid/coordinates.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/data/grid/layout.hpp"

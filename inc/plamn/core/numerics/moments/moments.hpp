@@ -1,4 +1,3 @@
-#include "plamn/core/def.hpp"
 #ifndef MOMENTS_HPP
 #define MOMENTS_HPP
 
@@ -6,7 +5,6 @@
 #include "plamn/core/data/field/field_tiles.hpp"
 
 #include <type_traits>
-#include <stdexcept>
 
 namespace plamn
 {

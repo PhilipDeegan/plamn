@@ -1,10 +1,8 @@
 #ifndef PLAMN_SIMULATOR_SIMULATOR_DEF_HPP
 #define PLAMN_SIMULATOR_SIMULATOR_DEF_HPP
 
-#include "damn/core/logger.hpp"
 #include "damn/core/def/damn_config.hpp"
 
-#include "plamn/core/def.hpp"
 #include "plamn/core/models/options/mhd_options_def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/initializer/data_provider.hpp"
@@ -15,7 +13,6 @@
 #include <cassert>
 #include <cstddef>
 #include <string>
-#include <vector>
 #include <format>
 
 namespace plamn

@@ -1,11 +1,6 @@
 #ifndef PLAMN_CORE_NUMERICS_BOUNDARY_CONDITION_BOUNDARY_CONDITION_HPP
 #define PLAMN_CORE_NUMERICS_BOUNDARY_CONDITION_BOUNDARY_CONDITION_HPP
 
-#include "damn/core/geometry/box.hpp"
-
-#include "plamn/core/def.hpp"
-#include "plamn/core/data/particles/partitioning/partitionner.hpp"
-
 #include <cstddef>
 #include <utility>
 #include <vector>

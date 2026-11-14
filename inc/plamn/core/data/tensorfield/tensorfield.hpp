@@ -8,7 +8,6 @@
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/field/field.hpp"
 #include "plamn/core/data/grid/grid_tiles.hpp"
-#include "plamn/core/data/vecfield/vecfield_component.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 
 #include <array>

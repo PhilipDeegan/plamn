@@ -6,7 +6,6 @@
 #include "damn/core/meta/logic.hpp"
 #include "damn/core/meta/type_meta.hpp"
 
-#include "plamn/core/def.hpp"
 #include "plamn/core/errors.hpp"
 #include "plamn/core/numerics/pusher/boris/basics.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"

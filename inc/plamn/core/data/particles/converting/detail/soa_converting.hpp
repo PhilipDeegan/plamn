@@ -6,11 +6,9 @@
 #include "damn/core/meta/for_N.hpp"
 #include "damn/core/memory/memory.hpp"
 
-#include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/converting/particles_converting.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/arrays/particles_soa.hpp"
-#include "plamn/core/data/particles/converting/detail/def_converting.hpp"
 
 #include <cassert>
 #include <cstddef>

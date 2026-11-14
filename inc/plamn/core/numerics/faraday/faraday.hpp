@@ -3,8 +3,6 @@
 
 #include "damn/core/def/damn_config.hpp"
 
-#include "plamn/core/def.hpp"
-
 namespace plamn::core {
 
 // Bnew = B - dt curl(E), one component at one point: curlEc is that component of curl(layout, E)

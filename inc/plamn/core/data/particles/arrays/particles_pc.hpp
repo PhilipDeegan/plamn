@@ -19,7 +19,6 @@
 #include "damn/core/sys/monitoring.hpp"
 #include "damn/core/data/ndarray/ndarray_vector.hpp"
 
-#include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/particle_translation_tracking.hpp"
 

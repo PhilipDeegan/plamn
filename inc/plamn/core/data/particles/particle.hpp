@@ -2,8 +2,6 @@
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLE_HPP
 
 #include "damn/core/math/array.hpp"
-#include "damn/core/math/numeric.hpp"
-#include "damn/core/sys/strings.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/def/damn_config.hpp"
 
@@ -11,8 +9,6 @@
 
 #include <array>
 #include <random>
-#include <iostream>
-#include <algorithm>
 #include <type_traits>
 #include <cstddef>
 #include <limits>

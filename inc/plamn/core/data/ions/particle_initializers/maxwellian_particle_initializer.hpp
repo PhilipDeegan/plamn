@@ -1,13 +1,8 @@
 #ifndef PLAMN_FLUID_PARTICLE_INITIALIZER_HPP
 #define PLAMN_FLUID_PARTICLE_INITIALIZER_HPP
 
-#include "damn/core/math/numeric.hpp"
-#include "damn/core/meta/logic.hpp"
-#include "damn/core/geometry/point.hpp"
 #include "damn/core/math/random.hpp"
 #include "damn/core/meta/for_N.hpp"
-#include "damn/core/math/random.hpp"
-#include "damn/core/geometry/point.hpp"
 #include "damn/core/def.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/math/array.hpp"
@@ -15,18 +10,10 @@
 
 #include "plamn/core/data/grid/coordinates.hpp"
 #include "plamn/core/data/ions/particle_initializers/maxwellian_def.hpp"
-#include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particle.hpp"
-#include "plamn/core/data/grid/layout_defs.hpp"
 #include "plamn/core/data/particles/particles.hpp"
 #include "plamn/core/data/particles/appending/particles_appending.hpp"
-#include "plamn/core/models/quantities/hybrid_quantities.hpp"
 #include "plamn/core/data/ions/particle_initializers/particle_initializer.hpp"
-#include "plamn/initializer/data_provider.hpp"
-#include "plamn/core/data/grid/layout_defs.hpp"
-#include "plamn/core/models/quantities/hybrid_quantities.hpp"
-#include "plamn/core/data/ions/particle_initializers/particle_initializer.hpp"
-#include "plamn/core/data/particles/particle.hpp"
 #include "plamn/initializer/data_provider.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/models/quantities/quantity.hpp"
@@ -35,7 +22,6 @@
 #include <memory>
 #include <random>
 #include <string>
-#include <cassert>
 #include <cstdint>
 #include <numeric>
 #include <functional>

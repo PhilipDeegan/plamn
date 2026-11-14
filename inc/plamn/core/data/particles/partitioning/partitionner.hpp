@@ -1,11 +1,7 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTITIONING_PARTITIONNER_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTITIONING_PARTITIONNER_HPP
 
-#include "damn/core/memory/span.hpp"
-#include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/range.hpp"
-
-#include "plamn/core/def.hpp"
 
 namespace damn::core
 {

@@ -4,7 +4,6 @@
 #include "damn/core/def/damn_config.hpp" // IWYU pragma: keep
 #include "damn/core/data/ndarray/ndarray_vector.hpp"
 
-#include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/grid.hpp"
 #include "plamn/core/data/ions/ions.hpp"
 #include "plamn/core/data/grid/grid_tiles.hpp"

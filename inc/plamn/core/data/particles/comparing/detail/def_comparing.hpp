@@ -2,13 +2,8 @@
 #define PLAMN_CORE_DATA_PARTICLES_COMPARING_DETAIL_DEF_COMPARING
 
 #include "damn/core/meta/type_meta.hpp"
-#include "damn/core/math/equality.hpp"
-
-#include "plamn/core/def.hpp"
-#include "plamn/core/data/particles/particles_def.hpp"
 
 #include <cstdint>
-#include <cstddef>
 
 namespace damn
 {

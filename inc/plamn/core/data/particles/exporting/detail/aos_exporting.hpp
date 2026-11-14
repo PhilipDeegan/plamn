@@ -10,7 +10,6 @@
 #include "damn/core/geometry/range.hpp"
 #include "damn/core/def/detail/mkn_gpu.hpp"
 #include "damn/core/geometry/point.hpp"
-#include "damn/core/meta/type_meta.hpp"
 
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"

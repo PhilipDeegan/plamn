@@ -3,13 +3,8 @@
 
 #include "damn/core/logger.hpp"
 #include "damn/core/sys/strings.hpp"
-#include "damn/core/memory/memory.hpp"
 
-#include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/exporting/detail/def_exporting.hpp"
-#include "plamn/core/data/particles/exporting/detail/aos_exporting.hpp"
-#include "plamn/core/data/particles/exporting/detail/soavx_exporting.hpp"
-#include "plamn/core/data/particles/particles_def.hpp"
 
 #include <cstddef>
 #include <string_view>
@@ -19,25 +14,6 @@ namespace damn::core
 template<typename Type, std::size_t dim>
 struct Box;
 } // namespace damn::core
-
-namespace plamn::core
-{
-
-
-// // generic fallthrough
-// template<auto src_layout_mde, auto src_alloc_mde, auto dst_layout_mde, auto dst_alloc_mde>
-// template<auto type, typename Src, typename Dst>
-// void ParticlesAppender<src_layout_mde, src_alloc_mde, dst_layout_mde, dst_alloc_mde>::operator()(
-//     Src const& src, Dst& dst)
-// {
-//     // not optimized but *should work*
-//     dst.reserve(dst.size() + src.size());
-//     std::copy(src.begin(), src.end(), std::back_inserter(dst));
-// }
-
-
-
-} // namespace plamn::core
 
 namespace plamn::core
 {

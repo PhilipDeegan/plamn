@@ -6,13 +6,10 @@
 //  each waits for its launch before returning: the jobs live in its scope
 //   todo: async (no wait), the jobs must then outlive the launch, see .gpu_todo
 
-#include "damn/core/exec/kernels.hpp"
 #include "damn/core/def/damn_config.hpp"
 
-#include "plamn/core/def.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 
-#include <cstddef>
 #include <stdexcept>
 #include <type_traits>
 

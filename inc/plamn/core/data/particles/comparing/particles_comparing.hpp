@@ -1,13 +1,8 @@
 #include "damn/core/math/equality.hpp"
-
-#include "plamn/core/def.hpp"
 #ifndef PLAMN_CORE_DATA_PARTICLES_COMPARING_PARTICLES_COMPARING
 #define PLAMN_CORE_DATA_PARTICLES_COMPARING_PARTICLES_COMPARING
 
-#include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/comparing/detail/def_comparing.hpp"
-#include "plamn/core/data/particles/comparing/detail/aos_comparing.hpp"
-#include "plamn/core/data/particles/comparing/detail/soa_comparing.hpp"
 
 namespace plamn::core
 {

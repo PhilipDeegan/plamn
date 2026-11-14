@@ -4,7 +4,6 @@
 #include "damn/core/sys/strings.hpp"
 #include "damn/core/meta/logic.hpp"
 
-#include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/arrays/particles_pc.hpp"
 #include "plamn/core/data/particles/arrays/particles_ts.hpp"

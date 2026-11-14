@@ -9,13 +9,10 @@
 #include "damn/core/vector.hpp"
 #include "damn/core/meta/for_N.hpp"
 #include "damn/core/memory/memory.hpp"
-#include "damn/core/geometry/box.hpp"
 
-#include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 
 #include <cstddef>
-#include <iterator>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>

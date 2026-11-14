@@ -1,17 +1,9 @@
 #ifndef PLAMN_CORE_NUMERICS_DIFFERENTIAL_OPERATORS_HPP
 #define PLAMN_CORE_NUMERICS_DIFFERENTIAL_OPERATORS_HPP
 
-#include "damn/core/data/ndarray/ndarray_vector.hpp"
 #include "damn/core/def/constants.hpp"
 #include "damn/core/geometry/point.hpp"
-#include "damn/core/math/array.hpp"
-#include "damn/core/math/numeric.hpp"
-#include "damn/core/meta/logic.hpp"
 #include "damn/core/meta/for_N.hpp"
-#include "damn/core/meta/type_meta.hpp"
-#include "damn/core/meta/tuple.hpp"
-#include "damn/core/sys/strings.hpp"
-#include "damn/core/sys/env.hpp"
 #include "damn/core/data/ndarray/ndarray_view.hpp"
 #include "damn/core/def/damn_config.hpp"
 

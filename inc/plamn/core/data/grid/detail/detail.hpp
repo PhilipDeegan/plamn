@@ -7,8 +7,6 @@
 #include "damn/core/def/kokkos_tools.hpp"
 #include "damn/core/logger.hpp"
 
-#include "plamn/core/def.hpp"
-
 // one kernel backend: mkn::gpu launches when present (also on umpire memory), else raja, else kokkos
 #if DAMN_HAVE_MKN_GPU
 #include "plamn/core/data/grid/detail/mkn_gpu.hpp"
@@ -18,7 +16,6 @@
 #include "plamn/core/data/grid/detail/kokkos.hpp"
 #endif
 
-#include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 
 #include <cstddef>

@@ -12,14 +12,11 @@
 #include "damn/core/meta/type_meta.hpp"
 #include "damn/core/sys/env.hpp"
 
-#include "plamn/core/def.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
-#include "plamn/core/data/electromag/electromag.hpp"
 #include "plamn/core/data/tensorfield/tensorfield.hpp"
 #include "plamn/core/data/particles/particles.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/arrays/particles_soavx.hpp"
-#include "plamn/core/numerics/pusher/boris/basics.hpp"
 
 #include "interpolator.hpp"
 

@@ -3,7 +3,6 @@
 
 #include "damn/core/math/sort.hpp"
 #include "damn/core/def/damn_config.hpp"
-#include "damn/core/def/detail/thrust.hpp"
 #include "damn/core/operators.hpp"
 #include "damn/core/data/tiles/tile_set.hpp"
 #include "damn/core/data/tiles/tile_set_traversal.hpp"
@@ -105,13 +104,6 @@ private:
     std::array<ParticlesTile*, 7> _links = damn::core::ConstArray<ParticlesTile*, 7>(nullptr);
 };
 
-
-
-
-template<typename Particles>
-struct CrossTileCopyDAO;
-template<typename Span_t>
-struct TileSetBlockDAO;
 
 
 

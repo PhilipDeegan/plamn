@@ -9,7 +9,6 @@
 
 #include <array>
 #include <cstdint>
-#include <tuple>
 #include <stdexcept>
 #include <cstddef>
 #include <type_traits>

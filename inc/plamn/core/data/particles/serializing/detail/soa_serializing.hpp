@@ -5,7 +5,6 @@
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/meta/logic.hpp"
 
-#include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/serializing/detail/def_serializing.hpp"
 

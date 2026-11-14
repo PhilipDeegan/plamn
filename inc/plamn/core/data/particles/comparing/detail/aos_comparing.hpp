@@ -2,16 +2,12 @@
 #define PLAMN_CORE_DATA_PARTICLES_COMPARING_DETAIL_AOS_COMPARING
 
 #include "damn/core/math/numeric.hpp"
-#include "damn/core/meta/type_meta.hpp"
 #include "damn/core/def/damn_config.hpp"
-#include "damn/core/memory/memory.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/math/equality.hpp"
 
-#include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/comparing/detail/def_comparing.hpp"
-#include "plamn/core/data/particles/arrays/particles_pc_ts.hpp"
 
 // #include <format>
 

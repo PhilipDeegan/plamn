@@ -1,12 +1,7 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTITIONING_PARTICLES_PARTITIONING_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTITIONING_PARTICLES_PARTITIONING_HPP
 
-#include "damn/core/vector.hpp"
-#include "damn/core/geometry/box.hpp"
 #include "damn/core/def/damn_config.hpp"
-
-#include "plamn/core/def.hpp"
-#include "plamn/core/data/particles/partitioning/partitionner.hpp"
 
 #include <cstddef>
 
@@ -17,7 +12,7 @@ class ParticlesPartitioner;
 } // namespace plamn::core
 
 // the specializations: after the primary template above
-#include "particles_partitioning_cpu.hpp"
+#include "particles_partitioning_cpu.hpp" // IWYU pragma: keep
 
 #if DAMN_HAVE_GPU
 
@@ -28,8 +23,10 @@ class ParticlesPartitioner;
 namespace plamn::core
 {
 
-template<typename Particles> // force compile error showing no impl
-class ParticlesPartitioner<damn::AllocatorMode::GPU_UNIFIED, Particles, /*impl = */ 0>;
+// force compile error showing no impl
+template<typename Particles>
+class ParticlesPartitioner<damn::AllocatorMode::GPU_UNIFIED, Particles,
+                           /*impl = */ 0>; // IWYU pragma: keep
 
 } // namespace plamn::core
 

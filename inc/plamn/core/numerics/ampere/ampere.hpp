@@ -3,8 +3,6 @@
 
 #include "damn/core/def/damn_config.hpp"
 
-#include "plamn/core/def.hpp"
-
 #include <cstdint>
 
 namespace plamn::core

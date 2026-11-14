@@ -7,7 +7,6 @@
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/sys/env.hpp"
 
-#include "plamn/core/def.hpp"
 #include "plamn/core/data/tiles/tile_set_overlaps.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"

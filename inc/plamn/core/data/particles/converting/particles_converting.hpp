@@ -4,14 +4,11 @@
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/logger.hpp"
 #include "damn/core/sys/strings.hpp"
-#include "damn/core/geometry/box_spans.hpp"
 
-#include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/converting/detail/def_converting.hpp"
 #include "plamn/core/data/particles/converting/detail/aos_converting.hpp"
 #include "plamn/core/data/particles/converting/detail/soa_converting.hpp"
-#include "plamn/core/data/particles/particles_detail.hpp"
 #include "plamn/core/data/particles/sorting/particles_sorting.hpp"
 
 #include "phlop/timing/scope.hpp"

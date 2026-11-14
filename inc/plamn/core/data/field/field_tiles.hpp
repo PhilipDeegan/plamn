@@ -6,7 +6,6 @@
 #include "damn/core/data/tiles/tile_set.hpp"
 #include "damn/core/data/tiles/tile_set_traversal.hpp"
 #include "damn/core/math/array.hpp"
-#include "damn/core/math/numeric.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/geometry/point.hpp"
@@ -20,7 +19,6 @@
 #include <cassert>
 #include <cstdint>
 #include <string>
-#include <cstddef>
 #include <stdexcept>
 #include <algorithm>
 #include <type_traits>
