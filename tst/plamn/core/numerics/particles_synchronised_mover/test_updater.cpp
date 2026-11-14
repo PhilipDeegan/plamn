@@ -6,6 +6,7 @@
 #include "damn/core/math/array.hpp"
 #include "damn/core/math/numeric.hpp"
 #include "plamn/core/numerics/particles_synchronised_mover/particles_synchronised_mover.hpp"
+#include "plamn/core/models/electromag_initializer.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/numerics/interpolator/interpolating.hpp"
 #include "plamn/core/numerics/interpolator/interpolating.hpp"
@@ -231,7 +232,7 @@ struct ParticlesSynchronisedMoverTest : public ::testing::Test
         // and ion population particles to user supplied moments
 
         assert(no_nans(ions.velocity()(Component::X)));
-        EM.initialize(layout);
+        ElectromagInitializer<dim>{init_dict["electromag"]}(*EM, layout);
         for (auto& pop : ions)
         {
             auto const& info         = pop.particleInitializerInfo();
@@ -300,25 +301,16 @@ struct ParticlesSynchronisedMoverTest : public ::testing::Test
 
                 // per_particle() dispatches per layout (flat for AoS/AoSMapped, per tile for
                 // AoSCMTS), so no manual tile loop is needed here
+                // the first particle_ghost_width domain cells, copied into the as many ghost
+                // cells left of the domain
+                auto constexpr pgw = static_cast<int>(Layout::options.particle_ghost_width);
                 per_particle(domainPart, [&](auto const& part) {
-                    if constexpr (interp_order == 2 or interp_order == 3)
+                    if (part.iCell()[0] >= firstAMRCell[0]
+                        and part.iCell()[0] < firstAMRCell[0] + pgw)
                     {
-                        if (part.iCell()[0] == firstAMRCell[0]
-                            or part.iCell()[0] == firstAMRCell[0] + 1)
-                        {
-                            auto p{part};
-                            p.iCell()[0] -= 2;
-                            levelGhostPartOld.push_back(p);
-                        }
-                    }
-                    else if constexpr (interp_order == 1)
-                    {
-                        if (part.iCell()[0] == firstAMRCell[0])
-                        {
-                            auto p{part};
-                            p.iCell()[0] -= 1;
-                            levelGhostPartOld.push_back(p);
-                        }
+                        auto p{part};
+                        p.iCell()[0] -= pgw;
+                        levelGhostPartOld.push_back(p);
                     }
                 });
 
@@ -575,14 +567,7 @@ TYPED_TEST(ParticlesSynchronisedMoverTest, loadsDomainPatchAndLevelGhostParticle
     {
         for (auto& pop : this->ions)
         {
-            if constexpr (TypeParam::interp_order == 1)
-            {
-                check(1, pop);
-            }
-            else if constexpr (TypeParam::interp_order == 2 or TypeParam::interp_order == 3)
-            {
-                check(2, pop);
-            }
+            check(TestFixture::Layout::options.particle_ghost_width, pop);
         }
     }
 }
@@ -601,23 +586,16 @@ TYPED_TEST(ParticlesSynchronisedMoverTest, loadsLevelGhostParticlesOnLeftGhostAr
         {
             auto const ghost = convert_to<LayoutMode::AoS>(pop.levelGhostParticles(), this->layout);
 
-            if constexpr (TypeParam::interp_order == 1)
-            {
-                for (auto it = ghost.begin(); it != ghost.end(); ++it)
-                {
-                    EXPECT_EQ(firstAMRCell[0] - 1, it.iCell()[0]);
-                }
-            }
-            else if constexpr (TypeParam::interp_order == 2 or TypeParam::interp_order == 3)
-            {
-                auto copy                 = ghost;
-                auto firstInOuterMostCell = std::partition(
-                    std::begin(copy), std::end(copy), [&firstAMRCell](auto const& particle) {
-                        return particle.iCell()[0] == firstAMRCell[0] - 1;
-                    });
-                EXPECT_EQ(nbrPartPerCell, std::distance(std::begin(copy), firstInOuterMostCell));
-                EXPECT_EQ(nbrPartPerCell, std::distance(firstInOuterMostCell, std::end(copy)));
-            }
+            // particle_ghost_width ghost cells left of the domain, nbrPartPerCell in each
+            auto constexpr pgw
+                = static_cast<int>(TestFixture::Layout::options.particle_ghost_width);
+            for (int c = 1; c <= pgw; ++c)
+                EXPECT_EQ(nbrPartPerCell, std::count_if(std::begin(ghost), std::end(ghost),
+                                                        [&](auto const& particle) {
+                                                            return particle.iCell()[0]
+                                                                   == firstAMRCell[0] - c;
+                                                        }));
+            EXPECT_EQ(pgw * nbrPartPerCell, std::distance(std::begin(ghost), std::end(ghost)));
         }
     }
 }

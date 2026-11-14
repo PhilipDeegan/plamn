@@ -5,16 +5,6 @@
 #include "plamn/plamn_core.hpp"
 #include "plamn/simulator/simulator_def.hpp"
 
-#if defined(HAVE_RAJA) and defined(HAVE_UMPIRE)
-#include "SAMRAI/tbox/Collectives.h" // tbox::parallel_synchronize();
-#include "plamn/simulator/simulator.h"     // static allocator init - probably should be isolated
-#endif
-
-#if defined(HAVE_RAJA) and defined(HAVE_UMPIRE)
-#include "SAMRAI/tbox/Collectives.h" // tbox::parallel_synchronize();
-#include "plamn/simulator/simulator.h"     // static allocator init - probably should be isolated
-#endif
-
 #include "plamn/core/numerics/ohm/ohm_transformer.hpp"
 #include "plamn/core/data/grid/layout_defs.hpp"
 

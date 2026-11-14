@@ -12,11 +12,15 @@
 #include <array>
 #include <cassert>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <format>
 
 namespace plamn
 {
+
+// simulation/time_step/mode: a fixed dt, or recomputed each step
+enum class TimeStepType : std::uint8_t { constant = 0, adaptive };
 
 class ISimulator
 {
@@ -55,8 +59,8 @@ struct SimOpts
     std::size_t interp_order  = 1;
     std::size_t nbRefinedPart = defaultNbrRefinedParts(dimension, interp_order);
 
-    core::LayoutMode layout_mode = core::LayoutMode::AoSMapped;
-    damn::AllocatorMode alloc_mode     = damn::AllocatorMode::CPU;
+    core::LayoutMode layout_mode   = core::LayoutMode::AoSMapped;
+    damn::AllocatorMode alloc_mode = damn::AllocatorMode::CPU;
 
     MHDOpts::ReconstructionType reconstruction_type = MHDOpts::ReconstructionType::MHDOff;
     MHDOpts::SlopeLimiterType slope_limiter_type    = MHDOpts::SlopeLimiterType::MHDOff;

@@ -36,7 +36,7 @@ namespace core
 
 
         template<typename VecField, typename Layout>
-        void initialize(VecField& v, Layout const& layout)
+        void initialize(VecField& v, Layout const& layout) const
         {
             static_assert(Layout::dimension == VecField::dimension,
                           "dimension mismatch between vecfield and layout");

@@ -6,6 +6,7 @@
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/grid_tiles.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
+#include "plamn/core/data/grid/detail/detail.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 #include "plamn/core/data/tensorfield/tensorfield.hpp"
@@ -20,6 +21,7 @@
 #include <format>
 #include <string>
 #include <vector>
+#include <type_traits>
 
 namespace plamn::core
 {
@@ -32,7 +34,7 @@ public:
     using VecField   = Ions::vecfield_type;
     using Field      = Ions::field_type;
     using Layout     = Ions::layout_type;
-    using Scalar     = Layout::Scalar;
+    using Scalar     = std::decay_t<decltype(Layout::options)>::FieldOptions::Scalar;
 
     StandardHybridElectronFluxComputer(Ions& ions, VecField& J)
         : ions_{ions}
@@ -97,7 +99,7 @@ public:
         auto& Vey         = Ve(Component::Y);
         auto& Vez         = Ve(Component::Z);
 
-        layout.evalGrownOnBox(Ne, 0, [=] DAMN_ALL(auto const& ijk) mutable {
+        eval_on_box(Ne, domain_box(layout, Ne), [=] DAMN_ALL(auto const& ijk) mutable {
             auto const JxOnVx = project<Scalar::Jx, Scalar::Vx>(Jx, ijk);
             auto const JyOnVy = project<Scalar::Jy, Scalar::Vy>(Jy, ijk);
             auto const JzOnVz = project<Scalar::Jz, Scalar::Vz>(Jz, ijk);

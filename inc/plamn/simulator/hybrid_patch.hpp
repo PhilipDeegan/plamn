@@ -1,0 +1,258 @@
+#ifndef PLAMN_SIMULATOR_HYBRID_PATCH_HPP
+#define PLAMN_SIMULATOR_HYBRID_PATCH_HPP
+
+// HybridPatch: one patch of a hybrid level, its data and the core views over it, as a
+// SAMRAI patch's data would be
+//   views:   em, J, ions (a runtime list of populations), electrons; and the PPC solver's
+//            predicted and averaged electromag (emPred, emAvg)
+//   storage: the grids and particle arrays the views point at, named as the views, not
+//            filled: the simulator writes everything before reading it
+//
+// not movable: the views, and the electrons' copies of the ions and J views, point at
+// members; LevelData keeps patches behind unique_ptr
+//
+// for_each_resource names what damn's schedules may move:
+//   EM_B_x... EM_E_x..., EMPred_B_x..., EMAvg_E_x...,
+//   <pop>_density, <pop>_charge_density, <pop>_flux_x...,
+//   <pop>_domain, <pop>_patch_ghost (particles)
+
+#include "damn/core/meta/for_N.hpp"
+#include "damn/core/geometry/box.hpp"
+
+#include "plamn/core/def.hpp"
+#include "plamn/plamn_core.hpp"
+#include "plamn/amr/resources.hpp"
+#include "plamn/core/data/ions/ion_population/particle_pack.hpp"
+#include "plamn/core/numerics/particles_synchronised_mover/particles_synchronised_mover.hpp"
+#include "plamn/initializer/data_provider.hpp"
+#include "plamn/core/data/particles/particles_def.hpp"
+#include "plamn/core/models/quantities/hybrid_quantities.hpp"
+
+#include <array>
+#include <memory>
+#include <string>
+#include <vector>
+#include <cstddef>
+#include <optional>
+#include <format>
+#include <type_traits>
+#include <utility>
+
+namespace plamn::simulator
+{
+template<auto opts>
+struct HybridPatch
+{
+    using Types       = core::PLAMN_Types<opts>::Hybrid;
+    using Layout_t    = Types::Layout_t;
+    using Grid_t      = Types::Grid_t;
+    using Particles_t = Types::Particles_t;
+
+    auto static constexpr dimension            = Layout_t::dimension;
+    auto static constexpr field_ghost_width    = Layout_t::ghost_width;
+    auto static constexpr particle_ghost_width = Layout_t::options.particle_ghost_width;
+
+    using Electromag_t                 = Types::Electromag_t;
+    using VecField_t                   = Types::VecField_t;
+    using Ions_t                       = Types::Ions_t;
+    using Electrons_t                  = Types::Electrons_t;
+    using ParticlesSynchronisedMover_t = core::ParticlesSynchronisedMover<Particles_t, Layout_t>;
+    using Boxing_t                     = ParticlesSynchronisedMover_t::Boxing_t;
+    using Box_t                        = damn::core::Box<int, dimension>;
+
+    template<std::size_t N>
+    using Grids = std::array<Grid_t, N>;
+
+    // a grid for a field view: same name and quantity, not filled
+    static Grid_t grid(auto const& field, Layout_t const& layout)
+    {
+        return Grid_t{field.name(), layout, field.physicalQuantity()};
+    }
+
+    // grids for the components of a tensor field view
+    template<typename TensorField>
+    static auto grids(TensorField const& tf, Layout_t const& layout)
+    {
+        auto constexpr N = std::tuple_size_v<std::decay_t<decltype(tf.components())>>;
+        return damn::core::for_N<N, damn::core::for_N_R_mode::make_array>(
+            [&](auto i) { return grid(tf[i], layout); });
+    }
+
+    template<typename TensorField, std::size_t N>
+    static void bind(TensorField& tf, Grids<N>& grids)
+    {
+        for (std::size_t i = 0; i < N; ++i)
+            tf[i].setBuffer(&grids[i]);
+    }
+
+    // one population's data
+    struct PopulationData
+    {
+        PopulationData(auto& pop, Layout_t const& layout)
+            : density{grid(pop.particleDensity(), layout)}
+            , charge_density{grid(pop.chargeDensity(), layout)}
+            , flux{grids(pop.flux(), layout)}
+            , momentum{grids(pop.momentumTensor(), layout)}
+            , domain{core::make_particles<Particles_t>(layout)}
+            , patch_ghost{core::make_particles<Particles_t>(layout)}
+            , level_ghost{core::make_particles<Particles_t>(layout)}
+            , level_ghost_old{core::make_particles<Particles_t>(layout)}
+            , level_ghost_new{core::make_particles<Particles_t>(layout)}
+            , pack{pop.name(),   &domain,          &patch_ghost,
+                   &level_ghost, &level_ghost_old, &level_ghost_new}
+        {
+            auto&& [F, M, pd, cd, particles] = pop.getCompileTimeResourcesViewList();
+            bind(F, flux);
+            bind(M, momentum);
+            pd.setBuffer(&density);
+            cd.setBuffer(&charge_density);
+            particles.setBuffer(&pack);
+        }
+
+        PopulationData(PopulationData const&) = delete;
+        PopulationData(PopulationData&&)      = delete;
+
+        Grid_t density, charge_density;
+        Grids<3> flux;
+        Grids<6> momentum;
+        Particles_t domain, patch_ghost, level_ghost, level_ghost_old, level_ghost_new;
+        core::ParticlesPack<Particles_t> pack;
+    };
+
+    // dict: the "simulation" node; non_level_ghost: the cells around the patch other
+    // patches of the level cover, periodic images included (damn::amr::covered_by_level)
+    HybridPatch(Layout_t const& layout_, initializer::Dict const& dict,
+                std::vector<Box_t> const& non_level_ghost)
+        : layout{layout_}
+        , em{dict["electromag"]}
+        , emPred{"EMPred"}
+        , emAvg{"EMAvg"}
+        , J{"J", core::HybridQuantity::Vector::J}
+        , ions{dict["ions"]}
+        , boxing{layout, non_level_ghost}
+        , emE{grids(em.E, layout)}
+        , emB{grids(em.B, layout)}
+        , predE{grids(emPred.E, layout)}
+        , predB{grids(emPred.B, layout)}
+        , avgE{grids(emAvg.E, layout)}
+        , avgB{grids(emAvg.B, layout)}
+        , Jxyz{grids(J, layout)}
+        , massDensity{grid(ions.massDensity(), layout)}
+        , chargeDensity{grid(ions.chargeDensity(), layout)}
+        , bulkVelocity{grids(ions.velocity(), layout)}
+        , chargeFlux{grids(ions.chargeFlux(), layout)}
+        , momentum{grids(ions.momentumTensor(), layout)}
+    {
+        bind(em.E, emE);
+        bind(em.B, emB);
+        bind(emPred.E, predE);
+        bind(emPred.B, predB);
+        bind(emAvg.E, avgE);
+        bind(emAvg.B, avgB);
+        bind(J, Jxyz);
+
+        auto&& [bV, M, cd, md, cF] = ions.getCompileTimeResourcesViewList();
+        bind(bV, bulkVelocity);
+        bind(M, momentum);
+        cd.setBuffer(&chargeDensity);
+        md.setBuffer(&massDensity);
+        bind(cF, chargeFlux);
+        for (auto& pop : ions)
+            populations.emplace_back(std::make_unique<PopulationData>(pop, layout));
+
+        // the electrons copy the ions and J views: made once those point at data
+        electrons_.emplace(dict["electrons"], ions, J);
+        auto&& [moments]          = electrons_->getCompileTimeResourcesViewList();
+        auto&& [flux, closure]    = moments.getCompileTimeResourcesViewList();
+        auto&& [ve, ions_, J_]    = flux.getCompileTimeResourcesViewList();
+        auto&& [ions__, pressure] = closure.getCompileTimeResourcesViewList();
+        electronVelocity.emplace(grids(ve, layout));
+        electronPressure.emplace(grid(pressure, layout));
+        bind(ve, *electronVelocity);
+        pressure.setBuffer(&*electronPressure);
+    }
+
+    HybridPatch(HybridPatch const&)            = delete;
+    HybridPatch(HybridPatch&&)                 = delete;
+    HybridPatch& operator=(HybridPatch const&) = delete;
+    HybridPatch& operator=(HybridPatch&&)      = delete;
+
+    NO_DISCARD auto& electrons() { return *electrons_; }
+
+    Layout_t layout;
+
+    // views
+    Electromag_t em, emPred, emAvg;
+    VecField_t J;
+    Ions_t ions;
+    Boxing_t boxing;
+
+    // storage
+    Grids<3> emE, emB, predE, predB, avgE, avgB, Jxyz;
+    Grid_t massDensity, chargeDensity;
+    Grids<3> bulkVelocity, chargeFlux;
+    Grids<6> momentum;
+    std::vector<std::unique_ptr<PopulationData>> populations;
+    std::optional<Grids<3>> electronVelocity;
+    std::optional<Grid_t> electronPressure;
+
+private:
+    std::optional<Electrons_t> electrons_;
+};
+
+
+namespace detail
+{
+    std::array<char const*, 3> constexpr inline xyz{"_x", "_y", "_z"};
+
+    template<auto gw>
+    void vector_resources(std::string const& name, auto& grids, auto&& fn)
+    {
+        for (std::size_t i = 0; i < 3; ++i)
+        {
+            auto r = amr::field_resource<gw>(grids[i]);
+            fn(name + xyz[i], r);
+        }
+    }
+} // namespace detail
+
+template<auto opts>
+void for_each_resource(HybridPatch<opts>& patch, auto&& fn)
+{
+    using Patch    = HybridPatch<opts>;
+    auto const gw  = Patch::field_ghost_width;
+    auto const pgw = Patch::particle_ghost_width;
+
+    detail::vector_resources<gw>("EM_B", patch.emB, fn);
+    detail::vector_resources<gw>("EM_E", patch.emE, fn);
+    detail::vector_resources<gw>("EMPred_B", patch.predB, fn);
+    detail::vector_resources<gw>("EMPred_E", patch.predE, fn);
+    detail::vector_resources<gw>("EMAvg_B", patch.avgB, fn);
+    detail::vector_resources<gw>("EMAvg_E", patch.avgE, fn);
+
+    for (auto& pop : patch.populations)
+    {
+        auto const& name = pop->pack._name;
+        auto density     = amr::field_resource<gw>(pop->density);
+        auto charge      = amr::field_resource<gw>(pop->charge_density);
+        fn(name + "_density", density);
+        fn(name + "_charge_density", charge);
+        detail::vector_resources<gw>(name + "_flux", pop->flux, fn);
+
+        auto domain      = amr::particle_resource<pgw>(pop->domain);
+        auto patch_ghost = amr::particle_resource<pgw>(pop->patch_ghost);
+        fn(name + "_domain", domain);
+        fn(name + "_patch_ghost", patch_ghost);
+    }
+}
+
+// LevelData holds patches by unique_ptr
+template<auto opts>
+void for_each_resource(std::unique_ptr<HybridPatch<opts>>& patch, auto&& fn)
+{
+    for_each_resource(*patch, fn);
+}
+
+} // namespace plamn::simulator
+
+#endif // PLAMN_SIMULATOR_HYBRID_PATCH_HPP

@@ -4,14 +4,12 @@
 #include "damn/core/def/damn_config.hpp"
 
 #include "plamn/core/def.hpp"
-#include "plamn/core/data/vecfield/vecfield_initializer.hpp"
 #include "plamn/core/data/tensorfield/tensorfield.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 #include "plamn/initializer/data_provider.hpp"
 
 #include "dict.hpp"
 
-#include <cassert>
 #include <tuple>
 #include <string>
 #include <cstddef>
@@ -63,7 +61,6 @@ namespace core
         explicit Electromag(std::string name)
             : Super{{name + "_E", HybridQuantity::Vector::E},
                     {name + "_B", HybridQuantity::Vector::B}}
-            , Binit_{}
         {
         }
 
@@ -74,16 +71,10 @@ namespace core
                     {dict["name"].template to<std::string>() + "_"
                          + dict["magnetic"]["name"].template to<std::string>(),
                      HybridQuantity::Vector::B}}
-            , Binit_{dict["magnetic"]["initializer"]}
         {
         }
 
-
-        void initialize(auto const& layout)
-        {
-            assert(B.isUsable());
-            Binit_.initialize(B, layout);
-        }
+        // initialization from the input: core/models/electromag_initializer.hpp
 
 
         //-------------------------------------------------------------------------
@@ -126,7 +117,6 @@ namespace core
 
 
     private:
-        VecFieldInitializer<dimension> Binit_;
     };
 
 
