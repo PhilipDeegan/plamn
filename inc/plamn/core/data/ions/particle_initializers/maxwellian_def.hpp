@@ -1,8 +1,9 @@
 #ifndef PLAMN_CORE_DATA_IONS_PARTICLE_INITIALIZERS_MAXWELLIAN_DEF_HPP
 #define PLAMN_CORE_DATA_IONS_PARTICLE_INITIALIZERS_MAXWELLIAN_DEF_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/math/numeric.hpp"
+
+#include "plamn/core/def.hpp"
 
 #include <array>
 #include <cstdint>

@@ -25,7 +25,7 @@
 #include "plamn/simulator/simulator_def.hpp"
 
 #include "tst/plamn/core/data/field/test_field_fixtures.hpp"
-#include "tst/plamn/core/data/gridlayout/test_gridlayout.hpp"
+#include "tst/plamn/core/data/grid/test_layout_fixtures.hpp"
 #include "tst/plamn/core/data/vecfield/test_vecfield_fixtures.hpp"
 #include "tst/plamn/core/data/electromag/test_electromag_fixtures.hpp"
 
@@ -40,23 +40,21 @@ double static constexpr eta = 1;
 double static constexpr nu  = 1;
 auto static const cells     = damn::core::get_env_as("PLAMN_CELLS", std::uint32_t{22});
 
-template<typename Patch>
-void ref_do(Patch& patch)
+void ref_do(auto& patch)
 {
     OhmTransformer{{eta, nu}}(patch.layout, patch.n, patch.V, patch.P, patch.em.B, patch.J,
                               patch.emNew.E);
 }
 
-template<typename Patch>
-void cmp_do(Patch& patch)
+void cmp_do(auto& patch)
 {
     // CPU: tile by tile, GPU: one launch, block per tile
     OhmTransformer{{eta, nu}}(patch.layout, *patch.n, *patch.V, *patch.P, *patch.em.B, *patch.J,
                               *patch.emNew.E);
 }
 
-template<auto alloc_mode, typename GridLayout_t, typename R, typename C>
-void compare(GridLayout_t const& layout, R& ref, C& cmp)
+template<auto alloc_mode>
+void compare(auto const& layout, auto& ref, auto& cmp)
 {
     using enum LayoutMode;
     using enum damn::AllocatorMode;
@@ -67,7 +65,7 @@ void compare(GridLayout_t const& layout, R& ref, C& cmp)
     // if constexpr (alloc_mode == GPU_UNIFIED)
     //     diff *= 1e3; // atomic no order guaranteed
 
-    auto const& patch_box = layout.AMRBox();
+    auto const& patch_box = layout.cells;
 
     for (std::size_t c = 0; c < n_components; ++c)
     {
@@ -105,7 +103,7 @@ struct OhmTileTest : public ::testing::Test
                                                     .alloc_mode   = alloc_mode};
 
         using DamnTypes                 = PLAMN_Types<opts>;
-        using GridLayout_t               = DamnTypes::Hybrid::GridLayout_t;
+        using Layout_t                   = DamnTypes::Hybrid::Layout_t;
         using Field_t                    = DamnTypes::Hybrid::Grid_t;
         using Hybrid_t                   = DamnTypes::Hybrid;
         auto constexpr static field_opts = TensorFieldOptions<Hybrid_t>{};
@@ -113,7 +111,7 @@ struct OhmTileTest : public ::testing::Test
         using UsableVecField_t           = UsableVecField<field_opts>;
 
 
-        TileSetPatch(GridLayout_t const& layout_)
+        TileSetPatch(Layout_t const& layout_)
             : layout{layout_}
         {
             J.fill(.001);
@@ -122,7 +120,7 @@ struct OhmTileTest : public ::testing::Test
             P.fill(.001);
         }
 
-        GridLayout_t layout;
+        Layout_t layout;
         UsableElectromag_t em{layout}, emNew{layout};
         UsableVecField_t J{"J", layout, HybridQuantity::Vector::J};
         UsableVecField_t V{"V", layout, HybridQuantity::Vector::V};
@@ -138,7 +136,7 @@ struct OhmTileTest : public ::testing::Test
         auto constexpr static opts   = SimOpts{.dimension = dim, .interp_order = interp};
 
         using DamnTypes                 = PLAMN_Types<opts>;
-        using GridLayout_t               = DamnTypes::Hybrid::GridLayout_t;
+        using Layout_t                   = DamnTypes::Hybrid::Layout_t;
         using Hybrid_t                   = DamnTypes::Hybrid;
         auto constexpr static field_opts = TensorFieldOptions<Hybrid_t>{};
         using UsableElectromag_t         = UsableElectromag<field_opts>;
@@ -146,7 +144,7 @@ struct OhmTileTest : public ::testing::Test
         using Grid_t                     = DamnTypes::Hybrid::Grid_t;
         using UsableVecField_t           = UsableVecField<field_opts>;
 
-        ContiguousPatch(GridLayout_t const& layout_)
+        ContiguousPatch(Layout_t const& layout_)
             : layout{layout_}
         {
             J.fill(.001);
@@ -155,7 +153,7 @@ struct OhmTileTest : public ::testing::Test
             P.fill(.001);
         }
 
-        GridLayout_t layout;
+        Layout_t layout;
         UsableElectromag_t em{layout}, emNew{layout};
         UsableVecField_t J{"J", layout, HybridQuantity::Vector::J};
         UsableVecField_t V{"V", layout, HybridQuantity::Vector::V};
@@ -172,8 +170,8 @@ struct OhmTileTest : public ::testing::Test
 
     void do_compare() const { compare<CmpPatch::alloc_mode>(*cmp_layout, ref_patch, cmp_patch); }
 
-    TestGridLayout<typename RefPatch::GridLayout_t> const ref_layout{cells};
-    TestGridLayout<typename CmpPatch::GridLayout_t> const cmp_layout{cells};
+    TestLayout<typename RefPatch::Layout_t> const ref_layout{cells};
+    TestLayout<typename CmpPatch::Layout_t> const cmp_layout{cells};
     RefPatch ref_patch{ref_layout};
     CmpPatch cmp_patch{cmp_layout};
 };
@@ -192,8 +190,7 @@ DAMN_WITH_GPU(
 
 TYPED_TEST_SUITE(OhmTileTest, Permutations_t, );
 
-template<typename OhmTileTest_t>
-auto run(OhmTileTest_t& self)
+auto run(auto& self)
 {
     ref_do(self.ref_patch);
     cmp_do(self.cmp_patch);

@@ -1,13 +1,11 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_SORTING_PARTICLES_SORTING_CPU_HPP
 #define PLAMN_CORE_DATA_PARTICLES_SORTING_PARTICLES_SORTING_CPU_HPP
 
-#include "plamn/core/def.hpp"
-
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/meta/tuple.hpp"
+
+#include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
-
-
 
 #include <stdexcept>
 

@@ -1,42 +1,40 @@
 #ifndef PLAMN_CORE_DATA_FIELD_FIELD_OVERLAPS_HPP
 #define PLAMN_CORE_DATA_FIELD_FIELD_OVERLAPS_HPP
 
-
-// #include "plamn/core/data/grid/gridlayout.hpp"
-#include "plamn/core/def.hpp"
-#include "damn/core/sys/strings.hpp"
-#include "plamn/core/data/field/field.hpp"
 #include "damn/core/geometry/box.hpp"
-#include "plamn/core/data/grid/grid_tiles.hpp"
+#include "damn/core/data/tiles/tile_set_overlaps.hpp"
+
+#include "plamn/core/def.hpp"
+#include "plamn/core/data/field/field.hpp"
+#include "plamn/core/data/tiles/tile_set_overlaps.hpp"
+#include "plamn/core/data/field/field_tiles.hpp"
+
 // #include "plamn/core/data/field/field_box.hpp"
 // #include "plamn/core/data/grid/grid_tiles.hpp"
-#include "plamn/core/data/tiles/tile_set_overlaps.hpp"
-
 
 #include <map>
 #include <vector>
 #include <cstdint>
 #include <cstddef>
-#include <cstring>
-
-
+#include <string>
+#include <type_traits>
 
 namespace plamn::core
 {
 
 
-template<typename GridLayout_, auto opts>
+template<typename Layout_, auto opts>
 struct FieldTileOverlaps
 {
     using Field_t     = basic::Field<opts>;
-    using FieldTile_t = FieldTile<GridLayout_, Field_t>;
+    using FieldTile_t = FieldTile<Layout_, Field_t>;
     using Quantity    = decltype(opts)::physical_quantity_type;
 
 
     // when you're sure it should exist
     static auto& getQuantity(auto const& layout, Quantity const& pq)
     {
-        return levels.at(layout.levelNumber()).patches.at(to_string(layout.AMRBox())).at(pq);
+        return levels.at(layout.level).patches.at(to_string(layout.cells)).at(pq);
     }
     // when you're sure it should exist
     template<typename Tiles>
@@ -78,8 +76,8 @@ struct FieldTileOverlaps
             struct Tile
             {
                 Tile(auto& field_tile)
-                    : domain_box{field_tile.layout().domainBoxFor(field_tile())}
-                    , ghost_box{field_tile.layout().ghostBoxFor(field_tile())}
+                    : domain_box{domain_box(field_tile.layout(), field_tile())}
+                    , ghost_box{ghost_box(field_tile.layout(), field_tile())}
                 {
                 }
 
@@ -119,11 +117,11 @@ auto& FieldTileOverlaps<GL, opts>::getOrCreateQuantity(auto const& layout, auto&
 
     using Patch_t = Level::Patch;
 
-    if (!levels.count(layout.levelNumber()))
-        levels.try_emplace(layout.levelNumber());
+    if (!levels.count(layout.level))
+        levels.try_emplace(layout.level);
 
-    auto& level           = levels.at(layout.levelNumber());
-    auto const& patch_key = to_string(layout.AMRBox());
+    auto& level           = levels.at(layout.level);
+    auto const& patch_key = to_string(layout.cells);
     if (!level.patches.count(patch_key))
         level.patches.try_emplace(patch_key);
 

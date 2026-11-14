@@ -6,7 +6,7 @@
 #include "plamn/core/data/field/field.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "plamn/core/numerics/ampere/ampere_transformer.hpp"
-#include "plamn/core/data/grid/gridlayoutdefs.hpp"
+#include "plamn/core/data/grid/layout_defs.hpp"
 
 #include "tst/plamn/core/data/field/test_field.hpp"
 #include "tst/plamn/core/data/vecfield/test_vecfield_fixtures.hpp"
@@ -42,12 +42,12 @@ protected:
     static constexpr std::size_t interp_order = 1;
     using core_types                          = PLAMN_Types<plamn::SimOpts{dim, interp_order}>;
     using HybridTypes                         = core_types::Hybrid;
-    using GridLayout_t                        = HybridTypes::GridLayout_t;
+    using Layout_t                            = HybridTypes::Layout_t;
     using Ampere_t                            = AmpereTransformer<>;
     auto static constexpr field_opts          = TensorFieldOptions<HybridTypes>{};
     using UsableVecFieldND                    = UsableVecField<field_opts>;
 
-    GridLayout_t layout;
+    Layout_t layout;
     UsableVecFieldND B, J;
 
 public:
@@ -67,12 +67,12 @@ protected:
     static constexpr std::size_t interp_order = 1;
     using core_types                          = PLAMN_Types<plamn::SimOpts{dim, interp_order}>;
     using HybridTypes                         = core_types::Hybrid;
-    using GridLayout_t                        = HybridTypes::GridLayout_t;
+    using Layout_t                            = HybridTypes::Layout_t;
     using Ampere_t                            = AmpereTransformer<>;
     auto static constexpr field_opts          = TensorFieldOptions<HybridTypes>{};
     using UsableVecFieldND                    = UsableVecField<field_opts>;
 
-    GridLayout_t layout;
+    Layout_t layout;
     UsableVecFieldND B, J;
 
 public:
@@ -92,12 +92,12 @@ protected:
     static constexpr std::size_t interp_order = 1;
     using core_types                          = PLAMN_Types<plamn::SimOpts{dim, interp_order}>;
     using HybridTypes                         = core_types::Hybrid;
-    using GridLayout_t                        = HybridTypes::GridLayout_t;
+    using Layout_t                            = HybridTypes::Layout_t;
     using Ampere_t                            = AmpereTransformer<>;
     auto static constexpr field_opts          = TensorFieldOptions<HybridTypes>{};
     using UsableVecFieldND                    = UsableVecField<field_opts>;
 
-    GridLayout_t layout;
+    Layout_t layout;
     UsableVecFieldND B, J;
 
 public:
@@ -126,8 +126,8 @@ TEST_F(Ampere1DTest, ampere1DCalculatedOk)
 
     for (std::uint32_t ix = gsi_d_X; ix <= gei_d_X; ++ix)
     {
-        auto point
-            = this->layout.fieldNodeCoordinates(By, this->layout.localToAMR(damn::core::Point{ix}.as_signed()));
+        auto point = coordinate(this->layout, By,
+                                this->layout.localToAMR(damn::core::Point{ix}.as_signed()));
         By(ix) = std::cos(2 * M_PI / 5. * point[0]);
         Bz(ix) = std::sin(2 * M_PI / 5. * point[0]);
     }
@@ -170,8 +170,8 @@ TEST_F(Ampere2DTest, ampere2DCalculatedOk)
     {
         for (std::uint32_t iy = gsi_d_Y; iy <= gei_d_Y; ++iy)
         {
-            auto point = this->layout.fieldNodeCoordinates(
-                Bx, layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
+            auto point = coordinate(this->layout, Bx,
+                                    layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
             Bx(ix, iy) = std::cos(2 * M_PI / 5. * point[0]) * std::sin(2 * M_PI / 6. * point[1]);
         }
     }
@@ -180,8 +180,8 @@ TEST_F(Ampere2DTest, ampere2DCalculatedOk)
     {
         for (std::uint32_t iy = gsi_p_Y; iy <= gei_p_Y; ++iy)
         {
-            auto point = this->layout.fieldNodeCoordinates(
-                By, layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
+            auto point = coordinate(this->layout, By,
+                                    layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
             By(ix, iy) = std::cos(2 * M_PI / 5. * point[0]) * std::tanh(2 * M_PI / 6. * point[1]);
         }
     }
@@ -190,8 +190,8 @@ TEST_F(Ampere2DTest, ampere2DCalculatedOk)
     {
         for (std::uint32_t iy = gsi_d_Y; iy <= gei_d_Y; ++iy)
         {
-            auto point = this->layout.fieldNodeCoordinates(
-                Bz, layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
+            auto point = coordinate(this->layout, Bz,
+                                    layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
             Bz(ix, iy) = std::sin(2 * M_PI / 5. * point[0]) * std::tanh(2 * M_PI / 6. * point[1]);
         }
     }
@@ -207,7 +207,7 @@ TEST_F(Ampere2DTest, ampere2DCalculatedOk)
     auto psi_d_Y = this->layout.physicalStartIndex(QtyCentering::dual, Direction::Y);
     auto pei_d_Y = this->layout.physicalEndIndex(QtyCentering::dual, Direction::Y);
 
-    std::array<std::uint32_t, 2> nPts_ = this->layout.allocSize(HybridQuantity::Scalar::Jx);
+    std::array<std::uint32_t, 2> nPts_ = alloc_shape(this->layout, HybridQuantity::Scalar::Jx);
 
     for (auto ix = psi_d_X; ix <= pei_d_X; ++ix)
     {
@@ -218,7 +218,7 @@ TEST_F(Ampere2DTest, ampere2DCalculatedOk)
         }
     }
 
-    nPts_ = this->layout.allocSize(HybridQuantity::Scalar::Jy);
+    nPts_ = alloc_shape(this->layout, HybridQuantity::Scalar::Jy);
 
     for (auto ix = psi_p_X; ix <= pei_p_X; ++ix)
     {
@@ -229,7 +229,7 @@ TEST_F(Ampere2DTest, ampere2DCalculatedOk)
         }
     }
 
-    nPts_ = this->layout.allocSize(HybridQuantity::Scalar::Jz);
+    nPts_ = alloc_shape(this->layout, HybridQuantity::Scalar::Jz);
 
     for (auto ix = psi_p_X; ix <= pei_p_X; ++ix)
     {
@@ -274,8 +274,8 @@ TEST_F(Ampere3DTest, ampere3DCalculatedOk)
         {
             for (std::uint32_t iz = gsi_d_Z; iz <= gei_d_Z; ++iz)
             {
-                damn::core::Point<double, 3> point = this->layout.fieldNodeCoordinates(
-                    Bx, layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+                damn::core::Point<double, 3> point = coordinate(
+                    this->layout, Bx, layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
                 Bx(ix, iy, iz) = std::sin(2 * M_PI / 5. * point[0])
                                  * std::cos(2 * M_PI / 6. * point[1])
                                  * std::tanh(2 * M_PI / 12. * point[2]);
@@ -289,8 +289,8 @@ TEST_F(Ampere3DTest, ampere3DCalculatedOk)
         {
             for (std::uint32_t iz = gsi_d_Z; iz <= gei_d_Z; ++iz)
             {
-                damn::core::Point<double, 3> point = this->layout.fieldNodeCoordinates(
-                    By, layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+                damn::core::Point<double, 3> point = coordinate(
+                    this->layout, By, layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
                 By(ix, iy, iz) = std::tanh(2 * M_PI / 5. * point[0])
                                  * std::sin(2 * M_PI / 6. * point[1])
                                  * std::cos(2 * M_PI / 12. * point[2]);
@@ -304,8 +304,8 @@ TEST_F(Ampere3DTest, ampere3DCalculatedOk)
         {
             for (std::uint32_t iz = gsi_p_Z; iz <= gei_p_Z; ++iz)
             {
-                damn::core::Point<double, 3> point = this->layout.fieldNodeCoordinates(
-                    Bz, layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+                damn::core::Point<double, 3> point = coordinate(
+                    this->layout, Bz, layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
                 Bz(ix, iy, iz) = std::cos(2 * M_PI / 5. * point[0])
                                  * std::tanh(2 * M_PI / 6. * point[1])
                                  * std::sin(2 * M_PI / 12. * point[2]);
@@ -330,7 +330,7 @@ TEST_F(Ampere3DTest, ampere3DCalculatedOk)
     auto psi_d_Z = this->layout.physicalStartIndex(QtyCentering::dual, Direction::Z);
     auto pei_d_Z = this->layout.physicalEndIndex(QtyCentering::dual, Direction::Z);
 
-    std::array<std::uint32_t, 3> nPts_ = this->layout.allocSize(HybridQuantity::Scalar::Jx);
+    std::array<std::uint32_t, 3> nPts_ = alloc_shape(this->layout, HybridQuantity::Scalar::Jx);
 
     for (std::uint32_t ix = psi_d_X; ix <= pei_d_X; ++ix)
     {
@@ -344,7 +344,7 @@ TEST_F(Ampere3DTest, ampere3DCalculatedOk)
         }
     }
 
-    nPts_ = this->layout.allocSize(HybridQuantity::Scalar::Jy);
+    nPts_ = alloc_shape(this->layout, HybridQuantity::Scalar::Jy);
 
     for (std::uint32_t ix = psi_p_X; ix <= pei_p_X; ++ix)
     {
@@ -358,7 +358,7 @@ TEST_F(Ampere3DTest, ampere3DCalculatedOk)
         }
     }
 
-    nPts_ = this->layout.allocSize(HybridQuantity::Scalar::Jz);
+    nPts_ = alloc_shape(this->layout, HybridQuantity::Scalar::Jz);
 
     for (std::uint32_t ix = psi_p_X; ix <= pei_p_X; ++ix)
     {
@@ -378,11 +378,11 @@ TEST_F(Ampere2DTest, grownPhysicalBoxIsExactOnQuadraticB)
 {
     using GrownAmpere = AmpereTransformer<AmpereBox{AmpereMode::GrownPhysical, 1}>;
 
-    auto const dl = layout.meshSize();
+    auto const dl = layout.dx;
 
     auto const x
         = [&](auto const& field, std::uint32_t const i, std::uint32_t const iy, Direction const d) {
-              auto const c = layout.centering(field)[static_cast<std::size_t>(d)];
+              auto const c = ::plamn::core::centering(layout, field)[static_cast<std::size_t>(d)];
               auto const n = d == Direction::X ? i : iy;
               auto const s = static_cast<double>(n) - layout.physicalStartIndex(field, d);
               return s * dl[static_cast<std::size_t>(d)]

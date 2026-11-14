@@ -33,8 +33,7 @@ struct FieldMock
 };
 
 
-template<typename GridLayout, typename Field0, typename Field1>
-void test_fields(GridLayout const& layout, Field0 const& field0, Field1 const& field1)
+void test_fields(auto const& layout, auto const& field0, auto const& field1)
 {
     EXPECT_EQ(field0.shape(), field1.shape());
 
@@ -45,25 +44,23 @@ void test_fields(GridLayout const& layout, Field0 const& field0, Field1 const& f
 }
 
 
-template<typename GridLayout, typename NdArrayImpl>
-void test(GridLayout const& layout,
-          Field<GridLayout::dimension, HybridQuantity::Scalar> const& field0,
-          Field<GridLayout::dimension, HybridQuantity::Scalar> const& field1)
+template<typename Layout, typename NdArrayImpl>
+void test(Layout const& layout, Field<Layout::dimension, HybridQuantity::Scalar> const& field0,
+          Field<Layout::dimension, HybridQuantity::Scalar> const& field1)
 {
     test_fields(layout, field0, field1);
 }
 
 
-template<typename GridLayout, typename Field, typename T>
-void test(GridLayout const& layout, Field const& field0, std::vector<T> const& fieldV)
+template<typename T>
+void test(auto const& layout, auto const& field0, std::vector<T> const& fieldV)
 {
     EXPECT_EQ(field0.size(), fieldV.size());
     test_fields(layout, field0, make_field_from(field0, fieldV.data()));
 }
 
 
-template<typename GridLayout, typename Field0, typename Field1>
-void test(GridLayout const& layout, Field0 const& field0, Field1 const& field1)
+void test(auto const& layout, auto const& field0, auto const& field1)
 {
     test_fields(layout, field0, field1);
 }

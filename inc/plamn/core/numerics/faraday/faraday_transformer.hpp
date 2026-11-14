@@ -1,24 +1,17 @@
 #ifndef PLAMN_CORE_NUMERICS_FARADAY_FARADAY_TRANSFORMER_HPP
 #define PLAMN_CORE_NUMERICS_FARADAY_FARADAY_TRANSFORMER_HPP
 
-#include "plamn/core/def.hpp"
-#include "damn/core/math/array.hpp"
-#include "damn/core/math/numeric.hpp"
-#include "damn/core/meta/logic.hpp"
 #include "damn/core/meta/for_N.hpp"
-#include "damn/core/meta/type_meta.hpp"
-#include "damn/core/meta/tuple.hpp"
-#include "damn/core/sys/strings.hpp"
-#include "damn/core/sys/env.hpp"
-#include "damn/core/exec/kernels.hpp"
+#include "damn/core/def/damn_config.hpp"
+
 #include "plamn/core/data/field/field_tiles.hpp"
-#include "plamn/core/numerics/faraday/faraday.hpp"
 #include "plamn/core/numerics/differential_operators.hpp"
 #include "plamn/core/data/field/field_expr.hpp"
 #include "plamn/core/data/grid/layout.hpp"
 
 #include <array>
 #include <stdexcept>
+#include <cstddef>
 
 namespace plamn::core
 {
@@ -41,30 +34,30 @@ struct FaradayTile
 class FaradayTransformer
 {
 public:
-    // the box Bnew component Bnc is computed on, as layout.evalOnBox below
-    template<typename GridLayout, typename Field>
-    static auto box_for(GridLayout const& layout, Field const& Bnc)
+    // the box Bnew component Bnc is computed on, as eval_on_box below
+    template<typename Layout>
+    static auto box_for(Layout const& layout, auto const& Bnc)
     {
-        auto constexpr static dim = GridLayout::dimension;
-        return local_domain_box(layout.AMRBox(), centering_of<dim>(Bnc),
-                                GridLayout::options.field_ghost_width);
+        auto constexpr static dim = Layout::dimension;
+        return local_domain_box(layout.cells, centering_of<dim>(Bnc),
+                                Layout::options.field_ghost_width);
     }
 
-    template<typename GridLayout, typename VecField>
-    void operator()(GridLayout const& layout, VecField const& B, VecField const& E, VecField& Bnew,
+    template<typename Layout, typename VecField>
+    void operator()(Layout const& layout, VecField const& B, VecField const& E, VecField& Bnew,
                     double const dt) const
         requires(not has_tiled_field_type_c<VecField>)
     {
-        auto constexpr static dim = GridLayout::dimension;
-        auto const curlE          = curl<dim>(layout.meshSize(), E);
+        auto constexpr static dim = Layout::dimension;
+        auto const curlE          = curl<dim>(layout.dx, E);
 
         damn::core::for_N<3>([&](auto c) {
             assign(Bnew[c], box_for(layout, Bnew[c]), of(B[c]) - dt * curlE.template get<c>());
         });
     }
 
-    template<typename GridLayout, typename VecField>
-    void operator()(GridLayout const& /*patch layout*/, VecField const& B, VecField const& E,
+    template<typename Layout, typename VecField>
+    void operator()(Layout const& /*patch layout*/, VecField const& B, VecField const& E,
                     VecField& Bnew, double const dt) const
         requires(has_tiled_field_type_c<VecField>)
     {

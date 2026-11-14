@@ -6,22 +6,39 @@
 //   local index space: ghost inclusive, starts at 0 on the first ghost node
 //   gw: field ghost width, the same for primal and dual
 
-#include "plamn/core/def.hpp"
 #include "damn/core/math/numeric.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"
-#include "plamn/core/data/grid/gridlayoutdefs.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/math/array.hpp"
+
+#include "plamn/core/def.hpp"
+#include "plamn/core/data/grid/layout_defs.hpp"
+#include "plamn/core/models/quantities/quantity.hpp"
 
 #include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 
 namespace plamn::core
 {
 NO_DISCARD constexpr QtyCentering flip(QtyCentering const c) DAMN_ALL
 {
     return c == QtyCentering::primal ? QtyCentering::dual : QtyCentering::primal;
+}
+
+template<std::size_t dim>
+NO_DISCARD constexpr auto primal_centering() DAMN_ALL
+{
+    return damn::core::ConstArray<QtyCentering, dim>(QtyCentering::primal);
+}
+
+template<std::size_t dim>
+NO_DISCARD constexpr auto dual_centering() DAMN_ALL
+{
+    return damn::core::ConstArray<QtyCentering, dim>(QtyCentering::dual);
 }
 
 NO_DISCARD constexpr std::uint32_t dual_offset(QtyCentering const c) DAMN_ALL
@@ -117,18 +134,19 @@ NO_DISCARD constexpr auto local_ghost_box(damn::core::Box<int, dim> const& cells
 
 
 template<std::size_t dim>
-NO_DISCARD constexpr auto amr_box(damn::core::Box<int, dim> const& cells,
+NO_DISCARD constexpr auto qty_box(damn::core::Box<int, dim> const& cells,
                                   std::array<QtyCentering, dim> const& centering)
 {
     return toCenteredBox(cells, centering);
 }
 
 template<std::size_t dim>
-NO_DISCARD constexpr auto amr_ghost_box(damn::core::Box<int, dim> const& cells,
+NO_DISCARD constexpr auto qty_ghost_box(damn::core::Box<int, dim> const& cells,
                                         std::array<QtyCentering, dim> const& centering,
                                         std::uint32_t const gw)
 {
-    return damn::core::grow(amr_box(cells, centering), damn::core::ConstArray<std::uint32_t, dim>(gw));
+    return damn::core::grow(qty_box(cells, centering),
+                            damn::core::ConstArray<std::uint32_t, dim>(gw));
 }
 
 

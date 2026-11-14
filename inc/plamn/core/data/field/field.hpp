@@ -2,18 +2,27 @@
 #define PLAMN_CORE_DATA_FIELD_FIELD_BASE_HPP
 
 #include "damn/core/logger.hpp"
-#include "plamn/core/def.hpp"
 #include "damn/core/def/damn_config.hpp"
-#include "damn/core/geometry/point.hpp"
 #include "damn/core/data/ndarray/ndarray_view.hpp"
-#include "damn/core/meta/container_meta.hpp"
+#include "damn/core/math/array.hpp"
+#include "damn/core/meta/type_meta.hpp"
 
+#include "plamn/core/def.hpp"
 
+// #include <stdexcept>
+
+#include <cassert>
 #include <array>
 #include <string>
 #include <cstddef>
-// #include <stdexcept>
-
+#include <cmath>
+#include <cstdint>
+#include <format>
+#include <ostream>
+#include <stdexcept>
+#include <type_traits>
+#include <vector>
+#include <version>
 
 namespace plamn::core
 {
@@ -285,15 +294,6 @@ inline auto sum_not_nan(basic::Field<opts> const& f)
 template<auto opts>
 void check_field(basic::Field<opts> const& f, auto const& layout)
 {
-#if DAMN_DEBUG
-    // for_each_point(layout.domainBoxFor(f), [&](auto const& bix) {
-    //     if (std::isnan(f(bix)))
-    //     {
-    //         DAMN_LOG_LINE_SS("\n" << f);
-    //     }
-    //     assert(not std::isnan(f(bix)));
-    // });
-#endif // DAMN_DEBUG
 }
 
 

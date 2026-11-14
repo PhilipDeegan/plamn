@@ -1,13 +1,21 @@
-#include "plamn/core/def.hpp"
-// IWYU pragma: private, include "core/data/particles/converting/particles_converting.hpp"
-
+// IWYU pragma: private, include "plamn/core/data/particles/converting/particles_converting.hpp"
 #ifndef PLAMN_CORE_DATA_PARTICLES_CONVERTING_DETAIL_SOA_CONVERTING
 #define PLAMN_CORE_DATA_PARTICLES_CONVERTING_DETAIL_SOA_CONVERTING
 
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/meta/for_N.hpp"
 #include "damn/core/memory/memory.hpp"
+
+#include "plamn/core/data/particles/converting/particles_converting.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/arrays/particles_soa.hpp"
-#include "plamn/core/data/particles/converting/detail/def_converting.hpp"
+#include "plamn/core/data/particles/converting/detail/def_converting.hpp" // IWYU pragma: keep
+
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <tuple>
+#include <utility>
 
 namespace plamn::core
 {
@@ -15,9 +23,9 @@ using enum LayoutMode;
 using enum damn::AllocatorMode;
 
 template<>
-template<typename Dst, typename Src, typename GridLayout>
+template<typename Dst, typename Src, typename Layout>
 Dst ParticlesConverter<SoA, CPU, AoS, CPU>::operator()( //
-    Src const& src, GridLayout const& layout)
+    Src const& src, Layout const& layout)
 {
     auto out = make_particles<Dst>(layout);
     out.reserve(src.size());
@@ -28,9 +36,9 @@ Dst ParticlesConverter<SoA, CPU, AoS, CPU>::operator()( //
 }
 
 template<>
-template<typename Dst, typename Src, typename GridLayout>
+template<typename Dst, typename Src, typename Layout>
 Dst ParticlesConverter<SoAVX, CPU, AoS, CPU>::operator()( //
-    Src const& src, GridLayout const& layout)
+    Src const& src, Layout const& layout)
 {
     auto out = make_particles<Dst>(layout);
     out.reserve(src.size());
@@ -42,9 +50,9 @@ Dst ParticlesConverter<SoAVX, CPU, AoS, CPU>::operator()( //
 
 
 template<>
-template<typename Dst, typename Src, typename GridLayout>
+template<typename Dst, typename Src, typename Layout>
 Dst ParticlesConverter<SoATS, CPU, AoS, CPU>::operator()( //
-    Src const& src, GridLayout const& layout)
+    Src const& src, Layout const& layout)
 {
     static constexpr std::uint8_t N = 128;
 
@@ -59,7 +67,7 @@ Dst ParticlesConverter<SoATS, CPU, AoS, CPU>::operator()( //
         });
     };
 
-    SoAArray<GridLayout::dimension, N> tmp;
+    SoAArray<Layout::dimension, N> tmp;
     auto out = make_particles<Dst>(layout);
     out.reserve(src.size());
 
@@ -85,9 +93,9 @@ Dst ParticlesConverter<SoATS, CPU, AoS, CPU>::operator()( //
 
 
 template<>
-template<typename Dst, typename Src, typename GridLayout>
+template<typename Dst, typename Src, typename Layout>
 Dst ParticlesConverter<SoATS, GPU_UNIFIED, AoS, CPU>::operator()( //
-    Src const& src, GridLayout const& layout)
+    Src const& src, Layout const& layout)
 {
     static constexpr std::uint8_t N = 128;
 
@@ -102,7 +110,7 @@ Dst ParticlesConverter<SoATS, GPU_UNIFIED, AoS, CPU>::operator()( //
         });
     };
 
-    SoAArray<GridLayout::dimension, N> tmp;
+    SoAArray<Layout::dimension, N> tmp;
     auto out = make_particles<Dst>(layout);
     out.reserve(src.size());
 

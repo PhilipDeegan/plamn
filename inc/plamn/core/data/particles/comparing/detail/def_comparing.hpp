@@ -1,15 +1,22 @@
-#include "plamn/core/def.hpp"
-
 #ifndef PLAMN_CORE_DATA_PARTICLES_COMPARING_DETAIL_DEF_COMPARING
 #define PLAMN_CORE_DATA_PARTICLES_COMPARING_DETAIL_DEF_COMPARING
 
-#include "damn/core/math/equality.hpp"
-#include "plamn/core/data/particles/particles_def.hpp"
+#include "damn/core/meta/type_meta.hpp"
 
-#include <cstddef>
+#include <cstdint>
+
+namespace damn
+{
+enum class AllocatorMode : std::uint16_t;
+} // namespace damn
+namespace damn::core
+{
+struct EqualityReport;
+} // namespace damn::core
 
 namespace plamn::core
 {
+enum class LayoutMode : std::uint16_t;
 
 
 template<auto src_layout_mde, auto src_alloc_mde, auto dst_layout_mde, auto dst_alloc_mde>

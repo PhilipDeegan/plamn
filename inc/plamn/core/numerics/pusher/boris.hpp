@@ -1,18 +1,25 @@
 #ifndef PLAMN_CORE_PUSHER_BORIS_HPP
 #define PLAMN_CORE_PUSHER_BORIS_HPP
 
-#include "plamn/core/def.hpp"
-
 #include "damn/core/logger.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/meta/logic.hpp"
+#include "damn/core/meta/type_meta.hpp"
+
 #include "plamn/core/errors.hpp"
 #include "plamn/core/numerics/pusher/boris/basics.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
+
+#include "phlop/timing/scope.hpp"
 
 #include <array>
 #include <cstddef>
 #include <sstream>
 #include <iterator>
 #include <algorithm>
+#include <cstdint>
+#include <string>
+#include <type_traits>
 
 namespace plamn::core
 {
@@ -108,7 +115,7 @@ public:
                     ex("E_" + std::to_string(i), std::to_string(e[i]));
                 for (std::uint16_t i = 0; i < 3; ++i)
                     ex("B_" + std::to_string(i), std::to_string(b[i]));
-                ex("level", std::to_string(layout.levelNumber()));
+                ex("level", std::to_string(layout.level));
                 throw ex;
             }
         }
@@ -201,8 +208,7 @@ private:
             particles.iCell(idx) = newCell;
     }
 
-    template<typename Particles, typename ParticleEB>
-    void static accelerate_(Particles& particles, ParticleEB const& particleEB, double const coef1,
+    void static accelerate_(auto& particles, auto const& particleEB, double const coef1,
                             std::size_t const idx) DAMN_ALL
     {
         auto particle = particles.begin() + idx;

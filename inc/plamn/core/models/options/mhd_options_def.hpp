@@ -1,8 +1,6 @@
 #ifndef PLAMN_OPTIONS_MHD_OPTIONS_DEF_HPP
 #define PLAMN_OPTIONS_MHD_OPTIONS_DEF_HPP
 
-#include "plamn/core/def.hpp"
-
 #include <cstdint>
 
 // if mhd is off, axes stay at MHDOff and no selector specializations exist for it (canary)

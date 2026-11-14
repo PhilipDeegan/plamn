@@ -1,25 +1,37 @@
 #ifndef PLAMN_CORE_DATA_FIELD_FIELD_BOX_HPP
 #define PLAMN_CORE_DATA_FIELD_FIELD_BOX_HPP
 
-#include "plamn/core/def.hpp"
+#include "damn/core/data/ndarray/ndarray_mask.hpp"
+#include "damn/core/data/ndarray/ndarray_view.hpp"
+#include "damn/core/geometry/point.hpp"
+#include "damn/core/logger.hpp"
+#include "damn/core/math/array.hpp"
+#include "damn/core/math/numeric.hpp"
+#include "damn/core/meta/type_meta.hpp"
+#include "damn/core/geometry/box.hpp"
+#include "damn/core/geometry/box_spans.hpp"
+
+#include "plamn/core/data/field/field_tiles.hpp"
+#include "plamn/core/data/grid/grid.hpp"
+#include "plamn/core/data/field/field.hpp"
+#include "plamn/core/data/grid/grid_tiles.hpp"
+#include "plamn/core/data/field/field_overlaps.hpp"
+
+#include <cassert>
+#include <cstdlib>
+#include <vector>
+#include <cmath>
+#include <cstring>
+#include <type_traits>
+#include <algorithm>
+#include <cstdint>
+#include <format>
+#include <iterator>
+#include <stdexcept>
 
 #ifndef PLAMN_FIELD_BOX_IMPL
 #define PLAMN_FIELD_BOX_IMPL 0
 #endif
-
-
-#include "plamn/core/data/grid/grid.hpp"
-#include "plamn/core/data/field/field.hpp"
-#include "damn/core/geometry/box.hpp"
-#include "plamn/core/data/grid/grid_tiles.hpp"
-#include "damn/core/geometry/box_spans.hpp"
-#include "plamn/core/data/field/field_overlaps.hpp"
-
-#include <vector>
-#include <cmath>
-#include <cstddef>
-#include <cstring>
-#include <type_traits>
 
 namespace plamn::core
 {
@@ -68,7 +80,7 @@ template<typename Op>
 auto constexpr static is_border_max_op_v = is_border_max_op<Op>();
 
 // a box over a field, as operate_on_fields' untiled fallthrough needs it:
-//  local box + field indexable by local point (FieldBox, or bench ArrayBox with no GridLayout)
+//  local box + field indexable by local point (FieldBox, or bench ArrayBox with no Layout)
 template<typename T>
 concept field_box_c = requires(T& t) {
     t.lcl_box;
@@ -92,22 +104,19 @@ public:
     {
     }
 
-    template<typename GridLayout_t>
-    FieldBox(Field_t& field_, GridLayout_t const& layout)
-        : FieldBox{field_, layout.AMRBox(), layout.ghostBoxFor(field_)}
+    FieldBox(Field_t& field_, auto const& layout)
+        : FieldBox{field_, layout.cells, ghost_box(layout, field_)}
     {
     }
 
-    template<typename GridLayout_t>
-    FieldBox(Field_t& field_, GridLayout_t const& layout,
+    FieldBox(Field_t& field_, auto const& layout,
              damn::core::Box<std::uint32_t, dimension> const& selection)
-        : FieldBox{field_, layout.AMRBox(), selection}
+        : FieldBox{field_, layout.cells, selection}
     {
     }
 
-    template<typename GridLayout_t>
-    FieldBox(Field_t& field_, GridLayout_t const& layout, damn::core::Box<int, dimension> const& selection)
-        : FieldBox{field_, layout.AMRBox(), layout.AMRToLocal(selection)}
+    FieldBox(Field_t& field_, auto const& layout, damn::core::Box<int, dimension> const& selection)
+        : FieldBox{field_, layout.cells, to_local(layout, selection)}
     {
     }
 
@@ -191,18 +200,18 @@ struct BoxExpander // expands border tiles to cover the patch ghost box
 template<typename Box_t>
 BoxExpander(Box_t, Box_t) -> BoxExpander<Box_t>;
 
-template<typename Operator, typename GridLayout_t, typename... Args>
-void operate_on_fields(FieldBox<GridTileSet<GridLayout_t, Args...>>& dst,
-                       FieldBox<GridTileSet<GridLayout_t, Args...> const> const& src);
+template<typename Operator, typename Layout_t, typename... Args>
+void operate_on_fields(FieldBox<GridTileSet<Layout_t, Args...>>& dst,
+                       FieldBox<GridTileSet<Layout_t, Args...> const> const& src);
 
 template<typename Tiles>
 auto reduce_single(Tiles const& input)
     requires(is_field_tile_set_v<Tiles>);
 
 
-template<typename Operator, typename GridLayout_t, typename... Args>
-void operate_on_fields(FieldBox<GridTileSet<GridLayout_t, Args...>>& dst,
-                       FieldBox<GridTileSet<GridLayout_t, Args...> const> const& src)
+template<typename Operator, typename Layout_t, typename... Args>
+void operate_on_fields(FieldBox<GridTileSet<Layout_t, Args...>>& dst,
+                       FieldBox<GridTileSet<Layout_t, Args...> const> const& src)
     requires(is_border_op_v<Operator>)
 {
     DAMN_LOG_SCOPE(3, "operate_on_fields_border_sum<GridTileSet,GridTileSet>");
@@ -214,12 +223,11 @@ void operate_on_fields(FieldBox<GridTileSet<GridLayout_t, Args...>>& dst,
 
     auto const skip = [](auto const& field, auto const& tile) {
         auto const tbox = damn::core::grow(tile, 1);
-        return *(tbox * field.layout().AMRBox()) == tbox;
+        return *(tbox * field.layout().cells) == tbox;
     };
-    auto const get_box = [&](auto const& tile) { return tile.layout().AMRGhostBoxFor(pq); };
-    auto const src_selection_box = src.field.layout().localToAMR(src.lcl_box);
-    auto const dst_selection_box
-        = shift(dst.field.layout().localToAMR(dst.lcl_box), src.offset_ * -1);
+    auto const get_box = [&](auto const& tile) { return qty_ghost_box(tile.layout(), pq); };
+    auto const src_selection_box = to_amr(src.field.layout(), src.lcl_box);
+    auto const dst_selection_box = shift(to_amr(dst.field.layout(), dst.lcl_box), src.offset_ * -1);
 
     for (auto& dst_tile : dst.field())
         if (!skip(dst.field, dst_tile))
@@ -230,9 +238,9 @@ void operate_on_fields(FieldBox<GridTileSet<GridLayout_t, Args...>>& dst,
                         if (auto const src_overlap = src_selection_box * get_box(src_tile))
                             if (auto const overlap = *src_overlap * *dst_overlap)
                             {
-                                auto const lcl_src_box = src_tile.layout().AMRToLocal(*overlap);
+                                auto const lcl_src_box = to_local(src_tile.layout(), *overlap);
                                 auto const lcl_dst_box
-                                    = dst_tile.layout().AMRToLocal(shift(*overlap, src.offset_));
+                                    = to_local(dst_tile.layout(), shift(*overlap, src.offset_));
 
                                 assert(lcl_src_box.size() <= src_tile().size());
                                 assert(lcl_dst_box.size() <= dst_tile().size());
@@ -246,21 +254,20 @@ void operate_on_fields(FieldBox<GridTileSet<GridLayout_t, Args...>>& dst,
 }
 
 
-template<typename Operator, typename GridLayout_t, typename... Args>
-void operate_on_fields(FieldBox<GridTileSet<GridLayout_t, Args...>>& dst,
-                       FieldBox<GridTileSet<GridLayout_t, Args...> const> const& src)
+template<typename Operator, typename Layout_t, typename... Args>
+void operate_on_fields(FieldBox<GridTileSet<Layout_t, Args...>>& dst,
+                       FieldBox<GridTileSet<Layout_t, Args...> const> const& src)
 {
     DAMN_LOG_SCOPE(3, "operate_on_fields<GridTileSet,GridTileSet>");
 
     auto const pq = dst.field.physicalQuantity();
     assert(src.field.physicalQuantity() == pq);
 
-    auto get_dst_box = [&](auto const& tile) { return tile.layout().AMRGhostBoxFor(pq); };
+    auto get_dst_box = [&](auto const& tile) { return qty_ghost_box(tile.layout(), pq); };
     auto get_src_box = [&](auto const& tile) { return tile.ghost_box(); };
 
-    auto const src_selection_box = src.field.layout().localToAMR(src.lcl_box);
-    auto const dst_selection_box
-        = shift(dst.field.layout().localToAMR(dst.lcl_box), src.offset_ * -1);
+    auto const src_selection_box = to_amr(src.field.layout(), src.lcl_box);
+    auto const dst_selection_box = shift(to_amr(dst.field.layout(), dst.lcl_box), src.offset_ * -1);
 
     assert(src_selection_box.shape() == dst_selection_box.shape());
 
@@ -280,9 +287,9 @@ void operate_on_fields(FieldBox<GridTileSet<GridLayout_t, Args...>>& dst,
                 if (auto const overlap = src_overlap * *dst_overlap)
                 {
                     auto const& src_tile   = *src_tile_ptr;
-                    auto const lcl_src_box = src_tile.layout().AMRToLocal(*overlap);
+                    auto const lcl_src_box = to_local(src_tile.layout(), *overlap);
                     auto const lcl_dst_box
-                        = dst_tile.layout().AMRToLocal(shift(*overlap, src.offset_));
+                        = to_local(dst_tile.layout(), shift(*overlap, src.offset_));
 
                     assert(lcl_src_box.size() <= src_tile().size());
                     assert(lcl_dst_box.size() <= dst_tile().size());
@@ -300,12 +307,12 @@ void operate_on_fields(FieldBox<GridTileSet<T0s...>>& dst, FieldBox<T1s...> cons
     using Src = std::decay_t<decltype(src.field)>;
     static_assert(damn::core::is_ndarray_v<Src>); // may be a raw view, e.g. an unpacked stream buffer
 
-    auto const amr_selection_box = dst.field.layout().localToAMR(dst.lcl_box);
+    auto const amr_selection_box = to_amr(dst.field.layout(), dst.lcl_box);
     auto const pq                = dst.field.physicalQuantity();
 
     for (auto& dst_tile : dst.field())
     {
-        auto const dst_tile_ghost_box = dst_tile.layout().AMRGhostBoxFor(pq);
+        auto const dst_tile_ghost_box = qty_ghost_box(dst_tile.layout(), pq);
         if (auto const overlap = amr_selection_box * dst_tile_ghost_box)
         {
             // src.lcl_box covers the full intersection in src-local coords.
@@ -317,7 +324,7 @@ void operate_on_fields(FieldBox<GridTileSet<T0s...>>& dst, FieldBox<T1s...> cons
             auto const overlap_shape = overlap->shape().template as<std::uint32_t>();
             auto const lcl_src_box   = damn::core::Box<std::uint32_t, decltype(amr_offset)::dimension>{
                 lcl_src_lower, lcl_src_lower + overlap_shape - 1};
-            auto const lcl_dst_box = dst_tile.layout().AMRToLocal(*overlap);
+            auto const lcl_dst_box = to_local(dst_tile.layout(), *overlap);
             damn::core::for_each_point_zip(lcl_dst_box, lcl_src_box, [&](auto const& dst_ix, auto const& src_ix) {
                 Operator{dst_tile()(dst_ix)}(src.field(src_ix));
             });
@@ -354,15 +361,15 @@ void operate_on_fields(FieldBox<Grid<T0s...>>& dst, FieldBox<GridTileSet<T1s...>
 
     auto const pq           = src.field.physicalQuantity();
     auto const patch_layout = src.field.layout();
-    auto const patch_box    = patch_layout.AMRBox();
-    auto const ghost_box    = patch_layout.AMRGhostBoxFor(pq);
+    auto const patch_box    = patch_layout.cells;
+    auto const ghost_box    = qty_ghost_box(patch_layout, pq);
     auto const expander     = BoxExpander{ghost_box, patch_box};
 
     Grid_t0 srcScratch{src.field.name(), pq, src.field.shape()};
     srcScratch.zero();
     for (auto const& tile : src.field())
     {
-        auto const tile_gb = tile.layout().AMRGhostBoxFor(pq);
+        auto const tile_gb = qty_ghost_box(tile.layout(), pq);
         if (*(tile_gb * patch_box) == tile_gb) // fully interior, cannot reach a border box
             continue;
         damn::core::for_each_point(expander(*tile), [&](auto const& bix) {
@@ -372,15 +379,15 @@ void operate_on_fields(FieldBox<Grid<T0s...>>& dst, FieldBox<GridTileSet<T1s...>
         });
     }
 
-    auto const dst_layout        = src.field.layout().copy_as(dst.amr_box);
-    auto const src_selection_box = src.field.layout().localToAMR(src.lcl_box);
-    auto const dst_selection_box = shift(dst_layout.localToAMR(dst.lcl_box), src.offset_ * -1);
+    auto const dst_layout        = sub_layout(src.field.layout(), dst.amr_box);
+    auto const src_selection_box = to_amr(src.field.layout(), src.lcl_box);
+    auto const dst_selection_box = shift(to_amr(dst_layout, dst.lcl_box), src.offset_ * -1);
     assert(src_selection_box.shape() == dst_selection_box.shape());
 
     if (auto const overlap = src_selection_box * dst_selection_box)
     {
-        auto const lcl_src_box = src.field.layout().AMRToLocal(*overlap);
-        auto const lcl_dst_box = dst_layout.AMRToLocal(shift(*overlap, src.offset_));
+        auto const lcl_src_box = to_local(src.field.layout(), *overlap);
+        auto const lcl_dst_box = to_local(dst_layout, shift(*overlap, src.offset_));
 
         damn::core::for_each_point_zip(lcl_dst_box, lcl_src_box, [&](auto const& dst_ix, auto const& src_ix) {
             Operator{dst.field(dst_ix)}(srcScratch(src_ix));
@@ -399,14 +406,14 @@ void operate_on_fields(FieldBox<Grid<T0s...>>& dst, FieldBox<GridTileSet<T1s...>
     DAMN_LOG_SCOPE(3, "operate_on_fields_border_sum<Grid, GridTileSet>");
 
     auto const pq         = dst.field.physicalQuantity();
-    auto const dst_layout = src.field.layout().copy_as(dst.amr_box);
+    auto const dst_layout = sub_layout(src.field.layout(), dst.amr_box);
     auto const skip       = [](auto const& field, auto const& tile) {
         auto const tbox = damn::core::grow(tile, 1);
-        return *(tbox * field.layout().AMRBox()) == tbox;
+        return *(tbox * field.layout().cells) == tbox;
     };
-    auto const get_box = [&](auto const& tile) { return tile.layout().AMRGhostBoxFor(pq); };
-    auto const src_selection_box = src.field.layout().localToAMR(src.lcl_box);
-    auto const dst_selection_box = shift(dst_layout.localToAMR(dst.lcl_box), src.offset_ * -1);
+    auto const get_box = [&](auto const& tile) { return qty_ghost_box(tile.layout(), pq); };
+    auto const src_selection_box = to_amr(src.field.layout(), src.lcl_box);
+    auto const dst_selection_box = shift(to_amr(dst_layout, dst.lcl_box), src.offset_ * -1);
     assert(src_selection_box.shape() == dst_selection_box.shape());
 
 #if PLAMN_FIELD_BOX_IMPL == 0
@@ -418,8 +425,8 @@ void operate_on_fields(FieldBox<Grid<T0s...>>& dst, FieldBox<GridTileSet<T1s...>
         if (auto const src_overlap = src_selection_box * src_tile_ghost_box)
             if (auto const overlap = *src_overlap * dst_selection_box)
             {
-                auto const lcl_src_box = src_tile.layout().AMRToLocal(*overlap);
-                auto const lcl_dst_box = dst_layout.AMRToLocal(shift(*overlap, src.offset_));
+                auto const lcl_src_box = to_local(src_tile.layout(), *overlap);
+                auto const lcl_dst_box = to_local(dst_layout, shift(*overlap, src.offset_));
 
                 assert(lcl_src_box.size() <= src_tile().size());
 
@@ -435,22 +442,22 @@ void operate_on_fields(FieldBox<Grid<T0s...>>& dst, FieldBox<GridTileSet<T1s...>
     auto constexpr static dim  = FieldBox<Grid<T0s...>>::dimension;
     auto constexpr static opts = FieldOpts<HybridQuantity::Scalar, double>{dim};
 
-    auto const& patch_layout = src.field()[0].layout().copy_as(src.field.box());
-    auto const ghost_box     = patch_layout.AMRGhostBoxFor(pq);
-    using GridLayout_t       = std::decay_t<decltype(patch_layout)>;
-    using FieldOverlaps_t    = FieldTileOverlaps<GridLayout_t, opts>;
+    auto const& patch_layout = sub_layout(src.field()[0].layout(), src.field.box());
+    auto const ghost_box     = qty_ghost_box(patch_layout, pq);
+    using Layout_t           = std::decay_t<decltype(patch_layout)>;
+    using FieldOverlaps_t    = FieldTileOverlaps<Layout_t, opts>;
     auto const& field_patch  = FieldOverlaps_t::getQuantity(patch_layout, src.field);
 
     auto const& tile_span = field_patch.tile_span;
 
     damn::core::for_each_point(src.lcl_box, [&](auto const& src_lix) {
-        auto const& amr_idx = patch_layout.localToAMR(src_lix);
-        auto const& dst_lix = dst_layout.AMRToLocal(amr_idx);
+        auto const& amr_idx = to_amr(patch_layout, src_lix);
+        auto const& dst_lix = to_local(dst_layout, amr_idx);
 
         for (auto const* src_tile_ptr : tile_span.cells(src_lix))
         {
             auto const& src_tile     = *src_tile_ptr;
-            auto const& src_tile_lix = src_tile.layout().AMRToLocal(amr_idx);
+            auto const& src_tile_lix = to_local(src_tile.layout(), amr_idx);
             Operator{dst.field(dst_lix)}(src_tile()(src_tile_lix));
         }
     });
@@ -496,14 +503,14 @@ void set_on_fields(FieldBox<FieldTileSet<Args...>>& dst, auto const val)
 
     auto const pq = dst.field.physicalQuantity();
     auto const amr_selection_box
-        = dst.field()[0].layout().copy_as(dst.amr_box).localToAMR(dst.lcl_box);
+        = to_amr(sub_layout(dst.field()[0].layout(), dst.amr_box), dst.lcl_box);
 
     for (auto& dst_tile : dst.field())
     {
-        auto const dst_tile_ghost_box = dst_tile.layout().AMRGhostBoxFor(pq);
+        auto const dst_tile_ghost_box = qty_ghost_box(dst_tile.layout(), pq);
         if (auto const overlap = amr_selection_box * dst_tile_ghost_box)
         {
-            auto const lcl_dst_box = dst_tile.layout().AMRToLocal(*overlap);
+            auto const lcl_dst_box = to_local(dst_tile.layout(), *overlap);
             damn::core::for_each_point(lcl_dst_box,
                            [&](auto const& point) { Operator{dst_tile()(point)}(val); });
         }
@@ -535,7 +542,7 @@ void append_from_fields(FieldBox<FieldTileSet<Args...> const> const& src, auto& 
 
     auto const pq = src.field.physicalQuantity();
     auto const amr_selection_box
-        = src.field()[0].layout().copy_as(src.amr_box).localToAMR(src.lcl_box);
+        = to_amr(sub_layout(src.field()[0].layout(), src.amr_box), src.lcl_box);
 
     auto const base = vec.size();
     vec.resize(base + amr_selection_box.size(), 0);
@@ -547,7 +554,7 @@ void append_from_fields(FieldBox<FieldTileSet<Args...> const> const& src, auto& 
         // sum: accumulate from all overlapping tile ghost boxes (resize already zero-inits)
         for (auto const& tile : src.field())
         {
-            auto const tile_gb = tile.layout().AMRGhostBoxFor(pq);
+            auto const tile_gb = qty_ghost_box(tile.layout(), pq);
             if (auto const overlap = amr_selection_box * tile_gb)
                 damn::core::for_each_point(*overlap, [&](auto const& bix) {
                     auto const dst_lix = (bix - amr_selection_box.lower).as_unsigned();
@@ -616,7 +623,7 @@ void copy_fields(FieldTileSet<T0s...>& dst, basic::Field<opts> const& src)
     DAMN_LOG_SCOPE(3, "copy_fields<FieldTileSet,basic::Field>");
 
     assert(dst().size());
-    auto const& patch_layout = dst()[0].layout().copy_as(dst.box());
+    auto const& patch_layout = sub_layout(dst()[0].layout(), dst.box());
 
 #if PLAMN_FIELD_BOX_IMPL == 0
     for (auto& tile : dst)
@@ -625,21 +632,21 @@ void copy_fields(FieldTileSet<T0s...>& dst, basic::Field<opts> const& src)
 #endif
 
 #if PLAMN_FIELD_BOX_IMPL == 1
-    using GridLayout_t      = std::decay_t<decltype(patch_layout)>;
-    using FieldOverlaps_t   = FieldTileOverlaps<GridLayout_t, opts>;
+    using Layout_t          = std::decay_t<decltype(patch_layout)>;
+    using FieldOverlaps_t   = FieldTileOverlaps<Layout_t, opts>;
     auto const& field_patch = FieldOverlaps_t::getQuantity(patch_layout, dst);
 
     for (std::size_t i = 0; i < dst().size(); ++i)
     {
         auto& tile = dst()[i];
-        damn::core::for_each_span(field_patch[i].ghost_box, [&](auto const& dst_lcl_point,
-                                                    std::uint32_t const span_size) {
-            auto const& amr_point     = tile.layout().localToAMR(dst_lcl_point);
-            auto const& src_lcl_point = patch_layout.AMRToLocal(amr_point);
-            auto* src_start           = &src(src_lcl_point);
-            auto* dst_start           = &tile(dst_lcl_point);
-            std::copy(src_start, src_start + span_size, dst_start);
-        });
+        damn::core::for_each_span(field_patch[i].ghost_box,
+                                  [&](auto const& dst_lcl_point, std::uint32_t const span_size) {
+                                      auto const& amr_point = to_amr(tile.layout(), dst_lcl_point);
+                                      auto const& src_lcl_point = to_local(patch_layout, amr_point);
+                                      auto* src_start           = &src(src_lcl_point);
+                                      auto* dst_start           = &tile(dst_lcl_point);
+                                      std::copy(src_start, src_start + span_size, dst_start);
+                                  });
     }
 #endif
 }
@@ -649,7 +656,7 @@ template<typename... T0s, auto opts>
 void copy_fields(FieldTileSet<T0s...>& dst, basic::Field<opts> const& src,
                  std::size_t const tile_idx)
 {
-    auto const& patch_layout = dst()[0].layout().copy_as(dst.box());
+    auto const& patch_layout = sub_layout(dst()[0].layout(), dst.box());
     auto& tile               = dst()[tile_idx];
     FieldBox{tile(), tile.layout(), tile.ghost_box()}.op(
         FieldBox{src, patch_layout, tile.ghost_box()});
@@ -673,9 +680,9 @@ auto& reduce_single_(GridTiles_t const& tiles, Grid_t& grid)
     requires(is_field_tile_set_v<GridTiles_t> && is_field_v<Grid_t>)
 {
     auto const pq           = tiles.physicalQuantity();
-    auto const patch_layout = tiles[0].layout().copy_as(tiles.box());
-    auto const patch_box    = patch_layout.AMRBox();
-    auto const ghost_box    = patch_layout.AMRGhostBoxFor(pq);
+    auto const patch_layout = sub_layout(tiles[0].layout(), tiles.box());
+    auto const patch_box    = patch_layout.cells;
+    auto const ghost_box    = qty_ghost_box(patch_layout, pq);
     auto const expander     = BoxExpander{ghost_box, patch_box};
 
     grid.reshape(tiles.shape());
@@ -683,7 +690,7 @@ auto& reduce_single_(GridTiles_t const& tiles, Grid_t& grid)
 
     for (auto const& tile : tiles())
     {
-        auto const tile_gb              = tile.layout().AMRGhostBoxFor(pq);
+        auto const tile_gb              = qty_ghost_box(tile.layout(), pq);
         auto const is_border            = *(tile_gb * patch_box) != tile_gb;
         decltype(tile_gb) const& tile_b = *tile;
         damn::core::for_each_point(is_border ? expander(tile_b) : tile_b, [&](auto const& bix) {
@@ -700,10 +707,10 @@ auto& reduce_single_(Grid_t const& grid, GridTiles_t& tiles)
     requires(is_field_v<Grid_t> && is_field_tile_set_v<GridTiles_t>)
 {
     auto const pq           = tiles.physicalQuantity();
-    auto const get_box      = [&](auto const& tile) { return tile.layout().AMRGhostBoxFor(pq); };
-    auto const patch_layout = tiles[0].layout().copy_as(tiles.box());
-    auto const patch_box    = patch_layout.AMRBox();
-    auto const ghost_box    = patch_layout.AMRGhostBoxFor(pq);
+    auto const get_box      = [&](auto const& tile) { return qty_ghost_box(tile.layout(), pq); };
+    auto const patch_layout = sub_layout(tiles[0].layout(), tiles.box());
+    auto const patch_box    = patch_layout.cells;
+    auto const ghost_box    = qty_ghost_box(patch_layout, pq);
     auto const expander     = BoxExpander{ghost_box, patch_box};
     tiles.zero();
 
@@ -711,7 +718,7 @@ auto& reduce_single_(Grid_t const& grid, GridTiles_t& tiles)
 
     for (auto& tile : tiles())
     {
-        auto const tile_gb              = tile.layout().AMRGhostBoxFor(pq);
+        auto const tile_gb              = qty_ghost_box(tile.layout(), pq);
         auto const is_border            = *(tile_gb * patch_box) != tile_gb;
         decltype(tile_gb) const& tile_b = *tile;
         damn::core::for_each_point(is_border ? expander(tile_b) : tile_b, [&](auto const& bix) {
@@ -729,9 +736,8 @@ template<typename Tiles>
 auto tile_owner_expander(Tiles const& tiles)
     requires(is_field_tile_set_v<Tiles>)
 {
-    auto const patch_layout = tiles[0].layout().copy_as(tiles.box());
-    return BoxExpander{patch_layout.AMRGhostBoxFor(tiles.physicalQuantity()),
-                       patch_layout.AMRBox()};
+    auto const patch_layout = sub_layout(tiles[0].layout(), tiles.box());
+    return BoxExpander{qty_ghost_box(patch_layout, tiles.physicalQuantity()), patch_layout.cells};
 }
 
 // for every cell of box (AMR field indices), copies the owning tile's value into dst, whose
@@ -746,7 +752,8 @@ void gather_owned(Tiles const& tiles, auto const& box, auto& dst, auto const& or
         if (auto const overlap = box * expander(*tile))
             operate_on_spans<damn::core::SetEqual<typename Tiles::type>>(
                 dst, damn::core::as_unsigned(shift(*overlap, origin * -1)), tile(),
-                damn::core::as_unsigned(shift(*overlap, tile.layout().AMRGhostBoxFor(pq).lower * -1)));
+                damn::core::as_unsigned(
+                    shift(*overlap, qty_ghost_box(tile.layout(), pq).lower * -1)));
 }
 
 // for every cell of box (AMR field indices), copies src, whose local index 0 is the AMR index
@@ -758,7 +765,7 @@ void scatter_to_tiles(auto const& src, auto const& origin, auto const& box, Tile
     auto const pq = tiles.physicalQuantity();
     for (auto& tile : tiles())
     {
-        auto const tile_gb = tile.layout().AMRGhostBoxFor(pq);
+        auto const tile_gb = qty_ghost_box(tile.layout(), pq);
         if (auto const overlap = box * tile_gb)
             operate_on_spans<damn::core::SetEqual<typename Tiles::type>>(
                 tile(), damn::core::as_unsigned(shift(*overlap, tile_gb.lower * -1)), src,
@@ -776,7 +783,7 @@ void sync_owned(Tiles& tiles, auto const& box)
     auto const expander = tile_owner_expander(tiles);
     for (auto& dst_tile : tiles())
     {
-        auto const dst_gb  = dst_tile.layout().AMRGhostBoxFor(pq);
+        auto const dst_gb  = qty_ghost_box(dst_tile.layout(), pq);
         auto const dst_box = box * dst_gb;
         if (!dst_box)
             continue;
@@ -784,9 +791,10 @@ void sync_owned(Tiles& tiles, auto const& box)
             if (&src_tile != &dst_tile)
                 if (auto const overlap = *dst_box * expander(*src_tile))
                     operate_on_spans<damn::core::SetEqual<typename Tiles::type>>(
-                        dst_tile(), damn::core::as_unsigned(shift(*overlap, dst_gb.lower * -1)), src_tile(),
+                        dst_tile(), damn::core::as_unsigned(shift(*overlap, dst_gb.lower * -1)),
+                        src_tile(),
                         damn::core::as_unsigned(
-                            shift(*overlap, src_tile.layout().AMRGhostBoxFor(pq).lower * -1)));
+                            shift(*overlap, qty_ghost_box(src_tile.layout(), pq).lower * -1)));
     }
 }
 
@@ -822,25 +830,25 @@ auto& reduce_single(Tiles const& input)
     return input;
 }
 
-template<typename Operator, typename Grid_t, typename GridTiles_t>
-auto& reduce_into_(GridTiles_t const& tiles, Grid_t& grid)
+template<typename Operator, typename Grid_t>
+auto& reduce_into_(auto const& tiles, Grid_t& grid)
 {
     DAMN_LOG_SCOPE(3, "reduce_into<GridTileSet,Grid>");
 
     grid.reshape(tiles.shape());
     grid.zero();
     assert(sum_field(grid) < 1e-15);
-    auto const& patch_layout = tiles[0].layout().copy_as(tiles.box());
+    auto const& patch_layout = sub_layout(tiles[0].layout(), tiles.box());
 
 #if PLAMN_FIELD_BOX_IMPL == 0
 
     auto const pq      = tiles.physicalQuantity();
-    auto const get_box = [&](auto const& tile) { return tile.layout().AMRGhostBoxFor(pq); };
+    auto const get_box = [&](auto const& tile) { return qty_ghost_box(tile.layout(), pq); };
     for (auto const& tile : tiles())
     {
         auto const& tile_layout = tile.layout();
         auto const& tile_box    = get_box(tile);
-        FieldBox{grid, patch_layout, patch_layout.AMRToLocal(tile_box)}. //
+        FieldBox{grid, patch_layout, to_local(patch_layout, tile_box)}. //
             template op<Operator>(core::FieldBox{tile(), tile_layout, tile_box});
     }
 
@@ -848,8 +856,8 @@ auto& reduce_into_(GridTiles_t const& tiles, Grid_t& grid)
 
     auto constexpr static dim  = Grid_t::dimension;
     auto constexpr static opts = FieldOpts<HybridQuantity::Scalar, double>{dim};
-    using GridLayout_t         = std::decay_t<decltype(patch_layout)>;
-    using FieldOverlaps_t      = FieldTileOverlaps<GridLayout_t, opts>;
+    using Layout_t             = std::decay_t<decltype(patch_layout)>;
+    using FieldOverlaps_t      = FieldTileOverlaps<Layout_t, opts>;
     auto const& field_patch    = FieldOverlaps_t::getQuantity(patch_layout, tiles);
 
     for (std::size_t i = 0; i < tiles().size(); ++i)
@@ -858,8 +866,8 @@ auto& reduce_into_(GridTiles_t const& tiles, Grid_t& grid)
         damn::core::for_each_span(field_patch[i].ghost_box, [&](auto const& src_lcl_point,
                                                     std::uint32_t const span_size) {
             auto const& src_start     = &tile()(src_lcl_point);
-            auto const& amr_point     = tile.layout().localToAMR(src_lcl_point);
-            auto const& dst_lcl_point = patch_layout.AMRToLocal(amr_point);
+            auto const& amr_point     = to_amr(tile.layout(), src_lcl_point);
+            auto const& dst_lcl_point = to_local(patch_layout, amr_point);
             auto* dst_start           = &grid(dst_lcl_point);
             for (std::uint32_t j = 0; j < span_size; ++j)
                 Operator{*(dst_start + j)}(*(src_start + j));
@@ -893,13 +901,14 @@ auto& reduce_single(Dst& dst, TiledField const& tiles,
 
     auto const pq          = tiles.physicalQuantity();
     auto const& first_tile = tiles()[0];
-    auto const patch_gb    = first_tile.layout().copy_as(tiles.box()).AMRGhostBoxFor(pq);
-    auto const patch_fb    = damn::core::shrink(patch_gb, first_tile.layout().options.field_ghost_width);
+    auto const patch_gb    = qty_ghost_box(sub_layout(first_tile.layout(), tiles.box()), pq);
+    auto const patch_fb
+        = damn::core::shrink(patch_gb, std::decay_t<decltype(first_tile.layout())>::ghost_width);
     BoxExpander const expander{patch_gb, patch_fb};
 
     for (auto const& tile : tiles())
     {
-        auto const tile_gb     = tile.layout().AMRGhostBoxFor(pq);
+        auto const tile_gb     = qty_ghost_box(tile.layout(), pq);
         auto const expanded_fb = expander(tile.field_box());
         if (auto const overlap = selection * expanded_fb)
         {
@@ -973,7 +982,7 @@ void fill_domain_box(Field_t& field, auto const& layout, auto const v)
     requires(!is_field_tile_set_v<Field_t>)
 {
     auto const pq = field.physicalQuantity();
-    damn::core::for_each_point(layout.domainBoxFor(pq), [&](auto const& bix) { field(bix) = v; });
+    damn::core::for_each_point(domain_box(layout, pq), [&](auto const& bix) { field(bix) = v; });
 }
 
 template<typename Field_t>
@@ -982,7 +991,8 @@ void fill_domain_box(Field_t& field, auto const& layout, auto const v)
 {
     auto const pq = field.physicalQuantity();
     for (auto& tile : field())
-        damn::core::for_each_point(tile.layout().domainBoxFor(pq), [&](auto const& bix) { tile()(bix) = v; });
+        damn::core::for_each_point(domain_box(tile.layout(), pq),
+                                   [&](auto const& bix) { tile()(bix) = v; });
 }
 
 template<typename Field_t>
@@ -999,10 +1009,10 @@ void fill_ghost(Field_t& field, auto const& layout, auto const v)
     requires(is_field_tile_set_v<Field_t>)
 {
     auto const pq        = field.physicalQuantity();
-    auto const patch_box = layout.AMRBoxFor(field);
+    auto const patch_box = qty_box(layout, field);
     for (auto& tile : field())
     {
-        auto const tile_gb = tile.layout().AMRGhostBoxFor(pq);
+        auto const tile_gb = qty_ghost_box(tile.layout(), pq);
         if (auto const is_border = *(tile_gb * patch_box) != tile_gb; not is_border)
             continue;
 

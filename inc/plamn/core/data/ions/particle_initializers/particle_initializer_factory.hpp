@@ -1,24 +1,28 @@
 #ifndef PLAMN_PARTICLE_INITIALIZER_FACTORY_HPP
 #define PLAMN_PARTICLE_INITIALIZER_FACTORY_HPP
 
-
 #include "plamn/core/def.hpp"
 #include "plamn/initializer/data_provider.hpp"
+
 #include "maxwellian_particle_initializer.hpp"
 #include "particle_initializer.hpp"
+#include "dict.hpp"
 
 #include <memory>
 #include <string>
+#include <array>
+#include <cstddef>
+#include <optional>
 
 namespace plamn
 {
 namespace core
 {
-    template<typename Particles, typename GridLayout>
+    template<typename Particles, typename Layout>
     class ParticleInitializerFactory
     {
-        using ParticleInitializerT      = ParticleInitializer<Particles, GridLayout>;
-        static constexpr auto dimension = GridLayout::dimension;
+        using ParticleInitializerT      = ParticleInitializer<Particles, Layout>;
+        static constexpr auto dimension = Layout::dimension;
 
 
     public:
@@ -63,8 +67,7 @@ namespace core
 
                 if (basisName == "cartesian")
                 {
-                    return std::make_unique<
-                        MaxwellianParticleInitializer<Particles, GridLayout>>(
+                    return std::make_unique<MaxwellianParticleInitializer<Particles, Layout>>(
                         density, v, vth, nbrPartPerCell, seed, Basis::Cartesian, magneticField,
                         densityCutOff, populationName);
                 }
@@ -74,8 +77,7 @@ namespace core
                     magneticField[1] = dict["magnetic_x"].template to<FunctionType>();
                     magneticField[2] = dict["magnetic_x"].template to<FunctionType>();
 
-                    return std::make_unique<
-                        MaxwellianParticleInitializer<Particles, GridLayout>>(
+                    return std::make_unique<MaxwellianParticleInitializer<Particles, Layout>>(
                         density, v, vth, nbrPartPerCell, seed, Basis::Magnetic, magneticField,
                         densityCutOff, populationName);
                 }

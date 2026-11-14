@@ -1,15 +1,24 @@
 #ifndef PLAMN_CORE_DATA_GRID_GRID_TILES_HPP
 #define PLAMN_CORE_DATA_GRID_GRID_TILES_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/data/tiles/tile_set.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/geometry/box.hpp"
+#include "damn/core/geometry/box_spans.hpp"
+#include "damn/core/math/numeric.hpp"
+
+#include "plamn/core/def.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 
+#include <cassert>
 #include <cmath>
 #include <tuple>
 #include <string>
 #include <optional>
 #include <stdexcept>
+#include <cstddef>
+#include <cstdint>
+#include <iosfwd>
 
 namespace plamn::core
 {
@@ -20,16 +29,16 @@ auto static grid_cells(auto&&... args)
     auto const& [layout, qty] = std::forward_as_tuple(args...);
 
     if constexpr (hasGhosts)
-        return layout.allocSize(qty);
+        return alloc_shape(layout, qty);
     else
-        return *(layout.AMRBox().shape().as_unsigned() - 1);
+        return *(layout.cells.shape().as_unsigned() - 1);
 }
 
-template<typename GridLayout_t, typename Grid_t, typename Field_t>
-struct GridTile : public FieldTile<GridLayout_t, Field_t>
+template<typename Layout_t, typename Grid_t, typename Field_t>
+struct GridTile : public FieldTile<Layout_t, Field_t>
 {
-    auto constexpr static dimension = GridLayout_t::dimension;
-    using Super                     = FieldTile<GridLayout_t, Field_t>;
+    auto constexpr static dimension = Layout_t::dimension;
+    using Super                     = FieldTile<Layout_t, Field_t>;
     using value_type                = Grid_t::Super;
     using NdArray_t                 = Grid_t::Super;
     using Super::operator();
@@ -43,7 +52,7 @@ struct GridTile : public FieldTile<GridLayout_t, Field_t>
 
     // called when making tiles
     GridTile(auto const& box, auto const& patch_layout, auto const& pq)
-        : GridTile(patch_layout.copy_as(box), pq)
+        : GridTile(sub_layout(patch_layout, box), pq)
     {
     }
 
@@ -72,19 +81,20 @@ private:
     NdArray_t arr;
 };
 
-template<typename GridLayout_t, typename Grid_t, typename Field_t>
-class GridTileSet : public damn::core::TileSet<GridTile<GridLayout_t, Grid_t, Field_t>, Grid_t::alloc_mode>,
-                    public FieldTileSet<GridLayout_t, Grid_t, Field_t>
+template<typename Layout_t, typename Grid_t, typename Field_t>
+class GridTileSet
+    : public damn::core::TileSet<GridTile<Layout_t, Grid_t, Field_t>, Grid_t::alloc_mode>,
+      public FieldTileSet<Layout_t, Grid_t, Field_t>
 
 {
 public:
     using grid_type  = Grid_t;
     using field_type = Field_t;
-    using Super      = damn::core::TileSet<GridTile<GridLayout_t, Grid_t, Field_t>, Grid_t::alloc_mode>;
-    using View       = FieldTileSet<GridLayout_t, Grid_t, Field_t>;
+    using Super      = damn::core::TileSet<GridTile<Layout_t, Grid_t, Field_t>, Grid_t::alloc_mode>;
+    using View       = FieldTileSet<Layout_t, Grid_t, Field_t>;
     using type       = Grid_t::value_type;
     using physical_quantity_type = Grid_t::physical_quantity_type;
-    using value_type             = GridTile<GridLayout_t, Grid_t, Field_t>;
+    using value_type             = GridTile<Layout_t, Grid_t, Field_t>;
     using Super::operator[];
     using View::operator();
     using View::box;
@@ -92,9 +102,9 @@ public:
     auto constexpr static alloc_mode = Grid_t::alloc_mode;
     auto constexpr static dimension  = Grid_t::dimension;
 
-    GridTileSet(std::string const& name, GridLayout_t const& layout,
-                physical_quantity_type const qty, std::optional<type> val = std::nullopt)
-        : Super{layout.AMRBox(), layout, qty}
+    GridTileSet(std::string const& name, Layout_t const& layout, physical_quantity_type const qty,
+                std::optional<type> val = std::nullopt)
+        : Super{layout.cells, layout, qty}
         , View{name, qty}
         , name_{name}
         , layout_{layout}
@@ -156,11 +166,11 @@ public:
     auto& layout() const { return layout_; }
 
     // patch layout and each tile's sub layout from a corrected patch layout (restarts)
-    void reset_layout(GridLayout_t const& layout)
+    void reset_layout(Layout_t const& layout)
     {
         layout_ = layout;
         for (auto& tile : *this)
-            tile.reset_layout(layout.copy_as(tile.layout().AMRBox()));
+            tile.reset_layout(sub_layout(layout, tile.layout().cells));
     }
 
     Super& super() { return *this; }
@@ -176,8 +186,8 @@ private:
     // DAMN_TILING_* env values may not
     void check_tile_widths_() const
     {
-        auto constexpr ghost_width = GridLayout_t::options.field_ghost_width;
-        auto const patch_shape     = layout_.AMRBox().shape();
+        auto constexpr ghost_width = Layout_t::options.field_ghost_width;
+        auto const patch_shape     = layout_.cells.shape();
         for (auto const& tile : super()())
         {
             auto const tile_shape = static_cast<damn::core::Box<int, dimension>>(tile).shape();
@@ -201,7 +211,7 @@ private:
     }
 
     std::string name_;
-    GridLayout_t layout_;
+    Layout_t layout_;
     std::uint32_t max_tile_size_;
 
     // FieldTileOverlaps<field_opts>::Level::Patch* ptr = nullptr;
@@ -209,9 +219,9 @@ private:
 
 
 
-template<typename GridLayout_t, typename Grid_t, typename Field_t>
+template<typename Layout_t, typename Grid_t, typename Field_t>
 inline std::ostream& operator<<(std::ostream& out,
-                                FieldTileSet<GridLayout_t, Grid_t, Field_t> const& ts)
+                                FieldTileSet<Layout_t, Grid_t, Field_t> const& ts)
 {
     for (auto const& tile : ts())
         out << tile();
@@ -220,14 +230,14 @@ inline std::ostream& operator<<(std::ostream& out,
 }
 
 
-template<typename GridLayout_t, typename Grid_t, typename Field_t>
-inline auto sum_field(FieldTileSet<GridLayout_t, Grid_t, Field_t> const& ts)
+template<typename Layout_t, typename Grid_t, typename Field_t>
+inline auto sum_field(FieldTileSet<Layout_t, Grid_t, Field_t> const& ts)
 {
     return damn::core::sum_from(ts(), [](auto const& tile) { return sum(tile()); });
 }
 
-template<typename GridLayout_t, typename Grid_t, typename Field_t>
-inline auto sum_not_nan(FieldTileSet<GridLayout_t, Grid_t, Field_t> const& ts)
+template<typename Layout_t, typename Grid_t, typename Field_t>
+inline auto sum_not_nan(FieldTileSet<Layout_t, Grid_t, Field_t> const& ts)
 {
     return damn::core::sum_from(ts(), [](auto const& tile) {
         typename Grid_t::value_type s = 0;
@@ -239,22 +249,22 @@ inline auto sum_not_nan(FieldTileSet<GridLayout_t, Grid_t, Field_t> const& ts)
 }
 
 
-template<typename GridLayout_t, typename Grid_t, typename Field_t>
-void check_field(basic::FieldTileSet<GridLayout_t, Grid_t, Field_t> const& f,
-                 GridLayout_t const& layout)
+template<typename Layout_t, typename Grid_t, typename Field_t>
+void check_field(basic::FieldTileSet<Layout_t, Grid_t, Field_t> const& f, Layout_t const& layout)
 {
 #if DAMN_DEBUG
-    auto const domainBox = layout.AMRBoxFor(f);
+    auto const domainBox = qty_box(layout, f);
 
     for (auto& tile : f())
         if (auto const overlap = **tile * domainBox)
-            damn::core::for_each_point(tile.layout().AMRToLocal(*overlap),
-                           [&](auto const& bix) { assert(not std::isnan(tile()(bix))); });
+            damn::core::for_each_point(to_local(tile.layout(), *overlap), [&](auto const& bix) {
+                assert(not std::isnan(tile()(bix)));
+            });
 #endif // DAMN_DEBUG
 }
 
-template<typename GridLayout_t, typename Grid_t, typename Field_t>
-void check_field(basic::FieldTileSet<GridLayout_t, Grid_t, Field_t> const& f)
+template<typename Layout_t, typename Grid_t, typename Field_t>
+void check_field(basic::FieldTileSet<Layout_t, Grid_t, Field_t> const& f)
 {
 #if DAMN_DEBUG
     for (auto& tile : f())

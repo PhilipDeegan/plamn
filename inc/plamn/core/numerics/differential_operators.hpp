@@ -1,20 +1,17 @@
 #ifndef PLAMN_CORE_NUMERICS_DIFFERENTIAL_OPERATORS_HPP
 #define PLAMN_CORE_NUMERICS_DIFFERENTIAL_OPERATORS_HPP
 
-#include "plamn/core/def.hpp"
-#include "plamn/core/data/grid/gridlayoutdefs.hpp"
-#include "damn/core/data/ndarray/ndarray_vector.hpp"
-#include "plamn/core/data/vecfield/vecfield_component.hpp"
 #include "damn/core/def/constants.hpp"
 #include "damn/core/geometry/point.hpp"
-#include "damn/core/math/array.hpp"
-#include "damn/core/math/numeric.hpp"
-#include "damn/core/meta/logic.hpp"
 #include "damn/core/meta/for_N.hpp"
-#include "damn/core/meta/type_meta.hpp"
-#include "damn/core/meta/tuple.hpp"
-#include "damn/core/sys/strings.hpp"
-#include "damn/core/sys/env.hpp"
+#include "damn/core/data/ndarray/ndarray_view.hpp"
+#include "damn/core/def/damn_config.hpp"
+
+#include "plamn/core/def.hpp"
+#include "plamn/core/data/grid/layout_defs.hpp"
+#include "plamn/core/data/grid/patch_layout.hpp"
+#include "plamn/core/data/vecfield/vecfield_component.hpp"
+#include "plamn/core/models/quantities/quantity.hpp"
 
 #include <array>
 #include <cstddef>
@@ -22,8 +19,8 @@
 
 namespace plamn::core::detail
 {
-template<std::size_t d, typename Array, typename T, std::size_t dim>
-double shifted(Array const& array, damn::core::Point<T, dim> const& idx, int const shift) DAMN_ALL
+template<std::size_t d, typename T, std::size_t dim>
+double shifted(auto const& array, damn::core::Point<T, dim> const& idx, int const shift) DAMN_ALL
 {
     return damn::core::for_N_fold<dim>([&](auto... i) { return array((i == d ? idx[i] + shift : idx[i])...); });
 }
@@ -60,9 +57,8 @@ class Partial<dir, dim>
 public:
     using expr_tag = void;
 
-    template<typename Src>
     Partial(std::array<double, dim> const& dx, std::array<QtyCentering, dim> const& srcCentering,
-            Src const& src)
+            auto const& src)
         : view_{src.data(), src.shape()}
     {
         if (src.data() == nullptr)
@@ -74,9 +70,8 @@ public:
         centering_[d] = detail::flipped(srcCentering[d]);
     }
 
-    template<typename GridLayout, typename Src>
-    Partial(GridLayout const& layout, Src const& src)
-        : Partial{layout.meshSize(), layout.centering(src), src}
+    Partial(auto const& layout, auto const& src)
+        : Partial{layout.dx, ::plamn::core::centering(layout, src), src} // not Partial::centering
     {
     }
 
@@ -111,9 +106,8 @@ public:
     {
     }
 
-    template<typename GridLayout, typename Src>
-    Partial(GridLayout const& layout, Src const& src)
-        : centering_{layout.centering(src)}
+    Partial(auto const& layout, auto const& src)
+        : centering_{::plamn::core::centering(layout, src)}
     {
     }
 
@@ -139,17 +133,15 @@ namespace detail
     public:
         using expr_tag = void;
 
-        template<typename VecField>
         CurlComponent(std::array<double, dim> const& dx,
-                      std::array<std::array<QtyCentering, dim>, 3> const& cs, VecField const& v)
+                      std::array<std::array<QtyCentering, dim>, 3> const& cs, auto const& v)
             : dj_vk_{dx, cs[k], v[k]}
             , dk_vj_{dx, cs[j], v[j]}
         {
             check_();
         }
 
-        template<typename GridLayout, typename VecField>
-        CurlComponent(GridLayout const& layout, VecField const& v)
+        CurlComponent(auto const& layout, auto const& v)
             : dj_vk_{layout, v[k]}
             , dk_vj_{layout, v[j]}
         {
@@ -218,8 +210,7 @@ class Div
 public:
     using expr_tag = void;
 
-    template<typename GridLayout, typename VecField>
-    Div(GridLayout const& layout, VecField const& v)
+    Div(auto const& layout, auto const& v)
         : dx_vx_{layout, v[0]}
         , dy_vy_{layout, v[1]}
         , dz_vz_{layout, v[2]}
@@ -247,57 +238,56 @@ private:
 
 
 
-template<auto dir, typename GridLayout, typename Src>
-auto partial(GridLayout const& layout, Src const& src)
+template<auto dir, typename Layout>
+auto partial(Layout const& layout, auto const& src)
 {
-    return Partial<dir, GridLayout::dimension>{layout, src};
+    return Partial<dir, Layout::dimension>{layout, src};
 }
 
 // centering of a field from its quantity, no layout needed
-template<std::size_t dim, typename Field>
-auto centering_of(Field const& f)
+template<std::size_t dim>
+auto centering_of(auto const& f)
 {
     return centering<dim>(quantity(f.physicalQuantity()));
 }
 
-template<std::size_t dim, typename VecField>
-auto curl(std::array<double, dim> const& dx, VecField const& v)
+template<std::size_t dim>
+auto curl(std::array<double, dim> const& dx, auto const& v)
 {
     std::array<std::array<QtyCentering, dim>, 3> const c{
         centering_of<dim>(v[0]), centering_of<dim>(v[1]), centering_of<dim>(v[2])};
     return Curl<dim>{{dx, c, v}, {dx, c, v}, {dx, c, v}};
 }
 
-template<typename GridLayout, typename VecField>
-auto curl(GridLayout const& layout, VecField const& v)
+template<typename Layout>
+auto curl(Layout const& layout, auto const& v)
 {
-    return Curl<GridLayout::dimension>{{layout, v}, {layout, v}, {layout, v}};
+    return Curl<Layout::dimension>{{layout, v}, {layout, v}, {layout, v}};
 }
 
-template<typename GridLayout, typename Src>
-auto grad(GridLayout const& layout, Src const& src)
+template<typename Layout>
+auto grad(Layout const& layout, auto const& src)
 {
-    return Grad<GridLayout::dimension>{{layout, src}, {layout, src}, {layout, src}};
+    return Grad<Layout::dimension>{{layout, src}, {layout, src}, {layout, src}};
 }
 
-template<typename GridLayout, typename VecField>
-auto div(GridLayout const& layout, VecField const& v)
+template<typename Layout>
+auto div(Layout const& layout, auto const& v)
 {
-    return Div<GridLayout::dimension>{layout, v};
+    return Div<Layout::dimension>{layout, v};
 }
 
-template<typename GridLayout, typename Src>
-NO_DISCARD double laplacian(GridLayout const& layout, Src const& f,
-                            damn::core::Point<std::size_t, GridLayout::dimension> const idx) DAMN_ALL
+template<typename Layout, typename Src>
+NO_DISCARD double laplacian(Layout const& layout, Src const& f,
+                            damn::core::Point<std::size_t, Layout::dimension> const idx) DAMN_ALL
 {
-    static_assert(Src::dimension == GridLayout::dimension,
-                  "field and layout dimensions must match");
+    static_assert(Src::dimension == Layout::dimension, "field and layout dimensions must match");
 
     // plain accumulation rather than sum(array): sum is host-only (std::accumulate)
     double lap = 0;
-    damn::core::for_N<GridLayout::dimension>([&](auto ic) {
+    damn::core::for_N<Layout::dimension>([&](auto ic) {
         constexpr auto d = ic();
-        auto const inv   = layout.inverseMeshSize(static_cast<Direction>(d));
+        auto const inv   = 1.0 / layout.dx[d];
         lap += inv * inv
                * (detail::shifted<d>(f, idx, 1) - 2.0 * detail::shifted<d>(f, idx, 0)
                   + detail::shifted<d>(f, idx, -1));

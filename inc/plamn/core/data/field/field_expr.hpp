@@ -6,11 +6,13 @@
 // ...) are leaves that read shifted points; everything else is pointwise. An expression is plain
 // views and scalars, so it is trivially copyable to the device.
 
-#include "plamn/core/def.hpp"
-#include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/meta/for_N.hpp"
 #include "damn/core/data/ndarray/ndarray_view.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/geometry/box_spans.hpp"
+
+#include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/detail/detail.hpp"
 
 #include <cstddef>
@@ -97,8 +99,8 @@ namespace expr
             return Scalar{static_cast<double>(t)};
     }
 
-    template<typename Op, typename A, typename B>
-    NO_DISCARD auto binary(A const& a, B const& b)
+    template<typename Op>
+    NO_DISCARD auto binary(auto const& a, auto const& b)
     {
         using L = decltype(lift(a));
         using R = decltype(lift(b));
@@ -152,8 +154,8 @@ NO_DISCARD auto operator-(E const& e)
 
 
 // dst = e at every point of box (dst's local index space)
-template<typename Dst, typename Box_t, Expr E>
-void assign(Dst& dst, Box_t const& box, E const& e)
+template<typename Dst, Expr E>
+void assign(Dst& dst, auto const& box, E const& e)
 {
     auto const fn = [] DAMN_ALL(auto const& ijk, auto& d, auto const& ex) {
         d(ijk) = ex(ijk);
@@ -162,7 +164,7 @@ void assign(Dst& dst, Box_t const& box, E const& e)
     if constexpr (Dst::alloc_mode == damn::AllocatorMode::CPU)
         damn::core::for_each_point(box, [&](auto const& ijk) { fn(ijk, dst, e); });
     else
-        gpu::GridLayout::evalOnBox(fn, box, dst, e);
+        gpu::eval_on_box(fn, box, dst, e);
 }
 
 } // namespace plamn::core

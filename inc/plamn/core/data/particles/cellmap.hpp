@@ -2,25 +2,29 @@
 #define PLAMN_CORE_DATA_PARTICLES_CELLMAP_HPP
 
 #include "damn/core/data/ndarray/ndarray_view.hpp"
-#include "plamn/core/data/particles/particles_def.hpp"
-#include "plamn/core/def.hpp"
 #include "damn/core/def/damn_config.hpp" // IWYU pragma: keep
-#include "plamn/core/geometry/indexer.hpp"
 #include "damn/core/logger.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/geometry/range.hpp"
 #include "damn/core/meta/container_meta.hpp"
 #include "damn/core/data/ndarray/ndarray_vector.hpp"
+#include "damn/core/geometry/point.hpp"
 
+#include "plamn/core/data/particles/particles_def.hpp"
+#include "plamn/core/def.hpp"
+#include "plamn/core/geometry/indexer.hpp"
+
+#include <cassert>
 #include <array>
 #include <cstddef>
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
-#include <numeric>
-#include <algorithm>
-
+#include <cstdint>
+#include <iostream>
+#include <stdexcept>
+#include <utility>
 
 namespace plamn::core
 {

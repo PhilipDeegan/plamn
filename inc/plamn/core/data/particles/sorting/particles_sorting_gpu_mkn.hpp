@@ -3,10 +3,11 @@
 
 #if DAMN_HAVE_THRUST
 
-#include "plamn/core/def.hpp"
 #include "damn/core/exec/kernels.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/box_spans.hpp"
+
+#include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 
 #include <thrust/sort.h>

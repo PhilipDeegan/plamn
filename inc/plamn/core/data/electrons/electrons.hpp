@@ -1,20 +1,25 @@
 #ifndef PLAMN_ELECTRONS_HPP
 #define PLAMN_ELECTRONS_HPP
 
+#include "damn/core/def/damn_config.hpp"
+
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/grid_tiles.hpp"
+#include "plamn/core/data/grid/patch_layout.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 #include "plamn/core/data/tensorfield/tensorfield.hpp"
 #include "plamn/core/data/vecfield/vecfield_component.hpp"
-
 #include "plamn/initializer/data_provider.hpp"
 
+#include "dict.hpp"
 
 #include <tuple>
 #include <cstddef>
 #include <stdexcept>
-
+#include <format>
+#include <string>
+#include <vector>
 
 namespace plamn::core
 {
@@ -26,8 +31,8 @@ class StandardHybridElectronFluxComputer
 public:
     using VecField   = Ions::vecfield_type;
     using Field      = Ions::field_type;
-    using GridLayout = Ions::gridlayout_type;
-    using Scalar     = GridLayout::Scalar;
+    using Layout     = Ions::layout_type;
+    using Scalar     = Layout::Scalar;
 
     StandardHybridElectronFluxComputer(Ions& ions, VecField& J)
         : ions_{ions}
@@ -93,9 +98,9 @@ public:
         auto& Vez         = Ve(Component::Z);
 
         layout.evalGrownOnBox(Ne, 0, [=] DAMN_ALL(auto const& ijk) mutable {
-            auto const JxOnVx = GridLayout::template project<Scalar::Jx, Scalar::Vx>(Jx, ijk);
-            auto const JyOnVy = GridLayout::template project<Scalar::Jy, Scalar::Vy>(Jy, ijk);
-            auto const JzOnVz = GridLayout::template project<Scalar::Jz, Scalar::Vz>(Jz, ijk);
+            auto const JxOnVx = project<Scalar::Jx, Scalar::Vx>(Jx, ijk);
+            auto const JyOnVy = project<Scalar::Jy, Scalar::Vy>(Jy, ijk);
+            auto const JzOnVz = project<Scalar::Jz, Scalar::Vz>(Jz, ijk);
 
             Vex(ijk) = (Fx(ijk) - JxOnVx) / Ne(ijk);
             Vey(ijk) = (Fy(ijk) - JyOnVy) / Ne(ijk);
@@ -103,7 +108,7 @@ public:
         });
     }
 
-    void computeBulkVelocity(GridLayout const& layout)
+    void computeBulkVelocity(Layout const& layout)
     {
         check_field(ions_.chargeDensity(), layout);
         check_tensor_field(ions_.chargeFlux(), layout);
@@ -140,7 +145,7 @@ private:
 template<typename Ions>
 class IsothermalElectronPressureClosure
 {
-    using GridLayout = Ions::gridlayout_type;
+    using Layout     = Ions::layout_type;
     using VecField   = Ions::vecfield_type;
     using Field      = Ions::field_type;
 
@@ -188,7 +193,7 @@ public:
     NO_DISCARD Field& pressure() { return Pe_; }
     NO_DISCARD Field const& pressure() const { return Pe_; }
 
-    void computePressure(GridLayout const& /*layout*/)
+    void computePressure(Layout const& /*layout*/)
     {
         // static_assert(Field::is_contiguous, "Error - assumes Field date is contiguous");
 
@@ -223,7 +228,7 @@ class ElectronMomentModel
 {
     using VecField     = Ions::vecfield_type;
     using Field        = Ions::field_type;
-    using GridLayout   = Ions::gridlayout_type;
+    using Layout       = Ions::layout_type;
     using FluxComputer = StandardHybridElectronFluxComputer<Ions>;
 
 public:
@@ -296,7 +301,7 @@ class Electrons
 {
     using VecField   = Ions::vecfield_type;
     using Field      = Ions::field_type;
-    using GridLayout = Ions::gridlayout_type;
+    using Layout     = Ions::layout_type;
 
 public:
     Electrons(plamn::initializer::Dict const& dict, Ions& ions, VecField& J)
@@ -305,7 +310,7 @@ public:
     }
 
 
-    void update(GridLayout const& layout) { update_(layout); }
+    void update(Layout const& layout) { update_(layout); }
 
     // one tile's worth of work, tiles can be updated concurrently
     void update(std::size_t const tile_idx)

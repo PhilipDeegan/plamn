@@ -1,51 +1,44 @@
 #ifndef PLAMN_FLUID_PARTICLE_INITIALIZER_HPP
 #define PLAMN_FLUID_PARTICLE_INITIALIZER_HPP
 
+#include "damn/core/math/random.hpp"
+#include "damn/core/meta/for_N.hpp"
+#include "damn/core/def.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/math/array.hpp"
+#include "damn/core/memory/span.hpp"
+
 #include "plamn/core/data/grid/coordinates.hpp"
 #include "plamn/core/data/ions/particle_initializers/maxwellian_def.hpp"
-#include "plamn/core/def.hpp"
-#include "damn/core/math/numeric.hpp"
-#include "damn/core/meta/logic.hpp"
-#include "damn/core/geometry/point.hpp"
-#include "damn/core/math/random.hpp"
 #include "plamn/core/data/particles/particle.hpp"
-#include "plamn/core/data/grid/gridlayoutdefs.hpp"
 #include "plamn/core/data/particles/particles.hpp"
 #include "plamn/core/data/particles/appending/particles_appending.hpp"
-#include "plamn/core/models/quantities/hybrid_quantities.hpp"
 #include "plamn/core/data/ions/particle_initializers/particle_initializer.hpp"
-
 #include "plamn/initializer/data_provider.hpp"
+#include "plamn/core/data/particles/particles_def.hpp"
+#include "plamn/core/models/quantities/quantity.hpp"
 
 #include <cmath>
 #include <memory>
 #include <random>
 #include <string>
-#include <cassert>
 #include <cstdint>
 #include <numeric>
 #include <functional>
 #include <stdexcept>
-
-#include "plamn/core/data/grid/gridlayoutdefs.hpp"
-#include "plamn/core/models/quantities/hybrid_quantities.hpp"
-#include "damn/core/meta/for_N.hpp"
-#include "damn/core/math/random.hpp"
-#include "plamn/core/data/ions/particle_initializers/particle_initializer.hpp"
-#include "plamn/core/data/particles/particle.hpp"
-#include "plamn/initializer/data_provider.hpp"
-#include "damn/core/geometry/point.hpp"
-#include "damn/core/def.hpp"
-
+#include <array>
+#include <cstddef>
+#include <optional>
+#include <tuple>
+#include <type_traits>
 
 namespace plamn::core
 {
 enum class Basis { Magnetic, Cartesian };
 
 
-template<typename Generator>
 void maxwellianVelocity(std::array<double, 3> const& V, std::array<double, 3> const& Vth,
-                        Generator& generator, std::array<double, 3>& partVelocity)
+                        auto& generator, std::array<double, 3>& partVelocity)
 {
     std::normal_distribution<> maxwellX(V[0], Vth[0]);
     std::normal_distribution<> maxwellY(V[1], Vth[1]);
@@ -66,11 +59,11 @@ void maxwellianVelocity(std::array<double, 3> const& V, std::array<double, 3> co
  * Seeded values are reproducible for a given standard library only, since the std distributions
  * used to draw positions and velocities are implementation-defined.
  */
-template<typename Particles, typename GridLayout>
-class MaxwellianParticleInitializer : public ParticleInitializer<Particles, GridLayout>
+template<typename Particles, typename Layout>
+class MaxwellianParticleInitializer : public ParticleInitializer<Particles, Layout>
 {
 public:
-    static constexpr auto dimension = GridLayout::dimension;
+    static constexpr auto dimension = Layout::dimension;
     using InputFunction             = plamn::initializer::InitFunction<dimension>;
 
     MaxwellianParticleInitializer(
@@ -100,7 +93,7 @@ public:
     /**
      * @brief load particles in a Particles in a domain defined by the given layout
      */
-    void loadParticles(Particles& particles, GridLayout const& layout) const override;
+    void loadParticles(Particles& particles, Layout const& layout) const override;
 
 
     virtual ~MaxwellianParticleInitializer() = default;
@@ -144,10 +137,10 @@ private:
 class MaxwellianInitFunctions
 {
 public:
-    template<typename Function, typename FunctionArray, typename Basis, typename... Coords>
-    MaxwellianInitFunctions(Function& density, FunctionArray& bulkVelocity,
+    template<typename FunctionArray, typename... Coords>
+    MaxwellianInitFunctions(auto& density, FunctionArray& bulkVelocity,
                             FunctionArray& thermalVelocity, FunctionArray& magneticField,
-                            Basis const& basis, Coords const&... coords)
+                            auto const& basis, Coords const&... coords)
         : _n{density(coords...)}
 
     {
@@ -182,17 +175,18 @@ private:
 
 
 
-template<typename Particles_t, typename GridLayout>
-void MaxwellianParticleInitializer<Particles_t, GridLayout>::loadParticles(
-    Particles_t& particles, GridLayout const& layout) const
+template<typename Particles_t, typename Layout>
+void MaxwellianParticleInitializer<Particles_t, Layout>::loadParticles(Particles_t& particles,
+                                                                       Layout const& layout) const
 {
     auto const deltas = [](auto& pos, auto& gen) {
         return damn::core::for_N_make_array<dimension>([&](auto) { return pos(gen); });
     };
 
 
-    auto const cells = coordinate_vectors(
-        layout.meshSize(), layout.AMRBox(), damn::core::ConstArray<QtyCentering, dimension>(QtyCentering::dual));
+    auto const cells
+        = coordinate_vectors(layout.dx, layout.cells,
+                             damn::core::ConstArray<QtyCentering, dimension>(QtyCentering::dual));
 
     auto const fns = std::make_from_tuple<MaxwellianInitFunctions>(std::tuple_cat(
         std::forward_as_tuple(density_, bulkVelocity_, thermalVelocity_, magneticField_, basis_),
@@ -219,7 +213,7 @@ void MaxwellianParticleInitializer<Particles_t, GridLayout>::loadParticles(
 
     if constexpr (is_tiled(Particles_t::layout_mode))
     { // per tile storage: reserve where the particles will land
-        core::reserve(particles, layout.AMRBox(), nbrParticlePerCell_);
+        core::reserve(particles, layout.cells, nbrParticlePerCell_);
     }
     else
     { // flat storage: cells above the density cutoff, plus room for incoming particles
@@ -231,8 +225,8 @@ void MaxwellianParticleInitializer<Particles_t, GridLayout>::loadParticles(
                                              : sum;
                               });
 
-        auto const incoming_estimate = (surface_cell_count_(layout.AMRBox())
-                                        * (nbrParticlePerCell_ * over_alloc_factor_));
+        auto const incoming_estimate
+            = (surface_cell_count_(layout.cells) * (nbrParticlePerCell_ * over_alloc_factor_));
         if constexpr (requires { out.reserve(expected_size); }) // not per cell (AoSPCTS)
             out.reserve(expected_size + incoming_estimate);
     }
@@ -244,7 +238,8 @@ void MaxwellianParticleInitializer<Particles_t, GridLayout>::loadParticles(
 
         auto const cellWeight = n[flatCellIdx] / nbrParticlePerCell_;
         auto const iCell      = cells.points[flatCellIdx].toArray();
-        damn::core::SplitMix64 randGen{damn::core::cell_key(seed, populationKey_, layout.levelNumber(), iCell)};
+        damn::core::SplitMix64 randGen{
+            damn::core::cell_key(seed, populationKey_, layout.level, iCell)};
         ParticleDeltaDistribution<double> deltaDistrib;
         std::array<double, 3> particleVelocity;
         std::array<std::array<double, 3>, 3> basis;

@@ -1,9 +1,11 @@
-#ifndef PLAMN_CORE_GRID_GRIDLAYOUTDEFS_HPP
-#define PLAMN_CORE_GRID_GRIDLAYOUTDEFS_HPP
+#ifndef PLAMN_CORE_DATA_GRID_LAYOUT_DEFS_HPP
+#define PLAMN_CORE_DATA_GRID_LAYOUT_DEFS_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"
+#include "damn/core/def/damn_config.hpp"
+
+#include "plamn/core/def.hpp"
 #include "plamn/core/models/quantities/quantity.hpp"
 
 #include <array>
@@ -12,6 +14,7 @@
 #include <tuple>
 #include <type_traits>
 #include <utility>
+#include <variant>
 
 namespace plamn
 {
@@ -32,12 +35,11 @@ namespace core
 
     // using LinearCombination = std::vector<WeightPoint>;
 
-    enum class Layout { Yee };
 
 
     template<typename T, std::size_t dim>
-    NO_DISCARD damn::core::Box<T, dim> toCenteredBox(damn::core::Box<T, dim> box,
-                                         std::array<QtyCentering, dim> const& centerings)
+    NO_DISCARD damn::core::Box<T, dim>
+    toCenteredBox(damn::core::Box<T, dim> box, std::array<QtyCentering, dim> const& centerings)
     {
         for (std::size_t i = 0; i < dim; ++i)
             if (centerings[i] == QtyCentering::primal)
@@ -51,9 +53,12 @@ namespace core
     NO_DISCARD consteval auto recenteringStencil();
 
 
+    // src, dst: centerings; for quantities see patch_layout.hpp
     template<auto src, auto dst, std::size_t order = 2, typename Field>
-    NO_DISCARD inline auto project(Field const& field,
-                                   damn::core::Point<std::size_t, Field::dimension> const& index) DAMN_ALL
+        requires(not std::is_enum_v<decltype(src)>)
+    NO_DISCARD inline auto
+    project(Field const& field,
+            damn::core::Point<std::size_t, Field::dimension> const& index) DAMN_ALL
     {
         constexpr auto stencil = recenteringStencil<src, dst, order>();
 

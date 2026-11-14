@@ -1,30 +1,33 @@
 #ifndef PLAMN_CORE_DATA_FIELD_FIELD_ALGORITHM_HPP
 #define PLAMN_CORE_DATA_FIELD_FIELD_ALGORITHM_HPP
 
-
-#include "plamn/core/def.hpp"
-
 #include "damn/core/memory/span.hpp"
-#include "damn/core/exec/kernels.hpp"
-#include "damn/core/meta/logic.hpp"
 #include "damn/core/math/array.hpp"
-#include "plamn/core/data/field/field.hpp"
-#include "plamn/core/data/field/recentered_field.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/meta/constexprifier.hpp"
-#include "plamn/core/data/grid/gridlayoutdefs.hpp"
 #include "damn/core/data/ndarray/ndarray_vector.hpp"
+#include "damn/core/data/ndarray/ndarray_view.hpp"
+#include "damn/core/def/damn_config.hpp"
+
+#include "plamn/core/def.hpp"
+#include "plamn/core/data/field/field.hpp"
+#include "plamn/core/data/field/recentered_field.hpp"
 #include "plamn/core/data/tensorfield/tensorfield.hpp"
+#include "plamn/core/data/field/field_tiles.hpp"
+#include "plamn/core/models/quantities/quantity.hpp"
 
-#include "plamn/core/data/grid/grid.hpp"
-#include "plamn/core/data/grid/grid_tiles.hpp"
-
+#include <cassert>
 #include <array>
 #include <tuple>
 #include <string>
 #include <algorithm>
 #include <stdexcept>
-
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <initializer_list>
+#include <type_traits>
+#include <vector>
 
 namespace plamn
 {
@@ -93,13 +96,13 @@ auto& convert_to_fortran_primal(      // DOES NOT WORK ON GHOST BOX!
 {
     bool static constexpr c_ordering = false;
 
-    if (not all(layout.centering(dst), [](auto const c) { return c == QtyCentering::primal; }))
+    if (not all(centering(layout, dst), [](auto const c) { return c == QtyCentering::primal; }))
         throw std::runtime_error("Invalid operation, all directions must be primal");
 
     auto const all_primal
-        = all(layout.centering(src), [](auto const c) { return c == QtyCentering::primal; });
+        = all(centering(layout, src), [](auto const c) { return c == QtyCentering::primal; });
 
-    auto const lcl_src_box = layout.AMRToLocal(layout.AMRBoxFor(dst));
+    auto const lcl_src_box = to_local(layout, layout.AMRBoxFor(dst));
     auto dst_view          = damn::core::make_array_view<c_ordering>(dst.data(), *lcl_src_box.shape());
 
     auto const lcl_dst_box = [&]() {
@@ -115,9 +118,10 @@ auto& convert_to_fortran_primal(      // DOES NOT WORK ON GHOST BOX!
 
     else
     {
-        auto const isDual = std::apply(
-            [](auto... dual) { return damn::core::Constexprifier{dual...}; },
-            damn::core::generate_from([](auto c) { return c == QtyCentering::dual; }, layout.centering(src)));
+        auto const isDual
+            = std::apply([](auto... dual) { return damn::core::Constexprifier{dual...}; },
+                         damn::core::generate_from([](auto c) { return c == QtyCentering::dual; },
+                                                   centering(layout, src)));
 
         isDual([&]<bool... dual>() {
             constexpr std::array source{(dual ? QtyCentering::dual : QtyCentering::primal)...};
@@ -424,7 +428,7 @@ void operate(TensorField<Field_t, PQ, rank>& dst, TensorField<Field_t, PQ, rank>
 /** \brief calls fn(dst.data()[i], fields.data()[i]...) for every cell i of dst (and the
  * co-located fields, which must share dst's shape/tiling). Meant for callbacks that only
  * need the value at the same cell across several fields (no neighbor/projection access) -
- * unlike GridLayout::evalOnAnyBox, this works for tiled fields.
+ * unlike eval_on_box, this works for tiled fields.
  */
 template<typename Fn, typename Field_t, typename... Fields>
 void operate_on_fields(Fn&& fn, Field_t& dst, Fields&... fields)

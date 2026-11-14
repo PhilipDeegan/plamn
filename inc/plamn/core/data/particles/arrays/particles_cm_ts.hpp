@@ -1,11 +1,28 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTICLES_CELL_MAPPED_TILE_SET_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLES_CELL_MAPPED_TILE_SET_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/data/tiles/tile_set.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/geometry/point.hpp"
+#include "damn/core/math/array.hpp"
+#include "damn/core/meta/logic.hpp"
+
+#include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
+
+#include <cassert>
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <format>
+#include <functional>
+#include <new>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 namespace plamn::core
 {
@@ -78,7 +95,7 @@ public:
         return damn::core::Box<std::uint32_t, dim>{local_cell(from.lower), local_cell(from.upper)};
     }
 
-    // fn(amr, lcl) for each cell of box, as GridLayout::amr_lcl_idx
+    // fn(amr, lcl) for each cell of box, as for_each_amr_local
     void amr_lcl_idx(damn::core::Box<int, dim> const& box, auto&& fn) const
     {
         damn::core::for_each_point_zip(box, local_box(box), fn);
@@ -113,8 +130,7 @@ public:
     using per_tile_particles = Particles;
     using Tile_t             = MappedParticlesTile<Particles>;
 
-    template<typename MappedTileSetArray>
-    MappedTileSetSpan(MappedTileSetArray& arr)
+    MappedTileSetSpan(auto& arr)
         : Base{arr.box(), arr.ghost_cells()}
         , size_{arr.size()}
         , particles_{resolve(arr)}

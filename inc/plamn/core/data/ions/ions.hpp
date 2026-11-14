@@ -1,38 +1,36 @@
 #ifndef PLAMN_IONS_HPP
 #define PLAMN_IONS_HPP
 
+#include "damn/core/math/array.hpp"
 
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/field/field_algorithm.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/initializer/data_provider.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
-#include "plamn/core/data/vecfield/vecfield_component.hpp"
 #include "plamn/core/data/particles/exporting/particles_exporting.hpp"
+#include "plamn/core/data/particles/particles_def.hpp"
+
+#include "dict.hpp"
 // #include "particle_initializers/particle_initializer_factory.hpp"
 
-
-
-#include <array>
-#include <cmath>
+#include <cassert>
 #include <vector>
 #include <string>
 #include <sstream>
 #include <iterator>
 #include <stdexcept>
 #include <functional>
-#include "plamn/initializer/data_provider.hpp"
-#include "plamn/core/data/field/field_algorithm.hpp"
-#include "damn/core/meta/logic.hpp"
-#include "damn/core/math/array.hpp"
-#include "damn/core/geometry/box.hpp"
-#include "damn/core/geometry/range.hpp"
+#include <cstddef>
+#include <format>
+#include <tuple>
+#include <type_traits>
 
 namespace plamn
 {
 namespace core
 {
-    template<typename IonPopulation, typename GridLayout>
+    template<typename IonPopulation, typename Layout>
     class Ions
     {
     public:
@@ -42,8 +40,8 @@ namespace core
         using Float                     = field_type::type;
         using tensorfield_type          = IonPopulation::tensorfield_type;
         using particles_type       = IonPopulation::particles_type;
-        using gridlayout_type           = GridLayout;
-        static constexpr auto dimension = GridLayout::dimension;
+        using layout_type               = Layout;
+        static constexpr auto dimension = Layout::dimension;
 
 
         Ions(Ions const&) = default;
@@ -208,8 +206,7 @@ namespace core
 
 
         // drops the domain particles of all populations located in `boxes`
-        template<typename Boxes>
-        void eraseDomainParticlesIn(Boxes const& boxes)
+        void eraseDomainParticlesIn(auto const& boxes)
         {
             if (boxes.empty())
                 return;

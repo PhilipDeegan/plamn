@@ -1,7 +1,7 @@
 #ifndef PLAMN_FARADAY_HPP
 #define PLAMN_FARADAY_HPP
 
-#include "plamn/core/def.hpp"
+#include "damn/core/def/damn_config.hpp"
 
 namespace plamn::core {
 

@@ -1,8 +1,6 @@
 #ifndef PLAMN_CORE_DATA_GRID_GHOST_WIDTH_CALCULATOR_HPP
 #define PLAMN_CORE_DATA_GRID_GHOST_WIDTH_CALCULATOR_HPP
 
-#include "plamn/core/def.hpp"
-
 #include <cstdint>
 
 namespace plamn::core

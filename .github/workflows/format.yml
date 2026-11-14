@@ -1,0 +1,71 @@
+name: format
+
+# changed C++ lines follow .clang-format, as PHARE's gate (one clang-format version for
+# everyone: results differ between versions)
+
+on:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  clang-format:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+
+    - run: python -m pip install clang-format==22.1.8
+
+    # exit 0: nothing to change, 1: a diff, other: an error
+    - run: |
+        mb=$(git merge-base "origin/${{ github.base_ref }}" HEAD)
+        rc=0
+        git clang-format --diff --extensions c,cc,cpp,h,hpp,ipp "$mb" -- inc src tst \
+          > format.diff || rc=$?
+        [ "$rc" -le 1 ] || { cat format.diff; exit "$rc"; }
+        if grep -q '^diff --git' format.diff; then
+          cat format.diff
+          echo "run: git clang-format $mb -- inc src tst"
+          exit 1
+        fi
+
+  iwyu:
+    # include what you use: applying iwyu's suggestions changes nothing
+    # Debian 13: the same iwyu (8.23) and libstdc++ as development machines, results differ
+    # between versions; also a much smaller image than phare_dep
+    runs-on: ubuntu-24.04
+    container: debian:trixie
+    timeout-minutes: 30
+    steps:
+    - run: |  # git before checkout, so the checkout is a repository
+        apt-get update
+        apt-get install -y --no-install-recommends ca-certificates curl git openssh-client \
+          g++ openmpi-bin libopenmpi-dev iwyu
+
+    - uses: actions/checkout@v4
+
+    # damn is private: check it out where mkn looks for it (tpp/damn), as build_nix.yml
+    - uses: actions/checkout@v4
+      with:
+        repository: PhilipDeegan/damn
+        ssh-key: ${{ secrets.DAMN_DEPLOY_KEY }}
+        path: tpp/damn
+
+    - run: |
+        curl -Lo mkn https://github.com/mkn/mkn/releases/download/latest/mkn_nix
+        chmod +x mkn
+        KLOG=3 ./mkn build -dtKOqp iwyu_fix -Wx res/mkn/mpi # build: the module must link
+        git config --global --add safe.directory "$PWD"
+        if ! git diff --exit-code -- inc src tst; then
+          echo "run: mkn build -p iwyu_fix -x res/mkn/mpi, and commit the result"
+          exit 1
+        fi

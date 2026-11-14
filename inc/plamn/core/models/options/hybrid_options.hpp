@@ -1,14 +1,9 @@
 #ifndef PLAMN_OPTIONS_HYBRID_OPTIONS_HPP
 #define PLAMN_OPTIONS_HYBRID_OPTIONS_HPP
 
-#include "plamn/core/def.hpp"
-
-
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
-#include "plamn/core/data/grid/impl/yee/gridlayout_hybrid_yee.hpp"
 
 #include <array>
-
 
 namespace plamn
 {
@@ -33,7 +28,6 @@ struct HybridFieldOptions
 template<HybridFieldOptions opts>
 struct HybridOptions
 {
-    using GridLayoutImpl = core::hybrid::GridLayoutImplYee<opts>;
     using FieldOptions   = decltype(opts);
 
     auto static constexpr field_options        = opts;

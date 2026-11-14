@@ -1,16 +1,20 @@
 #ifndef PLAMN_CORE_DATA_ELECTROMAG_ELECTROMAG_HPP
 #define PLAMN_CORE_DATA_ELECTROMAG_ELECTROMAG_HPP
 
+#include "damn/core/def/damn_config.hpp"
 
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/vecfield/vecfield_initializer.hpp"
 #include "plamn/core/data/tensorfield/tensorfield.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
-
 #include "plamn/initializer/data_provider.hpp"
 
+#include "dict.hpp"
+
+#include <cassert>
 #include <tuple>
 #include <string>
+#include <cstddef>
 
 namespace plamn::core::basic
 {
@@ -75,8 +79,7 @@ namespace core
         }
 
 
-        template<typename GridLayout>
-        void initialize(GridLayout const& layout)
+        void initialize(auto const& layout)
         {
             assert(B.isUsable());
             Binit_.initialize(B, layout);

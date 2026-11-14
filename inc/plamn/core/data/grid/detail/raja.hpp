@@ -1,16 +1,17 @@
 #ifndef PLAMN_CORE_GRID_DETAIL_RAJA_H
 #define PLAMN_CORE_GRID_DETAIL_RAJA_H
 
-#include "plamn/core/def.hpp"
 #include "damn/core/geometry/box_spans.hpp"
+
+#include "plamn/core/def.hpp"
 
 namespace plamn::core::gpu::impl
 {
 
-struct GridLayout
+struct BoxKernel
 {
-    template<typename Fn, typename T, std::size_t S, typename... Args>
-    static void evalOnBox(Fn& fn, damn::core::Box<T, S> const& box, Args&&... args)
+    template<typename T, std::size_t S, typename... Args>
+    static void evalOnBox(auto& fn, damn::core::Box<T, S> const& box, Args&&... args)
     {
 #if !defined(RAJA_ENABLE_CUDA)
         RAJA::forall<RAJA::seq_exec>(

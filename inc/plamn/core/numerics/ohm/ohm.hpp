@@ -1,14 +1,22 @@
 #ifndef PLAMN_OHM_HPP
 #define PLAMN_OHM_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/geometry/point.hpp"
-#include "damn/core/meta/container_meta.hpp"
-#include "plamn/core/data/grid/gridlayoutdefs.hpp"
+#include "damn/core/def/damn_config.hpp"
+
+#include "plamn/core/data/grid/layout_defs.hpp"
+#include "plamn/core/data/grid/patch_layout.hpp"
 #include "plamn/core/data/vecfield/vecfield_component.hpp"
 #include "plamn/core/numerics/differential_operators.hpp"
-
 #include "plamn/initializer/data_provider.hpp"
+
+#include "dict.hpp"
+
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <type_traits>
 
 namespace plamn::core
 {
@@ -31,15 +39,15 @@ struct OhmInfo
     }
 };
 
-template<typename GridLayout>
+template<typename Layout>
 class Ohm : public OhmInfo
 {
     using Super                     = OhmInfo;
-    constexpr static auto dimension = GridLayout::dimension;
-    using Scalar                    = GridLayout::Scalar;
+    constexpr static auto dimension = Layout::dimension;
+    using Scalar                    = std::decay_t<decltype(Layout::options)>::FieldOptions::Scalar;
 
 public:
-    explicit Ohm(OhmInfo const& info, GridLayout const& layout)
+    explicit Ohm(OhmInfo const& info, Layout const& layout)
         : Super{info}
         , layout_{layout}
     {
@@ -67,7 +75,7 @@ public:
     }
 
 private:
-    GridLayout layout_; // GPU copy needs object not pointer!
+    Layout layout_; // GPU copy needs object not pointer!
 
     template<auto component, typename VecField>
     auto ideal_(VecField const& Ve, VecField const& B,
@@ -81,10 +89,10 @@ private:
             auto const& By = B(Component::Y);
             auto const& Bz = B(Component::Z);
 
-            auto const vyOnEx = GridLayout::template project<Scalar::Vy, Scalar::Ex>(Vy, index);
-            auto const vzOnEx = GridLayout::template project<Scalar::Vz, Scalar::Ex>(Vz, index);
-            auto const byOnEx = GridLayout::template project<Scalar::By, Scalar::Ex>(By, index);
-            auto const bzOnEx = GridLayout::template project<Scalar::Bz, Scalar::Ex>(Bz, index);
+            auto const vyOnEx = project<Scalar::Vy, Scalar::Ex>(Vy, index);
+            auto const vzOnEx = project<Scalar::Vz, Scalar::Ex>(Vz, index);
+            auto const byOnEx = project<Scalar::By, Scalar::Ex>(By, index);
+            auto const bzOnEx = project<Scalar::Bz, Scalar::Ex>(Bz, index);
 
             return -vyOnEx * bzOnEx + vzOnEx * byOnEx;
         }
@@ -96,10 +104,10 @@ private:
             auto const& Bx = B(Component::X);
             auto const& Bz = B(Component::Z);
 
-            auto const vxOnEy = GridLayout::template project<Scalar::Vx, Scalar::Ey>(Vx, index);
-            auto const vzOnEy = GridLayout::template project<Scalar::Vz, Scalar::Ey>(Vz, index);
-            auto const bxOnEy = GridLayout::template project<Scalar::Bx, Scalar::Ey>(Bx, index);
-            auto const bzOnEy = GridLayout::template project<Scalar::Bz, Scalar::Ey>(Bz, index);
+            auto const vxOnEy = project<Scalar::Vx, Scalar::Ey>(Vx, index);
+            auto const vzOnEy = project<Scalar::Vz, Scalar::Ey>(Vz, index);
+            auto const bxOnEy = project<Scalar::Bx, Scalar::Ey>(Bx, index);
+            auto const bzOnEy = project<Scalar::Bz, Scalar::Ey>(Bz, index);
 
             return -vzOnEy * bxOnEy + vxOnEy * bzOnEy;
         }
@@ -111,23 +119,23 @@ private:
             auto const& Bx = B(Component::X);
             auto const& By = B(Component::Y);
 
-            auto const vxOnEz = GridLayout::template project<Scalar::Vx, Scalar::Ez>(Vx, index);
-            auto const vyOnEz = GridLayout::template project<Scalar::Vy, Scalar::Ez>(Vy, index);
-            auto const bxOnEz = GridLayout::template project<Scalar::Bx, Scalar::Ez>(Bx, index);
-            auto const byOnEz = GridLayout::template project<Scalar::By, Scalar::Ez>(By, index);
+            auto const vxOnEz = project<Scalar::Vx, Scalar::Ez>(Vx, index);
+            auto const vyOnEz = project<Scalar::Vy, Scalar::Ez>(Vy, index);
+            auto const bxOnEz = project<Scalar::Bx, Scalar::Ez>(Bx, index);
+            auto const byOnEz = project<Scalar::By, Scalar::Ez>(By, index);
 
             return -vxOnEz * byOnEz + vyOnEz * bxOnEz;
         }
     }
 
 
-    template<auto component, typename Field, typename GradPe>
-    auto pressure_(Field const& n, GradPe const& gradPe,
+    template<auto component, typename Field>
+    auto pressure_(Field const& n, auto const& gradPe,
                    damn::core::Point<std::size_t, Field::dimension> index) const DAMN_ALL
     {
         if constexpr (component == Component::X)
         {
-            auto const nOnEx = GridLayout::template project<Scalar::rho, Scalar::Ex>(n, index);
+            auto const nOnEx = project<Scalar::rho, Scalar::Ex>(n, index);
 
             return -gradPe(index) / nOnEx;
         }
@@ -136,7 +144,7 @@ private:
         {
             if constexpr (dimension >= 2)
             {
-                auto const nOnEy = GridLayout::template project<Scalar::rho, Scalar::Ey>(n, index);
+                auto const nOnEy = project<Scalar::rho, Scalar::Ey>(n, index);
 
                 return -gradPe(index) / nOnEy;
             }
@@ -150,7 +158,7 @@ private:
         {
             if constexpr (dimension >= 3)
             {
-                auto const nOnEz = GridLayout::template project<Scalar::rho, Scalar::Ez>(n, index);
+                auto const nOnEz = project<Scalar::rho, Scalar::Ez>(n, index);
 
                 return -gradPe(index) / nOnEz;
             }
@@ -164,32 +172,32 @@ private:
 
 
 
-    template<auto component, typename VecField>
-    auto resistive_(VecField const& J, damn::core::Point<std::size_t, dimension> index) const DAMN_ALL
+    template<auto component>
+    auto resistive_(auto const& J, damn::core::Point<std::size_t, dimension> index) const DAMN_ALL
     {
         auto const& Jxyx = J(component);
 
         if constexpr (component == Component::X)
         {
-            auto const jxOnEx = GridLayout::template project<Scalar::Jx, Scalar::Ex>(Jxyx, index);
+            auto const jxOnEx = project<Scalar::Jx, Scalar::Ex>(Jxyx, index);
             return eta * jxOnEx;
         }
 
         if constexpr (component == Component::Y)
         {
-            auto const jyOnEy = GridLayout::template project<Scalar::Jy, Scalar::Ey>(Jxyx, index);
+            auto const jyOnEy = project<Scalar::Jy, Scalar::Ey>(Jxyx, index);
             return eta * jyOnEy;
         }
 
         if constexpr (component == Component::Z)
         {
-            auto const jzOnEz = GridLayout::template project<Scalar::Jz, Scalar::Ez>(Jxyx, index);
+            auto const jzOnEz = project<Scalar::Jz, Scalar::Ez>(Jxyx, index);
             return eta * jzOnEz;
         }
     }
 
-    template<auto component, typename VecField, typename Field>
-    auto hyperresistive_(VecField const& J, VecField const& B, Field const& n,
+    template<auto component, typename VecField>
+    auto hyperresistive_(VecField const& J, VecField const& B, auto const& n,
                          damn::core::Point<std::size_t, VecField::dimension> index) const DAMN_ALL
     {
         // if compile error, fix this function
@@ -210,21 +218,19 @@ private:
         return -nu * laplacian(layout_, J(component), index);
     }
 
-    template<auto component, typename VecField, typename Field>
-    auto spatial_hyperresistive_(VecField const& J, VecField const& B, Field const& n,
-                                 damn::core::Point<std::size_t, VecField::dimension> index) const DAMN_ALL
+    template<auto component, typename VecField>
+    auto spatial_hyperresistive_(
+        VecField const& J, VecField const& B, auto const& n,
+        damn::core::Point<std::size_t, VecField::dimension> index) const DAMN_ALL
     {
-        auto const lvlCoeff = 1. / std::pow(4, layout_.levelNumber());
+        auto const lvlCoeff = 1. / std::pow(4, layout_.level);
 
         auto constexpr min_density = 0.1;
         auto computeHR             = [&]<auto dst>() {
-            auto const BxOnE
-                = GridLayout::template project<Scalar::Bx, dst>(B(Component::X), index);
-            auto const ByOnE
-                = GridLayout::template project<Scalar::By, dst>(B(Component::Y), index);
-            auto const BzOnE
-                = GridLayout::template project<Scalar::Bz, dst>(B(Component::Z), index);
-            auto const nOnE = GridLayout::template project<Scalar::rho, dst>(n, index);
+            auto const BxOnE = project<Scalar::Bx, dst>(B(Component::X), index);
+            auto const ByOnE = project<Scalar::By, dst>(B(Component::Y), index);
+            auto const BzOnE = project<Scalar::Bz, dst>(B(Component::Z), index);
+            auto const nOnE  = project<Scalar::rho, dst>(n, index);
             auto b          = std::sqrt(BxOnE * BxOnE + ByOnE * ByOnE + BzOnE * BzOnE);
 
             return -nu * (b / (nOnE + min_density) + 1) * lvlCoeff

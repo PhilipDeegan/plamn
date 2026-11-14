@@ -13,7 +13,7 @@ namespace plamn::test
 template<typename Ions_t, typename EM>
 struct HybridPatch
 {
-    using GridLayout_t = Ions_t::gridlayout_type;
+    using Layout_t = Ions_t::layout_type;
 
     HybridPatch(auto&&... args)
         : model{args...}
@@ -32,7 +32,7 @@ struct HybridPatch
 
         struct State
         {
-            GridLayout_t layout;
+            Layout_t layout;
             Ions_t ions;
             EM em{layout};
             electromag_type electromag = *em;
@@ -46,7 +46,7 @@ struct HybridPatch
 
     std::string id = "patch_id";
     Model model;
-    GridLayout_t& layout = model.state.layout;
+    Layout_t& layout = model.state.layout;
 };
 
 
@@ -78,7 +78,7 @@ struct UsableModelAccessor
 {
     using Patch_t      = Patches::value_type;
     using Model_t      = Patch_t::Model_t;
-    using GridLayout_t = Patch_t::GridLayout_t;
+    using Layout_t     = Patch_t::Layout_t;
     using State_t      = std::decay_t<decltype(std::declval<Patch_t>().model.state)>;
     using Args_t       = detail::resolve_args_t<ArgsGetter>;
 
@@ -100,7 +100,7 @@ struct UsableModelAccessor
         auto& patchID() const { return id; }
 
         std::string id;
-        GridLayout_t layout;
+        Layout_t layout;
         Args_t args;
     };
 
@@ -114,8 +114,8 @@ template<typename Patches, typename ArgsGetter>
 UsableModelAccessor(Patches, ArgsGetter) -> UsableModelAccessor<Patches, ArgsGetter>;
 
 
-template<typename Patches, typename ArgsGetter = decltype(detail::default_no_args)>
-auto make_model_level_accessor(Patches& patches, ArgsGetter getter = detail::default_no_args)
+template<typename ArgsGetter = decltype(detail::default_no_args)>
+auto make_model_level_accessor(auto& patches, ArgsGetter getter = detail::default_no_args)
 {
     return UsableModelAccessor{patches, getter};
 }

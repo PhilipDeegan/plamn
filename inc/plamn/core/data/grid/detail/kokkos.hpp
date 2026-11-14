@@ -1,16 +1,17 @@
 #ifndef PLAMN_CORE_GRID_DETAIL_KOKKOS_HPP
 #define PLAMN_CORE_GRID_DETAIL_KOKKOS_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/geometry/box_spans.hpp"
+
+#include "plamn/core/def.hpp"
 
 namespace plamn::core::gpu::impl
 {
 
-struct GridLayout
+struct BoxKernel
 {
-    template<typename Fn, typename T, std::size_t S, typename... Args>
-    static void evalOnBox(Fn& fn, damn::core::Box<T, S> const& box, Args&&... args)
+    template<typename T, std::size_t S, typename... Args>
+    static void evalOnBox(auto& fn, damn::core::Box<T, S> const& box, Args&&... args)
     {
         DAMN_LOG_LINE_SS(box.size());
         int size = box.size();

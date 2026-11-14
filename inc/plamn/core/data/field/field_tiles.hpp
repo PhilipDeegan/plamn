@@ -1,14 +1,17 @@
 #ifndef PLAMN_CORE_DATA_FIELD_FIELD_TILES_HPP
 #define PLAMN_CORE_DATA_FIELD_FIELD_TILES_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/vector.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/data/tiles/tile_set.hpp"
 #include "damn/core/data/tiles/tile_set_traversal.hpp"
 #include "damn/core/math/array.hpp"
-#include "damn/core/math/numeric.hpp"
 #include "damn/core/geometry/box_spans.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/geometry/point.hpp"
+#include "damn/core/memory/span.hpp"
+
+#include "plamn/core/def.hpp"
 
 #include <tuple>
 #include <utility>
@@ -16,16 +19,27 @@
 #include <cassert>
 #include <cstdint>
 #include <string>
-#include <cstddef>
 #include <stdexcept>
 #include <algorithm>
 #include <type_traits>
+#include <array>
+#include <cstdlib>
+#include <iosfwd>
+#include <iterator>
+#include <version>
 
+namespace damn::core
+{
+template<typename D>
+struct SetEqual;
+} // namespace damn::core
+
+// defined in tensorfield.hpp, which includes this file
 namespace plamn::core::basic
 {
 template<typename Field_t, std::size_t rank>
 struct TensorField;
-}
+} // namespace plamn::core::basic
 
 namespace plamn::core
 {
@@ -96,14 +110,14 @@ void operate_on_spans(Dst& dst, damn::core::Box<std::uint32_t, dim> const& dst_l
                       });
 }
 
-template<typename GridLayout_t, typename Grid_t, typename Field_t>
+template<typename Layout_t, typename Grid_t, typename Field_t>
 struct GridTile;
 
-template<typename GridLayout_t, typename Field_t>
-class FieldTile : public damn::core::Box<std::int32_t, GridLayout_t::dimension>
+template<typename Layout_t, typename Field_t>
+class FieldTile : public damn::core::Box<std::int32_t, Layout_t::dimension>
 {
 public:
-    auto constexpr static dimension  = GridLayout_t::dimension;
+    auto constexpr static dimension    = Layout_t::dimension;
     auto constexpr static alloc_mode   = Field_t::alloc_mode;
     auto constexpr static is_c_ordered = Field_t::is_c_ordered;
     using Super                        = damn::core::Box<std::int32_t, dimension>;
@@ -111,8 +125,8 @@ public:
     using type                       = Field_t::type;
 
     template<typename... Args>
-    FieldTile(GridLayout_t const& layout, Field_t const& field)
-        : Super{layout.AMRBox()}
+    FieldTile(Layout_t const& layout, Field_t const& field)
+        : Super{layout.cells}
         , field_{field}
         , layout_{layout}
     {
@@ -125,16 +139,16 @@ public:
     auto& layout() const DAMN_ALL { return layout_; }
 
     // same box, other mesh size/origin, see GridTileSet::reset_layout
-    void reset_layout(GridLayout_t const& layout)
+    void reset_layout(Layout_t const& layout)
     {
-        assert(layout.AMRBox() == layout_.AMRBox());
+        assert(layout.cells == layout_.cells);
         layout_ = layout;
     }
 
     auto ghost_box() const DAMN_ALL { return ghost_box_; }
     auto field_box() const DAMN_ALL
     {
-        return damn::core::shrink(ghost_box(), GridLayout_t::options.field_ghost_width);
+        return damn::core::shrink(ghost_box(), Layout_t::options.field_ghost_width);
     }
 
     template<template<typename, std::size_t> typename Point_t>
@@ -173,16 +187,16 @@ public:
 
 private:
     Field_t field_;
-    GridLayout_t layout_;
-    damn::core::Box<int, dimension> ghost_box_   = layout_.AMRGhostBoxFor(physicalQuantity());
+    Layout_t layout_;
+    damn::core::Box<int, dimension> ghost_box_ = qty_ghost_box(layout_, physicalQuantity());
     std::array<FieldTile*, 7> _links = damn::core::ConstArray<FieldTile*, 7>(nullptr);
 };
 
-template<typename GridLayout_t, typename Grid_t, typename Field_t>
+template<typename Layout_t, typename Grid_t, typename Field_t>
 struct FieldTileSetTypes
 {
-    using Tile_t     = GridTile<GridLayout_t, Grid_t, Field_t>;
-    using Tile_vt    = FieldTile<GridLayout_t, Field_t>;
+    using Tile_t     = GridTile<Layout_t, Grid_t, Field_t>;
+    using Tile_vt    = FieldTile<Layout_t, Field_t>;
     using Span_t     = damn::core::ViewSpan<Tile_vt, Tile_t>;
     using Span_pt    = damn::core::ViewSpan<Tile_vt*, Tile_t*>;
     using value_type = damn::core::TileSetView<Tile_vt, Span_t, Span_pt>;
@@ -192,20 +206,20 @@ struct FieldTileSetTypes
 
 namespace plamn::core::basic
 {
-template<typename GridLayout_, typename Grid_t, typename Field_t>
-class FieldTileSet : public FieldTileSetTypes<GridLayout_, Grid_t, Field_t>::value_type
+template<typename Layout_, typename Grid_t, typename Field_t>
+class FieldTileSet : public FieldTileSetTypes<Layout_, Grid_t, Field_t>::value_type
 {
-    using local_types = FieldTileSetTypes<GridLayout_, Grid_t, Field_t>;
+    using local_types = FieldTileSetTypes<Layout_, Grid_t, Field_t>;
 
 public:
-    using GridLayout_t               = GridLayout_;
+    using Layout_t                   = Layout_;
     using grid_type                  = Grid_t;
     using field_type                 = Field_t;
     using Super                      = local_types::value_type;
     using value_type                 = local_types::Tile_vt;
     using physical_quantity_type     = Grid_t::physical_quantity_type;
     using type                       = Grid_t::type;
-    auto constexpr static dimension  = GridLayout_t::dimension;
+    auto constexpr static dimension  = Layout_t::dimension;
     auto constexpr static alloc_mode = Grid_t::alloc_mode;
 
     FieldTileSet(auto physicalQuantity) DAMN_ALL : Super{{}, nullptr, 0, nullptr, {}},
@@ -234,10 +248,10 @@ public:
                     = std::forward_as_tuple(args...);
                 assert(cells_data);
                 return Super{box, &*tiles_data[0], n_tiles,
-                             reinterpret_cast<FieldTile<GridLayout_t, Field_t>**>(cells_data),
+                             reinterpret_cast<FieldTile<Layout_t, Field_t>**>(cells_data),
                              cells_shape};
             });
-            ghost_box_     = field->layout().AMRGhostBoxFor(qty_);
+            ghost_box_     = qty_ghost_box(field->layout(), qty_);
             max_tile_size_ = field->max_tile_size();
         }
         else
@@ -404,11 +418,11 @@ private:
 namespace plamn::core
 {
 
-template<typename GridLayout_t, typename Grid_t, typename Field_t>
-class FieldTileSet : public basic::FieldTileSet<GridLayout_t, Grid_t, Field_t>
+template<typename Layout_t, typename Grid_t, typename Field_t>
+class FieldTileSet : public basic::FieldTileSet<Layout_t, Grid_t, Field_t>
 {
 public:
-    using Super = basic::FieldTileSet<GridLayout_t, Grid_t, Field_t>;
+    using Super = basic::FieldTileSet<Layout_t, Grid_t, Field_t>;
 
     FieldTileSet(std::string const& name, auto physicalQuantity) DAMN_ALL
         : Super{physicalQuantity},

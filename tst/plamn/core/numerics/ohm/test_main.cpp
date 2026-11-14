@@ -16,7 +16,7 @@
 #endif
 
 #include "plamn/core/numerics/ohm/ohm_transformer.hpp"
-#include "plamn/core/data/grid/gridlayoutdefs.hpp"
+#include "plamn/core/data/grid/layout_defs.hpp"
 
 #include "plamn/simulator/simulator_def.hpp"
 
@@ -37,7 +37,7 @@ class NDlayout
 {
     NDlayout() {}
 
-    using nDL = plamn::core::PLAMN_Types<plamn::SimOpts{dim, interp}>::Hybrid::GridLayout_t;
+    using nDL = plamn::core::PLAMN_Types<plamn::SimOpts{dim, interp}>::Hybrid::Layout_t;
 
 public:
     static nDL create()
@@ -79,7 +79,7 @@ struct OhmTest : public ::testing::Test
     static constexpr auto interp = typename TypeInfo::second_type{}();
 
     using HybridTypes = plamn::core::PLAMN_Types<plamn::SimOpts{dim, interp}>::Hybrid;
-    using GridYee     = HybridTypes::GridLayout_t;
+    using GridYee                    = HybridTypes::Layout_t;
     auto static constexpr field_opts = plamn::core::TensorFieldOptions<HybridTypes>{};
     using UsableVecFieldND           = UsableVecField<field_opts>;
     using Grid_t                     = Grid<damn::core::NdArrayVector<dim>, HybridQuantity::Scalar>;
@@ -94,8 +94,8 @@ struct OhmTest : public ::testing::Test
     OhmInfo ohm_info;
 
     OhmTest()
-        : n{"n", HybridQuantity::Scalar::rho, layout.allocSize(HybridQuantity::Scalar::rho)}
-        , P{"P", HybridQuantity::Scalar::P, layout.allocSize(HybridQuantity::Scalar::P)}
+        : n{"n", HybridQuantity::Scalar::rho, alloc_shape(layout, HybridQuantity::Scalar::rho)}
+        , P{"P", HybridQuantity::Scalar::P, alloc_shape(layout, HybridQuantity::Scalar::P)}
         , V{"V", layout, HybridQuantity::Vector::V}
         , B{"B", layout, HybridQuantity::Vector::B}
         , J{"J", layout, HybridQuantity::Vector::J}
@@ -116,8 +116,8 @@ struct OhmTest : public ::testing::Test
 
             for (auto ix = gsi_p_X; ix <= gei_p_X; ++ix)
             {
-                auto point = this->layout.fieldNodeCoordinates(
-                    n, this->layout.localToAMR(damn::core::Point{ix}.as_signed()));
+                auto point = coordinate(this->layout, n,
+                                        this->layout.localToAMR(damn::core::Point{ix}.as_signed()));
 
                 n(ix)  = std::cosh(0.5 * point[0]);
                 Vx(ix) = std::sinh(0.2 * point[0]);
@@ -131,8 +131,8 @@ struct OhmTest : public ::testing::Test
 
             for (auto ix = gsi_d_X; ix <= gei_d_X; ++ix)
             {
-                auto point = this->layout.fieldNodeCoordinates(
-                    Bz, this->layout.localToAMR(damn::core::Point{ix}.as_signed()));
+                auto point = coordinate(this->layout, Bz,
+                                        this->layout.localToAMR(damn::core::Point{ix}.as_signed()));
 
                 By(ix) = std::cosh(0.3 * point[0]);
                 Bz(ix) = std::cosh(0.4 * point[0]);
@@ -155,8 +155,9 @@ struct OhmTest : public ::testing::Test
             {
                 for (auto iy = gsi_p_Y; iy <= gei_p_Y; ++iy)
                 {
-                    auto point = this->layout.fieldNodeCoordinates(
-                        n, this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
+                    auto point = coordinate(
+                        this->layout, n,
+                        this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
 
                     n(ix, iy)  = std::cosh(0.5 * point[0]) * std::cosh(0.5 * point[1]);
                     Vx(ix, iy) = std::sinh(0.2 * point[0]) * std::sinh(0.2 * point[1]);
@@ -167,8 +168,9 @@ struct OhmTest : public ::testing::Test
                 }
                 for (auto iy = gsi_d_Y; iy <= gei_d_Y; ++iy)
                 {
-                    auto point = this->layout.fieldNodeCoordinates(
-                        Bx, this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
+                    auto point = coordinate(
+                        this->layout, Bx,
+                        this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
 
                     Bx(ix, iy) = std::cosh(0.2 * point[0]) * std::cosh(0.2 * point[1]);
                     Jy(ix, iy) = std::tanh(0.3 * point[0]) * std::tanh(0.3 * point[1]);
@@ -178,16 +180,18 @@ struct OhmTest : public ::testing::Test
             {
                 for (auto iy = gsi_p_Y; iy <= gei_p_Y; ++iy)
                 {
-                    auto point = this->layout.fieldNodeCoordinates(
-                        Jx, this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
+                    auto point = coordinate(
+                        this->layout, Jx,
+                        this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
 
                     By(ix, iy) = std::cosh(0.3 * point[0]) * std::cosh(0.3 * point[1]);
                     Jx(ix, iy) = std::tanh(0.2 * point[0]) * std::tanh(0.2 * point[1]);
                 }
                 for (auto iy = gsi_d_Y; iy <= gei_d_Y; ++iy)
                 {
-                    auto point = this->layout.fieldNodeCoordinates(
-                        Bz, this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
+                    auto point = coordinate(
+                        this->layout, Bz,
+                        this->layout.localToAMR(damn::core::Point{ix, iy}.as_signed()));
 
                     Bz(ix, iy) = std::cosh(0.4 * point[0]) * std::cosh(0.4 * point[1]);
                 }
@@ -215,8 +219,9 @@ struct OhmTest : public ::testing::Test
                 {
                     for (auto iz = gsi_p_Z; iz <= gei_p_Z; ++iz)
                     {
-                        auto point = this->layout.fieldNodeCoordinates(
-                            n, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+                        auto point = coordinate(
+                            this->layout, n,
+                            this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
 
                         n(ix, iy, iz) = std::cosh(0.5 * point[0]) * std::cosh(0.5 * point[1])
                                         * std::cosh(0.5 * point[2]);
@@ -231,8 +236,9 @@ struct OhmTest : public ::testing::Test
                     }
                     for (auto iz = gsi_d_Z; iz <= gei_d_Z; ++iz)
                     {
-                        auto point = this->layout.fieldNodeCoordinates(
-                            Jz, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+                        auto point = coordinate(
+                            this->layout, Jz,
+                            this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
 
                         Jz(ix, iy, iz) = std::tanh(0.4 * point[0]) * std::tanh(0.4 * point[1])
                                          * std::tanh(0.4 * point[2]);
@@ -242,16 +248,18 @@ struct OhmTest : public ::testing::Test
                 {
                     for (auto iz = gsi_p_Z; iz <= gei_p_Z; ++iz)
                     {
-                        auto point = this->layout.fieldNodeCoordinates(
-                            Jy, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+                        auto point = coordinate(
+                            this->layout, Jy,
+                            this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
 
                         Jy(ix, iy, iz) = std::tanh(0.3 * point[0]) * std::tanh(0.3 * point[1])
                                          * std::tanh(0.3 * point[2]);
                     }
                     for (auto iz = gsi_d_Z; iz <= gei_d_Z; ++iz)
                     {
-                        auto point = this->layout.fieldNodeCoordinates(
-                            Bx, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+                        auto point = coordinate(
+                            this->layout, Bx,
+                            this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
 
                         Bx(ix, iy, iz) = std::cosh(0.2 * point[0]) * std::cosh(0.2 * point[1])
                                          * std::cosh(0.2 * point[2]);
@@ -264,16 +272,18 @@ struct OhmTest : public ::testing::Test
                 {
                     for (auto iz = gsi_p_Z; iz <= gei_p_Z; ++iz)
                     {
-                        auto point = this->layout.fieldNodeCoordinates(
-                            Jx, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+                        auto point = coordinate(
+                            this->layout, Jx,
+                            this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
 
                         Jx(ix, iy, iz) = std::tanh(0.2 * point[0]) * std::tanh(0.2 * point[1])
                                          * std::tanh(0.2 * point[2]);
                     }
                     for (auto iz = gsi_d_Z; iz <= gei_d_Z; ++iz)
                     {
-                        auto point = this->layout.fieldNodeCoordinates(
-                            By, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+                        auto point = coordinate(
+                            this->layout, By,
+                            this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
 
                         By(ix, iy, iz) = std::cosh(0.3 * point[0]) * std::cosh(0.3 * point[1])
                                          * std::cosh(0.3 * point[2]);
@@ -283,8 +293,9 @@ struct OhmTest : public ::testing::Test
                 {
                     for (auto iz = gsi_p_Z; iz <= gei_p_Z; ++iz)
                     {
-                        auto point = this->layout.fieldNodeCoordinates(
-                            Bz, this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
+                        auto point = coordinate(
+                            this->layout, Bz,
+                            this->layout.localToAMR(damn::core::Point{ix, iy, iz}.as_signed()));
 
                         Bz(ix, iy, iz) = std::cosh(0.4 * point[0]) * std::cosh(0.4 * point[1])
                                          * std::cosh(0.4 * point[2]);
@@ -421,7 +432,7 @@ TYPED_TEST(OhmTest, ThatElectricFieldIsOkFromOhmsLaw)
         {
             for (auto iy = psi_Y; iy <= pei_Y; ++iy)
             {
-                auto nPts_  = this->layout.allocSize(HybridQuantity::Scalar::Ex);
+                auto nPts_  = alloc_shape(this->layout, HybridQuantity::Scalar::Ex);
                 auto index_ = ix * nPts_[1] + iy;
                 EXPECT_THAT(Exnew(ix, iy), ::testing::DoubleNear((expected_ohmX[index_]), 1e-12));
             }
@@ -436,7 +447,7 @@ TYPED_TEST(OhmTest, ThatElectricFieldIsOkFromOhmsLaw)
         {
             for (auto iy = psi_Y; iy <= pei_Y; ++iy)
             {
-                auto nPts_  = this->layout.allocSize(HybridQuantity::Scalar::Ey);
+                auto nPts_  = alloc_shape(this->layout, HybridQuantity::Scalar::Ey);
                 auto index_ = ix * nPts_[1] + iy;
                 EXPECT_THAT(Eynew(ix, iy), ::testing::DoubleNear((expected_ohmY[index_]), 1e-12));
             }
@@ -451,7 +462,7 @@ TYPED_TEST(OhmTest, ThatElectricFieldIsOkFromOhmsLaw)
         {
             for (auto iy = psi_Y; iy <= pei_Y; ++iy)
             {
-                auto nPts_  = this->layout.allocSize(HybridQuantity::Scalar::Ez);
+                auto nPts_  = alloc_shape(this->layout, HybridQuantity::Scalar::Ez);
                 auto index_ = ix * nPts_[1] + iy;
                 EXPECT_THAT(Eznew(ix, iy), ::testing::DoubleNear((expected_ohmZ[index_]), 1e-12));
             }
@@ -473,7 +484,7 @@ TYPED_TEST(OhmTest, ThatElectricFieldIsOkFromOhmsLaw)
             {
                 for (auto iz = psi_Z; iz <= pei_Z; ++iz)
                 {
-                    auto nPts_  = this->layout.allocSize(HybridQuantity::Scalar::Ex);
+                    auto nPts_  = alloc_shape(this->layout, HybridQuantity::Scalar::Ex);
                     auto index_ = ix * nPts_[1] * nPts_[2] + iy * nPts_[2] + iz;
                     EXPECT_THAT(Exnew(ix, iy, iz),
                                 ::testing::DoubleNear((expected_ohmX[index_]), 1e-10));
@@ -494,7 +505,7 @@ TYPED_TEST(OhmTest, ThatElectricFieldIsOkFromOhmsLaw)
             {
                 for (auto iz = psi_Z; iz <= pei_Z; ++iz)
                 {
-                    auto nPts_  = this->layout.allocSize(HybridQuantity::Scalar::Ey);
+                    auto nPts_  = alloc_shape(this->layout, HybridQuantity::Scalar::Ey);
                     auto index_ = ix * nPts_[1] * nPts_[2] + iy * nPts_[2] + iz;
                     EXPECT_THAT(Eynew(ix, iy, iz),
                                 ::testing::DoubleNear((expected_ohmY[index_]), 1e-10));
@@ -515,7 +526,7 @@ TYPED_TEST(OhmTest, ThatElectricFieldIsOkFromOhmsLaw)
             {
                 for (auto iz = psi_Z; iz <= pei_Z; ++iz)
                 {
-                    auto nPts_  = this->layout.allocSize(HybridQuantity::Scalar::Ez);
+                    auto nPts_  = alloc_shape(this->layout, HybridQuantity::Scalar::Ez);
                     auto index_ = ix * nPts_[1] * nPts_[2] + iy * nPts_[2] + iz;
                     EXPECT_THAT(Eznew(ix, iy, iz),
                                 ::testing::DoubleNear((expected_ohmZ[index_]), 1e-10));

@@ -4,7 +4,6 @@
 // simulation input: the dict passed (by const&) to model constructors, and the
 // user functions it carries. Whoever builds the dict owns it; there is no global.
 
-#include "plamn/core/def.hpp"
 #include "damn/core/memory/span.hpp"
 
 #include "dict.hpp"

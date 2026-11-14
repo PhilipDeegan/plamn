@@ -1,16 +1,19 @@
 #ifndef PLAMN_CORE_DATA_GRID_GRID_BASE_HPP
 #define PLAMN_CORE_DATA_GRID_GRID_BASE_HPP
 
+#include "damn/core/meta/for_N.hpp"
+
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/field/field.hpp"
-#include "damn/core/def/damn_config.hpp"
 
 #include <array>
 #include <string>
-#include <cassert>
 #include <optional>
 #include <algorithm>
-
+#include <cstdint>
+#include <iosfwd>
+#include <stdexcept>
+#include <type_traits>
 
 namespace plamn::core
 {
@@ -49,10 +52,9 @@ public:
     {
     }
 
-    template<typename GridLayout_t>
-    Grid(std::string const& name, GridLayout_t const& layout, PhysicalQuantity qty,
+    Grid(std::string const& name, auto const& layout, PhysicalQuantity qty,
          std::optional<value_type> const value = std::nullopt)
-        : Grid{name, qty, layout.allocSize(qty), value}
+        : Grid{name, qty, alloc_shape(layout, qty), value}
     {
     }
 
@@ -74,8 +76,7 @@ public:
     NO_DISCARD std::string name() const { return name_; }
     NO_DISCARD constexpr PhysicalQuantity physicalQuantity() const { return qty_; }
 
-    template<typename That>
-    void copyData(That const& that)
+    void copyData(auto const& that)
     {
         if (damn::core::for_N_any<dimension>([&](auto i) { return this->shape()[i] != that.shape()[i]; }))
             throw std::runtime_error("Grid::copyData: Incompatible input shape");

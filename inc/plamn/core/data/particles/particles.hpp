@@ -1,24 +1,32 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTICLES_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLES_HPP
 
-#include "plamn/core/def.hpp"
-#include "plamn/core/data/particles/particle.hpp"
-#include "plamn/core/data/particles/particles_def.hpp"
-#include "plamn/core/data/particles/particles_detail.hpp"
-// #include "plamn/core/data/particles/sorting/particles_sorting.hpp"
-// #include "plamn/core/data/particles/particles_selector.hpp"
-// #include "plamn/core/data/particles/partitioning/particles_partitioning.hpp"
-
-#include "damn/core/memory/span.hpp"
-#include "damn/core/geometry/box.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/geometry/point.hpp"
+#include "damn/core/logger.hpp"
+#include "damn/core/math/array.hpp"
+#include "damn/core/math/numeric.hpp"
+#include "damn/core/meta/logic.hpp"
+#include "damn/core/meta/type_meta.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/math/equality.hpp"
 #include "damn/core/sys/monitoring.hpp"
 
+#include "plamn/core/def.hpp"
+#include "plamn/core/data/particles/particle.hpp"
+#include "plamn/core/data/particles/particles_def.hpp"
+#include "plamn/core/data/particles/particles_detail.hpp"
+
+// #include "plamn/core/data/particles/sorting/particles_sorting.hpp"
+// #include "plamn/core/data/particles/particles_selector.hpp"
+// #include "plamn/core/data/particles/partitioning/particles_partitioning.hpp"
+
 #include <utility>
 #include <sstream>
 #include <stdexcept>
-#include <type_traits>
+#include <cstddef>
+#include <format>
+#include <string>
 
 namespace plamn::core
 {

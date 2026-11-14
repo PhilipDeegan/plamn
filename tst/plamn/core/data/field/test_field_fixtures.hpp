@@ -2,6 +2,7 @@
 #define PLAMN_TEST_CORE_DATA_TEST_FIELD_FIXTURES_HPP
 
 #include "plamn/core/def.hpp"
+#include "plamn/core/data/grid/detail/detail.hpp"
 
 #include "plamn/core/data/grid/grid.hpp"
 #include "plamn/core/data/field/field.hpp"
@@ -20,7 +21,7 @@ struct TestFieldOptions
 {
     auto constexpr static opts = core_types::opts;
 
-    using GridLayout_t = core_types::GridLayout_t;
+    using Layout_t = core_types::Layout_t;
 };
 
 
@@ -75,8 +76,7 @@ struct FieldComparator
 
     void finalize() { ok = eqvals == total and nan0 == 0 and nan1 == 0; }
 
-    template<typename F0, typename F1>
-    auto operator()(F0 const& ref, F1 const& cmp)
+    auto operator()(auto const& ref, auto const& cmp)
     {
         auto const& ref_dat = ref.data();
         auto const& cmp_dat = cmp.data();
@@ -224,10 +224,10 @@ damn::core::EqualityReport compare_fields(FieldTileSet<T0s...> const& ref, Field
  * never given a valid interpolated value, e.g. density and bulk velocity).
  * Supports both AoSMapped (plain Field) and AoSCMTS (FieldTileSet) inputs.
  */
-template<typename GridLayout, std::size_t dim, typename PQ, typename D0, typename D1, auto am0,
-         auto am1>
-damn::core::EqualityReport compare_field_domains(GridLayout const& layout, Field<dim, PQ, D0, am0> const& ref,
-                                     Field<dim, PQ, D1, am1> const& cmp, double const diff = 1e-15)
+template<std::size_t dim, typename PQ, typename D0, typename D1, auto am0, auto am1>
+damn::core::EqualityReport
+compare_field_domains(auto const& layout, Field<dim, PQ, D0, am0> const& ref,
+                      Field<dim, PQ, D1, am1> const& cmp, double const diff = 1e-15)
 {
     auto const same_sizes = ref.size() == cmp.size();
 
@@ -235,7 +235,8 @@ damn::core::EqualityReport compare_field_domains(GridLayout const& layout, Field
         return damn::core::EqualityReport{false, "Tensorfield shape/size mismatch"};
 
     FloatFieldComparator_t eq{diff};
-    layout.evalOnBox(ref, [&](auto const&... idxs) { eq.add(ref(idxs...), cmp(idxs...)); });
+    eval_on_box(ref, domain_box(layout, ref),
+                [&](auto const&... idxs) { eq.add(ref(idxs...), cmp(idxs...)); });
     eq.finalize();
 
     std::stringstream log;
@@ -265,16 +266,17 @@ damn::core::EqualityReport compare_field_domains(GridLayout const& layout, Field
     return damn::core::EqualityReport{true, log.str()};
 }
 
-template<typename GridLayout, typename... T0s, typename... T1s>
-damn::core::EqualityReport compare_field_domains(GridLayout const& layout, Grid<T0s...> const& ref,
-                                     Grid<T1s...> const& cmp, double const diff = 1e-15)
+template<typename... T0s, typename... T1s>
+damn::core::EqualityReport compare_field_domains(auto const& layout, Grid<T0s...> const& ref,
+                                                 Grid<T1s...> const& cmp, double const diff = 1e-15)
 {
     return compare_field_domains(layout, *ref, *cmp, diff);
 }
 
-template<typename GridLayout, std::size_t dim, typename PQ, typename D, auto am, typename... T1s>
-damn::core::EqualityReport compare_field_domains(GridLayout const& layout, Field<dim, PQ, D, am> const& ref,
-                                     FieldTileSet<T1s...> const& cmp, double const diff = 1e-15)
+template<std::size_t dim, typename PQ, typename D, auto am, typename... T1s>
+damn::core::EqualityReport
+compare_field_domains(auto const& layout, Field<dim, PQ, D, am> const& ref,
+                      FieldTileSet<T1s...> const& cmp, double const diff = 1e-15)
 {
     if (ref.size() != cmp.size())
         return damn::core::EqualityReport{false, "Field/FieldTileSet shape mismatch"};
@@ -284,9 +286,10 @@ damn::core::EqualityReport compare_field_domains(GridLayout const& layout, Field
     return compare_field_domains(layout, ref, tmp, diff);
 }
 
-template<typename GridLayout, typename... T0s, std::size_t dim, typename PQ, typename D, auto am>
-damn::core::EqualityReport compare_field_domains(GridLayout const& layout, FieldTileSet<T0s...> const& ref,
-                                     Field<dim, PQ, D, am> const& cmp, double const diff = 1e-15)
+template<typename... T0s, std::size_t dim, typename PQ, typename D, auto am>
+damn::core::EqualityReport
+compare_field_domains(auto const& layout, FieldTileSet<T0s...> const& ref,
+                      Field<dim, PQ, D, am> const& cmp, double const diff = 1e-15)
 {
     return compare_field_domains(layout, cmp, ref, diff);
 }

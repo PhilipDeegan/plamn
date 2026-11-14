@@ -1,53 +1,59 @@
-#ifndef PLAMN_ION_UPDATER_DEF_HPP
-#define PLAMN_ION_UPDATER_DEF_HPP
-
-#include "plamn/core/def.hpp"
-
+#ifndef PLAMN_CORE_NUMERICS_PARTICLES_SYNCHRONISED_MOVER_DEF_HPP
+#define PLAMN_CORE_NUMERICS_PARTICLES_SYNCHRONISED_MOVER_DEF_HPP
 
 #include "damn/core/geometry/box.hpp"
+#include "damn/core/data/tiles/tile_set_overlaps.hpp"
+#include "damn/core/def/detail/mkn_gpu.hpp"
+#include "damn/core/geometry/point.hpp"
+#include "damn/core/sys/env.hpp"
+
 #include "plamn/core/data/tiles/tile_set_overlaps.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 
 #include <cstdint>
+#include <array>
+#include <cstddef>
+#include <format>
+#include <string>
+#include <vector>
 
 namespace plamn::core
 {
 enum class UpdaterMode : std::uint16_t { domain_only = 0, all };
 
-template<typename GridLayout>
+template<typename Layout>
 struct UpdaterSelectionBoxing;
-
-template<typename Selector_t, typename GridLayout>
+template<typename Selector_t, typename Layout>
 struct UpdaterCellMapSelectionBoxing;
 
-template<typename Updater_t, typename GridLayout>
+template<typename Updater_t, typename Layout>
 constexpr auto* cellmapselection_boxing_impl()
 {
     using Selector_t = Updater_t::Pusher::ParticleSelector;
-    return static_cast<UpdaterCellMapSelectionBoxing<Selector_t, GridLayout>*>(0);
+    return static_cast<UpdaterCellMapSelectionBoxing<Selector_t, Layout>*>(0);
 }
 
-template<typename Updater_t, typename GridLayout>
+template<typename Updater_t, typename Layout>
 constexpr auto* selection_boxing_impl()
 {
     using enum LayoutMode;
     if constexpr (Updater_t::Particles_t::layout_mode == AoSMapped)
-        return cellmapselection_boxing_impl<Updater_t, GridLayout>();
+        return cellmapselection_boxing_impl<Updater_t, Layout>();
     else
-        return static_cast<UpdaterSelectionBoxing<GridLayout>*>(0);
+        return static_cast<UpdaterSelectionBoxing<Layout>*>(0);
 }
 
 
 
-template<typename GridLayout>
+template<typename Layout>
 struct UpdaterSelectionBoxing
 {
-    auto constexpr static partGhostWidth = GridLayout::options.particle_ghost_width;
-    using GridLayout_t                   = GridLayout;
-    using Box_t                          = damn::core::Box<int, GridLayout_t::dimension>;
+    auto constexpr static partGhostWidth = Layout::options.particle_ghost_width;
+    using Layout_t                       = Layout;
+    using Box_t                          = damn::core::Box<int, Layout_t::dimension>;
 
-    UpdaterSelectionBoxing(GridLayout_t const& layout_, std::vector<Box_t> const& nonLevelGhostBox_,
+    UpdaterSelectionBoxing(Layout_t const& layout_, std::vector<Box_t> const& nonLevelGhostBox_,
                            std::vector<Box_t> const& nonOwnedBoxes_ = {})
         : layout{layout_}
         , nonLevelGhostBox{nonLevelGhostBox_}
@@ -55,11 +61,11 @@ struct UpdaterSelectionBoxing
     {
     }
 
-    GridLayout_t const layout;
+    Layout_t const layout;
     std::vector<Box_t> const nonLevelGhostBox;
     // domain cells owned by an overlapping same-level patch, usually empty
     std::vector<Box_t> const nonOwnedBoxes;
-    Box_t const domainBox = layout.AMRBox();
+    Box_t const domainBox = layout.cells;
     Box_t const ghostBox  = damn::core::grow(domainBox, partGhostWidth);
 
     static bool isOwned(auto const& cell, Box_t const& domainBox,
@@ -74,15 +80,15 @@ struct UpdaterSelectionBoxing
 };
 
 
-template<typename Selector_t, typename GridLayout>
-struct UpdaterCellMapSelectionBoxing : public UpdaterSelectionBoxing<GridLayout>
+template<typename Selector_t, typename Layout>
+struct UpdaterCellMapSelectionBoxing : public UpdaterSelectionBoxing<Layout>
 {
-    auto constexpr static partGhostWidth = GridLayout::options.particle_ghost_width;
-    using GridLayout_t                   = GridLayout;
-    using Box_t                          = damn::core::Box<int, GridLayout_t::dimension>;
-    using Super                          = UpdaterSelectionBoxing<GridLayout>;
+    auto constexpr static partGhostWidth = Layout::options.particle_ghost_width;
+    using Layout_t                       = Layout;
+    using Box_t                          = damn::core::Box<int, Layout_t::dimension>;
+    using Super                          = UpdaterSelectionBoxing<Layout>;
 
-    UpdaterCellMapSelectionBoxing(GridLayout_t const& layout_,
+    UpdaterCellMapSelectionBoxing(Layout_t const& layout_,
                                   std::vector<Box_t> const& nonLevelGhostBox_,
                                   std::vector<Box_t> const& nonOwnedBoxes_ = {})
         : Super{layout_, nonLevelGhostBox_, nonOwnedBoxes_}
@@ -125,19 +131,19 @@ struct UpdaterCellMapSelectionBoxing : public UpdaterSelectionBoxing<GridLayout>
 
 
 
-template<typename GridLayout>
-struct UpdaterTileSetSelectionBoxing : public UpdaterSelectionBoxing<GridLayout>
+template<typename Layout>
+struct UpdaterTileSetSelectionBoxing : public UpdaterSelectionBoxing<Layout>
 {
-    auto constexpr static dimension      = GridLayout::dimension;
-    auto constexpr static partGhostWidth = GridLayout::options.particle_ghost_width;
-    using GridLayout_t                   = GridLayout;
-    using Box_t                          = damn::core::Box<int, GridLayout_t::dimension>;
-    using Super                          = UpdaterSelectionBoxing<GridLayout>;
+    auto constexpr static dimension      = Layout::dimension;
+    auto constexpr static partGhostWidth = Layout::options.particle_ghost_width;
+    using Layout_t                       = Layout;
+    using Box_t                          = damn::core::Box<int, Layout_t::dimension>;
+    using Super                          = UpdaterSelectionBoxing<Layout>;
     using BoxSpanSet_t                   = damn::core::TileBoxSpanSet<dimension>;
     using scalar_t                       = HybridQuantity::Scalar;
 
 
-    UpdaterTileSetSelectionBoxing(GridLayout_t const& layout_,
+    UpdaterTileSetSelectionBoxing(Layout_t const& layout_,
                                   std::vector<Box_t> const& nonLevelGhostBox_)
         : Super{layout_, nonLevelGhostBox_}
     {
@@ -185,7 +191,7 @@ struct UpdaterTileSetSelectionBoxing : public UpdaterSelectionBoxing<GridLayout>
     // field_quantities(Super::layout); BoxSpanSet_t particles{make_nd_span_set_from(Super::layout,
     // [](auto const& layout) {
     //     return box_from_zero_to_upper_minus_one(
-    //         *grow(layout.AMRBox(), GridLayout_t::nbrParticleGhosts()).shape().as_unsigned());
+    //         *grow(layout.cells, Layout_t::nbrParticleGhosts()).shape().as_unsigned());
     // })};
 };
 
@@ -203,7 +209,7 @@ namespace plamn::core::detail
 auto static const timings_dir_str
     = damn::core::get_env_as("PLAMN_ASYNC_TIMES", std::string{".damn/async/multi_updater"});
 
-static bool ion_updater_io_setup = []() {
+static bool particles_synchronised_mover_io_setup = []() {
     mkn::kul::Dir timings{timings_dir_str};
     timings.mk();
     return true;

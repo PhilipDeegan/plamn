@@ -1,18 +1,25 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTICLE_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLE_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/math/array.hpp"
-#include "damn/core/math/numeric.hpp"
-#include "damn/core/sys/strings.hpp"
 #include "damn/core/geometry/point.hpp"
+#include "damn/core/def/damn_config.hpp"
+
+#include "plamn/core/def.hpp"
 
 #include <array>
 #include <random>
-#include <iostream>
-#include <algorithm>
 #include <type_traits>
+#include <cstddef>
+#include <limits>
+#include <sstream>
+#include <string>
 
+namespace damn::core
+{
+template<typename D>
+struct PlusEquals;
+} // namespace damn::core
 
 namespace plamn::core
 {
