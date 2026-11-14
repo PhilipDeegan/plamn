@@ -12,9 +12,10 @@
 #include "damn/core/logger.hpp"
 #include "damn/amr/hierarchy.hpp"
 #include "damn/amr/level_data.hpp"
-#include "damn/amr/scheduler.hpp"
+#include "damn/amr/move.hpp"
+#include "damn/amr/neighbours.hpp"
+#include "damn/amr/topology.hpp"
 #include "damn/amr/box_data.hpp"
-#include "damn/amr/schedule.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/math/array.hpp"
@@ -36,8 +37,10 @@
 #include "dict.hpp"
 #include "phlop/timing/scope.hpp"
 
+#include <algorithm>
 #include <array>
 #include <memory>
+#include <map>
 #include <string>
 #include <vector>
 #include <sstream>
@@ -63,7 +66,8 @@ public:
     using Layout_t     = Patch_t::Layout_t;
     using Hierarchy_t  = damn::amr::Hierarchy<dimension>;
     using LevelData_t  = damn::amr::LevelData<dimension, std::unique_ptr<Patch_t>>;
-    using Scheduler_t  = damn::amr::Scheduler<dimension>;
+    using Neighbours_t = damn::amr::Neighbours<dimension>;
+    using Resources_t  = std::map<std::string, std::vector<damn::amr::ResourcePair>>;
     using Box_t        = damn::core::Box<int, dimension>;
     using Interpolator = core::Interpolating<dimension, interp_order>;
 
@@ -135,13 +139,13 @@ private:
             fn(*patch);
     }
 
-    template<damn::amr::Transfer kind>
-    void fill_(std::string const& key)
+    // moves key's resources between the level's patches, see register_resources_
+    void move_(auto const how, std::string const& key)
     {
-        damn::amr::fill<kind>(scheduler_, key, hierarchy_, level_, rank_);
+        damn::amr::move(how, neighbours_, resources_.at(key), level_);
     }
 
-    void register_schedules_();
+    void register_resources_();
     void compute_moments_();
     void fill_ion_borders_();
     void move_ions_(double dt, core::UpdaterMode mode);
@@ -155,7 +159,8 @@ private:
     initializer::Dict dict_;
     Hierarchy_t hierarchy_;
     LevelData_t level_;
-    Scheduler_t scheduler_;
+    Neighbours_t neighbours_;
+    Resources_t resources_; // what moves together, by name
     int rank_ = 0;
 
     std::optional<core::OhmInfo> ohm_info_; // const members: set once, in setup_
@@ -220,22 +225,25 @@ void Simulator<opts>::setup_()
 
     ohm_info_.emplace(core::OhmInfo::FROM(sim["algo"]["ohm"]));
 
-    register_schedules_();
+    register_resources_();
 }
 
 // what moves between patches, named as for_each_resource(HybridPatch) names it
 template<auto opts>
-void Simulator<opts>::register_schedules_()
+void Simulator<opts>::register_resources_()
 {
-    using enum damn::amr::Transfer;
     auto const components = [](std::string const& name) {
-        return std::vector<std::string>{name + "_x", name + "_y", name + "_z"};
+        return damn::amr::same_names({name + "_x", name + "_y", name + "_z"});
+    };
+    auto const add = [&](std::string const& key, std::vector<damn::amr::ResourcePair> const& r) {
+        auto& resources = resources_[key];
+        resources.insert(resources.end(), r.begin(), r.end());
     };
 
-    damn::amr::add(scheduler_, "EM_B", PatchGhost, components("EM_B"));
-    damn::amr::add(scheduler_, "EM_E", PatchGhost, components("EM_E"));
-    damn::amr::add(scheduler_, "EMPred_B", PatchGhost, components("EMPred_B"));
-    damn::amr::add(scheduler_, "EMAvg_E", PatchGhost, components("EMAvg_E"));
+    add("EM_B", components("EM_B"));
+    add("EM_E", components("EM_E"));
+    add("EMPred_B", components("EMPred_B"));
+    add("EMAvg_E", components("EMAvg_E"));
 
     auto const& ions    = dict_["simulation"]["ions"];
     auto const nbr_pops = ions["nbrPopulations"].template to<std::size_t>();
@@ -244,13 +252,11 @@ void Simulator<opts>::register_schedules_()
         auto const name = ions["pop" + std::to_string(i)]["name"].template to<std::string>();
 
         // every population's moments in one exchange, PHAREHUB/PHARE#1079
-        auto names = components(name + "_flux");
-        names.push_back(name + "_density");
-        names.push_back(name + "_charge_density");
-        damn::amr::add(scheduler_, "IonPopBorderSum", BorderSum, names);
+        add("IonPopBorderSum", components(name + "_flux"));
+        add("IonPopBorderSum",
+            damn::amr::same_names({name + "_density", name + "_charge_density"}));
 
-        damn::amr::add_pairs(scheduler_, "IonGhostParticles", GhostToDomain,
-                             {{name + "_patch_ghost", name + "_domain"}});
+        add("IonGhostParticles", {{name + "_patch_ghost", name + "_domain"}});
     }
 }
 
@@ -279,6 +285,11 @@ void Simulator<opts>::initialize()
                                          damn::amr::covered_by_level(hierarchy_, 0, ghost));
     });
 
+    // the level's neighbours, as far as any resource reaches outside its patch: field ghosts
+    // plus primal nodes, or particle ghosts. One rank, one memory domain for now
+    auto constexpr reach = std::max<int>(Patch_t::field_ghost_width + 1, pgw);
+    neighbours_ = damn::amr::make_neighbours(hierarchy_, 0, rank_, damn::amr::single_node(), reach);
+
     // the model: fields and particles from the user's functions
     per_patch_([&](auto& patch) {
         core::ElectromagInitializer<dimension>{sim["electromag"]}(patch.em, patch.layout);
@@ -289,8 +300,8 @@ void Simulator<opts>::initialize()
             initializer->loadParticles(pop.domainParticles(), patch.layout);
         }
     });
-    fill_<damn::amr::Transfer::PatchGhost>("EM_B");
-    fill_<damn::amr::Transfer::PatchGhost>("EM_E");
+    move_(damn::amr::fill_ghosts, "EM_B");
+    move_(damn::amr::fill_ghosts, "EM_E");
 
     // moments from the particles, completed across patch borders
     per_patch_([&](auto& patch) {
@@ -302,7 +313,7 @@ void Simulator<opts>::initialize()
 
     // J from B, then E from Ohm's law
     ampere_ohm_<&Patch_t::em>();
-    fill_<damn::amr::Transfer::PatchGhost>("EM_E");
+    move_(damn::amr::fill_ghosts, "EM_E");
 
     currentTime_   = startTime_;
     isInitialized_ = true;
@@ -343,7 +354,7 @@ void Simulator<opts>::compute_moments_()
 template<auto opts>
 void Simulator<opts>::fill_ion_borders_()
 {
-    fill_<damn::amr::Transfer::BorderSum>("IonPopBorderSum");
+    move_(damn::amr::sum_borders, "IonPopBorderSum");
 }
 
 // J from B (Ampere, on the physical box + 1: what Ohm reads, so J is never exchanged), the
@@ -373,7 +384,7 @@ void Simulator<opts>::average_()
             core::average(patch.em.E[i], patch.emPred.E[i], patch.emAvg.E[i]);
         }
     });
-    fill_<damn::amr::Transfer::PatchGhost>("EMAvg_E");
+    move_(damn::amr::fill_ghosts, "EMAvg_E");
 }
 
 template<auto opts>
@@ -388,7 +399,7 @@ void Simulator<opts>::move_ions_(double const dt, core::UpdaterMode const mode)
     if (mode != core::UpdaterMode::domain_only)
     {
         // particles that left their patch go to the patch owning their cell
-        fill_<damn::amr::Transfer::GhostToDomain>("IonGhostParticles");
+        move_(damn::amr::gather_leaving, "IonGhostParticles");
         per_patch_([](auto& patch) {
             for (auto& pop : patch.ions)
                 pop.patchGhostParticles().clear();
@@ -403,7 +414,7 @@ void Simulator<opts>::predictor1_(double const dt)
     per_patch_([&](auto& patch) {
         core::FaradayTransformer{}(patch.layout, patch.em.B, patch.em.E, patch.emPred.B, dt);
     });
-    fill_<damn::amr::Transfer::PatchGhost>("EMPred_B");
+    move_(damn::amr::fill_ghosts, "EMPred_B");
     ampere_ohm_<&Patch_t::emPred>();
 }
 
@@ -413,7 +424,7 @@ void Simulator<opts>::predictor2_(double const dt)
     per_patch_([&](auto& patch) {
         core::FaradayTransformer{}(patch.layout, patch.em.B, patch.emAvg.E, patch.emPred.B, dt);
     });
-    fill_<damn::amr::Transfer::PatchGhost>("EMPred_B");
+    move_(damn::amr::fill_ghosts, "EMPred_B");
     ampere_ohm_<&Patch_t::emPred>();
 }
 
@@ -423,9 +434,9 @@ void Simulator<opts>::corrector_(double const dt)
     per_patch_([&](auto& patch) {
         core::FaradayTransformer{}(patch.layout, patch.em.B, patch.emAvg.E, patch.em.B, dt);
     });
-    fill_<damn::amr::Transfer::PatchGhost>("EM_B");
+    move_(damn::amr::fill_ghosts, "EM_B");
     ampere_ohm_<&Patch_t::em>();
-    fill_<damn::amr::Transfer::PatchGhost>("EM_E");
+    move_(damn::amr::fill_ghosts, "EM_E");
 }
 
 template<auto opts>
