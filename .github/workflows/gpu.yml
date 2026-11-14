@@ -32,7 +32,7 @@ jobs:
     env:
       CUDA_ARCH: sm_90
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - name: Install
       run: |
         apt-get update && apt-get install -y curl sudo git openssh-client clang-19 libnuma-dev
@@ -40,7 +40,7 @@ jobs:
         ln -sf /usr/bin/clang-19 /usr/local/bin/clang
         ln -sf /usr/bin/clang++-19 /usr/local/bin/clang++
         clang++ --version
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         repository: PhilipDeegan/damn
         ssh-key: ${{ secrets.DAMN_DEPLOY_KEY }}
@@ -61,6 +61,10 @@ jobs:
         #  missing include directory
         [ -d "${CUDA_HOME}/targets/x86_64-linux/include/cccl" ] \
           || sed -i '\|targets/x86_64-linux/include/cccl|d' res/mkn/clang_cuda_ci.yaml
+        # link the simulator's shared cudart, not the toolkit's: mkn puts the profile's lib path on
+        #  LD_LIBRARY_PATH for test runs, and the toolkit's cudart cannot run on the simulated driver
+        sed -i "s|^path: .*|path: ${VGPU_SHIM_DIR}|" res/mkn/clang_cuda_ci.yaml
+        grep -n "^path:\|cuda.arch" res/mkn/clang_cuda_ci.yaml
         curl -Lo mkn https://github.com/mkn/mkn/releases/download/latest/mkn_nix
         chmod +x mkn && mv mkn /usr/local/bin/mkn
     - name: Build/Test core
@@ -75,10 +79,10 @@ jobs:
     container: ghcr.io/pharchive/phare_dep/ubuntu:24.04
     timeout-minutes: 120
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - name: Install
       run: apt-get update && apt-get install -y curl sudo git openssh-client
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         repository: PhilipDeegan/damn
         ssh-key: ${{ secrets.DAMN_DEPLOY_KEY }}
@@ -103,10 +107,12 @@ jobs:
       run: |
         sed -e "s/-DMKN_GPU_CUDA=0/-DMKN_GPU_CUDA=0 --offload-arch=gfx942/" \
           res/mkn/hip_thrust.yaml > res/mkn/hip_thrust_ci.yaml
-        grep -n offload-arch res/mkn/hip_thrust_ci.yaml
+        # the hip profiles' local (/mkn/r) and remote (git@github.com, SSH) repositories are a
+        #  developer's: CI uses mkn's defaults (~/.maiken/repo, https)
+        sed -i -e '/^local:/,+2d' -e '/^remote:/,+2d' res/mkn/hip_thrust_ci.yaml
+        cat res/mkn/hip_thrust_ci.yaml
         curl -Lo mkn https://github.com/mkn/mkn/releases/download/latest/mkn_nix
         chmod +x mkn && mv mkn /usr/local/bin/mkn
-        mkdir -p /mkn # the hip profiles set local.repo: /mkn/r
     - name: Build/Test core
       run: |
         KLOG=3 vgpu run mkn clean build test -dtKOqp test_plamn_core -x res/mkn/hip_thrust_ci
