@@ -3,6 +3,8 @@ name: GPU
 # CUDA and ROCm builds/tests on simulated GPUs (https://github.com/pantheongpu/pantheonsim), on
 #  GitHub's standard runners. Slow: run on merges to master and on demand, not on pull requests.
 #  Modelled on PHARE's tiling_gpu build.yml (cuda fast / rocm jobs).
+#  In ghcr.io/0xz/hpc-containers' cuda / rocm images (pinned): the toolkit, PantheonSim (vgpu, its
+#  shared cudart shim), Open MPI built for the GPU and parallel HDF5 (subfiling) in /opt
 #  damn is private: checked out where mkn looks for it (tpp/damn) with a read-only deploy key
 
 concurrency:
@@ -18,14 +20,13 @@ permissions:
   contents: read
 
 jobs:
-  # CUDA on a simulated NVIDIA H100, clang only (no nvcc). The simulator needs a shared cudart,
-  #  the profiles link -lcudart (the .so).
-  #  sm_90 (H100) with CUDA 12.6: res/mkn/clang_cuda.yaml targets sm_120, which needs CUDA >= 12.8.
-  #  clang 19: clang 18 fails on libstdc++ 14's __float128 in device code.
+  # CUDA on a simulated NVIDIA H100, clang (the image's nvcc is not used). The simulator needs a
+  #  shared cudart, the profiles link -lcudart (the .so) from its shim.
+  #  sm_90 (H100): res/mkn/clang_cuda.yaml targets sm_120.
   cuda:
-    name: cuda (clang 19, CUDA 12.6, simulated H100)
+    name: cuda (clang, CUDA 13.5, simulated H100)
     runs-on: ubuntu-24.04
-    container: ghcr.io/pharchive/phare_dep/ubuntu:24.04
+    container: ghcr.io/0xz/hpc-containers:cuda-eae65e1
     timeout-minutes: 120
     env:
       CUDA_ARCH: sm_90
@@ -33,22 +34,13 @@ jobs:
     - uses: actions/checkout@v6
     - name: Install
       run: |
-        apt-get update && apt-get install -y curl sudo git openssh-client clang-19 libnuma-dev
-        # the mkn profiles call clang / clang++
-        ln -sf /usr/bin/clang-19 /usr/local/bin/clang
-        ln -sf /usr/bin/clang++-19 /usr/local/bin/clang++
+        apt-get update && apt-get install -y curl git openssh-client clang libnuma-dev
         clang++ --version
     - uses: actions/checkout@v6
       with:
         repository: PhilipDeegan/damn
         ssh-key: ${{ secrets.DAMN_DEPLOY_KEY }}
         path: tpp/damn
-    - name: Set up the simulated GPU and CUDA
-      uses: pantheongpu/setup-pantheonsim@a1b9d4237411f9b2b0e0bb895b4d83377f336a7b # v0.1.9
-      with:
-        gpu: nvidia/h100
-        cuda-toolkit: "12.6"
-        rocm: none
     - name: mkn profiles for this GPU
       run: |
         # not `command -v nvcc`: that is pantheonsim's drop-in, in its build dir
@@ -69,38 +61,25 @@ jobs:
       run: |
         KLOG=3 vgpu run mkn clean build test -dtKOqp test_plamn_core -x res/mkn/clang_cuda_ci
 
-  # ROCm on a simulated AMD MI300X (gfx942), hipcc from ROCm 7.1, rocThrust (res/mkn/hip_thrust.yaml,
-  #  thrust is used only if its headers are found)
+  # ROCm on a simulated AMD MI300X (gfx942), hipcc and rocThrust from the image's ROCm
+  #  (res/mkn/hip_thrust.yaml, thrust is used only if its headers are found)
   rocm:
-    name: rocm (hipcc, ROCm 7.1, simulated MI300X)
+    name: rocm (hipcc, ROCm 7.14, simulated MI300X)
     runs-on: ubuntu-24.04
-    container: ghcr.io/pharchive/phare_dep/ubuntu:24.04
+    container: ghcr.io/0xz/hpc-containers:rocm-eae65e1
     timeout-minutes: 120
     steps:
     - uses: actions/checkout@v6
     - name: Install
-      run: apt-get update && apt-get install -y curl sudo git openssh-client
+      run: |
+        apt-get update && apt-get install -y curl git openssh-client
+        hipcc --version
+        ls /opt/rocm/include/thrust/sort.h || echo "::warning::no rocThrust, building without thrust"
     - uses: actions/checkout@v6
       with:
         repository: PhilipDeegan/damn
         ssh-key: ${{ secrets.DAMN_DEPLOY_KEY }}
         path: tpp/damn
-    - name: Set up the simulated GPU and ROCm
-      uses: pantheongpu/setup-pantheonsim@a1b9d4237411f9b2b0e0bb895b4d83377f336a7b # v0.1.9
-      with:
-        gpu: amd/mi300x
-        rocm: "7.1"
-    - name: rocThrust
-      run: |
-        # the action installs hipcc and the HIP runtime only; rocThrust + rocPRIM are headers,
-        #  from the ROCm apt repository it set up
-        cd $(mktemp -d)
-        if apt-get download rocthrust-dev rocprim-dev; then
-          for d in *.deb; do dpkg-deb -x $d /; done
-          ls /opt/rocm/include/thrust/sort.h
-        else
-          echo "::warning::no rocThrust, building without thrust"
-        fi
     - name: mkn profiles for this GPU
       run: |
         sed -e "s/-DMKN_GPU_CUDA=0/-DMKN_GPU_CUDA=0 --offload-arch=gfx942/" \
