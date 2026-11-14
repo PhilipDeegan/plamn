@@ -9,6 +9,7 @@
 #include "plamn/core/data/particles/appending/detail/def_appending.hpp"
 #include "plamn/core/data/particles/appending/detail/aos_appending.hpp"
 #include "plamn/core/data/particles/appending/detail/soa_appending.hpp"
+#include "plamn/core/data/particles/appending/detail/soavx_chunked_appending.hpp" // IWYU pragma: keep
 #include "plamn/core/data/particles/particles_def.hpp"
 
 #include <cassert>

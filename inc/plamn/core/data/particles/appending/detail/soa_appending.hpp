@@ -11,6 +11,7 @@
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/arrays/particles_soa.hpp"
 #include "plamn/core/data/particles/arrays/particles_soavx.hpp"
+#include "plamn/core/data/particles/appending/detail/def_appending.hpp" // IWYU pragma: keep
 
 // #include "plamn/core/data/particles/particles.hpp"
 // #include "plamn/core/data/particles/particle_packer.hpp"

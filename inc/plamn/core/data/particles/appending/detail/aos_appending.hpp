@@ -11,6 +11,7 @@
 
 #include "plamn/core/data/particles/appending/particles_appending.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
+#include "plamn/core/data/particles/appending/detail/def_appending.hpp" // IWYU pragma: keep
 
 #include <cstdint>
 #include <iterator>

@@ -3,6 +3,8 @@
 #define PLAMN_CORE_DATA_PARTICLES_COMPARING_PARTICLES_COMPARING
 
 #include "plamn/core/data/particles/comparing/detail/def_comparing.hpp"
+#include "plamn/core/data/particles/comparing/detail/aos_comparing.hpp" // IWYU pragma: keep
+#include "plamn/core/data/particles/comparing/detail/soa_comparing.hpp" // IWYU pragma: keep
 
 namespace plamn::core
 {

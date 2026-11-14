@@ -7,6 +7,7 @@
 #include "damn/core/meta/logic.hpp"
 #include "damn/core/sys/strings.hpp"
 
+#include "plamn/core/data/particles/arrays/particles_soa_thrust.hpp" // IWYU pragma: keep
 #include "plamn/core/data/particles/particles_def.hpp"
 
 #include "phlop/timing/scope.hpp"

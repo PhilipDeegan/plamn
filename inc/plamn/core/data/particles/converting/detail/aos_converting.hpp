@@ -8,6 +8,7 @@
 
 #include "plamn/core/data/particles/converting/particles_converting.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
+#include "plamn/core/data/particles/converting/detail/def_converting.hpp" // IWYU pragma: keep
 
 #include <algorithm>
 #include <cstddef>

@@ -10,6 +10,7 @@
 
 #include "plamn/core/data/particles/particle.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
+#include "plamn/core/data/particles/arrays/particles_soa_thrust.hpp" // IWYU pragma: keep
 
 #include "mkn/gpu.hpp"
 

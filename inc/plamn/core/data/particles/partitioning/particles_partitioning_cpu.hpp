@@ -7,6 +7,7 @@
 
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
+#include "plamn/core/data/particles/partitioning/partitionner.hpp"
 
 #include <stdexcept>
 
