@@ -17,15 +17,15 @@
 // data is a writable numpy view on the patch's grid, particles the patch's domain particle
 //  array, by reference: only valid while the simulator and its patches exist
 
-#include "plamn/core/data/vecfield/vecfield_component.hpp"
 #include "damn/mpi/damn_mpi.hpp"
+
+#include "plamn/core/data/vecfield/vecfield_component.hpp"
 
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
 #include <nanobind/stl/array.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
-
 #include <array>
 #include <cstdint>
 #include <cstring>
@@ -74,10 +74,10 @@ public:
 
     HybridPatchLevel(Simulator& sim, std::size_t const lvl)
         : sim_{sim}
+        , lvl_{lvl}
     {
-        if (lvl != 0)
-            throw std::runtime_error("plamn DataWrangler: one level only, no level "
-                                     + std::to_string(lvl));
+        if (lvl >= sim.n_levels())
+            throw std::runtime_error("plamn DataWrangler: no level " + std::to_string(lvl));
     }
 
     auto getB(std::string const& c)
@@ -127,7 +127,7 @@ private:
 
     void for_each_patch_(auto&& fn)
     {
-        auto& level = sim_.level();
+        auto& level = sim_.level(lvl_);
         for (std::size_t i = 0; i < level.patches.size(); ++i)
             fn(level.patches[i], *level.data[i]);
     }
@@ -161,6 +161,7 @@ private:
     }
 
     Simulator& sim_;
+    std::size_t lvl_;
 };
 
 
@@ -177,7 +178,7 @@ public:
     {
     }
 
-    std::size_t getNumberOfLevels() const { return 1; }
+    std::size_t getNumberOfLevels() const { return sim_.n_levels(); }
     auto getHybridPatchLevel(std::size_t const lvl) { return Level_t{sim_, lvl}; }
 
     // every rank's patch datas gathered on rank 0, as owned copies (e.g. to plot the whole
