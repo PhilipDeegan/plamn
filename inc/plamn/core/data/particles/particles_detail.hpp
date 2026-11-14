@@ -6,24 +6,23 @@
 
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
+#include "plamn/core/data/particles/arrays/particles_pc.hpp"
+#include "plamn/core/data/particles/arrays/particles_ts.hpp"
+#include "plamn/core/data/particles/arrays/particles_pc_ts.hpp"
+#include "plamn/core/data/particles/arrays/particles_cm_ts.hpp"
+#include "plamn/core/data/particles/arrays/particles_aos.hpp"
+#include "plamn/core/data/particles/arrays/particles_soa.hpp"
+#include "plamn/core/data/particles/arrays/particles_soavx.hpp"
+#include "plamn/core/data/particles/arrays/particles_soavx_chunked.hpp"
+
+#include "magic_enum/magic_enum.hpp"
+#include "magic_enum/magic_enum_switch.hpp"  // IWYU pragma: keep
+#include "magic_enum/magic_enum_utility.hpp" // IWYU pragma: keep
 
 #include <string_view>
 #include <type_traits>
 #include <cstddef>
 #include <cstdint>
-// Mutators
-#include "plamn/core/data/particles/arrays/particles_pc.hpp"
-#include "plamn/core/data/particles/arrays/particles_ts.hpp"
-#include "plamn/core/data/particles/arrays/particles_pc_ts.hpp"
-#include "plamn/core/data/particles/arrays/particles_cm_ts.hpp"
-// Impls
-#include "plamn/core/data/particles/arrays/particles_aos.hpp"
-#include "plamn/core/data/particles/arrays/particles_soa.hpp"
-#include "plamn/core/data/particles/arrays/particles_soavx.hpp"
-#include "plamn/core/data/particles/arrays/particles_soavx_chunked.hpp"
-#include "magic_enum/magic_enum.hpp"
-#include "magic_enum/magic_enum_switch.hpp"  // IWYU pragma: keep
-#include "magic_enum/magic_enum_utility.hpp" // IWYU pragma: keep
 
 namespace damn
 {

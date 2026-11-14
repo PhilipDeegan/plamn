@@ -63,5 +63,5 @@ profile:
       headers: -x c++-header
       # namespace a::b in forward declarations, plamn's include mappings
       args: -Xiwyu --cxx17ns -Xiwyu --mapping_file=res/iwyu.imp
-      fix: --nocomments
+      fix: --nocomments --noreorder # keeps the include order: damn, plamn, other, system
       system_last: true
