@@ -5,11 +5,21 @@
     ./mkn.py --dim 1 2 --interp 1 2       # every combination
     ./mkn.py --dim 2 --refined 5          # a refined particle number other than the default
     ./mkn.py --dim 2 -- -W                # anything after -- goes to mkn
+    ./mkn.py --scope-flags 1=time,mem,perf_all 2=time,perf_all   # phlop per scope metrics
+    ./mkn.py --sync-pools                 # damn's thread pools run tasks on the calling thread
 
 The permutation is set with compile definitions (PLAMN_SIM_*, see src/python3/plamn_sim.cpp)
 and the module named as pyplamn looks for it: plamn_cpp_<dim>_<interp>_<refined>_<layout>_<alloc>,
 pyphare's simulator id. Run from the plamn root; py_etc is built once first unless --no-etc.
 The modules use MPI: built with res/mkn/mpi's settings (mpicxx) unless -x is given after --.
+
+Scopes (DAMN_LOG_SCOPE(level, "name")) up to --log-level (default 2) are phlop scopes; what each
+level records is chosen at build time with --scope-flags <level>=<any of time,mem,perf_light,
+perf_all> (default: time), and at run time: PHARE_SCOPE_TIMING=1 writes .phare/timings/rank.<r>.txt,
+PHLOP_SCOPE_MEM=1 adds memory, PHLOP_PERF_LIGHT / PHLOP_PERF_ALL hardware counters (see
+damn/core/def/phlop.hpp); python3 -m phlop.timing.scope_timer times|perf|variance reads them.
+Hardware counters count the calling thread: --sync-pools (DAMN_THREAD_POOL_SYNC) for serial
+numbers that include the pools' work.
 """
 
 import argparse
@@ -76,6 +86,17 @@ def main(argv):
     parser.add_argument("--layout", nargs="+", default=["AoSMapped"], choices=LAYOUTS)
     parser.add_argument("--allocator", nargs="+", default=["CPU"], choices=ALLOCATORS)
     parser.add_argument("--no-etc", action="store_true", help="don't build py_etc")
+    parser.add_argument(
+        "--sync-pools", action="store_true", help="DAMN_THREAD_POOL_SYNC: no pool threads"
+    )
+    parser.add_argument("--log-level", type=int, choices=[0, 1, 2, 3], help="DAMN_LOG_LEVEL")
+    parser.add_argument(
+        "--scope-flags",
+        nargs="+",
+        default=[],
+        metavar="LEVEL=FLAGS",
+        help="phlop scope flags per log level, e.g. 1=time,mem,perf_all",
+    )
     if "--" in argv:
         at = argv.index("--")
         argv, extra = argv[:at], argv[at + 1 :]
@@ -84,6 +105,17 @@ def main(argv):
     args = parser.parse_args(argv)
     if "-x" not in extra:
         extra += ["-x", "res/mkn/mpi"]
+
+    scoping = [] if args.log_level is None else [f"-DDAMN_LOG_LEVEL={args.log_level}"]
+    if args.sync_pools:
+        scoping += ["-DDAMN_THREAD_POOL_SYNC=1"]
+    for flags in args.scope_flags:
+        level, _, keys = flags.partition("=")
+        valid = {"time", "mem", "perf_light", "perf_all"}
+        if level not in ("1", "2", "3") or not keys or not set(keys.split(",")) <= valid:
+            print(f"--scope-flags {flags}: <1|2|3>=<any of {','.join(sorted(valid))}>")
+            return 1
+        scoping += [f"-DDAMN_LOG_SCOPE_FLAGS_{level}={keys}"]
 
     if not args.no_etc and mkn("py_etc", extra):
         return 1
@@ -104,7 +136,7 @@ def main(argv):
             f"-DPLAMN_SIM_LAYOUT={layout}",
             f"-DPLAMN_SIM_ALLOCATOR={allocator}",
             f"-DPLAMN_SIM_MODULE={name}",
-        ]
+        ] + scoping
         if mkn("py_sim", extra, defines, out=name, own_dir=True):
             return 1
     return 0

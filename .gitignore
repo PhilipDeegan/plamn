@@ -7,3 +7,5 @@ __pycache__
 .plamn*
 .phlop
 *.so
+plamn_test_scope_timing
+.phare
