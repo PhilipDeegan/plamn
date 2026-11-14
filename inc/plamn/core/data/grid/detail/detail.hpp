@@ -3,17 +3,11 @@
 
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/def/detail/mkn_gpu.hpp"
-#include "damn/core/def/detail/raja.hpp"
-#include "damn/core/def/kokkos_tools.hpp"
 #include "damn/core/logger.hpp"
 
-// one kernel backend: mkn::gpu launches when present (also on umpire memory), else raja, else kokkos
+// the kernel backend: mkn::gpu launches
 #if DAMN_HAVE_MKN_GPU
 #include "plamn/core/data/grid/detail/mkn_gpu.hpp"
-#elif DAMN_HAVE_RAJA
-#include "plamn/core/data/grid/detail/raja.hpp"
-#elif DAMN_HAVE_KOKKOS
-#include "plamn/core/data/grid/detail/kokkos.hpp"
 #endif
 
 #include "damn/core/geometry/box_spans.hpp"
@@ -33,7 +27,7 @@ template<typename T, std::size_t S, typename... Args>
 void eval_on_box(auto& fn, damn::core::Box<T, S> const& box, Args&... args)
 {
     DAMN_LOG_LINE_SS(box.size());
-#if DAMN_HAVE_MKN_GPU || DAMN_HAVE_RAJA || DAMN_HAVE_KOKKOS
+#if DAMN_HAVE_MKN_GPU
     impl::BoxKernel::evalOnBox(fn, box, args...);
 #endif
 }
