@@ -68,7 +68,10 @@ def alfven(refined, steps):
     )
     ph.ElectronModel(closure="isothermal", Te=0.0)
     simulator = Simulator(sim, log_to_file=False).setup().initialize()
-    simulator.run()
+    for _ in range(
+        steps
+    ):  # not run(): newer pyphares reset the simulator once it is done
+        simulator.advance()
     cpp = simulator.cpp_sim
     out = {
         "B": {q: np.asarray(cpp.all_domain_values(f"EM_B_{q}")) for q in "yz"},
@@ -146,7 +149,8 @@ def harris(steps):
     simulator = Simulator(sim, log_to_file=False).setup().initialize()
     cpp = simulator.cpp_sim
     initial = [cpp.total_particle_count(ln) for ln in range(cpp.n_levels())]
-    simulator.run()
+    for _ in range(steps):
+        simulator.advance()
     out = {
         "levels": cpp.n_levels(),
         "initial": initial,
