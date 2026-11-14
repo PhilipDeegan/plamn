@@ -1,14 +1,20 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_SORTING_PARTICLES_SORTING_HPP
 #define PLAMN_CORE_DATA_PARTICLES_SORTING_PARTICLES_SORTING_HPP
 
-#include "plamn/core/def.hpp"
-#include "damn/core/vector.hpp"
 #include "damn/core/geometry/box.hpp"
+#include "damn/core/def/detail/mkn_gpu.hpp"
+#include "damn/core/logger.hpp"
+#include "damn/core/meta/logic.hpp"
+#include "damn/core/sys/strings.hpp"
 
-#include "plamn/core/data/particles/arrays/particles_soa_thrust.hpp"
+#include "plamn/core/data/particles/arrays/particles_soa_thrust.hpp" // IWYU pragma: keep
 #include "plamn/core/data/particles/particles_def.hpp"
-#include <type_traits>
 
+#include "phlop/timing/scope.hpp"
+
+#include <type_traits>
+#include <cstddef>
+#include <string_view>
 
 namespace plamn::core::detail
 {
@@ -16,10 +22,11 @@ template<auto alloc_mode, std::size_t impl, typename Particles>
 class ParticleSorter;
 } // namespace plamn::core::detail
 
-#include "particles_sorting_cpu.hpp"
+// the specializations: after the primary template above
+#include "particles_sorting_cpu.hpp" // IWYU pragma: keep
 
 #if DAMN_HAVE_MKN_GPU
-#include "particles_sorting_gpu_mkn.hpp"
+#include "particles_sorting_gpu_mkn.hpp" // IWYU pragma: keep
 #else // no impl (yet)
 namespace plamn::core::detail
 {

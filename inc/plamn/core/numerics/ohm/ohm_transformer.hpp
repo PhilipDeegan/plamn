@@ -1,25 +1,19 @@
 #ifndef PLAMN_CORE_NUMERICS_OHM_OHM_TRANSFORMER_HPP
 #define PLAMN_CORE_NUMERICS_OHM_OHM_TRANSFORMER_HPP
 
-#include "plamn/core/def.hpp"
-#include "plamn/core/data/grid/detail/detail.hpp"
 #include "damn/core/meta/constexprifier.hpp"
-#include "damn/core/math/array.hpp"
-#include "damn/core/math/numeric.hpp"
-#include "damn/core/meta/logic.hpp"
-#include "damn/core/meta/for_N.hpp"
-#include "damn/core/meta/type_meta.hpp"
-#include "damn/core/meta/tuple.hpp"
-#include "damn/core/sys/strings.hpp"
-#include "damn/core/sys/env.hpp"
-#include "damn/core/exec/kernels.hpp"
-#include "damn/core/meta/container_meta.hpp"
+#include "damn/core/def/damn_config.hpp"
+
+#include "plamn/core/data/grid/detail/detail.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/numerics/ohm/ohm.hpp"
 #include "plamn/core/numerics/differential_operators.hpp"
+#include "plamn/core/data/grid/patch_layout.hpp"
+#include "plamn/core/data/vecfield/vecfield_component.hpp"
 
 #include <array>
 #include <stdexcept>
+#include <cstddef>
 
 namespace plamn::core
 {

@@ -1,15 +1,18 @@
 #ifndef PLAMN_CORE_DATA_ELECTROMAG_ELECTROMAG_HPP
 #define PLAMN_CORE_DATA_ELECTROMAG_ELECTROMAG_HPP
 
+#include "damn/core/def/damn_config.hpp"
 
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/tensorfield/tensorfield.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
-
 #include "plamn/initializer/data_provider.hpp"
+
+#include "dict.hpp"
 
 #include <tuple>
 #include <string>
+#include <cstddef>
 
 namespace plamn::core::basic
 {

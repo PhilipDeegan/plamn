@@ -1,0 +1,11 @@
+# iwyu mappings for plamn, used by the iwyu profiles in mkn.yaml
+[
+  # prefer the C++ headers: <cassert> over <assert.h>, <cstdlib> over <stdlib.h>. iwyu's own
+  # mappings already mark the C headers public, so they can't be remapped by include, only by
+  # symbol
+  { symbol: ["assert", "private", "<cassert>", "public"] },
+  { symbol: ["abort", "private", "<cstdlib>", "public"] },
+  { symbol: ["exit", "private", "<cstdlib>", "public"] },
+  { symbol: ["getenv", "private", "<cstdlib>", "public"] },
+  { symbol: ["std::abs", "private", "<cstdlib>", "public"] },
+]

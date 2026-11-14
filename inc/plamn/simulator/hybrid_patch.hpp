@@ -16,15 +16,17 @@
 //   <pop>_density, <pop>_charge_density, <pop>_flux_x...,
 //   <pop>_domain, <pop>_patch_ghost (particles)
 
+#include "damn/core/meta/for_N.hpp"
+#include "damn/core/geometry/box.hpp"
+
 #include "plamn/core/def.hpp"
 #include "plamn/plamn_core.hpp"
 #include "plamn/amr/resources.hpp"
 #include "plamn/core/data/ions/ion_population/particle_pack.hpp"
 #include "plamn/core/numerics/particles_synchronised_mover/particles_synchronised_mover.hpp"
 #include "plamn/initializer/data_provider.hpp"
-
-#include "damn/amr/hierarchy.hpp"
-#include "damn/core/meta/for_N.hpp"
+#include "plamn/core/data/particles/particles_def.hpp"
+#include "plamn/core/models/quantities/hybrid_quantities.hpp"
 
 #include <array>
 #include <memory>
@@ -32,6 +34,9 @@
 #include <vector>
 #include <cstddef>
 #include <optional>
+#include <format>
+#include <type_traits>
+#include <utility>
 
 namespace plamn::simulator
 {

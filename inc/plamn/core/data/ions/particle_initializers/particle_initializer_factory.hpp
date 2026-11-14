@@ -1,14 +1,18 @@
 #ifndef PLAMN_PARTICLE_INITIALIZER_FACTORY_HPP
 #define PLAMN_PARTICLE_INITIALIZER_FACTORY_HPP
 
-
 #include "plamn/core/def.hpp"
 #include "plamn/initializer/data_provider.hpp"
+
 #include "maxwellian_particle_initializer.hpp"
 #include "particle_initializer.hpp"
+#include "dict.hpp"
 
 #include <memory>
 #include <string>
+#include <array>
+#include <cstddef>
+#include <optional>
 
 namespace plamn
 {

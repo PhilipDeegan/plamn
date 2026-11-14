@@ -1,15 +1,16 @@
 #ifndef PLAMN_CORE_DATA_FIELD_INITIALIZERS_FIELD_USER_INITIALIZER_HPP
 #define PLAMN_CORE_DATA_FIELD_INITIALIZERS_FIELD_USER_INITIALIZER_HPP
 
-#include "plamn/core/def.hpp"
+#include "damn/core/memory/span.hpp"
 
-
-
-#include "plamn/core/data/grid/grid_tiles.hpp"
 #include "plamn/core/data/grid/coordinates.hpp"
+#include "plamn/core/data/field/field_tiles.hpp"
+#include "plamn/core/data/grid/layout.hpp"
+#include "plamn/core/models/quantities/quantity.hpp"
 
 #include <tuple>
-
+#include <cstddef>
+#include <memory>
 
 namespace plamn::core
 {

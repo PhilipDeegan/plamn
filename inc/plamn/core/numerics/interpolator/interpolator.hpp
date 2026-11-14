@@ -1,28 +1,27 @@
 #ifndef PLAMN_CORE_NUMERICS_INTERPOLATOR_INTERPOLATOR_HPP
 #define PLAMN_CORE_NUMERICS_INTERPOLATOR_INTERPOLATOR_HPP
 
-
-#include "plamn/core/def.hpp"
 #include "damn/core/logger.hpp"
 #include "damn/core/geometry/point.hpp"
-#include "plamn/core/data/grid/layout_defs.hpp"
+#include "damn/core/operators.hpp"
+#include "damn/core/meta/for_N.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/geometry/box.hpp"
+
+#include "plamn/core/def.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
+#include "plamn/core/data/grid/patch_layout.hpp"
+#include "plamn/core/models/quantities/quantity.hpp"
 
 #include <array>
-#include <cmath>
 #include <tuple>
 #include <cassert>
 #include <cstddef>
-#include <functional>
 #include <type_traits>
-
-
-#include "damn/core/operators.hpp"
-#include "damn/core/meta/logic.hpp"
-#include "damn/core/meta/for_N.hpp"
-#include "plamn/core/data/grid/patch_layout.hpp"
-#include "plamn/core/models/physical_state.hpp"
-#include "plamn/core/data/vecfield/vecfield_component.hpp"
+#include <cstdint>
+#include <optional>
+#include <utility>
+#include <variant>
 
 namespace plamn::core
 {

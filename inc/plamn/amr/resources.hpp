@@ -9,11 +9,12 @@
 //
 // both are small handles over the data, made on the fly in a for_each_resource
 
+#include "damn/core/geometry/box.hpp"
+#include "damn/core/geometry/point.hpp"
+
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/layout.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
-#include "damn/core/geometry/box.hpp"
-#include "damn/core/geometry/point.hpp"
 
 #include <memory>
 #include <cstddef>

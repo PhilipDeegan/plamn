@@ -1,15 +1,19 @@
 #ifndef PLAMN_CORE_MHD_MHD_QUANTITIES_HPP
 #define PLAMN_CORE_MHD_MHD_QUANTITIES_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/def/enum_table.hpp"
+#include "damn/core/def/damn_config.hpp"
+
+#include "plamn/core/def.hpp"
 #include "plamn/core/models/quantities/quantity.hpp"
 
 #include <array>
 #include <cstdint>
 #include <tuple>
 #include <stdexcept>
-
+#include <cstddef>
+#include <type_traits>
+#include <utility>
 
 namespace plamn::core
 {

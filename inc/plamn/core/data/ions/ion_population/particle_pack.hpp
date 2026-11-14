@@ -1,8 +1,13 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTICLE_PACK_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLE_PACK_HPP
 
+#include "damn/core/meta/type_meta.hpp"
+
 #include "plamn/core/def.hpp"
-#include "plamn/core/data/particles/particles.hpp"
+
+#include <cstddef>
+#include <stdexcept>
+#include <string>
 
 namespace plamn
 {

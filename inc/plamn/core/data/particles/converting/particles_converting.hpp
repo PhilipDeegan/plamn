@@ -1,18 +1,30 @@
-#include "plamn/core/def.hpp"
 #ifndef PLAMN_CORE_DATA_PARTICLES_CONVERTING_PARTICLES_CONVERTING
 #define PLAMN_CORE_DATA_PARTICLES_CONVERTING_PARTICLES_CONVERTING
 
-#include "plamn/core/data/particles/particles_def.hpp"
+#include "damn/core/geometry/box.hpp"
+#include "damn/core/logger.hpp"
+#include "damn/core/sys/strings.hpp"
 
+#include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/converting/detail/def_converting.hpp"
 #include "plamn/core/data/particles/converting/detail/aos_converting.hpp"
 #include "plamn/core/data/particles/converting/detail/soa_converting.hpp"
-#include "plamn/core/data/particles/particles_detail.hpp"
-#include "damn/core/geometry/box_spans.hpp"
 #include "plamn/core/data/particles/sorting/particles_sorting.hpp"
+
+#include "phlop/timing/scope.hpp"
+
+#include <algorithm>
+#include <cstddef>
+#include <iterator>
+#include <string_view>
+#include <type_traits>
 
 namespace plamn::core
 {
+template<auto opts>
+class Particles;
+template<auto src_layout_mde, auto src_alloc_mde, auto dst_layout_mde, auto dst_alloc_mde>
+struct ParticlesConverter;
 
 // generic fallthrough
 template<auto src_layout_mde, auto src_alloc_mde, auto dst_layout_mde, auto dst_alloc_mde>

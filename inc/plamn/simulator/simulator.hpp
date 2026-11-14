@@ -9,10 +9,17 @@
 // SolverPPC: predictor1, average, move ions (domain only), predictor2, average, move ions
 // (all), corrector
 
-#include "plamn/core/def.hpp"
-#include "plamn/plamn_core.hpp"
-#include "plamn/core/errors.hpp"
 #include "damn/core/logger.hpp"
+#include "damn/amr/hierarchy.hpp"
+#include "damn/amr/level_data.hpp"
+#include "damn/amr/scheduler.hpp"
+#include "damn/amr/box_data.hpp"
+#include "damn/amr/schedule.hpp"
+#include "damn/core/geometry/box.hpp"
+#include "damn/core/geometry/box_spans.hpp"
+#include "damn/core/math/array.hpp"
+
+#include "plamn/core/def.hpp"
 #include "plamn/core/numerics/ohm/ohm.hpp"
 #include "plamn/core/models/electromag_initializer.hpp"
 #include "plamn/core/numerics/ohm/ohm_transformer.hpp"
@@ -24,10 +31,10 @@
 #include "plamn/simulator/simulator_def.hpp"
 #include "plamn/simulator/hybrid_patch.hpp"
 #include "plamn/initializer/data_provider.hpp"
+#include "plamn/core/numerics/particles_synchronised_mover/particles_synchronised_mover_def.hpp"
 
-#include "damn/amr/hierarchy.hpp"
-#include "damn/amr/level_data.hpp"
-#include "damn/amr/scheduler.hpp"
+#include "dict.hpp"
+#include "phlop/timing/scope.hpp"
 
 #include <array>
 #include <memory>
@@ -37,6 +44,8 @@
 #include <optional>
 #include <cstddef>
 #include <stdexcept>
+#include <format>
+#include <type_traits>
 
 namespace plamn
 {

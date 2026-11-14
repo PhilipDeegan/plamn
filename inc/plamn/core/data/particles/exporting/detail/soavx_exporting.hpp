@@ -5,20 +5,27 @@
 //  (thrust), then moved to dst / dropped from the tail. Needs thrust, as SoAVX iteration does
 //  GPU_UNIFIED partitions and moves on the device (thrust::device, device copies)
 
-#include "plamn/core/def.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/vector.hpp"
 #include "damn/core/meta/for_N.hpp"
 #include "damn/core/memory/memory.hpp"
-#include "damn/core/geometry/box.hpp"
+
 #include "plamn/core/data/particles/particles_def.hpp"
 
 #include <cstddef>
-#include <iterator>
 #include <stdexcept>
+#include <type_traits>
+#include <utility>
+
+namespace damn::core
+{
+template<typename Type, std::size_t dim>
+struct Box;
+} // namespace damn::core
 
 #if DAMN_HAVE_THRUST
 #include "plamn/core/data/particles/arrays/particles_soa_thrust.hpp"
+
 #include <thrust/partition.h>
 #include <thrust/execution_policy.h>
 #endif

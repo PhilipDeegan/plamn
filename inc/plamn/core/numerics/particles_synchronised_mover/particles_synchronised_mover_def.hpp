@@ -1,15 +1,22 @@
 #ifndef PLAMN_CORE_NUMERICS_PARTICLES_SYNCHRONISED_MOVER_DEF_HPP
 #define PLAMN_CORE_NUMERICS_PARTICLES_SYNCHRONISED_MOVER_DEF_HPP
 
-#include "plamn/core/def.hpp"
-
-
 #include "damn/core/geometry/box.hpp"
+#include "damn/core/data/tiles/tile_set_overlaps.hpp"
+#include "damn/core/def/detail/mkn_gpu.hpp"
+#include "damn/core/geometry/point.hpp"
+#include "damn/core/sys/env.hpp"
+
 #include "plamn/core/data/tiles/tile_set_overlaps.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 
 #include <cstdint>
+#include <array>
+#include <cstddef>
+#include <format>
+#include <string>
+#include <vector>
 
 namespace plamn::core
 {
@@ -17,7 +24,6 @@ enum class UpdaterMode : std::uint16_t { domain_only = 0, all };
 
 template<typename Layout>
 struct UpdaterSelectionBoxing;
-
 template<typename Selector_t, typename Layout>
 struct UpdaterCellMapSelectionBoxing;
 

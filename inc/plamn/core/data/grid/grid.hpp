@@ -1,16 +1,19 @@
 #ifndef PLAMN_CORE_DATA_GRID_GRID_BASE_HPP
 #define PLAMN_CORE_DATA_GRID_GRID_BASE_HPP
 
+#include "damn/core/meta/for_N.hpp"
+
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/field/field.hpp"
-#include "damn/core/def/damn_config.hpp"
 
 #include <array>
 #include <string>
-#include <cassert>
 #include <optional>
 #include <algorithm>
-
+#include <cstdint>
+#include <iosfwd>
+#include <stdexcept>
+#include <type_traits>
 
 namespace plamn::core
 {

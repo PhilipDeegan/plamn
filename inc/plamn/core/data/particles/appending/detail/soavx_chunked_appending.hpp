@@ -1,4 +1,3 @@
-#include "plamn/core/def.hpp"
 #ifndef PLAMN_CORE_DATA_PARTICLES_APPENDING_DETAIL_SOAVX_CHUNKED_APPENDING
 #define PLAMN_CORE_DATA_PARTICLES_APPENDING_DETAIL_SOAVX_CHUNKED_APPENDING
 
@@ -6,10 +5,14 @@
 //  GPU_UNIFIED on the host. The destination's offsets are rebuilt by the caller's on_appended
 
 #include "plamn/core/data/particles/particles_def.hpp"
-#include "plamn/core/data/particles/appending/detail/def_appending.hpp"
+#include "plamn/core/data/particles/appending/detail/def_appending.hpp" // IWYU pragma: keep
+
+#include <cstddef>
 
 namespace plamn::core
 {
+template<auto src_layout_mde, auto src_alloc_mde, auto dst_layout_mde, auto dst_alloc_mde>
+struct ParticlesAppender;
 
 template<typename Src, typename Dst>
 void append_soavx_chunked(Src const& src, Dst& dst, std::size_t const start,

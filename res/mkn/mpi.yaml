@@ -1,6 +1,4 @@
-
-property:
-  sys.arch: ${ARCH}
+super: base
 
 compiler:
   mask:
@@ -13,12 +11,3 @@ file:
     archiver: ar -cr
     compiler: mpicxx -std=c++20 -fPIC
     linker: mpicxx
-
-find:
-  hdf5:
-    inc:
-      /usr/include/hdf5/openmpi
-      /usr/include/openmpi-${sys.arch}
-    lib:
-      /usr/lib64/openmpi/lib
-      /usr/lib/${sys.arch}-linux-gnu/hdf5/openmpi

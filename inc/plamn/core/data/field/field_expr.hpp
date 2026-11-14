@@ -6,11 +6,13 @@
 // ...) are leaves that read shifted points; everything else is pointwise. An expression is plain
 // views and scalars, so it is trivially copyable to the device.
 
-#include "plamn/core/def.hpp"
-#include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/meta/for_N.hpp"
 #include "damn/core/data/ndarray/ndarray_view.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/geometry/box_spans.hpp"
+
+#include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/detail/detail.hpp"
 
 #include <cstddef>

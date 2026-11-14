@@ -1,13 +1,10 @@
 #ifndef PLAMN_CORE_ERRORS_HPP
 #define PLAMN_CORE_ERRORS_HPP
 
-#include "plamn/core/def.hpp"
-
 #include "dict.hpp"
 
 #include <string>
 #include <sstream>
-#include <ostream>
 #include <exception>
 #include <stdexcept>
 

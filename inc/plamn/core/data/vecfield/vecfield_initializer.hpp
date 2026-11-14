@@ -1,4 +1,4 @@
-#include "plamn/core/def.hpp"
+#include <initializer_list>
 #ifndef VECFIELD_INITIALIZER_HPP
 #define VECFIELD_INITIALIZER_HPP
 
@@ -9,7 +9,6 @@
 #include <string>
 #include <cstddef>
 #include <stdexcept>
-
 
 namespace plamn
 {

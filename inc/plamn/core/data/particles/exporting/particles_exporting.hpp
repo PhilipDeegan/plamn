@@ -1,31 +1,21 @@
-#include "plamn/core/def.hpp"
 #ifndef PLAMN_CORE_DATA_PARTICLES_EXPORTING_PARTICLES_EXPORTING
 #define PLAMN_CORE_DATA_PARTICLES_EXPORTING_PARTICLES_EXPORTING
 
-#include "damn/core/memory/memory.hpp"
+#include "damn/core/logger.hpp"
+#include "damn/core/sys/strings.hpp"
+
 #include "plamn/core/data/particles/exporting/detail/def_exporting.hpp"
-#include "plamn/core/data/particles/exporting/detail/aos_exporting.hpp"
-#include "plamn/core/data/particles/exporting/detail/soavx_exporting.hpp"
-#include "plamn/core/data/particles/particles_def.hpp"
+#include "plamn/core/data/particles/exporting/detail/aos_exporting.hpp"   // IWYU pragma: keep
+#include "plamn/core/data/particles/exporting/detail/soavx_exporting.hpp" // IWYU pragma: keep
 
-namespace plamn::core
+#include <cstddef>
+#include <string_view>
+
+namespace damn::core
 {
-
-
-// // generic fallthrough
-// template<auto src_layout_mde, auto src_alloc_mde, auto dst_layout_mde, auto dst_alloc_mde>
-// template<auto type, typename Src, typename Dst>
-// void ParticlesAppender<src_layout_mde, src_alloc_mde, dst_layout_mde, dst_alloc_mde>::operator()(
-//     Src const& src, Dst& dst)
-// {
-//     // not optimized but *should work*
-//     dst.reserve(dst.size() + src.size());
-//     std::copy(src.begin(), src.end(), std::back_inserter(dst));
-// }
-
-
-
-} // namespace plamn::core
+template<typename Type, std::size_t dim>
+struct Box;
+} // namespace damn::core
 
 namespace plamn::core
 {

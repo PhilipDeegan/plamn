@@ -1,9 +1,11 @@
 #ifndef PLAMN_CORE_DATA_GRID_LAYOUT_DEFS_HPP
 #define PLAMN_CORE_DATA_GRID_LAYOUT_DEFS_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"
+#include "damn/core/def/damn_config.hpp"
+
+#include "plamn/core/def.hpp"
 #include "plamn/core/models/quantities/quantity.hpp"
 
 #include <array>
@@ -12,6 +14,7 @@
 #include <tuple>
 #include <type_traits>
 #include <utility>
+#include <variant>
 
 namespace plamn
 {

@@ -1,15 +1,19 @@
 #ifndef PLAMN_CORE_GEOMETRY_INDEXER_HPP
 #define PLAMN_CORE_GEOMETRY_INDEXER_HPP
 
-#include "plamn/core/def.hpp"
 #include "damn/core/vector.hpp"
 #include "damn/core/memory/span.hpp"
+#include "damn/core/def/damn_config.hpp"
+
+#include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 
 #include <vector>
 #include <cassert>
 #include <cstddef>
 #include <algorithm>
+#include <initializer_list>
+#include <iterator>
 
 namespace plamn::core
 {
@@ -30,8 +34,6 @@ struct IndexerOptions
 // Forward declaration so IndexerStorage<VECTOR> can name Indexer<SPAN> as its base.
 template<auto opts = IndexerOptions{}>
 class Indexer;
-
-
 template<auto storage_mode, auto opts>
 struct IndexerStorage;
 

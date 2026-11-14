@@ -1,13 +1,9 @@
 #ifndef PLAMN_OPTIONS_HYBRID_OPTIONS_HPP
 #define PLAMN_OPTIONS_HYBRID_OPTIONS_HPP
 
-#include "plamn/core/def.hpp"
-
-
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 
 #include <array>
-
 
 namespace plamn
 {

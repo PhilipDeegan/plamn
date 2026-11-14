@@ -1,19 +1,27 @@
-#include "plamn/core/def.hpp"
-// IWYU pragma: private, include "core/data/particles/appending/particles_appending.hpp"
+// IWYU pragma: private, include "plamn/core/data/particles/appending/particles_appending.hpp"
 #ifndef PLAMN_CORE_DATA_PARTICLES_APPENDING_DETAIL_SOA_APPENDING
 #define PLAMN_CORE_DATA_PARTICLES_APPENDING_DETAIL_SOA_APPENDING
 
+#include "damn/core/meta/for_N.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/memory/memory.hpp"
 #include "damn/core/geometry/box_spans.hpp"
+
+#include "plamn/core/data/particles/appending/particles_appending.hpp"
+#include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/arrays/particles_soa.hpp"
 #include "plamn/core/data/particles/arrays/particles_soavx.hpp"
+#include "plamn/core/data/particles/appending/detail/def_appending.hpp" // IWYU pragma: keep
 
 // #include "plamn/core/data/particles/particles.hpp"
 // #include "plamn/core/data/particles/particle_packer.hpp"
 // #include "plamn/core/data/particles/converting/particles_converting.hpp"
-#include "plamn/core/data/particles/appending/detail/def_appending.hpp"
 
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <tuple>
+#include <utility>
 
 namespace plamn::core
 {

@@ -1,24 +1,27 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTICLES_SOAVX_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLES_SOAVX_HPP
 
-#include "plamn/core/def.hpp"
-
-#include "damn/core/logger.hpp"
 #include "damn/core/vector.hpp"
 #include "damn/core/memory/span.hpp"
-#include "damn/core/meta/tuple.hpp"
 #include "damn/core/meta/for_N.hpp"
-#include "damn/core/meta/type_meta.hpp"
 #include "damn/core/sys/monitoring.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/def/detail/mkn_gpu.hpp"
 
 #include "plamn/core/data/particles/particle.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
+#include "plamn/core/data/particles/arrays/particles_soa_thrust.hpp" // IWYU pragma: keep
 
-#include "plamn/core/data/particles/arrays/particles_soa.hpp"
-#include "plamn/core/data/particles/arrays/particles_soa_thrust.hpp"
+#include "mkn/gpu.hpp"
 
+#include <cassert>
 #include <tuple>
 #include <type_traits>
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <iterator>
+#include <utility>
 
 namespace plamn::core
 {
@@ -784,140 +787,6 @@ struct SoAVXParticles<OuterSuper>::iterator_impl
 
 
 } // namespace plamn::core
-
-
-namespace std
-{
-
-// template<template<typename> typename Iterator, typename O>
-// // SFINAE to support const iterators
-// typename std::enable_if_t<Iterator<O>::is_soa, plamn::core::Particle<Iterator<O>::dimension>>
-// copy(Iterator<O> src)
-// {
-//     return {src.weight(), src.charge(), src.iCell(), src.delta(), src.v()};
-// }
-
-
-// template<template<typename> typename Iterator, typename O>
-// // SFINAE to support const iterators
-// typename std::enable_if_t<Iterator<O>::is_soa, void> copy(Iterator<O> src_begin, //
-//                                                           Iterator<O> src_end,
-//                                                           Iterator<O> dst_begin)
-// {
-//     auto src_tuple = src_begin.particles.as_tuple();
-//     auto dst_tuple = dst_begin.particles.as_tuple();
-//     for_N<std::tuple_size_v<decltype(src_tuple)>>([&](auto i) {
-//         auto& src = std::get<i>(src_tuple);
-//         auto& dst = std::get<i>(dst_tuple);
-//         std::copy(&src[src_begin.curr_pos], &src[src_end.curr_pos],
-//         &dst[dst_begin.curr_pos]);
-//     });
-// }
-
-
-
-// template<template<typename> typename Iterator, typename O, typename Inserter>
-// // SFINAE to support const iterators
-// typename std::enable_if_t<Iterator<O>::is_soa, void> copy(Iterator<O> src_begin, //
-//                                                           Iterator<O> src_end, Inserter i)
-// {
-//     // auto const& particles = src_begin.particles;
-
-//     for (; src_begin != src_end; ++src_begin, ++i)
-//         *i = src_begin.copy();
-// }
-
-// template<typename OuterSuper, typename T, typename Inserter, typename Fn,
-//          typename Iter
-//          = typename plamn::core::SoAVXParticles<OuterSuper>::template iterator_impl<T>>
-// void copy_if(Iter src_begin, Iter src_end, Inserter i, Fn check)
-// {
-//     auto const& particles = src_begin.particles;
-
-//     for (; src_begin != src_end; ++src_begin)
-//         if (check(src_begin))
-//         {
-//             *i = src_begin.copy();
-//             ++i;
-//         }
-// }
-
-
-
-// template<typename OuterSuper, typename T,
-//          typename Iter
-//          = typename plamn::core::SoAVXParticles<OuterSuper>::template iterator_impl<T>>
-// void iter_swap(Iter a, Iter b)
-// {
-//     DAMN_LOG_LINE_STR("");
-//     DAMN_ASSERT(&a.particles == &b.particles);
-
-//     a.particles.swap(a.curr_pos, b.curr_pos);
-// }
-
-// template<typename OuterSuper, typename T, typename Predicate,
-//          typename Iter
-//          = typename plamn::core::SoAVXParticles<OuterSuper>::template iterator_impl<T>>
-// Iter find_if_not(Iter first, Iter last, Predicate q)
-// { // https://en.cppreference.com/w/cpp/algorithm/find
-//     DAMN_LOG_LINE_STR("");
-//     for (; first != last; ++first)
-//         if (!q(first)) // pass iterator!
-//             return first;
-//     return last;
-// }
-
-// template<typename OuterSuper, typename T, typename Predicate/*,
-//          typename Iter = typename plamn::core::SoAVXParticles<OuterSuper>::template
-//          iterator_impl<T>*/>
-// typename plamn::core::SoAVXParticles<OuterSuper>::template iterator_impl<T>
-// partition(typename plamn::core::SoAVXParticles<OuterSuper>::template iterator_impl<T> first,
-// typename plamn::core::SoAVXParticles<OuterSuper>::template iterator_impl<T> last, Predicate
-// p) { // https://en.cppreference.com/w/cpp/algorithm/partition
-//     DAMN_LOG_LINE_STR("");
-//     first = find_if_not(first, last, p);
-//     if (first == last)
-//         return first;
-
-//     for (auto i = first + 1; i != last; ++i)
-//     {
-//         if (p(i)) // pass iterator!
-//         {
-//             iter_swap(i, first);
-//             ++first;
-//         }
-//     }
-//     return first;
-// }
-
-
-
-
-// template<template<typename> typename Iterator, typename O, typename Fn>
-// // SFINAE to support const iterators
-// typename std::enable_if_t<Iterator<O>::is_soa, void>
-// transform(Iterator<O> src_begin, Iterator<O> src_end, Iterator<O> dst_begin, Fn transform)
-// {
-//     if (&src_begin.particles != &dst_begin.particles)
-//         throw std::runtime_error("transform cannot work");
-
-//     for (; src_begin != src_end; ++src_begin, ++dst_begin)
-//         /*dst_begin = */ transform(src_begin); // transform edits in place
-// }
-
-
-// template<template<typename> typename Iterator, typename O>
-// // SFINAE to support const iterators
-// typename std::enable_if_t<Iterator<O>::is_soavx, std::size_t> distance(Iterator<O> const& a,
-//                                                                        Iterator<O> const& b)
-// {
-//     DAMN_ASSERT(&deref(a.particles).weight(0) == &deref(b.particles).weight(0));
-//     DAMN_ASSERT(a.curr_pos <= b.curr_pos);
-
-//     return b.curr_pos - a.curr_pos;
-// }
-
-} // namespace std
 
 
 namespace plamn::core

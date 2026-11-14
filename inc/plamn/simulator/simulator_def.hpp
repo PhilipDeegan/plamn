@@ -1,19 +1,20 @@
 #ifndef PLAMN_SIMULATOR_SIMULATOR_DEF_HPP
 #define PLAMN_SIMULATOR_SIMULATOR_DEF_HPP
 
-#include "plamn/core/def.hpp"
-#include "damn/core/logger.hpp"
+#include "damn/core/def/damn_config.hpp"
+
 #include "plamn/core/models/options/mhd_options_def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
-
 #include "plamn/initializer/data_provider.hpp"
+
+#include "dict.hpp"
 
 #include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <string>
-#include <vector>
+#include <format>
 
 namespace plamn
 {
@@ -58,8 +59,8 @@ struct SimOpts
     std::size_t interp_order  = 1;
     std::size_t nbRefinedPart = defaultNbrRefinedParts(dimension, interp_order);
 
-    core::LayoutMode layout_mode = core::LayoutMode::AoSMapped;
-    damn::AllocatorMode alloc_mode     = damn::AllocatorMode::CPU;
+    core::LayoutMode layout_mode   = core::LayoutMode::AoSMapped;
+    damn::AllocatorMode alloc_mode = damn::AllocatorMode::CPU;
 
     MHDOpts::ReconstructionType reconstruction_type = MHDOpts::ReconstructionType::MHDOff;
     MHDOpts::SlopeLimiterType slope_limiter_type    = MHDOpts::SlopeLimiterType::MHDOff;

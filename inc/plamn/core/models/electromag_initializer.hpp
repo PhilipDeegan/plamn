@@ -5,11 +5,13 @@
 //   ElectromagInitializer<dim>{dict}(em, layout);
 // B from the magnetic initializer functions; E is left to the model (Ohm's law)
 
-#include "plamn/core/def.hpp"
 #include "plamn/core/data/vecfield/vecfield_initializer.hpp"
 #include "plamn/initializer/data_provider.hpp"
 
+#include "dict.hpp"
+
 #include <cstddef>
+#include <string>
 
 namespace plamn::core
 {
