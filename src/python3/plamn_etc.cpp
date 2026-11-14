@@ -15,6 +15,7 @@
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/memory/span.hpp"
+#include "damn/mpi/damn_mpi.hpp"
 
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
@@ -31,11 +32,83 @@
 
 namespace nb = nanobind;
 
+namespace
+{
+bool mpi_on()
+{
+    int initialized = 0, finalized = 0;
+    MPI_Initialized(&initialized);
+    MPI_Finalized(&finalized);
+    return initialized and !finalized;
+}
+
+// MPI for python: pyphare's startMPI() makes one (as SamraiLifeCycle), it finalizes at the end
+// if it initialized. MPI_THREAD_FUNNELED: one thread calls MPI
+struct MpiLifeCycle
+{
+    MpiLifeCycle()
+    {
+        int initialized = 0;
+        MPI_Initialized(&initialized);
+        if (!initialized)
+        {
+            int provided = 0;
+            MPI_Init_thread(nullptr, nullptr, MPI_THREAD_FUNNELED, &provided);
+            owns = true;
+        }
+    }
+    ~MpiLifeCycle() { finalize(); }
+
+    void finalize()
+    {
+        if (owns and mpi_on())
+            MPI_Finalize();
+        owns = false;
+    }
+
+    bool owns = false;
+};
+} // namespace
+
 
 
 NB_MODULE(plamn_etc, m)
 {
     using namespace plamn::python3;
+
+    // ---------------------------------------------------------------- mpi
+    nb::class_<MpiLifeCycle>(m, "MpiLifeCycle")
+        .def(nb::init<>())
+        .def("finalize", &MpiLifeCycle::finalize)
+        .def_static("reset", [] {});
+    m.def("mpi_initialized", &mpi_on);
+    m.def("mpi_size", [] {
+        int size = 1;
+        if (mpi_on())
+            MPI_Comm_size(MPI_COMM_WORLD, &size);
+        return size;
+    });
+    m.def("mpi_rank", [] {
+        int rank = 0;
+        if (mpi_on())
+            MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        return rank;
+    });
+    m.def("mpi_barrier", [] {
+        if (mpi_on())
+            MPI_Barrier(MPI_COMM_WORLD);
+    });
+    // the lowest rank of each node
+    m.def("mpi_is_root_rank_for_host", [] {
+        if (!mpi_on())
+            return true;
+        MPI_Comm shared;
+        MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &shared);
+        int rank = 0;
+        MPI_Comm_rank(shared, &rank);
+        MPI_Comm_free(&shared);
+        return rank == 0;
+    });
     using V = std::vector<double>;
 
     nb::class_<Dict>(m, "Dict")

@@ -41,6 +41,7 @@ def config():
         time_step_nbr=time_step_nbr,
         cells=50,
         dl=0.2,
+        largest_patch_size=10,  # several patches: every rank has some on a few ranks
         hyper_resistivity=0.002,
         resistivity=0.001,
         strict=True,
@@ -78,6 +79,8 @@ def config():
 def level_bulk_velocity(simulator, ilvl):
     """mean of the ion bulk velocity over the physical nodes of a level"""
     patch_level = simulator.data_wrangler().getPatchLevel(ilvl)
+    if not patch_level.getVi("x"):  # this rank holds none
+        return None
     mean = []
     for component in ("x", "y", "z"):
         values = [
@@ -99,10 +102,12 @@ class MultiSpeciesMomentumTest(unittest.TestCase):
         self.simulator = Simulator(config(), log_to_file=False).setup().initialize()
         self.assertEqual(self.simulator.data_wrangler().getNumberOfLevels(), 1)
 
-        initial = level_bulk_velocity(self.simulator, 0)
+        initial = level_bulk_velocity(self.simulator, 0)  # this rank's region: uniform plasma
         for _ in range(time_step_nbr):
             self.simulator.advance()
         final = level_bulk_velocity(self.simulator, 0)
+        if initial is None:
+            return
 
         expected_vy = (
             protons["mass"] * protons["density"] * protons["vbulky"]

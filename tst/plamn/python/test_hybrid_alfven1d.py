@@ -33,12 +33,12 @@ def run(largest_patch_size):
     x = np.arange(CELLS) + 0.5  # By is dual in x
 
     def fit():  # By = a cos(k x + phase)
-        by = np.asarray(cpp.domain_values("EM_B_y"))
+        by = np.asarray(cpp.all_domain_values("EM_B_y"))
         c = (by * np.cos(k * x)).sum() * 2 / CELLS
         s = (by * np.sin(k * x)).sum() * 2 / CELLS
         return np.hypot(c, s), np.arctan2(-s, c)
 
-    result = {"particles": [cpp.particle_count()], "amplitude": [], "time": [], "phase": []}
+    result = {"particles": [cpp.total_particle_count()], "amplitude": [], "time": [], "phase": []}
     for step in range(STEPS + 1):
         if step % (STEPS // 5) == 0:
             amplitude, phase = fit()
@@ -47,10 +47,10 @@ def run(largest_patch_size):
             result["time"].append(cpp.currentTime())
         if step < STEPS:
             simulator.advance()
-    result["particles"].append(cpp.particle_count())
-    result["patches"] = cpp.patch_count()
+    result["particles"].append(cpp.total_particle_count())
+    result["patches"] = cpp.all_patch_count()
     result["finite"] = all(
-        np.isfinite(cpp.domain_values(f"EM_{q}_{c}")).all() for q in "BE" for c in "xyz"
+        np.isfinite(cpp.all_domain_values(f"EM_{q}_{c}")).all() for q in "BE" for c in "xyz"
     )
     # By = a cos(k (x + v t)): travels in -x for this polarisation (V in phase with B)
     result["speed"] = np.polyfit(result["time"], np.unwrap(result["phase"]), 1)[0] / k

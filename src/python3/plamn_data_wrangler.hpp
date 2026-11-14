@@ -7,7 +7,8 @@
 //   DataWrangler(simulator, hierarchy)   hierarchy: unused, plamn's is the simulator's own
 //     getNumberOfLevels()
 //     getHybridPatchLevel(lvl) -> HybridPatchLevel
-//     sync(patch_datas)                  one rank: the input
+//     sync(patch_datas)                  every rank's patch datas on rank 0 (copies), none on
+//                                        others; one rank: the input
 //   HybridPatchLevel: getB(c), getE(c), getNi(), getN(pop), getVi(c), getFlux(c, pop),
 //     getParticles(pop): one PatchData per local patch
 //   PatchData: patchID, origin, lower, upper (AMR cells), nGhosts (field or particle ghost
@@ -17,6 +18,7 @@
 //  array, by reference: only valid while the simulator and its patches exist
 
 #include "plamn/core/data/vecfield/vecfield_component.hpp"
+#include "damn/mpi/damn_mpi.hpp"
 
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
@@ -25,6 +27,8 @@
 #include <nanobind/stl/vector.h>
 
 #include <array>
+#include <cstdint>
+#include <cstring>
 #include <cstddef>
 #include <stdexcept>
 #include <string>
@@ -176,12 +180,98 @@ public:
     std::size_t getNumberOfLevels() const { return 1; }
     auto getHybridPatchLevel(std::size_t const lvl) { return Level_t{sim_, lvl}; }
 
-    // one rank: everything is already on rank 0
-    auto sync(std::vector<typename Level_t::FieldData> const& in) { return in; }
+    // every rank's patch datas gathered on rank 0, as owned copies (e.g. to plot the whole
+    //  domain), in rank order; other ranks get none. One rank: the input
+    std::vector<typename Level_t::FieldData>
+    sync(std::vector<typename Level_t::FieldData> const& in) const;
 
 private:
     Simulator& sim_;
 };
+
+
+template<typename Simulator>
+std::vector<typename DataWrangler<Simulator>::Level_t::FieldData>
+DataWrangler<Simulator>::sync(std::vector<typename Level_t::FieldData> const& in) const
+{
+    using FieldData = typename Level_t::FieldData;
+    if (sim_.ranks() == 1)
+        return in;
+
+    auto const put = [](std::vector<std::byte>& out, void const* data, std::size_t const bytes) {
+        auto const at = out.size();
+        out.resize(at + bytes);
+        std::memcpy(out.data() + at, data, bytes);
+    };
+    auto const get = [](std::byte const*& at, void* data, std::size_t const bytes) {
+        std::memcpy(data, at, bytes);
+        at += bytes;
+    };
+
+    // per patch: id length, id, origin, lower, upper, ghosts, shape, values
+    std::vector<std::byte> mine;
+    for (auto const& pd : in)
+    {
+        std::uint64_t const id_size = pd.patchID.size();
+        put(mine, &id_size, sizeof(id_size));
+        put(mine, pd.patchID.data(), id_size);
+        put(mine, pd.origin.data(), sizeof(pd.origin));
+        put(mine, pd.lower.data(), sizeof(pd.lower));
+        put(mine, pd.upper.data(), sizeof(pd.upper));
+        std::uint64_t const ghosts = pd.nGhosts;
+        put(mine, &ghosts, sizeof(ghosts));
+        std::array<std::uint64_t, dim> shape{};
+        std::size_t n = 1;
+        for (std::size_t i = 0; i < dim; ++i)
+            n *= (shape[i] = pd.data.shape(i));
+        put(mine, shape.data(), sizeof(shape));
+        put(mine, pd.data.data(), n * sizeof(double));
+    }
+
+    int const bytes = static_cast<int>(mine.size());
+    std::vector<int> counts(sim_.ranks()), displs(sim_.ranks());
+    MPI_Gather(&bytes, 1, MPI_INT, counts.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
+    std::vector<std::byte> all;
+    if (sim_.rank() == 0)
+    {
+        for (std::size_t r = 1; r < counts.size(); ++r)
+            displs[r] = displs[r - 1] + counts[r - 1];
+        all.resize(static_cast<std::size_t>(displs.back() + counts.back()));
+    }
+    MPI_Gatherv(mine.data(), bytes, MPI_BYTE, all.data(), counts.data(), displs.data(), MPI_BYTE, 0,
+                MPI_COMM_WORLD);
+    if (sim_.rank() != 0)
+        return {};
+
+    std::vector<FieldData> out;
+    std::byte const* at        = all.data();
+    std::byte const* const end = all.data() + all.size();
+    while (at < end)
+    {
+        auto& pd              = out.emplace_back();
+        std::uint64_t id_size = 0;
+        get(at, &id_size, sizeof(id_size));
+        pd.patchID.assign(reinterpret_cast<char const*>(at), id_size);
+        at += id_size;
+        get(at, pd.origin.data(), sizeof(pd.origin));
+        get(at, pd.lower.data(), sizeof(pd.lower));
+        get(at, pd.upper.data(), sizeof(pd.upper));
+        std::uint64_t ghosts = 0;
+        get(at, &ghosts, sizeof(ghosts));
+        pd.nGhosts = ghosts;
+        std::array<std::uint64_t, dim> shape{};
+        get(at, shape.data(), sizeof(shape));
+        std::array<std::size_t, dim> sizes{};
+        std::size_t n = 1;
+        for (std::size_t i = 0; i < dim; ++i)
+            n *= (sizes[i] = shape[i]);
+        auto* values = new double[n];
+        get(at, values, n * sizeof(double));
+        nb::capsule owner(values, [](void* p) noexcept { delete[] static_cast<double*>(p); });
+        pd.data = FieldView<dim>(values, dim, sizes.data(), owner);
+    }
+    return out;
+}
 
 
 template<typename Data, std::size_t dim>

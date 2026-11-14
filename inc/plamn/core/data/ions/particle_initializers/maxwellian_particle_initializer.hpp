@@ -95,6 +95,9 @@ public:
      */
     void loadParticles(Particles& particles, Layout const& layout) const override;
 
+    // nbrParticlePerCell for each cell whose density is at least the cutoff, as loadParticles
+    NO_DISCARD std::size_t nbrParticles(Layout const& layout) const override;
+
 
     virtual ~MaxwellianParticleInitializer() = default;
 
@@ -176,6 +179,22 @@ private:
 
 
 template<typename Particles_t, typename Layout>
+std::size_t
+MaxwellianParticleInitializer<Particles_t, Layout>::nbrParticles(Layout const& layout) const
+{
+    auto const cells
+        = coordinate_vectors(layout.dx, layout.cells,
+                             damn::core::ConstArray<QtyCentering, dimension>(QtyCentering::dual));
+    auto const n = std::apply([&](auto const&... c) { return density_(c...); }, cells.spans());
+
+    std::size_t populated = 0;
+    for (std::size_t i = 0; i < n->size(); ++i)
+        populated += (n->data()[i] >= densityCutOff_);
+    return populated * nbrParticlePerCell_;
+}
+
+
+template<typename Particles_t, typename Layout>
 void MaxwellianParticleInitializer<Particles_t, Layout>::loadParticles(Particles_t& particles,
                                                                        Layout const& layout) const
 {
@@ -199,10 +218,8 @@ void MaxwellianParticleInitializer<Particles_t, Layout>::loadParticles(Particles
     //  column (append_columns), instead of a host write into managed memory per particle
     bool constexpr static staged = Particles_t::layout_mode == LayoutMode::SoAVXChunked
                                    and Particles_t::alloc_mode == damn::AllocatorMode::GPU_UNIFIED;
-    using Staging_t
-        = std::conditional_t<staged,
-                             Particles<Particles_t::options.with_alloc(damn::AllocatorMode::CPU)>,
-                             Particles_t>;
+    using Staging_t = std::conditional_t<
+        staged, Particles<Particles_t::options.with_alloc(damn::AllocatorMode::CPU)>, Particles_t>;
     auto staging = [&]() {
         if constexpr (staged)
             return Staging_t{particles.box()};
@@ -217,13 +234,10 @@ void MaxwellianParticleInitializer<Particles_t, Layout>::loadParticles(Particles
     }
     else
     { // flat storage: cells above the density cutoff, plus room for incoming particles
-        auto const expected_size
-            = std::accumulate(n, n + cells.size(), std::size_t{0},
-                              [&](auto const& sum, auto const& density_value) {
-                                  return (density_value >= densityCutOff_)
-                                             ? sum + nbrParticlePerCell_
-                                             : sum;
-                              });
+        auto const expected_size = std::accumulate(
+            n, n + cells.size(), std::size_t{0}, [&](auto const& sum, auto const& density_value) {
+                return (density_value >= densityCutOff_) ? sum + nbrParticlePerCell_ : sum;
+            });
 
         auto const incoming_estimate
             = (surface_cell_count_(layout.cells) * (nbrParticlePerCell_ * over_alloc_factor_));
