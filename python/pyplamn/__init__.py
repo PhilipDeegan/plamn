@@ -54,6 +54,37 @@ def cpp_lib(sim):
         ) from e
 
 
+def _patch_layout_for():
+    """pharesee's hierarchy_from_sim builds hybrid layouts with PHARE's ghost widths (field 2, 4, 4
+    and particles 1, 2, 2 for interp 1, 2, 3, in HybridGridLayoutFor): use the width each patch
+    data carries (nGhosts, from plamn's allowed particle cell jump) instead. Both the tiling_gpu
+    (no model argument) and PHARE master signatures."""
+    try:  # pharesee needs matplotlib, not every pyplamn user has it
+        import pyphare.pharesee.hierarchy.fromsim as fromsim
+    except ImportError:
+        return
+    import pyphare.core.gridlayout as gridlayout
+    from pyphare.core.box import Box
+
+    original = getattr(fromsim.make_layout_for, "_pyplamn_original", fromsim.make_layout_for)
+
+    def make_layout_for(simulator, patch_data, qty, dl, *model):
+        if model and model[0] == "MHD":
+            return original(simulator, patch_data, qty, dl, *model)
+        box = Box(patch_data.lower, patch_data.upper)
+        return gridlayout.HybridGridLayoutFor(
+            box,
+            patch_data.origin,
+            dl,
+            simulator.interp_order(),
+            ghosts_nbr=[patch_data.nGhosts] * box.ndim,
+            is_particle_layout=(qty == "particles"),
+        )
+
+    make_layout_for._pyplamn_original = original
+    fromsim.make_layout_for = make_layout_for
+
+
 def patch():
     import pyphare.cpp as cpp
     import pyphare.cpp.validate as validate
@@ -66,6 +97,8 @@ def patch():
 
     cpp.cpp_etc_lib = lambda: etc
     cpp.cpp_lib = cpp_lib
+
+    _patch_layout_for()
 
     simulator.startMPI = lambda: None
     validate.log_runtime_config = lambda *a, **k: None

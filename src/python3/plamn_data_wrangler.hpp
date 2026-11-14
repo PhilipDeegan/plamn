@@ -10,7 +10,8 @@
 //     sync(patch_datas)                  one rank: the input
 //   HybridPatchLevel: getB(c), getE(c), getNi(), getN(pop), getVi(c), getFlux(c, pop),
 //     getParticles(pop): one PatchData per local patch
-//   PatchData: patchID, origin, lower, upper (AMR cells), nGhosts, data
+//   PatchData: patchID, origin, lower, upper (AMR cells), nGhosts (field or particle ghost
+//     width), data
 //
 // data is a writable numpy view on the patch's grid, particles the patch's domain particle
 //  array, by reference: only valid while the simulator and its patches exist
@@ -105,7 +106,8 @@ public:
         std::vector<ParticlesData> out;
         for_each_patch_([&](auto const& patch, auto& data) {
             set_(out.emplace_back(), patch, data);
-            out.back().data = &population_(data, pop).domainParticles();
+            out.back().data    = &population_(data, pop).domainParticles();
+            out.back().nGhosts = Patch_t::particle_ghost_width;
         });
         return out;
     }

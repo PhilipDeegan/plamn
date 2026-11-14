@@ -5,6 +5,7 @@
 #include "damn/core/def/detail/mkn_avx.hpp"
 
 #include "plamn/core/def.hpp"
+#include "plamn/core/data/grid/ghost_width_calculator.hpp"
 
 // #include "plamn/core/data/particles/particle.hpp"
 // #include "plamn/core/data/electromag/electromag.hpp"
@@ -39,7 +40,7 @@ auto static advance(Particle_t& p, std::array<Float, dim> const& halfDtOverDl) D
     {
         Float delta = p.delta()[iDim] + static_cast<Float>(halfDtOverDl[iDim] * p.v()[iDim]);
         if constexpr (alloc == damn::AllocatorMode::CPU)
-            if (std::abs(delta) > 2)
+            if (std::abs(delta) > particle_allowed_cell_jump)
                 damn::throw_exception<MoveTwoCellException>(delta, p.v()[iDim]);
 
         Float iCell     = std::floor(delta);
@@ -121,8 +122,9 @@ auto advance_noavx(Particles_t& ps, Args const&... args) DAMN_ALL
         auto& deldim     = ps.delta()[iDim][pidx];
         auto const delta = deldim + static_cast<Float>(halfDtOverDl[iDim] * ps.v()[iDim][pidx]);
         if constexpr (Particles_t::alloc_mode == damn::AllocatorMode::CPU)
-            if (std::abs(delta) > 2)
-                damn::throw_runtime_error("Error, particle moves more than 1 cell, delta >2");
+            if (std::abs(delta) > particle_allowed_cell_jump)
+                damn::throw_runtime_error("Error, particle moves more than "
+                                          "particle_allowed_cell_jump cells in a half push");
 
         auto iCell = std::floor(delta);
         deldim     = delta - iCell;
