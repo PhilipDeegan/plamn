@@ -20,7 +20,7 @@ void append_soavx_chunked(Src const& src, Dst& dst, std::size_t const start,
 {
     // refine streams in small chunks on top of reserve_flat's average case estimate: an exact
     //  reserve per chunk reallocates and copies every column each time (quadratic, and on
-    //  GPU_UNIFIED the umpire pool grew to >24GB), so only grow when short, with 5% headroom
+    //  GPU_UNIFIED the memory pool grew to >24GB), so only grow when short, with 5% headroom
     double constexpr static over_alloc = 1.05;
     if (auto const needed = dst.size() + end - start; needed > dst.capacity())
         dst.reserve(static_cast<std::size_t>(needed * over_alloc));
