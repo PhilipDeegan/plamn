@@ -12,7 +12,7 @@
 #include "damn/core/logger.hpp"
 #include "damn/amr/hierarchy.hpp"
 #include "damn/amr/level_data.hpp"
-#include "damn/amr/move.hpp"
+#include "damn/amr/copy.hpp"
 #include "damn/amr/neighbours.hpp"
 #include "damn/amr/topology.hpp"
 #include "damn/amr/box_data.hpp"
@@ -139,10 +139,10 @@ private:
             fn(*patch);
     }
 
-    // moves key's resources between the level's patches, see register_resources_
-    void move_(auto const how, std::string const& key)
+    // copies key's resources between the level's patches, see register_resources_
+    void copy_(auto const how, std::string const& key)
     {
-        damn::amr::move(how, neighbours_, resources_.at(key), level_);
+        damn::amr::copy(how, neighbours_, resources_.at(key), level_);
     }
 
     void register_resources_();
@@ -300,8 +300,8 @@ void Simulator<opts>::initialize()
             initializer->loadParticles(pop.domainParticles(), patch.layout);
         }
     });
-    move_(damn::amr::fill_ghosts, "EM_B");
-    move_(damn::amr::fill_ghosts, "EM_E");
+    copy_(damn::amr::fill_ghosts, "EM_B");
+    copy_(damn::amr::fill_ghosts, "EM_E");
 
     // moments from the particles, completed across patch borders
     per_patch_([&](auto& patch) {
@@ -313,7 +313,7 @@ void Simulator<opts>::initialize()
 
     // J from B, then E from Ohm's law
     ampere_ohm_<&Patch_t::em>();
-    move_(damn::amr::fill_ghosts, "EM_E");
+    copy_(damn::amr::fill_ghosts, "EM_E");
 
     currentTime_   = startTime_;
     isInitialized_ = true;
@@ -354,7 +354,7 @@ void Simulator<opts>::compute_moments_()
 template<auto opts>
 void Simulator<opts>::fill_ion_borders_()
 {
-    move_(damn::amr::sum_borders, "IonPopBorderSum");
+    copy_(damn::amr::sum_borders, "IonPopBorderSum");
 }
 
 // J from B (Ampere, on the physical box + 1: what Ohm reads, so J is never exchanged), the
@@ -384,7 +384,7 @@ void Simulator<opts>::average_()
             core::average(patch.em.E[i], patch.emPred.E[i], patch.emAvg.E[i]);
         }
     });
-    move_(damn::amr::fill_ghosts, "EMAvg_E");
+    copy_(damn::amr::fill_ghosts, "EMAvg_E");
 }
 
 template<auto opts>
@@ -399,7 +399,7 @@ void Simulator<opts>::move_ions_(double const dt, core::UpdaterMode const mode)
     if (mode != core::UpdaterMode::domain_only)
     {
         // particles that left their patch go to the patch owning their cell
-        move_(damn::amr::gather_leaving, "IonGhostParticles");
+        copy_(damn::amr::gather_leaving, "IonGhostParticles");
         per_patch_([](auto& patch) {
             for (auto& pop : patch.ions)
                 pop.patchGhostParticles().clear();
@@ -414,7 +414,7 @@ void Simulator<opts>::predictor1_(double const dt)
     per_patch_([&](auto& patch) {
         core::FaradayTransformer{}(patch.layout, patch.em.B, patch.em.E, patch.emPred.B, dt);
     });
-    move_(damn::amr::fill_ghosts, "EMPred_B");
+    copy_(damn::amr::fill_ghosts, "EMPred_B");
     ampere_ohm_<&Patch_t::emPred>();
 }
 
@@ -424,7 +424,7 @@ void Simulator<opts>::predictor2_(double const dt)
     per_patch_([&](auto& patch) {
         core::FaradayTransformer{}(patch.layout, patch.em.B, patch.emAvg.E, patch.emPred.B, dt);
     });
-    move_(damn::amr::fill_ghosts, "EMPred_B");
+    copy_(damn::amr::fill_ghosts, "EMPred_B");
     ampere_ohm_<&Patch_t::emPred>();
 }
 
@@ -434,9 +434,9 @@ void Simulator<opts>::corrector_(double const dt)
     per_patch_([&](auto& patch) {
         core::FaradayTransformer{}(patch.layout, patch.em.B, patch.emAvg.E, patch.em.B, dt);
     });
-    move_(damn::amr::fill_ghosts, "EM_B");
+    copy_(damn::amr::fill_ghosts, "EM_B");
     ampere_ohm_<&Patch_t::em>();
-    move_(damn::amr::fill_ghosts, "EM_E");
+    copy_(damn::amr::fill_ghosts, "EM_E");
 }
 
 template<auto opts>
