@@ -21,3 +21,8 @@ test_multi_species_momentum.py:
   - {}
   - tags: [mpi]
     prefix: "mpirun --oversubscribe -n 3"
+
+test_scope_timing.py:
+  - {}
+  - tags: [mpi]
+    prefix: "mpirun --oversubscribe -n 3"

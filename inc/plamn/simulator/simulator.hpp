@@ -20,6 +20,7 @@
 #include "damn/amr/partition.hpp"
 #include "damn/mpi/copy.hpp"
 #include "damn/mpi/damn_mpi.hpp"
+#include "damn/mpi/scope_timing.hpp"
 #include "damn/mpi/topology.hpp"
 #include "damn/amr/box_data.hpp"
 #include "damn/core/geometry/box.hpp"
@@ -45,6 +46,8 @@
 
 #include <algorithm>
 #include <array>
+#include <filesystem>
+#include <system_error>
 #include <memory>
 #include <map>
 #include <string>
@@ -88,6 +91,13 @@ public:
 
     Simulator(Simulator const&)            = delete;
     Simulator& operator=(Simulator const&) = delete;
+
+    // writes the scope timer files if timing (collective: every rank's simulator goes together)
+    ~Simulator() override;
+
+    // PHARE_SCOPE_TIMING=1 at setup: phlop's DAMN_LOG_SCOPE timers, a file per rank, written
+    //  when the simulator goes (pyphare's reset): python3 -m phlop.timing.scope_timer ...
+    inline static std::string const timings_prefix = ".phare/timings/rank.";
 
     NO_DISCARD double startTime() override { return startTime_; }
     NO_DISCARD double endTime() override { return finalTime_; }
@@ -163,6 +173,13 @@ public:
     // domain_values of every patch of the level, in level order, on every rank (collective)
     NO_DISCARD std::vector<double> all_domain_values(std::string const& name);
 
+    // per level, on rank 0 (collective, "" on other ranks), as PHARE's Simulator::summary:
+    //   lvl:<n> (<patches>,<cells>,<patch ghost cells>,<level ghost cells>) parts(<particles>),
+    //   tot:<particles>
+    // ghost cells: field_ghost_width around each patch, patch ghosts where a neighbour (or a
+    // periodic image) has them, level ghosts the rest
+    NO_DISCARD std::string summary();
+
 private:
     void setup_();
 
@@ -218,6 +235,7 @@ private:
     double finalTime_   = 0;
     double currentTime_ = 0;
     bool isInitialized_ = false;
+    bool timing_        = false; // this simulator started the scope timers
 };
 
 
@@ -240,6 +258,13 @@ void Simulator<opts>::setup_()
         MPI_Comm_size(MPI_COMM_WORLD, &n_ranks_);
     }
     topology_ = n_ranks_ > 1 ? damn::mpi::topology() : damn::amr::single_node();
+
+    if (mpi_on and !mpi_done and damn::mpi::env_flag("PHARE_SCOPE_TIMING")
+        and !damn::mpi::scope_timing_active())
+    {
+        damn::mpi::start_scope_timing(timings_prefix);
+        timing_ = true;
+    }
 
     auto const models = sim["models"].template to<std::vector<std::string>>();
     if (models != std::vector<std::string>{"HybridModel"})
@@ -489,12 +514,15 @@ double Simulator<opts>::advance()
 template<auto opts>
 void Simulator<opts>::compute_moments_()
 {
+    DAMN_LOG_SCOPE(1, "Simulator::compute_moments_");
     per_patch_([](auto& patch) { patch.ions.update(); });
 }
 
 template<auto opts>
 void Simulator<opts>::fill_ion_borders_()
 {
+    // the first exchange after the push: waits here are other ranks' longer pushes
+    DAMN_LOG_SCOPE(1, "Simulator::fill_ion_borders_");
     copy_(damn::amr::sum_borders, "IonPopBorderSum");
 }
 
@@ -505,10 +533,20 @@ template<auto opts>
 template<auto electromag>
 void Simulator<opts>::ampere_ohm_()
 {
+    // one loop each, so each has its own scope (time, counters)
+    {
+        DAMN_LOG_SCOPE(1, "Simulator::ampere");
+        per_patch_([&](auto& patch) {
+            core::AmpereTransformer{}(patch.layout, (patch.*electromag).B, patch.J);
+        });
+    }
+    {
+        DAMN_LOG_SCOPE(1, "Simulator::electrons");
+        per_patch_([&](auto& patch) { patch.electrons().update(patch.layout); });
+    }
+    DAMN_LOG_SCOPE(1, "Simulator::ohm");
     per_patch_([&](auto& patch) {
         auto& em = patch.*electromag;
-        core::AmpereTransformer{}(patch.layout, em.B, patch.J);
-        patch.electrons().update(patch.layout);
         core::OhmTransformer{*ohm_info_}(patch.layout, patch.electrons().density(),
                                          patch.electrons().velocity(), patch.electrons().pressure(),
                                          em.B, patch.J, em.E);
@@ -518,6 +556,7 @@ void Simulator<opts>::ampere_ohm_()
 template<auto opts>
 void Simulator<opts>::average_()
 {
+    DAMN_LOG_SCOPE(1, "Simulator::average_");
     per_patch_([](auto& patch) {
         for (std::size_t i = 0; i < 3; ++i)
         {
@@ -532,9 +571,12 @@ template<auto opts>
 void Simulator<opts>::move_ions_(double const dt, core::UpdaterMode const mode)
 {
     DAMN_LOG_SCOPE(1, "Simulator::move_ions");
-    per_patch_([&](auto& patch) {
-        mover_.updatePopulations(patch.ions, patch.emAvg, patch.boxing, dt, mode);
-    });
+    {
+        DAMN_LOG_SCOPE(1, "Simulator::move_ions::push"); // and deposit
+        per_patch_([&](auto& patch) {
+            mover_.updatePopulations(patch.ions, patch.emAvg, patch.boxing, dt, mode);
+        });
+    }
     fill_ion_borders_();
 
     if (mode != core::UpdaterMode::domain_only)
@@ -552,9 +594,13 @@ void Simulator<opts>::move_ions_(double const dt, core::UpdaterMode const mode)
 template<auto opts>
 void Simulator<opts>::predictor1_(double const dt)
 {
-    per_patch_([&](auto& patch) {
-        core::FaradayTransformer{}(patch.layout, patch.em.B, patch.em.E, patch.emPred.B, dt);
-    });
+    DAMN_LOG_SCOPE(1, "Simulator::predictor1_");
+    {
+        DAMN_LOG_SCOPE(1, "Simulator::faraday");
+        per_patch_([&](auto& patch) {
+            core::FaradayTransformer{}(patch.layout, patch.em.B, patch.em.E, patch.emPred.B, dt);
+        });
+    }
     copy_(damn::amr::fill_ghosts, "EMPred_B");
     ampere_ohm_<&Patch_t::emPred>();
 }
@@ -562,9 +608,13 @@ void Simulator<opts>::predictor1_(double const dt)
 template<auto opts>
 void Simulator<opts>::predictor2_(double const dt)
 {
-    per_patch_([&](auto& patch) {
-        core::FaradayTransformer{}(patch.layout, patch.em.B, patch.emAvg.E, patch.emPred.B, dt);
-    });
+    DAMN_LOG_SCOPE(1, "Simulator::predictor2_");
+    {
+        DAMN_LOG_SCOPE(1, "Simulator::faraday");
+        per_patch_([&](auto& patch) {
+            core::FaradayTransformer{}(patch.layout, patch.em.B, patch.emAvg.E, patch.emPred.B, dt);
+        });
+    }
     copy_(damn::amr::fill_ghosts, "EMPred_B");
     ampere_ohm_<&Patch_t::emPred>();
 }
@@ -572,12 +622,69 @@ void Simulator<opts>::predictor2_(double const dt)
 template<auto opts>
 void Simulator<opts>::corrector_(double const dt)
 {
-    per_patch_([&](auto& patch) {
-        core::FaradayTransformer{}(patch.layout, patch.em.B, patch.emAvg.E, patch.em.B, dt);
-    });
+    DAMN_LOG_SCOPE(1, "Simulator::corrector_");
+    {
+        DAMN_LOG_SCOPE(1, "Simulator::faraday");
+        per_patch_([&](auto& patch) {
+            core::FaradayTransformer{}(patch.layout, patch.em.B, patch.emAvg.E, patch.em.B, dt);
+        });
+    }
     copy_(damn::amr::fill_ghosts, "EM_B");
     ampere_ohm_<&Patch_t::em>();
     copy_(damn::amr::fill_ghosts, "EM_E");
+}
+
+template<auto opts>
+Simulator<opts>::~Simulator()
+{
+    if (!timing_)
+        return;
+    int mpi_on = 0, mpi_done = 0;
+    MPI_Initialized(&mpi_on);
+    MPI_Finalized(&mpi_done);
+    if (!mpi_on or mpi_done)
+        return;         // too late to write
+    std::error_code ec; // pyphare makes it on rank 0, maybe not yet
+    std::filesystem::create_directories(std::filesystem::path{timings_prefix}.parent_path(), ec);
+    damn::mpi::stop_scope_timing();
+}
+
+template<auto opts>
+std::string Simulator<opts>::summary()
+{
+    auto constexpr gw = Patch_t::field_ghost_width;
+
+    // patches, cells, patch ghost cells, level ghost cells, particles
+    std::array<unsigned long long, 5> mine{}, all{};
+    for (std::size_t i = 0; i < damn::amr::size(level_); ++i)
+    {
+        auto const& box   = level_.patches[i].box;
+        auto const& links = neighbours_.of[i];
+        ++mine[0];
+        mine[1] += static_cast<unsigned long long>(box.size());
+        damn::core::for_each_point(damn::core::grow(box, gw), [&](auto const& p) {
+            if (damn::core::isIn(p, box))
+                return;
+            bool const neighbour = std::any_of(links.begin(), links.end(), [&](auto const& l) {
+                return damn::core::isIn(p, damn::core::shift(l.patch.box, l.shift));
+            });
+            ++mine[neighbour ? 2 : 3];
+        });
+    }
+    mine[4] = particle_count();
+
+    all = mine;
+    if (n_ranks_ > 1)
+        MPI_Reduce(mine.data(), all.data(), static_cast<int>(mine.size()), MPI_UNSIGNED_LONG_LONG,
+                   MPI_SUM, 0, MPI_COMM_WORLD);
+    if (rank_ != 0)
+        return "";
+
+    std::stringstream ss;
+    ss << "lvl:0 (" << all[0] << "," << all[1] << "," << all[2] << "," << all[3] << ") parts("
+       << all[4] << "), \n";
+    ss << "tot:" << all[4];
+    return ss.str();
 }
 
 template<auto opts>
