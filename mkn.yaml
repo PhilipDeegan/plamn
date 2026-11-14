@@ -76,10 +76,8 @@ profile:
   - name: cpp.iwyu
     compile:
       paths: inc
-      # fragments (of particles_sorting.hpp, particles_partitioning.hpp), and backends needing
-      # RAJA / Kokkos
+      # fragments (of particles_sorting.hpp, particles_partitioning.hpp)
       ignore: sorting/particles_sorting_cpu.hpp partitioning/particles_partitioning_cpu.hpp
-              grid/detail/raja.hpp grid/detail/kokkos.hpp
       inc: /usr/lib/x86_64-linux-gnu/openmpi/include /usr/lib/x86_64-linux-gnu/openmpi/include/openmpi
       headers: -x c++-header
       # namespace a::b in forward declarations, plamn's include mappings
