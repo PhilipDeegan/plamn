@@ -1,0 +1,112 @@
+name: GPU
+
+# CUDA and ROCm builds/tests on simulated GPUs (https://github.com/pantheongpu/pantheonsim), on
+#  GitHub's standard runners. Slow: run on releases and on demand, not on pull requests.
+#  Modelled on PHARE's tiling_gpu build.yml (cuda fast / rocm jobs).
+#  damn is private: checked out where mkn looks for it (tpp/damn) with a read-only deploy key
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+  push: # TEMPORARY, to verify before merge
+    branches: [gpu_ci]
+
+permissions:
+  contents: read
+
+jobs:
+  # CUDA on a simulated NVIDIA H100, clang only (no nvcc). The simulator needs a shared cudart,
+  #  the profiles link -lcudart (the .so).
+  #  sm_90 (H100) with CUDA 12.6: res/mkn/clang_cuda.yaml targets sm_120, which needs CUDA >= 12.8.
+  #  clang 19: clang 18 fails on libstdc++ 14's __float128 in device code.
+  cuda:
+    name: cuda (clang 19, CUDA 12.6, simulated H100)
+    runs-on: ubuntu-24.04
+    container: ghcr.io/pharchive/phare_dep/ubuntu:24.04
+    timeout-minutes: 120
+    env:
+      CUDA_ARCH: sm_90
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install
+      run: |
+        apt-get update && apt-get install -y curl sudo git openssh-client clang-19 libnuma-dev
+        # the mkn profiles call clang / clang++
+        ln -sf /usr/bin/clang-19 /usr/local/bin/clang
+        ln -sf /usr/bin/clang++-19 /usr/local/bin/clang++
+        clang++ --version
+    - uses: actions/checkout@v4
+      with:
+        repository: PhilipDeegan/damn
+        ssh-key: ${{ secrets.DAMN_DEPLOY_KEY }}
+        path: tpp/damn
+    - name: Set up the simulated GPU and CUDA
+      uses: pantheongpu/setup-pantheonsim@a1b9d4237411f9b2b0e0bb895b4d83377f336a7b # v0.1.9
+      with:
+        gpu: nvidia/h100
+        cuda-toolkit: "12.6"
+        rocm: none
+    - name: mkn profiles for this GPU
+      run: |
+        # not `command -v nvcc`: that is pantheonsim's drop-in, in its build dir
+        CUDA_HOME=$(readlink -f /usr/local/cuda)
+        sed -e "s/cuda.arch: 120/cuda.arch: ${CUDA_ARCH#sm_}/" -e "s|/usr/local/cuda|${CUDA_HOME}|g" \
+          res/mkn/clang_cuda.yaml > res/mkn/clang_cuda_ci.yaml
+        # include/cccl (thrust, cub) only from CUDA 13, before they are in include/: mkn rejects a
+        #  missing include directory
+        [ -d "${CUDA_HOME}/targets/x86_64-linux/include/cccl" ] \
+          || sed -i '\|targets/x86_64-linux/include/cccl|d' res/mkn/clang_cuda_ci.yaml
+        curl -Lo mkn https://github.com/mkn/mkn/releases/download/latest/mkn_nix
+        chmod +x mkn && mv mkn /usr/local/bin/mkn
+    - name: Build/Test core
+      run: |
+        KLOG=3 vgpu run mkn clean build test -dtKOqp test_plamn_core -x res/mkn/clang_cuda_ci
+
+  # ROCm on a simulated AMD MI300X (gfx942), hipcc from ROCm 7.1, rocThrust (res/mkn/hip_thrust.yaml,
+  #  thrust is used only if its headers are found)
+  rocm:
+    name: rocm (hipcc, ROCm 7.1, simulated MI300X)
+    runs-on: ubuntu-24.04
+    container: ghcr.io/pharchive/phare_dep/ubuntu:24.04
+    timeout-minutes: 120
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install
+      run: apt-get update && apt-get install -y curl sudo git openssh-client
+    - uses: actions/checkout@v4
+      with:
+        repository: PhilipDeegan/damn
+        ssh-key: ${{ secrets.DAMN_DEPLOY_KEY }}
+        path: tpp/damn
+    - name: Set up the simulated GPU and ROCm
+      uses: pantheongpu/setup-pantheonsim@a1b9d4237411f9b2b0e0bb895b4d83377f336a7b # v0.1.9
+      with:
+        gpu: amd/mi300x
+        rocm: "7.1"
+    - name: rocThrust
+      run: |
+        # the action installs hipcc and the HIP runtime only; rocThrust + rocPRIM are headers,
+        #  from the ROCm apt repository it set up
+        cd $(mktemp -d)
+        if apt-get download rocthrust-dev rocprim-dev; then
+          for d in *.deb; do dpkg-deb -x $d /; done
+          ls /opt/rocm/include/thrust/sort.h
+        else
+          echo "::warning::no rocThrust, building without thrust"
+        fi
+    - name: mkn profiles for this GPU
+      run: |
+        sed -e "s/-DMKN_GPU_CUDA=0/-DMKN_GPU_CUDA=0 --offload-arch=gfx942/" \
+          res/mkn/hip_thrust.yaml > res/mkn/hip_thrust_ci.yaml
+        grep -n offload-arch res/mkn/hip_thrust_ci.yaml
+        curl -Lo mkn https://github.com/mkn/mkn/releases/download/latest/mkn_nix
+        chmod +x mkn && mv mkn /usr/local/bin/mkn
+        mkdir -p /mkn # the hip profiles set local.repo: /mkn/r
+    - name: Build/Test core
+      run: |
+        KLOG=3 vgpu run mkn clean build test -dtKOqp test_plamn_core -x res/mkn/hip_thrust_ci
