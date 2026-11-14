@@ -47,6 +47,7 @@ profile:
         tst/plamn/core/numerics/ampere/test_tileset_ampere.cpp
         tst/plamn/core/numerics/ohm/test_tileset_ohm.cpp
         tst/plamn/amr/test_refine_coarsen.cpp
+        tst/plamn/amr/test_tagging.cpp
 
 - name: test_plamn_core_slow # ~17M particles, >10 min unoptimised
   parent: test_plamn_core

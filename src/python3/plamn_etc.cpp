@@ -98,6 +98,12 @@ NB_MODULE(plamn_etc, m)
         if (mpi_on())
             MPI_Barrier(MPI_COMM_WORLD);
     });
+    // the max of value over the ranks, on every rank (collective)
+    m.def("mpi_max", [](double value) {
+        if (mpi_on())
+            MPI_Allreduce(MPI_IN_PLACE, &value, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+        return value;
+    });
     // the lowest rank of each node
     m.def("mpi_is_root_rank_for_host", [] {
         if (!mpi_on())

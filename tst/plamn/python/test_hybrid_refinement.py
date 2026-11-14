@@ -11,7 +11,8 @@ cells sharing the coarse-fine interface (see PHARE's tests/simulator/refinement)
 nothing changes in a step. The fine level holds the coarse particles under it, split.
 
 2D: a small double Harris sheet with one sheet refined stays finite, its fine level holding the
-coarse particles under it, split.
+coarse particles under it, split. With refinement="tagging", level 1 starts on the sheets and is
+regridded every 2 steps, divergence B kept at its initial (discretization) value.
 """
 
 import unittest
@@ -78,10 +79,17 @@ def alfven(refined, steps):
     return out
 
 
-def harris(steps):
+def harris(steps, tagging=False, measure=None):
     ph.global_vars.sim = None
     ph.clearDict()
     L = 0.5
+    refinement = (
+        dict(refinement="tagging", max_nbr_levels=2)
+        if tagging
+        else dict(
+            refinement="boxes", refinement_boxes={"L0": {"B0": [(30, 22), (69, 37)]}}
+        )
+    )
     sim = ph.Simulation(
         time_step=0.005,
         time_step_nbr=steps,
@@ -90,8 +98,7 @@ def harris(steps):
         largest_patch_size=(25, 25),
         hyper_resistivity=0.002,
         resistivity=0.001,
-        refinement="boxes",
-        refinement_boxes={"L0": {"B0": [(30, 22), (69, 37)]}},  # around the lower sheet
+        **refinement,  # boxes: around the lower sheet
         strict=True,
     )
     Lx, Ly = sim.simulation_domain()
@@ -146,7 +153,11 @@ def harris(steps):
     simulator = Simulator(sim, log_to_file=False).setup().initialize()
     cpp = simulator.cpp_sim
     initial = [cpp.total_particle_count(ln) for ln in range(cpp.n_levels())]
-    simulator.run()
+    measured = [measure(simulator)] if measure else []
+    for _ in range(steps):
+        simulator.advance()
+        if measure:
+            measured.append(measure(simulator))
     out = {
         "levels": cpp.n_levels(),
         "initial": initial,
@@ -157,8 +168,29 @@ def harris(steps):
             )
             for ln in range(cpp.n_levels())
         ],
+        "measured": measured,
     }
     simulator.reset()
+    return out
+
+
+def max_divb(simulator):
+    """max |div B| per level, over every patch's cells, over the ranks (collective)"""
+    from pyphare.pharesee.hierarchy.fromsim import hierarchy_from_sim
+
+    hx = hierarchy_from_sim(simulator, qty="EM_B_x")
+    hy = hierarchy_from_sim(simulator, qty="EM_B_y")
+    out = []
+    for ln in range(simulator.cpp_sim.n_levels()):  # every rank: a level may have none here
+        dx = 0.4 / 2**ln
+        m = 0.0
+        here = ln in hx.levels()
+        for px, py in zip(*(h.levels()[ln].patches if here else [] for h in (hx, hy))):
+            bx = px.patch_datas["EM_B_x"][px.box]
+            by = py.patch_datas["EM_B_y"][py.box]
+            div = (bx[1:, :] - bx[:-1, :]) / dx + (by[:, 1:] - by[:, :-1]) / dx
+            m = max(m, float(np.abs(div).max()))
+        out.append(pyplamn.etc.mpi_max(m))
     return out
 
 
@@ -193,6 +225,20 @@ class HybridRefinementTest(unittest.TestCase):
         # 40 x 16 coarse cells refined, each coarse particle split in 4 (2D, interp 1)
         expected = 40 * 16 * 20 * 4
         self.assertLess(abs(out["initial"][1] - expected) / expected, 0.01)
+        for B in out["B"]:
+            self.assertTrue(np.all(np.isfinite(B)))
+            self.assertLess(np.abs(B).max(), 2)
+
+    def test_harris_tagging_regrids_keep_div_b(self):
+        out = harris(40, tagging=True, measure=max_divb)
+        self.assertEqual(out["levels"], 2)
+        divb = out["measured"]
+        # the initial condition's discrete divergence is the most there is, on every level,
+        #  through every regrid
+        initial = max(divb[0])
+        for d in divb:
+            for ln in range(2):
+                self.assertLess(d[ln], initial * (1 + 1e-9) + 1e-12, divb)
         for B in out["B"]:
             self.assertTrue(np.all(np.isfinite(B)))
             self.assertLess(np.abs(B).max(), 2)

@@ -19,6 +19,7 @@ from .plamn_etc import (  # noqa: F401
     mpi_barrier,
     mpi_initialized,
     mpi_is_root_rank_for_host,
+    mpi_max,
     mpi_rank,
     mpi_size,
 )
