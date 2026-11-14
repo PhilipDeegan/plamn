@@ -7,14 +7,14 @@
 // PLAMN_SIM_LAYOUT and PLAMN_SIM_ALLOCATOR (defaults 1, 1, pyphare's default refined particle
 // number, AoSMapped, CPU), set by ./mkn.py, which also names the module
 
+#include "plamn/simulator/simulator.hpp"
+
 #include "plamn_dict.hpp"
 #include "plamn_data_wrangler.hpp"
-#include "plamn/simulator/simulator.hpp"
 
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/unique_ptr.h>
-
 #include <memory>
 
 #if !defined(PLAMN_SIM_DIM)
@@ -63,18 +63,29 @@ NB_MODULE(PLAMN_SIM_MODULE, m)
              nb::arg("timestep"))
         .def("dump_restarts", &Simulator::dump_restarts, nb::arg("timestamp"), nb::arg("timestep"))
         // read back, for tests
-        .def("domain_values", &Simulator::domain_values)
-        .def("particle_count", &Simulator::particle_count)
+        .def("domain_values", &Simulator::domain_values, nb::arg("name"), nb::arg("level") = 0)
+        .def("particle_count", &Simulator::particle_count, nb::arg("level") = 0)
+        .def("n_levels", &Simulator::n_levels)
         // over ranks (collective)
-        .def("all_domain_values", &Simulator::all_domain_values)
-        .def("total_particle_count", &Simulator::total_particle_count)
-        .def("particle_counts_per_rank", &Simulator::particle_counts_per_rank)
+        .def("all_domain_values", &Simulator::all_domain_values, nb::arg("name"),
+             nb::arg("level") = 0)
+        .def("total_particle_count", &Simulator::total_particle_count, nb::arg("level") = 0)
+        .def("particle_counts_per_rank", &Simulator::particle_counts_per_rank, nb::arg("level") = 0)
         .def("rank", &Simulator::rank)
         .def("summary", &Simulator::summary)
-        .def("all_patch_count",
-             [](Simulator& self) { return self.hierarchy().levels[0].patches.size(); })
+        .def(
+            "all_patch_count",
+            [](Simulator& self, std::size_t const level) {
+                return self.hierarchy().levels.at(level).patches.size();
+            },
+            nb::arg("level") = 0)
         .def("ranks", &Simulator::ranks)
-        .def("patch_count", [](Simulator& self) { return damn::amr::size(self.level()); })
+        .def(
+            "patch_count",
+            [](Simulator& self, std::size_t const level) {
+                return damn::amr::size(self.level(level));
+            },
+            nb::arg("level") = 0)
         .def_prop_ro_static("dims", [](nb::handle) { return Simulator::dimension; })
         .def_prop_ro_static("interp_order", [](nb::handle) { return Simulator::interp_order; })
         .def_prop_ro_static("refined_particle_nbr",

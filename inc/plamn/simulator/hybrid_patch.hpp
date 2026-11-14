@@ -14,7 +14,8 @@
 // for_each_resource names what damn's schedules may move:
 //   EM_B_x... EM_E_x..., EMPred_B_x..., EMAvg_E_x...,
 //   <pop>_density, <pop>_charge_density, <pop>_flux_x...,
-//   <pop>_domain, <pop>_patch_ghost (particles)
+//   EM_E_old_x..., EM_B_old_x..., EM_fluxSum_E_x... (AMR),
+//   <pop>_domain, <pop>_patch_ghost, <pop>_level_ghost[_old, _new] (particles)
 
 #include "damn/core/meta/for_N.hpp"
 #include "damn/core/geometry/box.hpp"
@@ -78,6 +79,14 @@ struct HybridPatch
             [&](auto i) { return grid(tf[i], layout); });
     }
 
+    // grids like a vector's, named name_x, name_y, name_z: storage without a view
+    static Grids<3> like(Grids<3> const& vector, std::string const& name, Layout_t const& layout)
+    {
+        std::array<char const*, 3> constexpr xyz{"_x", "_y", "_z"};
+        return damn::core::for_N<3, damn::core::for_N_R_mode::make_array>(
+            [&](auto i) { return Grid_t{name + xyz[i], layout, vector[i].physicalQuantity()}; });
+    }
+
     template<typename TensorField, std::size_t N>
     static void bind(TensorField& tf, Grids<N>& grids)
     {
@@ -128,6 +137,7 @@ struct HybridPatch
         , emPred{"EMPred"}
         , emAvg{"EMAvg"}
         , J{"J", core::HybridQuantity::Vector::J}
+        , Bold{"EM_B_old", core::HybridQuantity::Vector::B}
         , ions{dict["ions"]}
         , boxing{layout, non_level_ghost}
         , emE{grids(em.E, layout)}
@@ -142,6 +152,9 @@ struct HybridPatch
         , bulkVelocity{grids(ions.velocity(), layout)}
         , chargeFlux{grids(ions.chargeFlux(), layout)}
         , momentum{grids(ions.momentumTensor(), layout)}
+        , oldE{like(emE, "EM_E_old", layout)}
+        , oldB{like(emB, "EM_B_old", layout)}
+        , fluxSumE{like(emE, "EM_fluxSum_E", layout)}
     {
         bind(em.E, emE);
         bind(em.B, emB);
@@ -150,6 +163,7 @@ struct HybridPatch
         bind(emAvg.E, avgE);
         bind(emAvg.B, avgB);
         bind(J, Jxyz);
+        bind(Bold, oldB);
 
         auto&& [bV, M, cd, md, cF] = ions.getCompileTimeResourcesViewList();
         bind(bV, bulkVelocity);
@@ -184,6 +198,7 @@ struct HybridPatch
     // views
     Electromag_t em, emPred, emAvg;
     VecField_t J;
+    VecField_t Bold; // over oldB
     Ions_t ions;
     Boxing_t boxing;
 
@@ -192,6 +207,9 @@ struct HybridPatch
     Grid_t massDensity, chargeDensity;
     Grids<3> bulkVelocity, chargeFlux;
     Grids<6> momentum;
+    // AMR: E and B at the start of the level's step (prepare_step), for the finer level's time
+    // interpolation and the reflux; the time average of E over a coarser step (reflux)
+    Grids<3> oldE, oldB, fluxSumE;
     std::vector<std::unique_ptr<PopulationData>> populations;
     std::optional<Grids<3>> electronVelocity;
     std::optional<Grid_t> electronPressure;
@@ -229,6 +247,9 @@ void for_each_resource(HybridPatch<opts>& patch, auto&& fn)
     detail::vector_resources<gw>("EMPred_E", patch.predE, fn);
     detail::vector_resources<gw>("EMAvg_B", patch.avgB, fn);
     detail::vector_resources<gw>("EMAvg_E", patch.avgE, fn);
+    detail::vector_resources<gw>("EM_E_old", patch.oldE, fn);
+    detail::vector_resources<gw>("EM_B_old", patch.oldB, fn);
+    detail::vector_resources<gw>("EM_fluxSum_E", patch.fluxSumE, fn);
 
     for (auto& pop : patch.populations)
     {
@@ -241,8 +262,14 @@ void for_each_resource(HybridPatch<opts>& patch, auto&& fn)
 
         auto domain      = amr::particle_resource<pgw>(pop->domain);
         auto patch_ghost = amr::particle_resource<pgw>(pop->patch_ghost);
+        auto level_ghost     = amr::particle_resource<pgw>(pop->level_ghost);
+        auto level_ghost_old = amr::particle_resource<pgw>(pop->level_ghost_old);
+        auto level_ghost_new = amr::particle_resource<pgw>(pop->level_ghost_new);
         fn(name + "_domain", domain);
         fn(name + "_patch_ghost", patch_ghost);
+        fn(name + "_level_ghost", level_ghost);
+        fn(name + "_level_ghost_old", level_ghost_old);
+        fn(name + "_level_ghost_new", level_ghost_new);
     }
 }
 
