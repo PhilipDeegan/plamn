@@ -15,8 +15,8 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - run: |  # numpy: pyphare's only third party import for the python tests
-        apt update && apt install -y curl git openssh-client python3-numpy
+    - run: |  # numpy, matplotlib: pyphare's third party imports for the python tests
+        apt update && apt install -y curl git openssh-client python3-numpy python3-matplotlib
 
     # damn is private: check it out where mkn looks for it (tpp/damn) instead of cloning,
     # using a read-only deploy key on damn
@@ -45,4 +45,16 @@ jobs:
         KLOG=3 ./mkn build -dtKOqp py_etc -Wx res/mkn/mpi
         KLOG=3 ./mkn build -dtKOqp py_sim -Wx res/mkn/mpi
         PYTHONPATH=python:phare/pyphare:tst/plamn/python \
+          python3 -m unittest discover -v -s tst/plamn/python
+
+    # again with the pyphare of PHAREHUB/PHARE#1171 (live DataWrangler, PHARE master based)
+    - uses: actions/checkout@v4
+      with:
+        repository: PhilipDeegan/PHARE
+        ref: wrangler
+        path: phare_wrangler
+        sparse-checkout: pyphare
+
+    - run: |
+        PYTHONPATH=python:phare_wrangler/pyphare:tst/plamn/python \
           python3 -m unittest discover -v -s tst/plamn/python

@@ -40,9 +40,12 @@ def cpp_lib(sim):
     """the plamn simulator module of sim's build permutation, as pyphare.cpp.cpp_lib"""
     import importlib
 
-    from pyphare.cpp import simulator_id
-
-    name = f"pyplamn.plamn_cpp_{simulator_id(sim)}"
+    # plamn's own id, not pyphare.cpp.simulator_id: PHARE master's has no layout/allocator,
+    # tiling_gpu's does. Without them in the simulation, plamn's defaults
+    layout = getattr(sim, "model_layout", None) or "AoSMapped"
+    allocator = getattr(sim, "allocator", None) or "CPU"
+    sim_id = f"{sim.ndim}_{sim.interp_order}_{sim.refined_particle_nbr}_{layout}_{allocator}"
+    name = f"pyplamn.plamn_cpp_{sim_id}"
     try:
         return importlib.import_module(name)
     except ModuleNotFoundError as e:

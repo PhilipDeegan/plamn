@@ -81,7 +81,7 @@ NB_MODULE(plamn_etc, m)
         .def("eval_init_function_2d", &Dict::eval<2, V, V>)
         .def("eval_init_function_3d", &Dict::eval<3, V, V, V>);
 
-    nb::enum_<plamn::core::LayoutMode>(m, "LayoutMode")
+    nb::enum_<plamn::core::LayoutMode>(m, "LayoutMode", nb::is_arithmetic())
         .value("AoS", plamn::core::LayoutMode::AoS)
         .value("AoSMapped", plamn::core::LayoutMode::AoSMapped)
         .value("AoSCMTS", plamn::core::LayoutMode::AoSCMTS)
@@ -95,21 +95,21 @@ NB_MODULE(plamn_etc, m)
         .value("AoSPCTS", plamn::core::LayoutMode::AoSPCTS)
         .value("SoAVXChunked", plamn::core::LayoutMode::SoAVXChunked);
 
-    nb::enum_<damn::AllocatorMode>(m, "AllocatorMode")
+    nb::enum_<damn::AllocatorMode>(m, "AllocatorMode", nb::is_arithmetic())
         .value("CPU", damn::AllocatorMode::CPU)
         .value("GPU_UNIFIED", damn::AllocatorMode::GPU_UNIFIED);
 
-    nb::enum_<plamn::core::HyperMode>(m, "HyperMode")
+    nb::enum_<plamn::core::HyperMode>(m, "HyperMode", nb::is_arithmetic())
         .value("constant", plamn::core::HyperMode::constant)
         .value("spatial", plamn::core::HyperMode::spatial);
 
-    nb::enum_<plamn::core::BoundaryType>(m, "BoundaryType")
+    nb::enum_<plamn::core::BoundaryType>(m, "BoundaryType", nb::is_arithmetic())
         .value("none", plamn::core::BoundaryType::None)
         .value("reflective", plamn::core::BoundaryType::Reflective)
         .value("super_magnetofast_inflow", plamn::core::BoundaryType::SuperMagnetofastInflow)
         .value("open", plamn::core::BoundaryType::Open);
 
-    nb::enum_<plamn::TimeStepType>(m, "TimeStepType")
+    nb::enum_<plamn::TimeStepType>(m, "TimeStepType", nb::is_arithmetic())
         .value("constant", plamn::TimeStepType::constant)
         .value("adaptive", plamn::TimeStepType::adaptive);
 }

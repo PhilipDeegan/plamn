@@ -6,6 +6,7 @@
 // the permutation comes from PLAMN_SIM_DIM, PLAMN_SIM_INTERP (defaults 1, 1)
 
 #include "plamn_dict.hpp"
+#include "plamn_data_wrangler.hpp"
 #include "plamn/simulator/simulator.hpp"
 
 #include <nanobind/stl/string.h>
@@ -55,6 +56,8 @@ NB_MODULE(PLAMN_SIM_MODULE, m)
         .def_prop_ro_static("interp_order", [](nb::handle) { return Simulator::interp_order; })
         .def_prop_ro_static("refined_particle_nbr",
                             [](nb::handle) { return Simulator::nbRefinedPart; });
+
+    plamn::python3::declare_data_wrangler<Simulator>(m);
 
     m.def("make_simulator",
           [](plamn::python3::Dict const& dict) { return std::make_unique<Simulator>(dict.dict); });

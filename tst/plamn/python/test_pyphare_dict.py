@@ -48,10 +48,13 @@ class PyphareDictTest(unittest.TestCase):
 
     def test_enums_are_plamns(self):
         d = self.dict
-        self.assertEqual(
-            d.get_int("simulation/model_layout"), pyplamn.etc.LayoutMode.AoSMapped.value
-        )
-        self.assertEqual(d.get_int("simulation/allocator"), pyplamn.etc.AllocatorMode.CPU.value)
+        if d.has("simulation/model_layout"):  # tiling_gpu's pyphare writes it, PHARE master's not
+            self.assertEqual(
+                d.get_int("simulation/model_layout"), pyplamn.etc.LayoutMode.AoSMapped.value
+            )
+            self.assertEqual(
+                d.get_int("simulation/allocator"), pyplamn.etc.AllocatorMode.CPU.value
+            )
         self.assertEqual(
             d.get_int("simulation/time_step/mode"), pyplamn.etc.TimeStepType.constant.value
         )
