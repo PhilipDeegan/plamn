@@ -1,7 +1,7 @@
 name: GPU
 
 # CUDA and ROCm builds/tests on simulated GPUs (https://github.com/pantheongpu/pantheonsim), on
-#  GitHub's standard runners. Slow: run on releases and on demand, not on pull requests.
+#  GitHub's standard runners. Slow: run on merges to master and on demand, not on pull requests.
 #  Modelled on PHARE's tiling_gpu build.yml (cuda fast / rocm jobs).
 #  damn is private: checked out where mkn looks for it (tpp/damn) with a read-only deploy key
 
@@ -10,8 +10,8 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: [master]
   workflow_dispatch:
 
 permissions:
