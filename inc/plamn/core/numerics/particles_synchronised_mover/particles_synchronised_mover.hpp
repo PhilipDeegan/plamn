@@ -372,8 +372,6 @@ class ParallelParticlesSynchronisedMover
 public:
     using Boxing_t = UpdaterSelectionBoxing<Layout>;
 
-    auto constexpr static use_main_thread = MultiBorisOptions{}.use_main_thread;
-
     void updatePopulations(auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings,
                            double const& dt, UpdaterMode mode = UpdaterMode::all);
 
@@ -407,7 +405,7 @@ private:
 template<typename Particles_t, typename Layout>
 void ParallelParticlesSynchronisedMover<Particles_t, Layout>::reset_moments(auto& accessor)
 {
-    if constexpr (use_main_thread or not is_tiled(Particles_t::layout_mode))
+    if constexpr (not is_tiled(Particles_t::layout_mode))
         for (std::size_t i = 0; i < accessor.size(); ++i)
         {
             auto view      = accessor[i];
@@ -547,14 +545,6 @@ void ParallelParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositAl
                                           pop.levelGhostParticles());
     };
 
-    if constexpr (use_main_thread)
-    {
-        for (std::size_t i = 0; i < accessor.size(); ++i)
-            post_move_sync(accessor, boxings, i);
-        for (std::size_t i = 0; i < accessor.size(); ++i)
-            deposit(accessor, boxings, i);
-    }
-    else
     {
         auto& tp = damn::core::ThreadPool::INSTANCE();
         {
@@ -605,8 +595,6 @@ class FlatParallelParticlesSynchronisedMover
 public:
     using Boxing_t = UpdaterSelectionBoxing<Layout>;
 
-    auto constexpr static use_main_thread = MultiBorisOptions{}.use_main_thread;
-
     void updatePopulations(auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings,
                            double const& dt, UpdaterMode mode = UpdaterMode::all);
 
@@ -623,15 +611,8 @@ template<typename Particles_t, typename Layout>
 void FlatParallelParticlesSynchronisedMover<Particles_t, Layout>::per_patch(auto& accessor,
                                                                             auto const& fn)
 {
-    if constexpr (use_main_thread)
-        for (std::size_t i = 0; i < accessor.size(); ++i)
-        {
-            auto view = accessor[i];
-            fn(view);
-        }
-    else
-        damn::core::ThreadPool::INSTANCE().patch_exec(
-            accessor.size(), [&](auto const i) { return accessor[i]; }, fn);
+    damn::core::ThreadPool::INSTANCE().patch_exec(
+        accessor.size(), [&](auto const i) { return accessor[i]; }, fn);
 }
 
 
@@ -723,7 +704,8 @@ class ParallelParticlesSynchronisedMover
 public:
     using Boxing_t = Super::Boxing_t;
 
-    auto constexpr static use_main_thread = Super::use_main_thread;
+    // damn's synchronous pools (DAMN_THREAD_POOL_SYNC): the host steps on this thread too
+    auto constexpr static synchronous = damn::core::ThreadPool::synchronous;
 
     void updatePopulations(auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings,
                            double const& dt, UpdaterMode mode = UpdaterMode::all);
@@ -762,7 +744,7 @@ void ParallelParticlesSynchronisedMover<Particles_t, Layout>::reset_moments_(aut
             }
         };
 
-        if constexpr (use_main_thread)
+        if constexpr (synchronous)
             for (std::size_t i = 0; i < accessor.size(); ++i)
                 zero(i);
         else
@@ -802,7 +784,7 @@ void ParallelParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositDo
     reset_moments_(accessor, in);
     in.template move<MultiBorisMode::COPY>(boxings);
 
-    if constexpr (not use_main_thread)
+    if constexpr (not synchronous)
     {
         in.streamer.join();
         in.streamer.dump_times(detail::timings_dir_str + "/updateAndDepositDomain.txt");
@@ -829,7 +811,7 @@ void ParallelParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositAl
     auto post_move_sync
         = [&](auto const i) mutable { Super::post_move_sync(accessor, boxings, i); };
 
-    if constexpr (use_main_thread)
+    if constexpr (synchronous)
         for (std::size_t i = 0; i < accessor.size(); ++i)
             post_move_sync(i);
     else
@@ -891,7 +873,7 @@ void ParallelParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositAl
             }
         };
 
-        if constexpr (use_main_thread)
+        if constexpr (synchronous)
             for (std::size_t i = 0; i < accessor.size(); ++i)
                 deposit(i);
         else
@@ -919,14 +901,14 @@ void ParallelParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositAl
                 Super::deposit(accessor, boxings, i);
         };
 
-        if constexpr (use_main_thread)
+        if constexpr (synchronous)
             for (std::size_t i = 0; i < accessor.size(); ++i)
                 deposit(i);
         else
             in.streamer.host(std::move(deposit));
     }
 
-    if constexpr (not use_main_thread)
+    if constexpr (not synchronous)
     {
         in.streamer.join();
         in.streamer.dump_times(detail::timings_dir_str + "/updateAndDepositAll.txt");

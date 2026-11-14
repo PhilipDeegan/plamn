@@ -6,6 +6,7 @@
     ./mkn.py --dim 2 --refined 5          # a refined particle number other than the default
     ./mkn.py --dim 2 -- -W                # anything after -- goes to mkn
     ./mkn.py --scope-flags 1=time,mem,perf_all 2=time,perf_all   # phlop per scope metrics
+    ./mkn.py --sync-pools                 # damn's thread pools run tasks on the calling thread
 
 The permutation is set with compile definitions (PLAMN_SIM_*, see src/python3/plamn_sim.cpp)
 and the module named as pyplamn looks for it: plamn_cpp_<dim>_<interp>_<refined>_<layout>_<alloc>,
@@ -17,6 +18,8 @@ level records is chosen at build time with --scope-flags <level>=<any of time,me
 perf_all> (default: time), and at run time: PHARE_SCOPE_TIMING=1 writes .phare/timings/rank.<r>.txt,
 PHLOP_SCOPE_MEM=1 adds memory, PHLOP_PERF_LIGHT / PHLOP_PERF_ALL hardware counters (see
 damn/core/def/phlop.hpp); python3 -m phlop.timing.scope_timer times|perf|variance reads them.
+Hardware counters count the calling thread: --sync-pools (DAMN_THREAD_POOL_SYNC) for serial
+numbers that include the pools' work.
 """
 
 import argparse
@@ -83,6 +86,9 @@ def main(argv):
     parser.add_argument("--layout", nargs="+", default=["AoSMapped"], choices=LAYOUTS)
     parser.add_argument("--allocator", nargs="+", default=["CPU"], choices=ALLOCATORS)
     parser.add_argument("--no-etc", action="store_true", help="don't build py_etc")
+    parser.add_argument(
+        "--sync-pools", action="store_true", help="DAMN_THREAD_POOL_SYNC: no pool threads"
+    )
     parser.add_argument("--log-level", type=int, choices=[0, 1, 2, 3], help="DAMN_LOG_LEVEL")
     parser.add_argument(
         "--scope-flags",
@@ -101,6 +107,8 @@ def main(argv):
         extra += ["-x", "res/mkn/mpi"]
 
     scoping = [] if args.log_level is None else [f"-DDAMN_LOG_LEVEL={args.log_level}"]
+    if args.sync_pools:
+        scoping += ["-DDAMN_THREAD_POOL_SYNC=1"]
     for flags in args.scope_flags:
         level, _, keys = flags.partition("=")
         valid = {"time", "mem", "perf_light", "perf_all"}
