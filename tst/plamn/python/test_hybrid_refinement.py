@@ -69,7 +69,10 @@ def alfven(refined, steps):
     )
     ph.ElectronModel(closure="isothermal", Te=0.0)
     simulator = Simulator(sim, log_to_file=False).setup().initialize()
-    simulator.run()
+    for _ in range(
+        steps
+    ):  # not run(): newer pyphares reset the simulator once it is done
+        simulator.advance()
     cpp = simulator.cpp_sim
     out = {
         "B": {q: np.asarray(cpp.all_domain_values(f"EM_B_{q}")) for q in "yz"},
