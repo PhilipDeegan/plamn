@@ -24,6 +24,8 @@ jobs:
           if [ -x $venv/bin/python3 ]; then echo "$venv/bin" >> $GITHUB_PATH; break; fi
         done
     - run: python3 -c "import dill, numpy, matplotlib; print('pyphare requirements from', __import__('sys').prefix)"
+    # phlop.run.test_cases: one process per test, in parallel; .phlop.exec.yaml for special cases
+    - run: python3 -m pip install phlop
 
     # damn is private: check it out where mkn looks for it (tpp/damn) instead of cloning,
     # using a read-only deploy key on damn
@@ -49,11 +51,9 @@ jobs:
     # the python modules, with the same settings as above (C++20, also for mkn's own modules);
     # the tests run serially, without MPI_Init
     - run: |
-        KLOG=3 ./mkn build -dtKOqp py_etc -Wx res/mkn/mpi
-        KLOG=3 ./mkn build -dtKOqp py_sim -Wx res/mkn/mpi
-        KLOG=3 ./mkn build -dtKOqp py_sim_2d -Wx res/mkn/mpi
+        PATH=$PWD:$PATH KLOG=3 ./mkn.py --dim 1 2 -- -qW -x res/mkn/mpi
         PYTHONPATH=python:phare/pyphare:tst/plamn/python \
-          python3 -m unittest discover -v -s tst/plamn/python
+          python3 -m phlop.run.test_cases -i tst -c 2
 
     # again with the pyphare of PHAREHUB/PHARE#1171 (live DataWrangler, PHARE master based)
     - uses: actions/checkout@v4
@@ -65,4 +65,4 @@ jobs:
 
     - run: |
         PYTHONPATH=python:phare_wrangler/pyphare:tst/plamn/python \
-          python3 -m unittest discover -v -s tst/plamn/python
+          python3 -m phlop.run.test_cases -i tst -c 2

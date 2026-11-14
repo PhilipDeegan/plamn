@@ -1,7 +1,7 @@
 """pyphare's populateDict, through pyplamn.patch(), fills plamn's C++ Dict
 
 run from the plamn root:
-    PYTHONPATH=python:$PHARE/pyphare:tst/plamn/python python3 -m unittest discover -s tst/plamn/python
+    PYTHONPATH=python:$PHARE/pyphare:tst/plamn/python python3 -m phlop.run.test_cases -i tst
 """
 
 import unittest

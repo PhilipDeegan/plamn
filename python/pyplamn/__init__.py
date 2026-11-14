@@ -50,7 +50,8 @@ def cpp_lib(sim):
         return importlib.import_module(name)
     except ModuleNotFoundError as e:
         raise ModuleNotFoundError(
-            f"{name} is not built, see the py_sim profile in plamn's mkn.yaml"
+            f"{name} is not built: ./mkn.py --dim {sim.ndim} --interp {sim.interp_order}"
+            f" --refined {sim.refined_particle_nbr} --layout {layout} --allocator {allocator}"
         ) from e
 
 

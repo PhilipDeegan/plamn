@@ -24,7 +24,8 @@ profile:
   out: plamn_etc
   install: python/pyplamn
 
-# python modules: one simulator permutation each (1D, interp 1, AoSMapped, CPU)
+# python modules: a simulator permutation, ./mkn.py builds any (default: 1D, interp 1,
+# AoSMapped, CPU)
 - name: py_sim
   parent: base
   dep: lang.nanobind
@@ -33,12 +34,6 @@ profile:
   mode: shared
   out: plamn_cpp_1_1_2_AoSMapped_CPU
   install: python/pyplamn
-
-# 2D, interp 1, AoSMapped, CPU (pyphare's default refined_particle_nbr: 4)
-- name: py_sim_2d
-  parent: py_sim
-  arg: -DPLAMN_SIM_DIM=2 -DPLAMN_SIM_INTERP=1 -DPLAMN_SIM_MODULE=plamn_cpp_2_1_4_AoSMapped_CPU
-  out: plamn_cpp_2_1_4_AoSMapped_CPU
 
 - name: test_plamn_core
   inc: . tpp/damn

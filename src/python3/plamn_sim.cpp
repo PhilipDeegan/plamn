@@ -3,7 +3,9 @@
 //   make_simulator(dict) -> Simulator, dict: the plamn_etc.Dict pyphare filled, handed over
 //   by pyphare as the "hierarchy" (pyplamn.etc.make_hierarchy returns it)
 //
-// the permutation comes from PLAMN_SIM_DIM, PLAMN_SIM_INTERP (defaults 1, 1)
+// the permutation comes from PLAMN_SIM_DIM, PLAMN_SIM_INTERP, PLAMN_SIM_REFINED,
+// PLAMN_SIM_LAYOUT and PLAMN_SIM_ALLOCATOR (defaults 1, 1, pyphare's default refined particle
+// number, AoSMapped, CPU), set by ./mkn.py, which also names the module
 
 #include "plamn_dict.hpp"
 #include "plamn_data_wrangler.hpp"
@@ -21,13 +23,26 @@
 #if !defined(PLAMN_SIM_INTERP)
 #define PLAMN_SIM_INTERP 1
 #endif
+#if !defined(PLAMN_SIM_REFINED)
+#define PLAMN_SIM_REFINED plamn::defaultNbrRefinedParts(PLAMN_SIM_DIM, PLAMN_SIM_INTERP)
+#endif
+#if !defined(PLAMN_SIM_LAYOUT)
+#define PLAMN_SIM_LAYOUT AoSMapped
+#endif
+#if !defined(PLAMN_SIM_ALLOCATOR)
+#define PLAMN_SIM_ALLOCATOR CPU
+#endif
 #if !defined(PLAMN_SIM_MODULE)
 #define PLAMN_SIM_MODULE plamn_cpp_1_1_2_AoSMapped_CPU
 #endif
 
 namespace
 {
-auto constexpr opts = plamn::SimOpts{PLAMN_SIM_DIM, PLAMN_SIM_INTERP};
+auto constexpr opts = plamn::SimOpts{.dimension     = PLAMN_SIM_DIM,
+                                     .interp_order  = PLAMN_SIM_INTERP,
+                                     .nbRefinedPart = PLAMN_SIM_REFINED,
+                                     .layout_mode   = plamn::core::LayoutMode::PLAMN_SIM_LAYOUT,
+                                     .alloc_mode    = damn::AllocatorMode::PLAMN_SIM_ALLOCATOR};
 using Simulator     = plamn::Simulator<opts>;
 } // namespace
 

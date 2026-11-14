@@ -2,7 +2,7 @@
 
 needs the py_etc and py_sim modules built (mkn build -p py_etc / -p py_sim), then from
 the plamn root:
-    PYTHONPATH=python:$PHARE/pyphare:tst/plamn/python python3 -m unittest discover -s tst/plamn/python
+    PYTHONPATH=python:$PHARE/pyphare:tst/plamn/python python3 -m phlop.run.test_cases -i tst
 """
 
 import unittest
