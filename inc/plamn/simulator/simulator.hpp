@@ -22,6 +22,8 @@
 //     recomputes B from the time average of the fine E over its substeps (reflux)
 
 #include "damn/amr/box_data.hpp"
+#include "damn/amr/clustering.hpp"
+#include "damn/amr/regrid.hpp"
 #include "damn/amr/copy.hpp"
 #include "damn/amr/hierarchy.hpp"
 #include "damn/amr/inter_level.hpp"
@@ -35,12 +37,15 @@
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/logger.hpp"
 #include "damn/core/math/array.hpp"
+#include "damn/mpi/clustering.hpp"
 #include "damn/mpi/copy.hpp"
+#include "damn/mpi/regrid.hpp"
 #include "damn/mpi/damn_mpi.hpp"
 #include "damn/mpi/inter_level.hpp"
 #include "damn/mpi/scope_timing.hpp"
 #include "damn/mpi/topology.hpp"
 #include "damn/core/def/constants.hpp"
+#include "damn/core/geometry/point.hpp"
 
 #include "plamn/amr/coarsen.hpp"
 #include "plamn/amr/refine.hpp"
@@ -58,6 +63,7 @@
 #include "plamn/simulator/hybrid_patch.hpp"
 #include "plamn/simulator/simulator_def.hpp"
 #include "plamn/amr/resources.hpp"
+#include "plamn/amr/tagging.hpp"
 #include "plamn/amr/split/split.hpp" // IWYU pragma: keep (the Splitter specializations)
 #include "plamn/amr/split/splitter.hpp"
 
@@ -66,6 +72,8 @@
 
 #include <algorithm>
 #include <array>
+#include <concepts>
+#include <cmath>
 #include <cstddef>
 #include <filesystem>
 #include <format>
@@ -271,19 +279,33 @@ private:
     std::vector<double> box_weights_(int ln, std::vector<Box_t> const& boxes);
 
     void register_resources_();
+    // level ln's patches from its boxes (that level's cells): chopped into the largest patch
+    //  size, partitioned along the Hilbert curve by the particles they will hold
+    NO_DISCARD damn::amr::Level<dimension> level_of_(int ln, std::vector<Box_t> const& boxes);
     void make_level_(int ln, std::vector<Box_t> const& boxes);
+    void link_level_(int ln); // neighbours, map to the coarser level, level ghost cells
+    // the boxes of level ln + 1 from level ln's tagged cells (collective)
+    NO_DISCARD std::vector<Box_t> cluster_(int ln);
+    void regrid_(double t);
+    void regrid_level_(int ln, std::vector<Box_t> const& boxes, double t);
     void initialize_root_();
     void initialize_refined_(std::size_t ln);
+    void refined_moments_(std::size_t ln); // a refined level's moments and J from its particles
 
     // level ghost fills (patch ghosts, then level ghosts from the coarser level at time t)
     void fill_magnetic_ghosts_(std::size_t ln, std::string const& key, double t);
     void fill_electric_ghosts_(std::size_t ln, std::string const& key, double t);
+    // debug (NDEBUG not set): throws if a point of key's components (key_x, key_y, key_z) on
+    //  their ghost boxes is NaN, i.e. nothing filled it (HybridPatch starts NaN). Points past a
+    //  non periodic domain boundary are skipped
+    void check_set_(std::size_t ln, std::string const& key, std::string const& where);
     // B over the level ghost cells of every local patch made divergence free
     void touch_up_level_ghosts_(std::size_t ln, std::string const& key);
     NO_DISCARD double alpha_(std::size_t const ln, double const t) const
     {
         auto const& l = levels_[ln];
-        return l.coarse_dt > 0 ? (t - l.coarse_t) / l.coarse_dt : 0;
+        // no coarser step in progress (initialization, regrid): the coarser level's data now
+        return l.coarse_dt > 0 ? (t - l.coarse_t) / l.coarse_dt : 1;
     }
 
     void compute_moments_(std::size_t ln);
@@ -311,6 +333,12 @@ private:
     Resources_t resources_; // what moves together, by name
     std::vector<std::string> population_names_;
     std::vector<std::vector<Box_t>> refinement_boxes_; // per level, in that level's cells
+    // refinement="tagging": what to tag on, how to cluster, every how many level 0 steps
+    std::optional<amr::Tagging> tagging_;
+    damn::amr::ClusteringOptions<dimension> clustering_;
+    std::vector<std::vector<Box_t>> clustered_; // per level: the boxes it was clustered to
+    int regrid_interval_ = 2;                   // SAMRAI's for ratio 2 with time refinement
+    int steps_           = 0;
     int rank_    = 0;
     int n_ranks_ = 1;
     damn::amr::Topology topology_;
@@ -333,6 +361,51 @@ private:
 
 namespace detail
 {
+    // op, only where none of the covered cells (an old level's, periodic images included) is:
+    //  new cells of a regridded level, the old ones kept their data
+    template<typename Op, std::size_t dim>
+    struct Masked
+    {
+        using Box_t = damn::core::Box<int, dim>;
+        Op op;
+        std::vector<Box_t> const* covered;
+        int stencil = Op{}.stencil;
+
+        // box less every covered box, the covered points of a box given by points(box)
+        NO_DISCARD std::vector<Box_t> uncovered(Box_t const& box, auto&& points) const
+        {
+            std::vector<Box_t> parts{box};
+            for (auto const& c : *covered)
+            {
+                auto const p = points(c);
+                std::vector<Box_t> rest;
+                for (auto const& part : parts)
+                    for (auto const& r : part.remove(p))
+                        rest.push_back(r);
+                parts = std::move(rest);
+            }
+            return parts;
+        }
+
+        template<typename R, typename Coarse>
+            requires std::invocable<Op const&, R&, Box_t const&, Box_t const&, Coarse const&>
+        void operator()(R& dst, Box_t const& cells, Box_t const& box, Coarse const& coarse) const
+        {
+            for (auto const& part :
+                 uncovered(box, [&](auto const& b) { return domain_box(dst, b); }))
+                op(dst, cells, part, coarse);
+        }
+
+        template<typename R, typename Items, typename Shift>
+            requires std::invocable<Op const&, R&, Box_t const&, Box_t const&, Items, Shift const&>
+        void operator()(R& dst, Box_t const& cells, Box_t const& box, Items const items,
+                        Shift const& shift) const
+        {
+            for (auto const& part : uncovered(box, [](auto const& b) { return b; }))
+                op(dst, cells, part, items, shift);
+        }
+    };
+
     // the pairs of a vector's components between levels: coarse (and coarse_new, if not
     //  empty) on the coarser level, fine on the finer
     NO_DISCARD inline std::vector<damn::amr::LevelPair>
@@ -409,10 +482,22 @@ void Simulator<opts>::setup_()
 
     // finer levels: the user's refinement boxes (cells of the coarser level), refined
     hierarchy_.max_levels = cppdict::get_value(dict_, "simulation/AMR/max_nbr_levels", 1);
-    if (hierarchy_.max_levels > 1)
+    if (hierarchy_.max_levels > 1 and amr.contains("refinement")
+        and amr["refinement"].contains("tagging")
+        and amr["refinement"]["tagging"].contains("threshold"))
+    {
+        tagging_.emplace(amr::tagging_from(amr["refinement"]["tagging"]));
+        clustering_.tag_buffer = cppdict::get_value(dict_, "simulation/AMR/tag_buffer", 1);
+        if (amr.contains("nesting_buffer"))
+            clustering_.nesting_buffer
+                = std::max(1, amr["nesting_buffer"].template to<std::vector<int>>().front());
+        if (amr.contains("clustering") and amr["clustering"].template to<std::string>() != "tile")
+            throw std::runtime_error("plamn Simulator: tile clustering only");
+    }
+    else if (hierarchy_.max_levels > 1)
     {
         if (!amr.contains("refinement") or !amr["refinement"].contains("boxes"))
-            throw std::runtime_error("plamn Simulator: refinement boxes only for now (no tagging)");
+            throw std::runtime_error("plamn Simulator: refinement boxes or tagging");
         auto const& boxes = amr["refinement"]["boxes"];
         for (int ln = 0; ln + 1 < hierarchy_.max_levels; ++ln)
         {
@@ -589,7 +674,8 @@ std::vector<double> Simulator<opts>::all_domain_values(std::string const& name,
 // partitioned along the Hilbert curve by the particles they will hold, allocated, with their
 // neighbours and the map to the coarser level
 template<auto opts>
-void Simulator<opts>::make_level_(int const ln, std::vector<Box_t> const& boxes)
+damn::amr::Level<Simulator<opts>::dimension>
+Simulator<opts>::level_of_(int const ln, std::vector<Box_t> const& boxes)
 {
     // refined levels: patches of whole coarser cells, the size a multiple of the ratio
     auto size = patch_size_;
@@ -600,11 +686,14 @@ void Simulator<opts>::make_level_(int const ln, std::vector<Box_t> const& boxes)
     for (auto const& box : boxes)
         for (auto const& b : damn::amr::chop(box, size))
             patches.push_back(b);
-    damn::amr::set_level(
-        hierarchy_,
-        damn::amr::make_level(ln, patches,
-                              damn::amr::partition(patches, box_weights_(ln, patches), n_ranks_)));
+    return damn::amr::make_level(
+        ln, patches, damn::amr::partition(patches, box_weights_(ln, patches), n_ranks_));
+}
 
+template<auto opts>
+void Simulator<opts>::make_level_(int const ln, std::vector<Box_t> const& boxes)
+{
+    damn::amr::set_level(hierarchy_, level_of_(ln, boxes));
     auto const& sim = dict_["simulation"];
     auto const pgw    = Patch_t::particle_ghost_width;
     auto constexpr gw = Patch_t::field_ghost_width;
@@ -617,6 +706,15 @@ void Simulator<opts>::make_level_(int const ln, std::vector<Box_t> const& boxes)
         return std::make_unique<Patch_t>(layout, sim,
                                          damn::amr::covered_by_level(hierarchy_, ln, ghost));
     });
+    link_level_(ln);
+}
+
+template<auto opts>
+void Simulator<opts>::link_level_(int const ln)
+{
+    auto const pgw    = Patch_t::particle_ghost_width;
+    auto constexpr gw = Patch_t::field_ghost_width;
+    auto& l           = levels_[ln];
 
     // the level's neighbours, as far as any resource reaches outside its patch: field ghosts
     // plus primal nodes, or particle ghosts
@@ -629,6 +727,7 @@ void Simulator<opts>::make_level_(int const ln, std::vector<Box_t> const& boxes)
     //  parent, reaches
     l.to_coarser = damn::amr::make_level_map(hierarchy_, ln - 1, rank_, topology_,
                                              reach + 2 * amr::splitBoxGrowth<Splitter_t>() + 4);
+    l.level_ghost_cells.clear();
     for (auto const& p : l.data.patches)
     {
         auto& cells = l.level_ghost_cells.emplace_back();
@@ -658,6 +757,18 @@ void Simulator<opts>::initialize()
         make_level_(static_cast<int>(ln), refinement_boxes_[ln - 1]);
         initialize_refined_(ln);
     }
+    // tagging: each new level from the tags of the one under it, as long as some are
+    if (tagging_)
+        for (int ln = 0; ln + 1 < hierarchy_.max_levels; ++ln)
+        {
+            auto const boxes = cluster_(ln);
+            if (boxes.empty())
+                break;
+            clustered_.resize(static_cast<std::size_t>(ln) + 2);
+            clustered_[ln + 1] = boxes;
+            make_level_(ln + 1, boxes);
+            initialize_refined_(static_cast<std::size_t>(ln) + 1);
+        }
     // every level's E and B at t0, for the finer levels' time interpolation
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
         prepare_step_(static_cast<int>(ln), startTime_);
@@ -682,6 +793,7 @@ void Simulator<opts>::initialize_root_()
     });
     copy_(0, damn::amr::fill_ghosts, "EM_B");
     copy_(0, damn::amr::fill_ghosts, "EM_E");
+    check_set_(0, "EM_B", "root initialization"); // E: from Ohm's law below
 
     // moments from the particles, completed across patch borders
     per_patch_(0, [&](auto& patch) {
@@ -694,6 +806,7 @@ void Simulator<opts>::initialize_root_()
     // J from B, then E from Ohm's law
     ampere_ohm_<&Patch_t::em>(0);
     copy_(0, damn::amr::fill_ghosts, "EM_E");
+    check_set_(0, "EM_E", "root initialization");
 }
 
 // PHARE's HybridLevelInitializer, a refined level: B, E and the particles from the coarser
@@ -732,6 +845,12 @@ void Simulator<opts>::initialize_refined_(std::size_t const ln)
             pop.levelGhostParticles() = pop.levelGhostParticlesOld();
     });
 
+    refined_moments_(ln);
+}
+
+template<auto opts>
+void Simulator<opts>::refined_moments_(std::size_t const ln)
+{
     per_patch_(ln, [&](auto& patch) {
         core::resetMoments(patch.ions);
         core::depositParticles(patch.ions, patch.layout, Interpolator{}, core::DomainDeposit{});
@@ -747,6 +866,167 @@ void Simulator<opts>::initialize_refined_(std::size_t const ln)
 
 
 //-----------------------------------------------------------------------------
+//                           tagging, regrid
+//-----------------------------------------------------------------------------
+
+template<auto opts>
+std::vector<typename Simulator<opts>::Box_t> Simulator<opts>::cluster_(int const ln)
+{
+    DAMN_LOG_SCOPE(1, "Simulator::cluster_");
+    using Resource = amr::FieldResource<typename Patch_t::Grid_t, Patch_t::field_ghost_width>;
+    auto& l        = levels_[ln];
+    auto const dx  = damn::amr::mesh_size(hierarchy_, ln);
+
+    std::vector<damn::core::Point<int, dimension>> tagged;
+    for (std::size_t i = 0; i < damn::amr::size(l.data); ++i)
+    {
+        auto const resource = [&](std::string const& name) {
+            std::optional<Resource> r;
+            damn::amr::with_resource(l.data.data[i], name, [&](auto& x) {
+                if constexpr (std::is_same_v<std::decay_t<decltype(x)>, Resource>)
+                    r = x;
+            });
+            if (!r)
+                throw std::runtime_error("plamn Simulator: no field " + name + " to tag on");
+            return *r;
+        };
+        for (auto const& c : amr::tagged_cells(*tagging_, l.data.patches[i].box, dx, resource))
+            tagged.push_back(c);
+    }
+    if (n_ranks_ > 1)
+        return damn::mpi::cluster(hierarchy_, ln, tagged, clustering_);
+    return damn::amr::cluster(
+        hierarchy_, ln, damn::amr::tagged_tiles(hierarchy_, ln, tagged, clustering_), clustering_);
+}
+
+// every level but the finest allowed tagged and clustered again: a finer level whose boxes
+// changed is regridded (made, if new; removed, with the finer, if nothing is tagged)
+template<auto opts>
+void Simulator<opts>::regrid_(double const t)
+{
+    DAMN_LOG_SCOPE(1, "Simulator::regrid_");
+    for (int ln = 0; ln + 1 < hierarchy_.max_levels and ln < static_cast<int>(levels_.size()); ++ln)
+    {
+        auto const boxes = cluster_(ln);
+        auto const fine  = static_cast<std::size_t>(ln) + 1;
+        clustered_.resize(std::max(clustered_.size(), fine + 1));
+        if (fine < levels_.size() and boxes == clustered_[fine])
+            continue;
+        if (boxes.empty())
+        {
+            levels_.resize(fine);
+            clustered_.resize(fine);
+            damn::amr::remove_finer_levels(hierarchy_, ln);
+            break;
+        }
+        clustered_[fine] = boxes;
+        if (fine < levels_.size())
+            regrid_level_(ln + 1, boxes, t);
+        else
+        {
+            make_level_(ln + 1, boxes);
+            initialize_refined_(fine);
+            prepare_step_(ln + 1, t);
+        }
+    }
+}
+
+// level ln onto new boxes, at t (every level synchronized): its data moved where the old level
+// was (damn::amr::regrid), refined from the coarser level elsewhere, as PHARE's
+// HybridHybridMessengerStrategy::regrid; finer levels go, the caller makes them again
+template<auto opts>
+void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxes, double const t)
+{
+    DAMN_LOG_SCOPE(1, "Simulator::regrid_level_");
+    using damn::amr::LevelRegion;
+    auto const fine   = static_cast<std::size_t>(ln);
+    auto const pgw    = Patch_t::particle_ghost_width;
+    auto constexpr gw = Patch_t::field_ghost_width;
+
+    // the old level's cells, periodic images included
+    std::vector<Box_t> old_cells;
+    {
+        auto shifts = damn::amr::periodic_shifts(hierarchy_, ln);
+        shifts.insert(shifts.begin(), damn::core::Point<int, dimension>{});
+        for (auto const& p : hierarchy_.levels[ln].patches)
+            for (auto const& shift : shifts)
+                old_cells.push_back(damn::core::shift(p.box, shift));
+    }
+    auto const old_level = hierarchy_.levels[ln];
+    levels_.resize(fine + 1);
+    damn::amr::set_level(hierarchy_, level_of_(ln, boxes));
+    auto const map = damn::amr::make_regrid_map(old_level, hierarchy_.levels[ln], rank_,
+                                                damn::amr::periodic_shifts(hierarchy_, ln));
+
+    auto const& sim = dict_["simulation"];
+    auto const make = [&](auto const& p) {
+        Layout_t const layout{p.box, damn::amr::mesh_size(hierarchy_, ln),
+                              damn::amr::position(hierarchy_, ln, p.box.lower), ln};
+        auto const ghost = damn::core::grow(p.box, damn::core::ConstArray<int, dimension>(pgw));
+        return std::make_unique<Patch_t>(layout, sim,
+                                         damn::amr::covered_by_level(hierarchy_, ln, ghost));
+    };
+    auto& l = levels_[fine];
+    l.data  = n_ranks_ > 1 ? damn::mpi::regrid(map, std::move(l.data), make)
+                           : damn::amr::regrid(map, std::move(l.data), make);
+    for (std::size_t i = 0; i < damn::amr::size(l.data); ++i)
+    {
+        auto const ghost
+            = damn::core::grow(l.data.patches[i].box, damn::core::ConstArray<int, dimension>(pgw));
+        l.data.data[i]->rebox(damn::amr::covered_by_level(hierarchy_, ln, ghost));
+    }
+    link_level_(ln);
+    l.coarse_t  = t;
+    l.coarse_dt = 0; // the coarser level's data at t
+
+    // the new cells from the coarser level: B divergence free, E, the domain particles split
+    using MaskedField = detail::Masked<amr::FieldRefiner, dimension>;
+    MaskedField const masked_field{{}, &old_cells};
+    refine_(fine, masked_field, LevelRegion::Interior, detail::vector_pairs("EM_B", "EM_B"));
+    for (std::size_t i = 0; i < damn::amr::size(l.data); ++i)
+    {
+        auto& patch      = *l.data.data[i];
+        auto const cells = l.data.patches[i].box;
+        auto bx          = amr::field_resource<gw>(patch.emB[0]);
+        auto by          = amr::field_resource<gw>(patch.emB[1]);
+        auto bz          = amr::field_resource<gw>(patch.emB[2]);
+        for (auto const& region : masked_field.uncovered(cells, [](auto const& b) { return b; }))
+            amr::divergence_free_touch_up(std::array{&bx, &by, &bz}, cells, region,
+                                          damn::amr::mesh_size(hierarchy_, ln));
+    }
+    refine_(fine, masked_field, LevelRegion::Interior, detail::vector_pairs("EM_E", "EM_E"));
+    per_patch_(fine, [](auto& patch) {
+        for (auto& pop : patch.ions)
+        {
+            pop.patchGhostParticles().clear();
+            pop.levelGhostParticles().clear();
+            pop.levelGhostParticlesOld().clear();
+            pop.levelGhostParticlesNew().clear();
+        }
+    });
+    using MaskedSplit = detail::Masked<amr::ParticleSplitter<Splitter_t>, dimension>;
+    for (auto const& name : population_names_)
+        refine_(fine, MaskedSplit{{}, &old_cells}, LevelRegion::Interior,
+                {{name + "_domain", name + "_domain", ""}});
+
+    // ghosts: patch ghosts from the new neighbours, level ghosts from the coarser level now
+    fill_magnetic_ghosts_(fine, "EM_B", t);
+    fill_electric_ghosts_(fine, "EM_E", t);
+    for (auto const& name : population_names_)
+        refine_(fine, amr::ParticleSplitter<Splitter_t>{}, LevelRegion::LevelGhosts,
+                {{name + "_domain", name + "_level_ghost_old", ""}});
+    per_patch_(fine, [](auto& patch) {
+        for (auto& pop : patch.ions)
+            pop.levelGhostParticles() = pop.levelGhostParticlesOld();
+    });
+
+    refined_moments_(fine);
+    prepare_step_(ln, t);
+}
+
+
+
+//-----------------------------------------------------------------------------
 //                           ghosts
 //-----------------------------------------------------------------------------
 
@@ -755,11 +1035,13 @@ void Simulator<opts>::fill_magnetic_ghosts_(std::size_t const ln, std::string co
                                             double const t)
 {
     copy_(ln, damn::amr::fill_ghosts, key);
-    if (ln == 0)
-        return;
-    refine_(ln, amr::FieldRefiner{}, damn::amr::LevelRegion::LevelGhosts,
-            detail::vector_pairs("EM_B_old", key, "EM_B"), alpha_(ln, t));
-    touch_up_level_ghosts_(ln, key);
+    if (ln > 0)
+    {
+        refine_(ln, amr::FieldRefiner{}, damn::amr::LevelRegion::LevelGhosts,
+                detail::vector_pairs("EM_B_old", key, "EM_B"), alpha_(ln, t));
+        touch_up_level_ghosts_(ln, key);
+    }
+    check_set_(ln, key, "magnetic ghosts");
 }
 
 template<auto opts>
@@ -767,10 +1049,46 @@ void Simulator<opts>::fill_electric_ghosts_(std::size_t const ln, std::string co
                                             double const t)
 {
     copy_(ln, damn::amr::fill_ghosts, key);
-    if (ln == 0)
-        return;
-    refine_(ln, amr::FieldRefiner{}, damn::amr::LevelRegion::LevelGhosts,
-            detail::vector_pairs("EM_E_old", key, "EM_E"), alpha_(ln, t));
+    if (ln > 0)
+        refine_(ln, amr::FieldRefiner{}, damn::amr::LevelRegion::LevelGhosts,
+                detail::vector_pairs("EM_E_old", key, "EM_E"), alpha_(ln, t));
+    check_set_(ln, key, "electric ghosts");
+}
+
+template<auto opts>
+void Simulator<opts>::check_set_(std::size_t const ln, std::string const& key,
+                                 std::string const& where)
+{
+    if constexpr (DAMN_DEBUG)
+    {
+        auto& l           = levels_[ln];
+        auto const domain = damn::amr::level_domain(hierarchy_, static_cast<int>(ln));
+        for (std::size_t i = 0; i < damn::amr::size(l.data); ++i)
+            for (auto const* c : {"_x", "_y", "_z"})
+                damn::amr::with_resource(l.data.data[i], key + c, [&](auto& r) {
+                    if constexpr (damn::amr::BoxData<std::decay_t<decltype(r)>, dimension>)
+                    {
+                        auto const& cells = l.data.patches[i].box;
+                        auto box          = ghost_box(r, cells);
+                        auto const inside = domain_box(r, domain);
+                        for (std::size_t d = 0; d < dimension; ++d)
+                            if (!hierarchy_.periodic[d])
+                            {
+                                box.lower[d] = std::max(box.lower[d], inside.lower[d]);
+                                box.upper[d] = std::min(box.upper[d], inside.upper[d]);
+                            }
+                        damn::core::for_each_point(box, [&](auto const& p) {
+                            if (std::isnan(value(r, cells, p)))
+                            {
+                                std::stringstream ss;
+                                ss << "plamn Simulator (" << where << "): " << key << c
+                                   << " unset at " << p << " of level " << ln << " patch " << cells;
+                                throw std::runtime_error(ss.str());
+                            }
+                        });
+                    }
+                });
+    }
 }
 
 template<auto opts>
@@ -809,6 +1127,8 @@ double Simulator<opts>::advance()
     Hooks hooks{*this};
     damn::amr::advance(hierarchy_, hooks, currentTime_, dt_, time_ratio());
     currentTime_ += dt_;
+    if (tagging_ and ++steps_ % regrid_interval_ == 0)
+        regrid_(currentTime_);
     return dt_;
 }
 
@@ -1018,7 +1338,7 @@ void Simulator<opts>::move_ions_(std::size_t const ln, double const t, double co
     {
         DAMN_LOG_SCOPE(1, "Simulator::move_ions::push"); // and deposit
         per_patch_(ln, [&](auto& patch) {
-            mover_.updatePopulations(patch.ions, patch.emAvg, patch.boxing, dt, mode);
+            mover_.updatePopulations(patch.ions, patch.emAvg, *patch.boxing, dt, mode);
         });
     }
     deposit_level_ghosts_(ln, t + dt);

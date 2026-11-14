@@ -34,6 +34,7 @@
 #include <string>
 #include <vector>
 #include <cstddef>
+#include <limits>
 #include <optional>
 #include <format>
 #include <type_traits>
@@ -139,7 +140,7 @@ struct HybridPatch
         , J{"J", core::HybridQuantity::Vector::J}
         , Bold{"EM_B_old", core::HybridQuantity::Vector::B}
         , ions{dict["ions"]}
-        , boxing{layout, non_level_ghost}
+        , boxing{std::in_place, layout, non_level_ghost}
         , emE{grids(em.E, layout)}
         , emB{grids(em.B, layout)}
         , predE{grids(emPred.E, layout)}
@@ -184,6 +185,34 @@ struct HybridPatch
         electronPressure.emplace(grid(pressure, layout));
         bind(ve, *electronVelocity);
         pressure.setBuffer(&*electronPressure);
+
+        // debug: every value NaN until set, so a point nothing filled is found (Simulator's
+        //  check_set_) rather than read
+        if constexpr (DAMN_DEBUG)
+            for_each_grid([](auto& grid) { grid.fill(std::numeric_limits<double>::quiet_NaN()); });
+    }
+
+    // fn(grid) for every grid of the patch
+    void for_each_grid(auto&& fn)
+    {
+        for (auto* grids : {&emE, &emB, &predE, &predB, &avgE, &avgB, &Jxyz, &bulkVelocity,
+                            &chargeFlux, &oldE, &oldB, &fluxSumE, &*electronVelocity})
+            for (auto& g : *grids)
+                fn(g);
+        for (auto& g : momentum)
+            fn(g);
+        fn(massDensity);
+        fn(chargeDensity);
+        fn(*electronPressure);
+        for (auto& pop : populations)
+        {
+            fn(pop->density);
+            fn(pop->charge_density);
+            for (auto& g : pop->flux)
+                fn(g);
+            for (auto& g : pop->momentum)
+                fn(g);
+        }
     }
 
     HybridPatch(HybridPatch const&)            = delete;
@@ -200,7 +229,13 @@ struct HybridPatch
     VecField_t J;
     VecField_t Bold; // over oldB
     Ions_t ions;
-    Boxing_t boxing;
+    std::optional<Boxing_t> boxing; // the mover's: rebox() when the level's patches change
+
+    // the cells around the patch other patches of the level cover changed (a regrid)
+    void rebox(std::vector<Box_t> const& non_level_ghost)
+    {
+        boxing.emplace(layout, non_level_ghost);
+    }
 
     // storage
     Grids<3> emE, emB, predE, predB, avgE, avgB, Jxyz;
