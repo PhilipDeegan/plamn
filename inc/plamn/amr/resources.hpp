@@ -11,14 +11,21 @@
 
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"
+#include "damn/core/math/array.hpp"
 
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/layout.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
 
-#include <memory>
 #include <cstddef>
 #include <cstdint>
+#include <utility>
+
+namespace plamn::core
+{
+template<size_t dim>
+struct Particle;
+} // namespace plamn::core
 
 namespace plamn::amr
 {
