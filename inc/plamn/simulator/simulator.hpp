@@ -73,6 +73,7 @@
 #include <algorithm>
 #include <array>
 #include <concepts>
+#include <cmath>
 #include <cstddef>
 #include <filesystem>
 #include <format>
@@ -294,6 +295,10 @@ private:
     // level ghost fills (patch ghosts, then level ghosts from the coarser level at time t)
     void fill_magnetic_ghosts_(std::size_t ln, std::string const& key, double t);
     void fill_electric_ghosts_(std::size_t ln, std::string const& key, double t);
+    // debug (NDEBUG not set): throws if a point of key's components (key_x, key_y, key_z) on
+    //  their ghost boxes is NaN, i.e. nothing filled it (HybridPatch starts NaN). Points past a
+    //  non periodic domain boundary are skipped
+    void check_set_(std::size_t ln, std::string const& key, std::string const& where);
     // B over the level ghost cells of every local patch made divergence free
     void touch_up_level_ghosts_(std::size_t ln, std::string const& key);
     NO_DISCARD double alpha_(std::size_t const ln, double const t) const
@@ -788,6 +793,7 @@ void Simulator<opts>::initialize_root_()
     });
     copy_(0, damn::amr::fill_ghosts, "EM_B");
     copy_(0, damn::amr::fill_ghosts, "EM_E");
+    check_set_(0, "EM_B", "root initialization"); // E: from Ohm's law below
 
     // moments from the particles, completed across patch borders
     per_patch_(0, [&](auto& patch) {
@@ -800,6 +806,7 @@ void Simulator<opts>::initialize_root_()
     // J from B, then E from Ohm's law
     ampere_ohm_<&Patch_t::em>(0);
     copy_(0, damn::amr::fill_ghosts, "EM_E");
+    check_set_(0, "EM_E", "root initialization");
 }
 
 // PHARE's HybridLevelInitializer, a refined level: B, E and the particles from the coarser
@@ -1028,11 +1035,13 @@ void Simulator<opts>::fill_magnetic_ghosts_(std::size_t const ln, std::string co
                                             double const t)
 {
     copy_(ln, damn::amr::fill_ghosts, key);
-    if (ln == 0)
-        return;
-    refine_(ln, amr::FieldRefiner{}, damn::amr::LevelRegion::LevelGhosts,
-            detail::vector_pairs("EM_B_old", key, "EM_B"), alpha_(ln, t));
-    touch_up_level_ghosts_(ln, key);
+    if (ln > 0)
+    {
+        refine_(ln, amr::FieldRefiner{}, damn::amr::LevelRegion::LevelGhosts,
+                detail::vector_pairs("EM_B_old", key, "EM_B"), alpha_(ln, t));
+        touch_up_level_ghosts_(ln, key);
+    }
+    check_set_(ln, key, "magnetic ghosts");
 }
 
 template<auto opts>
@@ -1040,10 +1049,46 @@ void Simulator<opts>::fill_electric_ghosts_(std::size_t const ln, std::string co
                                             double const t)
 {
     copy_(ln, damn::amr::fill_ghosts, key);
-    if (ln == 0)
-        return;
-    refine_(ln, amr::FieldRefiner{}, damn::amr::LevelRegion::LevelGhosts,
-            detail::vector_pairs("EM_E_old", key, "EM_E"), alpha_(ln, t));
+    if (ln > 0)
+        refine_(ln, amr::FieldRefiner{}, damn::amr::LevelRegion::LevelGhosts,
+                detail::vector_pairs("EM_E_old", key, "EM_E"), alpha_(ln, t));
+    check_set_(ln, key, "electric ghosts");
+}
+
+template<auto opts>
+void Simulator<opts>::check_set_(std::size_t const ln, std::string const& key,
+                                 std::string const& where)
+{
+    if constexpr (DAMN_DEBUG)
+    {
+        auto& l           = levels_[ln];
+        auto const domain = damn::amr::level_domain(hierarchy_, static_cast<int>(ln));
+        for (std::size_t i = 0; i < damn::amr::size(l.data); ++i)
+            for (auto const* c : {"_x", "_y", "_z"})
+                damn::amr::with_resource(l.data.data[i], key + c, [&](auto& r) {
+                    if constexpr (damn::amr::BoxData<std::decay_t<decltype(r)>, dimension>)
+                    {
+                        auto const& cells = l.data.patches[i].box;
+                        auto box          = ghost_box(r, cells);
+                        auto const inside = domain_box(r, domain);
+                        for (std::size_t d = 0; d < dimension; ++d)
+                            if (!hierarchy_.periodic[d])
+                            {
+                                box.lower[d] = std::max(box.lower[d], inside.lower[d]);
+                                box.upper[d] = std::min(box.upper[d], inside.upper[d]);
+                            }
+                        damn::core::for_each_point(box, [&](auto const& p) {
+                            if (std::isnan(value(r, cells, p)))
+                            {
+                                std::stringstream ss;
+                                ss << "plamn Simulator (" << where << "): " << key << c
+                                   << " unset at " << p << " of level " << ln << " patch " << cells;
+                                throw std::runtime_error(ss.str());
+                            }
+                        });
+                    }
+                });
+    }
 }
 
 template<auto opts>

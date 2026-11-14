@@ -34,6 +34,7 @@
 #include <string>
 #include <vector>
 #include <cstddef>
+#include <limits>
 #include <optional>
 #include <format>
 #include <type_traits>
@@ -184,6 +185,34 @@ struct HybridPatch
         electronPressure.emplace(grid(pressure, layout));
         bind(ve, *electronVelocity);
         pressure.setBuffer(&*electronPressure);
+
+        // debug: every value NaN until set, so a point nothing filled is found (Simulator's
+        //  check_set_) rather than read
+        if constexpr (DAMN_DEBUG)
+            for_each_grid([](auto& grid) { grid.fill(std::numeric_limits<double>::quiet_NaN()); });
+    }
+
+    // fn(grid) for every grid of the patch
+    void for_each_grid(auto&& fn)
+    {
+        for (auto* grids : {&emE, &emB, &predE, &predB, &avgE, &avgB, &Jxyz, &bulkVelocity,
+                            &chargeFlux, &oldE, &oldB, &fluxSumE, &*electronVelocity})
+            for (auto& g : *grids)
+                fn(g);
+        for (auto& g : momentum)
+            fn(g);
+        fn(massDensity);
+        fn(chargeDensity);
+        fn(*electronPressure);
+        for (auto& pop : populations)
+        {
+            fn(pop->density);
+            fn(pop->charge_density);
+            for (auto& g : pop->flux)
+                fn(g);
+            for (auto& g : pop->momentum)
+                fn(g);
+        }
     }
 
     HybridPatch(HybridPatch const&)            = delete;
