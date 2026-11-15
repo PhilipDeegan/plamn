@@ -25,10 +25,9 @@ import numpy as np
 
 import pyplamn
 
-pyplamn.patch()
 
-import pyphare.pharein as ph  # noqa: E402
-from pyphare.simulator.simulator import Simulator, startMPI  # noqa: E402
+import pyphare.pharein as ph
+from pyphare.simulator.simulator import Simulator, startMPI
 
 PPC = 100
 
@@ -269,6 +268,10 @@ def max_divb(simulator):
 
 
 class HybridRefinementTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        pyplamn.patch()
+
     def test_alfven_reflux_does_not_kick_the_coarse_cells_beside_the_box(self):
         one, two = alfven(False, 1), alfven(True, 1)
         lo, up = 40, 59

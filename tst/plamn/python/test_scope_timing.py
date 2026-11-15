@@ -14,16 +14,17 @@ from pathlib import Path
 
 import pyplamn
 
-pyplamn.patch()
 
-import alfven1d  # noqa: E402
-import pyphare.pharein as ph  # noqa: E402
-from pyphare.simulator.simulator import Simulator  # noqa: E402
+import alfven1d
+import pyphare.pharein as ph
+from pyphare.simulator.simulator import Simulator
 
 CELLS = 100
 PATCH = 10
 STEPS = 3
-DIR = Path("plamn_test_scope_timing")  # the run's working directory: .phare/timings in it
+DIR = Path(
+    "plamn_test_scope_timing"
+)  # the run's working directory: .phare/timings in it
 
 SCOPES = [
     "Simulator::initialize",
@@ -46,6 +47,10 @@ def config():
 
 
 class ScopeTimingTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        pyplamn.patch()
+
     def test_a_file_per_rank_and_summary(self):
         cwd = Path.cwd()
         DIR.mkdir(exist_ok=True)
@@ -74,9 +79,13 @@ class ScopeTimingTest(unittest.TestCase):
             self.assertEqual(summary, "")
             return
         # periodic 1D, patches of 10 cells: every ghost cell is another patch's (or an image)
-        match = re.match(r"lvl:0 \((\d+),(\d+),(\d+),(\d+)\) parts\((\d+)\), \ntot:(\d+)", summary)
+        match = re.match(
+            r"lvl:0 \((\d+),(\d+),(\d+),(\d+)\) parts\((\d+)\), \ntot:(\d+)", summary
+        )
         self.assertIsNotNone(match, summary)
-        patches, cells, patch_ghosts, level_ghosts, parts, total = map(int, match.groups())
+        patches, cells, patch_ghosts, level_ghosts, parts, total = map(
+            int, match.groups()
+        )
         self.assertEqual((patches, cells, level_ghosts), (CELLS // PATCH, CELLS, 0))
         self.assertGreater(patch_ghosts, 0)
         self.assertEqual(parts, total)

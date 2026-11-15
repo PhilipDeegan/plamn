@@ -12,10 +12,9 @@ import numpy as np
 
 import pyplamn
 
-pyplamn.patch()
 
-import pyphare.pharein as ph  # noqa: E402
-from pyphare.simulator.simulator import Simulator  # noqa: E402
+import pyphare.pharein as ph
+from pyphare.simulator.simulator import Simulator
 
 cells = (100, 100)
 dl = (0.2, 0.2)
@@ -98,8 +97,14 @@ def expected_particles(protons_density):
 
 
 class LoadBalancingTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        pyplamn.patch()
+
     def init(self, protons_density):
-        self.simulator = Simulator(config(protons_density), log_to_file=False).setup().initialize()
+        self.simulator = (
+            Simulator(config(protons_density), log_to_file=False).setup().initialize()
+        )
         return self.simulator.cpp_sim
 
     def tearDown(self):

@@ -19,10 +19,9 @@ import numpy as np
 
 import pyplamn
 
-pyplamn.patch()
 
-import pyphare.pharein as ph  # noqa: E402
-from pyphare.simulator.simulator import Simulator, startMPI  # noqa: E402
+import pyphare.pharein as ph
+from pyphare.simulator.simulator import Simulator, startMPI
 
 ndim = 2
 X_TIMES = {1: 4, 2: 2, 3: 1}[ndim]
@@ -213,6 +212,10 @@ def assert_vtkhdf_layout(test, path):
 
 
 class VtkDiagnosticsTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        pyplamn.patch()
+
     def setUp(self):
         startMPI()
         np_ = pyplamn.etc.mpi_size()
