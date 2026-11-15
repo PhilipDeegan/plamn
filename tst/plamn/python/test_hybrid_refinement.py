@@ -15,7 +15,8 @@ coarse particles under it, split. With refinement="tagging", level 1 starts on t
 regridded every 2 steps, divergence B kept at its initial (discretization) value.
 
 Load balancing (pyphare's LoadBalancer, with tagging, on more than one rank): a beam drifting
-across the patches unbalances the ranks; rebalancing brings them back without changing B.
+across the patches unbalances the ranks; rebalancing brings them back without changing B, also
+with patches larger than a rank's share (level 0 cut on blocks, damn::amr::cut_partition).
 """
 
 import unittest
@@ -182,9 +183,10 @@ def harris(steps, tagging=False, measure=None, load_balancer=None):
     return out
 
 
-def drift(load_balancer, steps=120):
+def drift(load_balancer, steps=120, patch=(10, 10)):
     """level 0's rank imbalance (max / mean - 1 of the particles per rank) after each step, and
-    B at the end: uniform protons and a drifting beam blob, refinement="tagging" (2 levels)"""
+    B at the end: uniform protons and a drifting beam blob, refinement="tagging" (2 levels)
+    """
     ph.global_vars.sim = None
     ph.clearDict()
     sim = ph.Simulation(
@@ -192,7 +194,7 @@ def drift(load_balancer, steps=120):
         time_step_nbr=steps,
         cells=(60, 60),
         dl=(0.2, 0.2),
-        largest_patch_size=(10, 10),
+        largest_patch_size=patch,
         hyper_resistivity=0.001,
         refinement="tagging",
         max_nbr_levels=2,
@@ -239,9 +241,7 @@ def drift(load_balancer, steps=120):
         imbalance.append(per_rank.max() / per_rank.mean() - 1)
         if k < steps:
             simulator.advance()
-    B = np.concatenate(
-        [np.asarray(cpp.all_domain_values(f"EM_B_{q}", 0)) for q in "xyz"]
-    )
+    B = np.concatenate([np.asarray(cpp.level_values(f"EM_B_{q}", 0)) for q in "xyz"])
     simulator.reset()
     return {"imbalance": imbalance, "B": B}
 
@@ -329,6 +329,22 @@ class HybridRefinementTest(unittest.TestCase):
             self.assertLess(lb["imbalance"][step], no["imbalance"][step], step)
         self.assertGreater(max(no["imbalance"]), 0.4)
         self.assertLess(lb["imbalance"][100], 0.15)
+        self.assertLess(np.abs(lb["B"] - no["B"]).max(), 1e-12)
+
+    def test_load_balancing_cuts_patches_larger_than_a_share(self):
+        """two level 0 patches for 3 ranks: whole, one rank has none (imbalance 0.5 after
+        initialize); rebalanced at the start of step 0 (both runs) and 30 (with every=30),
+        level 0 is cut on blocks and every rank is within a block or so of the share"""
+        startMPI()
+        if pyplamn.etc.mpi_size() < 2:
+            self.skipTest("one rank: nothing to balance (--tags mpi runs it on 3)")
+        patch, steps = (30, 60), 31
+        no = drift(None, steps, patch)
+        lb = drift(dict(every=30, tol=0.05), steps, patch)
+        self.assertGreaterEqual(lb["imbalance"][0], 0.5)
+        for step in (1, 31):  # just after each rebalance
+            self.assertLess(lb["imbalance"][step], 0.15, step)
+        self.assertLess(lb["imbalance"][31], no["imbalance"][31])
         self.assertLess(np.abs(lb["B"] - no["B"]).max(), 1e-12)
 
 
