@@ -62,7 +62,7 @@ Simulator<opts>::level_of_(int const ln, std::vector<Box_t> const& boxes)
         ln, patches,
         damn::amr::partition(
             patches, isInitialized_ ? particle_weights_(ln, patches) : box_weights_(ln, patches),
-            n_ranks_));
+            damn::amr::node_share_capacity(topology_)));
 }
 
 template<auto opts>
