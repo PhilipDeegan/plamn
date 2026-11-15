@@ -8,6 +8,7 @@
 #include "damn/core/data/ndarray/ndarray_vector.hpp"
 #include "damn/core/data/ndarray/ndarray_view.hpp"
 #include "damn/core/def/damn_config.hpp"
+#include "damn/core/exec/kernels.hpp" // IWYU pragma: keep (gpu::Vec_t, gpu::TileLauncher: GPU builds)
 
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/field/field.hpp"
