@@ -4,7 +4,9 @@ name: format
 # everyone: results differ between versions)
 
 on:
-  pull_request:
+  pull_request: # not drafts (each job's if): a draft's pushes cost no Actions minutes, being
+    #  marked ready for review runs everything once; test locally meanwhile
+    types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -12,6 +14,7 @@ concurrency:
 
 jobs:
   clang-format:
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -39,6 +42,7 @@ jobs:
         fi
 
   iwyu:
+    if: ${{ !github.event.pull_request.draft }}
     # include what you use: applying iwyu's suggestions changes nothing
     # Debian 13: the same iwyu (8.23) and libstdc++ as development machines, results differ
     # between versions; also a much smaller image than phare_dep
@@ -78,3 +82,55 @@ jobs:
           echo "run: mkn build -p iwyu_fix -x res/mkn/mpi, and commit the result"
           exit 1
         fi
+
+  clang-tidy:
+    if: ${{ !github.event.pull_request.draft }}
+    # .clang-tidy's checks on the changed C++ lines, as PHARE's gate: clang-tidy reads the real
+    # compile commands, from an mkn dry run (res/ci/compile_db.py: no build). Findings show inline
+    # on the PR (annotations). Warning only for now.
+    runs-on: ubuntu-24.04
+    container: debian:trixie
+    timeout-minutes: 20
+    steps:
+    # Debian 13's clang-tidy 22, the same as development machines (results differ between versions)
+    - run: |  # git before checkout, so the checkout is a repository
+        apt-get update
+        apt-get install -y --no-install-recommends ca-certificates curl git openssh-client g++ python3 \
+          clang-tidy-22
+        clang-tidy-22 --version
+
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    # damn is private: check it out where mkn looks for it (tpp/damn), as build_nix.yml
+    - uses: actions/checkout@v4
+      with:
+        repository: PhilipDeegan/damn
+        ssh-key: ${{ secrets.DAMN_DEPLOY_KEY }}
+        path: tpp/damn
+    - name: damn's branch of the same name, if it has one (a plamn PR that needs a damn PR)
+      env:
+        BRANCH: ${{ github.head_ref || github.ref_name }}
+      run: |
+        cd tpp/damn && git config --global --add safe.directory "$PWD"
+        if [ "$BRANCH" != master ] && git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null; then
+          git fetch -q --depth 1 origin "$BRANCH" && git checkout -q FETCH_HEAD
+        fi
+        echo "damn: $(git log --oneline -1)"
+
+    - name: compile commands
+      run: |
+        git config --global --add safe.directory "$PWD"
+        curl -Lo mkn https://github.com/mkn/mkn/releases/download/latest/mkn_nix
+        chmod +x mkn && mv mkn /usr/local/bin/mkn
+        python3 res/ci/compile_db.py test_plamn_core -dKO
+
+    - continue-on-error: true # warning only (step level: the job stays green)
+      run: |
+        mb=$(git merge-base "origin/${{ github.base_ref }}" HEAD)
+        git diff -U0 "$mb" HEAD -- inc src tst \
+          | clang-tidy-diff-22.py -clang-tidy-binary clang-tidy-22 -p1 -path . -j "$(nproc)" \
+                                  -quiet -iregex '.*\.(c|cc|cpp|h|hpp|ipp)' > tidy.log 2>&1 || true
+        python3 res/ci/tidy_annotations.py tidy.log "$PWD"
+        ! grep -qE ": (warning|error): .*\[" tidy.log # the step fails (yellow) on findings

@@ -1,0 +1,4 @@
+# tests: plamn's .clang-tidy, less static initializations that may throw (gtest's registrations
+# and fixtures' globals: an exception there ends a test binary, which is fine)
+InheritParentConfig: true
+Checks: -bugprone-throwing-static-initialization

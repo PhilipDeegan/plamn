@@ -64,6 +64,13 @@ profile:
 - name: damn_hdf5
   dep: damn&tpp/damn(https://github.com/PhilipDeegan/damn)[damn_hdf5]
 
+# clang-tidy report (.clang-tidy) over the core tests and the plamn headers they include, needs
+# clang-tidy on PATH
+- name: tidy
+  parent: test_plamn_core
+  mod:
+  - name: clang.tidy
+
 # include-what-you-use report for inc/, needs iwyu on PATH
 - name: iwyu
   parent: base

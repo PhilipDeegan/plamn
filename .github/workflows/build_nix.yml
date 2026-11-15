@@ -5,10 +5,13 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  pull_request:
+  pull_request: # not drafts (each job's if): a draft's pushes cost no Actions minutes, being
+    #  marked ready for review runs everything once; test locally meanwhile
+    types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
   build:
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-24.04
     container: ghcr.io/pharchive/phare_dep/ubuntu:26.04
 
