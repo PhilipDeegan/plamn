@@ -19,6 +19,7 @@
 
 #include "damn/mpi/damn_mpi.hpp"
 
+#include "plamn/core/data/particles/particle_components.hpp"
 #include "plamn/core/data/vecfield/vecfield_component.hpp"
 
 #include <nanobind/nanobind.h>
@@ -32,6 +33,8 @@
 #include <cstddef>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace plamn::python3
@@ -302,7 +305,7 @@ void declare_data_wrangler(nb::module_& m)
     using DW           = DataWrangler<Simulator>;
     using Level        = DW::Level_t;
     using Particles_t  = Simulator::Patch_t::Particles_t;
-    using Particle_t   = std::decay_t<decltype(std::declval<Particles_t&>()[0])>;
+    using Particle_t   = plamn::core::Particle<dim>;
 
     nb::class_<Particle_t>(m, "Particle")
         .def_prop_ro("weight", [](Particle_t const& p) { return p.weight(); })
@@ -310,10 +313,46 @@ void declare_data_wrangler(nb::module_& m)
         .def_prop_ro("delta", [](Particle_t const& p) { return p.delta(); })
         .def_prop_ro("v", [](Particle_t const& p) { return p.v(); });
 
-    nb::class_<Particles_t>(m, "ParticleArray")
-        .def("size", [](Particles_t& self) { return self.size(); })
-        .def("__len__", [](Particles_t& self) { return self.size(); })
-        .def(
+    auto particles = nb::class_<Particles_t>(m, "ParticleArray")
+                         .def("size", [](Particles_t& self) { return self.size(); })
+                         .def("__len__", [](Particles_t& self) { return self.size(); });
+
+    if constexpr (plamn::core::HasComponents<Particles_t>)
+    {
+        // a copy of particle i, whatever the layout (SoA / SoAVX hold no Particle to refer to)
+        particles.def("__getitem__", [](Particles_t& self, std::size_t const i) {
+            if (i >= self.size())
+                throw nb::index_error();
+            auto const c = plamn::core::components(std::as_const(self));
+            Particle_t p;
+            p.weight() = c.weight[i];
+            for (std::size_t d = 0; d < dim; ++d)
+            {
+                p.iCell()[d] = c.iCell[d][i];
+                p.delta()[d] = c.delta[d][i];
+            }
+            for (std::size_t d = 0; d < 3; ++d)
+                p.v()[d] = c.v[d][i];
+            return p;
+        });
+
+        // {name: numpy view} of every component (weight, iCell_x.., delta_x.., v_x..), live and
+        //  writable, in the array's own memory: valid as long as the array is
+        particles.def("components", [](nb::handle const h) {
+            auto& self = nb::cast<Particles_t&>(h);
+            nb::dict out;
+            plamn::core::components(self).for_each([&](auto const& name, auto const& span) {
+                using T = std::remove_cv_t<typename std::decay_t<decltype(span)>::value_type>;
+                std::size_t const shape[1]    = {span.size()};
+                std::int64_t const strides[1] = {static_cast<std::int64_t>(span.stride_values())};
+                out[name.c_str()]
+                    = nb::ndarray<nb::numpy, T, nb::ndim<1>>(span.data(), 1, shape, h, strides);
+            });
+            return out;
+        });
+    }
+    else
+        particles.def(
             "__getitem__",
             [](Particles_t& self, std::size_t const i) -> auto& {
                 if (i >= self.size())
