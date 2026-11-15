@@ -52,6 +52,25 @@ profile:
         tst/plamn/amr/test_refine_coarsen.cpp
         tst/plamn/amr/test_tagging.cpp
 
+# C++ diagnostics tests embedding python (PHARE's tests/diagnostic): the simulation from
+# tst/plamn/simulator/diagnostics_job.py, through pyphare and pyplamn (py_etc built first:
+# ./mkn.py). MPI: -x res/mkn/mpi; run from the root, e.g. mpirun -n 3 bin/.../test_diagnostics_2d
+# libpython linked (MKN_PYTHON_LIB_EMBED): needs lang.python3 linking libpython3.<minor>, not
+# the stable ABI stub libpython3
+- name: test_plamn_diagnostics
+  inc: . tpp/damn
+  self: base damn_hdf5
+  dep: google.test
+  env:
+  - name: MKN_PYTHON_LIB_EMBED
+    mode: replace
+    value: 1
+  mod: lang.python3
+  mode: none
+  test: tst/plamn/simulator/test_diagnostics_1d.cpp
+        tst/plamn/simulator/test_diagnostics_2d.cpp
+        tst/plamn/simulator/test_diagnostics_3d.cpp
+
 - name: test_plamn_core_slow # ~17M particles, >10 min unoptimised
   parent: test_plamn_core
   test: tst/plamn/core/data/particles/test_particles_partitioning.cpp

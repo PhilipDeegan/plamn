@@ -26,6 +26,7 @@
 #include <nanobind/stl/vector.h>
 
 #include <memory>
+#include <cstdint>
 #include <string>
 #include <vector>
 #include <cstddef>
@@ -135,6 +136,9 @@ NB_MODULE(plamn_etc, m)
 
     nb::class_<Dict>(m, "Dict")
         .def(nb::init<>())
+        // the C++ Dict's address: for C++ tests embedding python (tst/plamn/simulator), built
+        //  from the same headers, to use it in place
+        .def("address", [](Dict& self) { return reinterpret_cast<std::uintptr_t>(&self.dict); })
         .def("add_size_t", &Dict::add<std::size_t>)
         .def("add_optional_size_t", &Dict::add<std::optional<std::size_t>>)
         .def("add_bool", &Dict::add<bool>)
