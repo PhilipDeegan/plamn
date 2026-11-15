@@ -1,0 +1,22 @@
+# clang-tidy for plamn (mkn's clang.tidy module, profile tidy): checks that find bugs or
+# performance problems, not style (as PHARE's), and unused parameters (parameter sets that want a
+# DAO). plamn's own headers and tests only.
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -bugprone-implicit-widening-of-multiplication-result,
+  performance-*,
+  -performance-avoid-endl,
+  misc-unused-parameters,
+  clang-diagnostic-unused-parameter,
+  clang-diagnostic-unused-variable,
+  modernize-use-nodiscard
+CheckOptions:
+  # plamn spells [[nodiscard]] through damn's NO_DISCARD macro (damn/core/def.hpp)
+  modernize-use-nodiscard.ReplacementString: NO_DISCARD
+HeaderFilterRegex: '.*/(inc|tst)/plamn/.*'
+# the compiler's unused warnings: misc-unused-parameters does not look into templates
+ExtraArgs: [-Wunused-parameter, -Wunused-variable]
+WarningsAsErrors: ''
