@@ -18,6 +18,9 @@
 #include "damn/core/memory/span.hpp"
 #include "damn/mpi/damn_mpi.hpp"
 #include "damn/hdf5/damn_hdf5.hpp"
+#if DAMN_HAS_HIGHFIVE
+#include "damn/hdf5/h5_file.hpp"
+#endif
 
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
@@ -58,12 +61,22 @@ struct MpiLifeCycle
         if (!initialized)
         {
             // MPI_THREAD_MULTIPLE only for HDF5's subfiling (its concentrator threads call MPI,
-            //  damn/hdf5/h5_file.hpp): it costs every message elsewhere (locks, transports)
-            auto const* driver  = std::getenv("DAMN_HDF5_DRIVER");
-            bool const multiple = driver and std::string_view{driver} == "subfiling";
-            int provided        = 0;
+            //  damn/hdf5/h5_file.hpp): it costs every message elsewhere (locks, transports).
+            //  PHARE's PHARE_H5_SUB_FILES (PHAREHUB/PHARE#1177) is damn's DAMN_H5_SUB_FILES
+            if (auto const* n = std::getenv("PHARE_H5_SUB_FILES");
+                n and !std::getenv("DAMN_H5_SUB_FILES"))
+                setenv("DAMN_H5_SUB_FILES", n, 1);
+            bool multiple = false;
+#if DAMN_HAS_HIGHFIVE
+            multiple = damn::hdf5::h5::mpi_thread_multiple_required();
+#endif
+            int provided = 0;
             MPI_Init_thread(nullptr, nullptr, multiple ? MPI_THREAD_MULTIPLE : MPI_THREAD_FUNNELED,
                             &provided);
+            if (multiple and provided < MPI_THREAD_MULTIPLE)
+                throw std::runtime_error("plamn: subfiling (DAMN_H5_SUB_FILES) needs "
+                                         "MPI_THREAD_MULTIPLE, MPI provides "
+                                         + std::to_string(provided));
             owns = true;
         }
     }

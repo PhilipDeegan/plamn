@@ -4,8 +4,9 @@
     python3 etc/bench/diagnostic/vtkhdf_io.py                     # the sweep, V-cache cores (0-7)
     python3 etc/bench/diagnostic/vtkhdf_io.py --cores 0-15        # every physical core
     python3 etc/bench/diagnostic/vtkhdf_io.py --ranks 1 4 --pools 1 2 --cells 256 --dumps 3
-    python3 etc/bench/diagnostic/vtkhdf_io.py --drivers mpio subfiling   # HDF5's drivers (MPI and
-        HDF5 with subfiling: source /opt/hpc/env.sh, a module built with -x res/mkn/hpc)
+    python3 etc/bench/diagnostic/vtkhdf_io.py --subfiles 0 2 4 --stripes 1 4 --ioc-threads 1 4
+        # MPI-IO (0) and subfiling (n subfiles, stripe MiB, threads per I/O concentrator): MPI and
+        # HDF5 with subfiling, source /opt/hpc/env.sh, a module built with -x res/mkn/hpc
 
 A 2D run (two populations, a refinement box), its EM and fluid diagnostics dumped --dumps times
 without advancing (the same data each dump: only the dump is measured), for each ranks x thread
@@ -192,6 +193,7 @@ def run(args):
     etc.mpi_barrier()
     # the simulator gone: files still open (flush_every 0, or not yet due) closed, timed, the
     #  scope timing files written
+    del cpp  # the last reference to the C++ simulator but pyphare's: reset() destroys it
     etc.mpi_barrier()
     t0 = time.perf_counter()
     simulator.reset()
@@ -199,13 +201,11 @@ def run(args):
     close_ms = (time.perf_counter() - t0) * 1e3
 
     # the driver asked for is the one used: subfiling leaves subfiles (a module without it ignores
-    #  DAMN_HDF5_DRIVER)
-    if os.environ.get("DAMN_HDF5_DRIVER") == "subfiling" and not any(
-        Path(out).rglob("*subfile*")
+    #  DAMN_H5_SUB_FILES)
+    if (n := int(os.environ.get("DAMN_H5_SUB_FILES", "0"))) and not any(
+        Path(out).rglob(f"*.subfile_*_of_{n}")
     ):
-        raise RuntimeError(
-            "DAMN_HDF5_DRIVER=subfiling but no subfiles: not the subfiling VFD"
-        )
+        raise RuntimeError(f"DAMN_H5_SUB_FILES={n} but no files in {n} subfiles")
     # every file: subfiling writes subfiles and a config beside each .vtkhdf
     mb = (
         sum(
@@ -268,9 +268,16 @@ def run(args):
 
 def sweep(args):
     cores = cores_of(args.cores)
+    # (subfiles, stripe MiB, IOC threads): 0 subfiles is MPI-IO, the others only for subfiling
+    drivers = [
+        (n, mib, ioc)
+        for n in args.subfiles
+        for mib in (args.stripes if n else [0])
+        for ioc in (args.ioc_threads if n else [0])
+    ]
     configs = [
         (d, r, p)
-        for d in args.drivers
+        for d in drivers
         for r in args.ranks
         for p in args.pools
         if r * p <= len(cores)
@@ -286,10 +293,19 @@ def sweep(args):
     print(
         f"cores {args.cores}, {args.cells}^2 cells, patches {args.patch}, {args.dumps} dumps, flush_every {args.flush_every}"
     )
-    head = f"{'driver':>10} {'ranks':>5} {'pools':>5} {'MB':>7} {'dump ms':>8} {'MB/s':>7} {'convert':>8} {'write':>7} {'write MB/s':>10} {'posix MB/s':>10} {'ctxsw v/i':>11} {'fsync ms':>8} {'close ms':>8}"
+    head = f"{'subfiles':>8} {'stripe':>6} {'ioc':>3} {'ranks':>5} {'pools':>5} {'MB':>7} {'dump ms':>8} {'MB/s':>7} {'convert':>8} {'write':>7} {'write MB/s':>10} {'posix MB/s':>10} {'ctxsw v/i':>11} {'fsync ms':>8} {'close ms':>8}"
     print(head)
-    for driver, ranks, pools in configs:
-        d = work / f"{driver}_r{ranks}_p{pools}"
+    for (subfiles, mib, ioc), ranks, pools in configs:
+        d = work / f"sf{subfiles}_s{mib}_i{ioc}_r{ranks}_p{pools}"
+        driver_env = dict(DAMN_H5_SUB_FILES=str(subfiles))
+        if subfiles:
+            driver_env.update(
+                H5FD_SUBFILING_STRIPE_SIZE=str(mib << 20),
+                H5FD_IOC_THREAD_POOL_SIZE=str(ioc),
+            )
+        label = (
+            f"{subfiles:>8} {mib if subfiles else '-':>6} {ioc if subfiles else '-':>3}"
+        )
         shutil.rmtree(d, ignore_errors=True)
         d.mkdir(parents=True)
         cmd = ["taskset", "-c", ",".join(map(str, cores)), "mpirun", "-n", str(ranks)]
@@ -311,18 +327,18 @@ def sweep(args):
         p = subprocess.run(
             cmd,
             cwd=d,
-            env=dict(env, PHARE_THREAD_POOLS=str(pools), DAMN_HDF5_DRIVER=driver),
+            env=dict(env, PHARE_THREAD_POOLS=str(pools), **driver_env),
             capture_output=True,
             text=True,
         )
         lines = [l for l in p.stdout.splitlines() if l.startswith("RESULT ")]
         if p.returncode or not lines:
             print(
-                f"{ranks:>5} {pools:>5}  failed:\n{p.stdout[-2000:]}\n{p.stderr[-2000:]}"
+                f"{label} {ranks:>5} {pools:>5}  failed:\n{p.stdout[-2000:]}\n{p.stderr[-2000:]}"
             )
             continue
         r = json.loads(lines[-1][7:])
-        r["driver"] = driver
+        r.update(subfiles=subfiles, stripe_mib=mib, ioc_threads=ioc)
         # the scopes, the slowest rank's (the timing files are written as the simulators go)
         timings = [d / f".phare/timings/rank.{k}.txt" for k in range(ranks)]
         for key, name in [("convert_ms", "convert"), ("write_ms", "write")]:
@@ -336,7 +352,7 @@ def sweep(args):
         mbs = r["mb"] / (r["dump_ms"] / 1e3)
         wmbs = r["mb"] / (r["write_ms"] / 1e3) if r["write_ms"] else float("nan")
         print(
-            f"{driver:>10} {ranks:>5} {pools:>5} {r['mb']:>7.1f} {r['dump_ms']:>8.1f} {mbs:>7.0f} {r['convert_ms']:>8.1f}"
+            f"{label} {ranks:>5} {pools:>5} {r['mb']:>7.1f} {r['dump_ms']:>8.1f} {mbs:>7.0f} {r['convert_ms']:>8.1f}"
             f" {r['write_ms']:>7.1f} {wmbs:>10.0f} {r['posix_mbs']:>10.0f}"
             f" {r['nvcsw']:>5.0f}/{r['nivcsw']:<5.0f} {r['fsync_ms']:>8.1f} {r['close_ms']:>8.1f}",
             flush=True,
@@ -361,7 +377,13 @@ def main():
         "--flush-every", type=int, default=1, help="dumps per file open (0: never)"
     )
     a.add_argument(
-        "--drivers", nargs="+", default=["mpio"], help="HDF5 drivers: mpio, subfiling"
+        "--subfiles", type=int, nargs="+", default=[0], help="0: MPI-IO, n: subfiling"
+    )
+    a.add_argument(
+        "--stripes", type=int, nargs="+", default=[32], help="subfiling stripe MiB"
+    )
+    a.add_argument(
+        "--ioc-threads", type=int, nargs="+", default=[4], help="per concentrator"
     )
     a.add_argument("--cells", type=int, default=512)
     a.add_argument("--patch", type=int, default=64)
