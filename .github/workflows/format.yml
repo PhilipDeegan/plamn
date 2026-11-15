@@ -87,12 +87,11 @@ jobs:
     container: debian:trixie
     timeout-minutes: 20
     steps:
-    - run: |  # git before checkout, so the checkout is a repository; clang-tidy 22, as locally
+    - run: |  # git before checkout, so the checkout is a repository; Debian 13's clang-tidy 22,
+              #  the same as development machines (results differ between versions)
         apt-get update
         apt-get install -y --no-install-recommends ca-certificates curl git openssh-client g++ python3 \
-          wget gnupg lsb-release software-properties-common
-        curl -fsSLo llvm.sh https://apt.llvm.org/llvm.sh && bash llvm.sh 22
-        apt-get install -y --no-install-recommends clang-tidy-22
+          clang-tidy-22
         clang-tidy-22 --version
 
     - uses: actions/checkout@v4
