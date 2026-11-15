@@ -131,10 +131,10 @@ def state(simulator):
 class RestartsTest(unittest.TestCase):
     def setUp(self):
         startMPI()
-        # the same on every rank, one per test
-        self.dir = str(
-            Path("phare_outputs/plamn_test_restarts") / self.id().split(".")[-1]
-        )
+        # the same on every rank of a run, its own per test and rank count: phlop runs a test
+        #  on 1 and on 3 ranks at the same time
+        name = f"{self.id().split('.')[-1]}_np{pyplamn.etc.mpi_size()}"
+        self.dir = str(Path("phare_outputs/plamn_test_restarts") / name)
         self.simulators = []
 
     def tearDown(self):
