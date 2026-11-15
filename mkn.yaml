@@ -41,6 +41,7 @@ profile:
   dep: google.test
   mode: none
   test: tst/plamn/core/data/grid/test_layout.cpp
+        tst/plamn/core/data/particles/test_particle_components.cpp
         tst/plamn/core/numerics/particles_synchronised_mover/test_updater.cpp
         tst/plamn/core/numerics/particles_synchronised_mover/test_multi_updater.cpp
         tst/plamn/core/numerics/faraday/test_tileset_faraday.cpp
