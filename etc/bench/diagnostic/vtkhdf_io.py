@@ -21,6 +21,7 @@ taskset; mpirun --bind-to none inside them). Per configuration, per dump (the me
                cache takes without HDF5 or one shared file
     ctxsw      context switches per dump, voluntary / involuntary, summed over ranks (getrusage:
                blocking IO waits / preemption, contention shows as the latter)
+    close ms   closing the files still open after the last dump (flush_every 0), the simulator going
     fsync ms   the files flushed to the device after the last dump (rank 0): the dumps above
                land in the page cache
 
@@ -189,6 +190,14 @@ def run(args):
 
     # bytes: every file's size after the last dump, over the dumps (rank 0)
     etc.mpi_barrier()
+    # the simulator gone: files still open (flush_every 0, or not yet due) closed, timed, the
+    #  scope timing files written
+    etc.mpi_barrier()
+    t0 = time.perf_counter()
+    simulator.reset()
+    etc.mpi_barrier()
+    close_ms = (time.perf_counter() - t0) * 1e3
+
     # the driver asked for is the one used: subfiling leaves subfiles (a module without it ignores
     #  DAMN_HDF5_DRIVER)
     if os.environ.get("DAMN_HDF5_DRIVER") == "subfiling" and not any(
@@ -225,8 +234,6 @@ def run(args):
             os.close(fd)
         fsync_ms = (time.perf_counter() - t0) * 1e3
 
-    simulator.reset()  # writes the scope timing files
-    etc.mpi_barrier()
     Path(f"rank.{rank}.json").write_text(json.dumps(dict(dumps=dumps)))
     etc.mpi_barrier()
     if rank != 0:
@@ -251,6 +258,7 @@ def run(args):
         nvcsw=med("nvcsw"),
         nivcsw=med("nivcsw"),
         fsync_ms=fsync_ms,
+        close_ms=close_ms,
     )
     print("RESULT " + json.dumps(result), flush=True)
 
@@ -278,7 +286,7 @@ def sweep(args):
     print(
         f"cores {args.cores}, {args.cells}^2 cells, patches {args.patch}, {args.dumps} dumps, flush_every {args.flush_every}"
     )
-    head = f"{'driver':>10} {'ranks':>5} {'pools':>5} {'MB':>7} {'dump ms':>8} {'MB/s':>7} {'convert':>8} {'write':>7} {'write MB/s':>10} {'posix MB/s':>10} {'ctxsw v/i':>11} {'fsync ms':>8}"
+    head = f"{'driver':>10} {'ranks':>5} {'pools':>5} {'MB':>7} {'dump ms':>8} {'MB/s':>7} {'convert':>8} {'write':>7} {'write MB/s':>10} {'posix MB/s':>10} {'ctxsw v/i':>11} {'fsync ms':>8} {'close ms':>8}"
     print(head)
     for driver, ranks, pools in configs:
         d = work / f"{driver}_r{ranks}_p{pools}"
@@ -330,7 +338,7 @@ def sweep(args):
         print(
             f"{driver:>10} {ranks:>5} {pools:>5} {r['mb']:>7.1f} {r['dump_ms']:>8.1f} {mbs:>7.0f} {r['convert_ms']:>8.1f}"
             f" {r['write_ms']:>7.1f} {wmbs:>10.0f} {r['posix_mbs']:>10.0f}"
-            f" {r['nvcsw']:>5.0f}/{r['nivcsw']:<5.0f} {r['fsync_ms']:>8.1f}",
+            f" {r['nvcsw']:>5.0f}/{r['nivcsw']:<5.0f} {r['fsync_ms']:>8.1f} {r['close_ms']:>8.1f}",
             flush=True,
         )
         if not args.keep:
