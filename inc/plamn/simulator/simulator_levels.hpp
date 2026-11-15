@@ -10,6 +10,7 @@
 #include "damn/amr/level_map.hpp"
 #include "damn/amr/neighbours.hpp"
 #include "damn/amr/partition.hpp"
+#include "damn/amr/topology.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/logger.hpp"
 #include "damn/core/math/array.hpp"

@@ -11,6 +11,7 @@
 #include "damn/amr/level_map.hpp"
 #include "damn/amr/partition.hpp"
 #include "damn/amr/regrid.hpp"
+#include "damn/amr/topology.hpp"
 #include "damn/core/def.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/box_spans.hpp"
