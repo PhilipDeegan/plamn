@@ -357,6 +357,7 @@ import os, sys
 sys.path[:0] = ["python", os.environ.get("PYPHARE", os.path.expanduser("~/git/phare/mkn"))
                 + "/pyphare", "tst/plamn/simulator"]
 import diagnostics_job
+diagnostics_job.declare()
 import pyphare.pharein as ph
 ph.populateDict()
 import pyplamn
