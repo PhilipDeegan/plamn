@@ -11,6 +11,7 @@
 //   populations[i]: name, density (particles), charge_density, flux
 
 #include "plamn/core/data/electromag/electromag.hpp"
+#include "damn/core/def.hpp"
 
 #include <string>
 #include <vector>

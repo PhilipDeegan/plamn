@@ -11,8 +11,9 @@
 //                                        others; one rank: the input
 //   HybridPatchLevel: getB(c), getE(c), getNi(), getN(pop), getVi(c), getFlux(c, pop),
 //     getMassDensity(), getChargeFlux(c), getDensity(pop) (particle density; getN: charge
-//     density), getParticles(pop): one PatchData per local patch; every quantity written as a
-//     diagnostic has one
+//     density), getMomentumTensor(c, pop = ""), getParticles(pop): one PatchData per local
+//     patch; every quantity written as a diagnostic has one. getMomentumTensor computes it
+//     (collective: every rank calls it; c: xx xy xz yy yz zz; pop "": all ions)
 //   PatchData: patchID, origin, lower, upper (AMR cells), nGhosts (field or particle ghost
 //     width), data
 //
@@ -30,6 +31,7 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 #include <array>
+#include <map>
 #include <cstdint>
 #include <cstring>
 #include <cstddef>
@@ -116,6 +118,16 @@ public:
     auto getChargeFlux(std::string const& c)
     {
         return vector_(c, [](auto& p) -> auto& { return p.ions.chargeFlux(); });
+    }
+    auto getMomentumTensor(std::string const& c, std::string const& pop)
+    {
+        static std::map<std::string, std::size_t> const ijk{{"xx", 0}, {"xy", 1}, {"xz", 2},
+                                                            {"yy", 3}, {"yz", 4}, {"zz", 5}};
+        auto const key       = pop.empty() ? std::string{"/ions/momentum_tensor"}
+                                           : "/ions/pop/" + pop + "/momentum_tensor";
+        auto const component = ijk.at(c);
+        sim_.compute(lvl_, key);
+        return fields_([&](auto& data) -> auto& { return *sim_.computed(data, key)[component]; });
     }
     auto getDensity(std::string const& pop)
     {
@@ -388,6 +400,7 @@ void declare_data_wrangler(nb::module_& m)
         .def("getMassDensity", &Level::getMassDensity)
         .def("getChargeFlux", &Level::getChargeFlux)
         .def("getDensity", &Level::getDensity)
+        .def("getMomentumTensor", &Level::getMomentumTensor, nb::arg("c"), nb::arg("pop") = "")
         .def("getParticles", &Level::getParticles);
 
     nb::class_<DW>(m, "DataWrangler")

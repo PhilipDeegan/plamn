@@ -62,8 +62,8 @@ namespace core
 
         NO_DISCARD bool isUsable() const
         {
-            return damn::core::isUsable(particles_, particleDensity_, chargeDensity_, flux_,
-                                  momentumTensor_);
+            // not the momentum tensor: bound only when computed (plamn's computed quantities)
+            return damn::core::isUsable(particles_, particleDensity_, chargeDensity_, flux_);
         }
 
         NO_DISCARD bool isSettable() const

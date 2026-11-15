@@ -34,8 +34,16 @@ YEE = {
     "B": [(True, False, False), (False, True, False), (False, False, True)],
     "E": [(False, True, True), (True, False, True), (True, True, False)],
 }
-FLUID = ["charge_density", "mass_density", "bulkVelocity", "charge_flux"]
-POP = ["density", "charge_density", "flux"]
+FLUID = [
+    "charge_density",
+    "mass_density",
+    "bulkVelocity",
+    "charge_flux",
+    "momentum_tensor",
+]
+POP = ["density", "charge_density", "flux", "momentum_tensor"]
+TENSOR = ["xx", "xy", "xz", "yy", "yz", "zz"]
+VX, VY, VTH = (0.5, 1.0), 0.1, 0.3  # per population (order of populations), all, all
 
 
 def simulation(out, box=((10, 10), (19, 19))):
@@ -67,9 +75,9 @@ def simulation(out, box=((10, 10), (19, 19))):
             "charge": charge,
             "density": density,
             "vbulkx": const(vx),
-            "vbulky": const(0.1),
+            "vbulky": const(VY),
             "vbulkz": const(0.0),
-            **{f"vth{c}": const(0.3) for c in "xyz"},
+            **{f"vth{c}": const(VTH) for c in "xyz"},
             "nbr_part_per_cell": 50,
             "init": {"seed": seed},
         }
@@ -79,7 +87,7 @@ def simulation(out, box=((10, 10), (19, 19))):
         by=const(0.2),
         bz=const(0.5),
         **{
-            name: pop(m, q, 0.5 * (i + 1), 1234 + i)
+            name: pop(m, q, VX[i], 1234 + i)
             for i, (name, (m, q)) in enumerate(populations.items())
         },
     )
@@ -100,14 +108,20 @@ def simulation(out, box=((10, 10), (19, 19))):
     return sim
 
 
+def comps_of(q):
+    if q == "momentum_tensor":
+        return TENSOR
+    return "xyz" if q in ("bulkVelocity", "charge_flux", "flux") else None
+
+
 def files():
     """quantity file: the live accessors of a level (DataWrangler), per component"""
     out = {"EM_B": ("B", "xyz"), "EM_E": ("E", "xyz")}
     for q in FLUID:
-        out[f"ions_{q}"] = (q, "xyz" if q in ("bulkVelocity", "charge_flux") else None)
+        out[f"ions_{q}"] = (q, comps_of(q))
     for name in populations:
         for q in POP:
-            out[f"ions_pop_{name}_{q}"] = ((q, name), "xyz" if q == "flux" else None)
+            out[f"ions_pop_{name}_{q}"] = ((q, name), comps_of(q))
     return out
 
 
@@ -120,6 +134,7 @@ def live(level, what, component):
             "density": lambda: level.getDensity(name),
             "charge_density": lambda: level.getN(name),
             "flux": lambda: level.getFlux(component, name),
+            "momentum_tensor": lambda: level.getMomentumTensor(component, name),
         }[q]()
     return {
         "B": lambda: level.getB(component),
@@ -128,6 +143,7 @@ def live(level, what, component):
         "mass_density": lambda: level.getMassDensity(),
         "bulkVelocity": lambda: level.getVi(component),
         "charge_flux": lambda: level.getChargeFlux(component),
+        "momentum_tensor": lambda: level.getMomentumTensor(component),
     }[what]()
 
 
@@ -269,6 +285,41 @@ class VtkDiagnosticsTest(unittest.TestCase):
                                 err_msg=f"{name} level {ln} {key} {component}",
                             )
 
+    def test_momentum_tensor(self):
+        """the total is the populations' sum; on level 0 a Maxwellian's mean M_ii / n is
+        m (V_i^2 + vth^2) (50 particles per cell: within a few percent)"""
+        import h5py
+
+        self.run_it()
+
+        def level0(name):
+            with h5py.File(Path(self.out) / f"{name}.vtkhdf", "r") as f:
+                root = f["VTKHDF"]
+                s = int(root["Steps"].attrs["NSteps"]) - 1
+                steps = root["Steps/Level0"]
+                row = int(steps["PointDataOffset/data"][s])
+                rows = sum(
+                    int(np.prod(b[1 : 2 * ndim : 2] - b[0 : 2 * ndim : 2] + 2))
+                    * X_TIMES
+                    for b in root["Level0/AMRBox"][
+                        int(steps["AMRBoxOffset"][s]) : int(steps["AMRBoxOffset"][s])
+                        + int(steps["NumberOfAMRBox"][s])
+                    ]
+                )
+                return root["Level0/PointData/data"][row : row + rows]
+
+        total = level0("ions_momentum_tensor")
+        pops = [level0(f"ions_pop_{p}_momentum_tensor") for p in populations]
+        np.testing.assert_allclose(total, sum(pops), rtol=1e-5, atol=1e-6)
+        for i, (name, (mass, _)) in enumerate(populations.items()):
+            n = level0(f"ions_pop_{name}_density")[:, 0].mean()
+            m = pops[i].mean(axis=0) / n
+            np.testing.assert_allclose(m[0], mass * (VX[i] ** 2 + VTH**2), rtol=0.05)
+            np.testing.assert_allclose(m[3], mass * (VY**2 + VTH**2), rtol=0.05)
+            np.testing.assert_allclose(
+                m[1], mass * VX[i] * VY, rtol=0.1, atol=0.02 * mass
+            )
+
     def test_level_without_patches_on_some_ranks(self):
         import h5py
 
@@ -281,12 +332,10 @@ class VtkDiagnosticsTest(unittest.TestCase):
                 self.assertLess(int(n_boxes.max()), pyplamn.etc.mpi_size())
 
     def test_unsupported_quantity_raises(self):
+        """pyphare accepts no quantity plamn does not write: one set past its checks"""
         sim = simulation(self.out)
-        ph.FluidDiagnostics(
-            quantity="momentum_tensor",
-            write_timestamps=[0.0],
-            population_name="protons",
-        )
+        ph.FluidDiagnostics(quantity="charge_density", write_timestamps=[0.0])
+        list(sim.diagnostics.values())[-1].quantity = "/ions/pressure_tensor"
         with self.assertRaises(Exception):
             self.simulator = Simulator(sim, log_to_file=False).setup()
 

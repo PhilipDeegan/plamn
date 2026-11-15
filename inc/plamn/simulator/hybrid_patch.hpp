@@ -30,6 +30,7 @@
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 
 #include <array>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -102,7 +103,6 @@ struct HybridPatch
             : density{grid(pop.particleDensity(), layout)}
             , charge_density{grid(pop.chargeDensity(), layout)}
             , flux{grids(pop.flux(), layout)}
-            , momentum{grids(pop.momentumTensor(), layout)}
             , domain{core::make_particles<Particles_t>(layout)}
             , patch_ghost{core::make_particles<Particles_t>(layout)}
             , level_ghost{core::make_particles<Particles_t>(layout)}
@@ -112,8 +112,7 @@ struct HybridPatch
                    &level_ghost, &level_ghost_old, &level_ghost_new}
         {
             auto&& [F, M, pd, cd, particles] = pop.getCompileTimeResourcesViewList();
-            bind(F, flux);
-            bind(M, momentum);
+            bind(F, flux); // M: over scratch grids when computed (simulator_computed.hpp)
             pd.setBuffer(&density);
             cd.setBuffer(&charge_density);
             particles.setBuffer(&pack);
@@ -124,7 +123,6 @@ struct HybridPatch
 
         Grid_t density, charge_density;
         Grids<3> flux;
-        Grids<6> momentum;
         Particles_t domain, patch_ghost, level_ghost, level_ghost_old, level_ghost_new;
         core::ParticlesPack<Particles_t> pack;
     };
@@ -152,7 +150,6 @@ struct HybridPatch
         , chargeDensity{grid(ions.chargeDensity(), layout)}
         , bulkVelocity{grids(ions.velocity(), layout)}
         , chargeFlux{grids(ions.chargeFlux(), layout)}
-        , momentum{grids(ions.momentumTensor(), layout)}
         , oldE{like(emE, "EM_E_old", layout)}
         , oldB{like(emB, "EM_B_old", layout)}
         , fluxSumE{like(emE, "EM_fluxSum_E", layout)}
@@ -167,8 +164,7 @@ struct HybridPatch
         bind(Bold, oldB);
 
         auto&& [bV, M, cd, md, cF] = ions.getCompileTimeResourcesViewList();
-        bind(bV, bulkVelocity);
-        bind(M, momentum);
+        bind(bV, bulkVelocity); // M: over scratch grids when computed
         cd.setBuffer(&chargeDensity);
         md.setBuffer(&massDensity);
         bind(cF, chargeFlux);
@@ -199,8 +195,6 @@ struct HybridPatch
                             &chargeFlux, &oldE, &oldB, &fluxSumE, &*electronVelocity})
             for (auto& g : *grids)
                 fn(g);
-        for (auto& g : momentum)
-            fn(g);
         fn(massDensity);
         fn(chargeDensity);
         fn(*electronPressure);
@@ -209,8 +203,6 @@ struct HybridPatch
             fn(pop->density);
             fn(pop->charge_density);
             for (auto& g : pop->flux)
-                fn(g);
-            for (auto& g : pop->momentum)
                 fn(g);
         }
     }
@@ -241,7 +233,16 @@ struct HybridPatch
     Grids<3> emE, emB, predE, predB, avgE, avgB, Jxyz;
     Grid_t massDensity, chargeDensity;
     Grids<3> bulkVelocity, chargeFlux;
-    Grids<6> momentum;
+    // computed quantities' grids (e.g. the momentum tensor), by name, made on first use and kept
+    // with the patch (simulator_computed.hpp)
+    std::map<std::string, Grid_t> scratch;
+    Grid_t& scratch_grid(std::string const& name, core::HybridQuantity::Scalar const qty)
+    {
+        auto it = scratch.find(name);
+        if (it == scratch.end())
+            it = scratch.try_emplace(name, name, layout, qty).first;
+        return it->second;
+    }
     // AMR: E and B at the start of the level's step (prepare_step), for the finer level's time
     // interpolation and the reflux; the time average of E over a coarser step (reflux)
     Grids<3> oldE, oldB, fluxSumE;
@@ -295,8 +296,8 @@ void for_each_resource(HybridPatch<opts>& patch, auto&& fn)
         fn(name + "_charge_density", charge);
         detail::vector_resources<gw>(name + "_flux", pop->flux, fn);
 
-        auto domain      = amr::particle_resource<pgw>(pop->domain);
-        auto patch_ghost = amr::particle_resource<pgw>(pop->patch_ghost);
+        auto domain          = amr::particle_resource<pgw>(pop->domain);
+        auto patch_ghost     = amr::particle_resource<pgw>(pop->patch_ghost);
         auto level_ghost     = amr::particle_resource<pgw>(pop->level_ghost);
         auto level_ghost_old = amr::particle_resource<pgw>(pop->level_ghost_old);
         auto level_ghost_new = amr::particle_resource<pgw>(pop->level_ghost_new);
@@ -305,6 +306,11 @@ void for_each_resource(HybridPatch<opts>& patch, auto&& fn)
         fn(name + "_level_ghost", level_ghost);
         fn(name + "_level_ghost_old", level_ghost_old);
         fn(name + "_level_ghost_new", level_ghost_new);
+    }
+    for (auto& [name, grid] : patch.scratch)
+    {
+        auto r = amr::field_resource<gw>(grid);
+        fn(name, r);
     }
 }
 

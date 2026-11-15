@@ -51,7 +51,8 @@ void Simulator<opts>::setup_diagnostics_()
     diagnostics_.overwrite  = get("mode", std::string{}) == "overwrite";
     diagnostics_.quantities = ::plamn::diagnostic::hybrid_quantities<View_t>(population_names_);
     for (auto const& d : diagnostics_.list) // unknown quantities: at setup, not at a dump
-        std::ignore = diagnostic::quantity_for(diagnostics_.quantities, d.quantity);
+        if (!is_computed(d.quantity))
+            std::ignore = diagnostic::quantity_for(diagnostics_.quantities, d.quantity);
 }
 
 template<auto opts>
@@ -76,7 +77,16 @@ void Simulator<opts>::dump_vtkhdf_(diagnostic::Diagnostic& diag, double const ti
     using Float       = Diagnostics::Float;
     auto constexpr gw = Patch_t::field_ghost_width;
 
-    auto const& fields     = diagnostic::quantity_for(diagnostics_.quantities, diag.quantity);
+    // the quantity's fields on a patch, fn(fields): computed ones' scratch grids (computed per
+    //  level first), the others the view's
+    bool const is_computed_ = is_computed(diag.quantity);
+    auto const with_fields  = [&](Patch_t& patch, auto&& fn) {
+        if (is_computed_)
+            fn(computed(patch, diag.quantity));
+        else
+            fn(diagnostic::quantity_for(diagnostics_.quantities,
+                                        diag.quantity)(simulator::view(patch)));
+    };
     auto const path        = diagnostics_.dir + "/" + diagnostic::file_name(diag.quantity);
     auto const max_levels  = hierarchy_.max_levels;
     std::size_t components = 0;
@@ -86,7 +96,7 @@ void Simulator<opts>::dump_vtkhdf_(diagnostic::Diagnostic& diag, double const ti
         for (auto const& l : levels_)
             if (!l.data.data.empty())
             {
-                local = fields(simulator::view(*l.data.data[0])).size();
+                with_fields(*l.data.data[0], [&](auto const& f) { local = f.size(); });
                 break;
             }
         components = damn::mpi::max(local);
@@ -140,6 +150,8 @@ void Simulator<opts>::dump_vtkhdf_(diagnostic::Diagnostic& diag, double const ti
                                         std::span<Float const>());
             continue;
         }
+        if (is_computed_)
+            compute(static_cast<std::size_t>(ln), diag.quantity);
         auto& ld = levels_[ln].data;
 
         // this rank's patches' rows, one after another
@@ -152,12 +164,12 @@ void Simulator<opts>::dump_vtkhdf_(diagnostic::Diagnostic& diag, double const ti
             damn::core::ThreadPool::INSTANCE().patch_exec(
                 ld.data.size(), [&](auto const i) { return i; },
                 [&](auto const i) {
-                    auto const v     = simulator::view(*ld.data[i]);
-                    auto const grids = fields(v);
                     std::span<Float> rows{buffer.data() + first[i], first[i + 1] - first[i]};
-                    for (std::size_t c = 0; c < grids.size(); ++c)
-                        diagnostic::primal_into<gw>(*grids[c], ld.patches[i].box, rows, components,
-                                                    c);
+                    with_fields(*ld.data[i], [&](auto const& grids) {
+                        for (std::size_t c = 0; c < grids.size(); ++c)
+                            diagnostic::primal_into<gw>(*grids[c], ld.patches[i].box, rows,
+                                                        components, c);
+                    });
                 });
         }
         DAMN_LOG_SCOPE(1, "Simulator::dump_vtkhdf_::write");

@@ -157,6 +157,7 @@ void Simulator<opts>::setup_()
     ohm_info_.emplace(core::OhmInfo::FROM(sim["algo"]["ohm"]));
 
     register_resources_();
+    setup_computed_();
     setup_restarts_();
     setup_diagnostics_();
 }

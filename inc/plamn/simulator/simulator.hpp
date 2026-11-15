@@ -55,6 +55,7 @@
 #include <chrono>
 #include <cstddef>
 #include <format>
+#include <functional>
 #include <map>
 #include <memory>
 #include <numeric>
@@ -85,6 +86,7 @@ public:
     std::size_t static constexpr nbRefinedPart = opts.nbRefinedPart;
 
     using Patch_t      = simulator::HybridPatch<opts>;
+    using Grid_t       = Patch_t::Grid_t;
     using Layout_t     = Patch_t::Layout_t;
     using Hierarchy_t  = damn::amr::Hierarchy<dimension>;
     using LevelData_t  = damn::amr::LevelData<dimension, std::unique_ptr<Patch_t>>;
@@ -123,6 +125,12 @@ public:
     double advance() override;
     bool dump_restarts(double timestamp, double timestep) override;    // simulator_restarts.hpp
     bool dump_diagnostics(double timestamp, double timestep) override; // simulator_diagnostics
+
+    // computed quantities by key (simulator_computed.hpp): compute is collective when the
+    //  quantity sums borders
+    NO_DISCARD bool is_computed(std::string const& key) const;
+    void compute(std::size_t ln, std::string const& key);
+    NO_DISCARD std::vector<Grid_t*> computed(Patch_t& patch, std::string const& key);
 
     std::vector<int> const& domainBox() const override { return domainBox_; }
     std::vector<double> const& cellWidth() const override { return cellWidth_; }
@@ -219,6 +227,18 @@ private:
     };
 
     void setup_();
+
+    // computed quantities, see simulator_computed.hpp
+    struct Computed
+    {
+        std::vector<std::pair<std::string, core::HybridQuantity::Scalar>> grids;
+        std::function<void(Patch_t&, std::vector<Grid_t*> const&)> local;
+        std::string border_sum; // a resources_ key, empty: none
+        std::function<void(Patch_t&, std::vector<Grid_t*> const&)> after;
+    };
+    std::map<std::string, Computed> computed_;
+    void setup_computed_();
+    Computed const& computed_for_(std::string const& key) const;
 
     // diagnostics, see simulator_diagnostics.hpp
     void setup_diagnostics_();
@@ -408,6 +428,7 @@ private:
 #include "plamn/simulator/simulator_levels.hpp"      // IWYU pragma: export
 #include "plamn/simulator/simulator_regrid.hpp"      // IWYU pragma: export
 #include "plamn/simulator/simulator_restarts.hpp"    // IWYU pragma: export
+#include "plamn/simulator/simulator_computed.hpp"    // IWYU pragma: export
 #include "plamn/simulator/simulator_diagnostics.hpp" // IWYU pragma: export
 #include "plamn/simulator/simulator_setup.hpp"       // IWYU pragma: export
 

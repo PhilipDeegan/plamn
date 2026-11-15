@@ -242,8 +242,9 @@ namespace core
 
         NO_DISCARD bool isUsable() const
         {
-            auto usable = damn::core::isUsable(chargeDensity_, bulkVelocity_, momentumTensor_,
-                                         massDensity_, chargeFlux_);
+            // not the momentum tensor: bound only when computed (plamn's computed quantities)
+            auto usable
+                = damn::core::isUsable(chargeDensity_, bulkVelocity_, massDensity_, chargeFlux_);
             for (auto const& pop : populations_)
                 usable &= usable and pop.isUsable();
             return usable;
