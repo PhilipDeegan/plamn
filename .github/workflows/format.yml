@@ -4,7 +4,9 @@ name: format
 # everyone: results differ between versions)
 
 on:
-  pull_request:
+  pull_request: # not drafts (each job's if): a draft's pushes cost no Actions minutes, being
+    #  marked ready for review runs everything once; test locally meanwhile
+    types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -12,6 +14,7 @@ concurrency:
 
 jobs:
   clang-format:
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -39,6 +42,7 @@ jobs:
         fi
 
   iwyu:
+    if: ${{ !github.event.pull_request.draft }}
     # include what you use: applying iwyu's suggestions changes nothing
     # Debian 13: the same iwyu (8.23) and libstdc++ as development machines, results differ
     # between versions; also a much smaller image than phare_dep
@@ -80,6 +84,7 @@ jobs:
         fi
 
   clang-tidy:
+    if: ${{ !github.event.pull_request.draft }}
     # .clang-tidy's checks on the changed C++ lines, as PHARE's gate: clang-tidy reads the real
     # compile commands, from an mkn dry run (res/ci/compile_db.py: no build). Findings show inline
     # on the PR (annotations). Warning only for now.
