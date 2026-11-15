@@ -9,3 +9,4 @@ __pycache__
 *.so
 plamn_test_scope_timing
 .phare
+compile_commands.json
