@@ -28,6 +28,8 @@
 #include <memory>
 #include <cstdint>
 #include <string>
+#include <string_view>
+#include <cstdlib>
 #include <vector>
 #include <cstddef>
 #include <optional>
@@ -55,8 +57,13 @@ struct MpiLifeCycle
         MPI_Initialized(&initialized);
         if (!initialized)
         {
-            int provided = 0;
-            MPI_Init_thread(nullptr, nullptr, MPI_THREAD_FUNNELED, &provided);
+            // MPI_THREAD_MULTIPLE only for HDF5's subfiling (its concentrator threads call MPI,
+            //  damn/hdf5/h5_file.hpp): it costs every message elsewhere (locks, transports)
+            auto const* driver  = std::getenv("DAMN_HDF5_DRIVER");
+            bool const multiple = driver and std::string_view{driver} == "subfiling";
+            int provided        = 0;
+            MPI_Init_thread(nullptr, nullptr, multiple ? MPI_THREAD_MULTIPLE : MPI_THREAD_FUNNELED,
+                            &provided);
             owns = true;
         }
     }

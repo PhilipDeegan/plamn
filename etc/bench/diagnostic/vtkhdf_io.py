@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """pharevtkhdf diagnostics IO: is the write saturating, and what does contention cost?
 
-    python3 bench/diagnostic/vtkhdf_io.py                     # the sweep, V-cache cores (0-7)
-    python3 bench/diagnostic/vtkhdf_io.py --cores 0-15        # every physical core
-    python3 bench/diagnostic/vtkhdf_io.py --ranks 1 4 --pools 1 2 --cells 256 --dumps 3
+    python3 etc/bench/diagnostic/vtkhdf_io.py                     # the sweep, V-cache cores (0-7)
+    python3 etc/bench/diagnostic/vtkhdf_io.py --cores 0-15        # every physical core
+    python3 etc/bench/diagnostic/vtkhdf_io.py --ranks 1 4 --pools 1 2 --cells 256 --dumps 3
+    python3 etc/bench/diagnostic/vtkhdf_io.py --drivers mpio subfiling   # HDF5's drivers (MPI and
+        HDF5 with subfiling: source /opt/hpc/env.sh, a module built with -x res/mkn/hpc)
 
 A 2D run (two populations, a refinement box), its EM and fluid diagnostics dumped --dumps times
 without advancing (the same data each dump: only the dump is measured), for each ranks x thread
@@ -38,7 +40,7 @@ import sys
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 PYPHARE = Path(os.environ.get("PYPHARE", Path.home() / "git/phare/mkn"))
 
 
@@ -180,7 +182,12 @@ def run(args):
 
     # bytes: every file's size after the last dump, over the dumps (rank 0)
     etc.mpi_barrier()
-    mb = sum(p.stat().st_size for p in Path(out).glob("*.vtkhdf")) / 1e6 / args.dumps
+    # every file: subfiling writes subfiles and a config beside each .vtkhdf
+    mb = (
+        sum(p.stat().st_size for p in Path(out).rglob("*") if p.is_file())
+        / 1e6
+        / args.dumps
+    )
 
     # the posix baseline: this rank's share of a dump, to its own file
     share = np.ones(int(mb * 1e6 / size / 4), dtype=np.float32)
@@ -193,7 +200,9 @@ def run(args):
     fsync_ms = 0.0
     if rank == 0:
         t0 = time.perf_counter()
-        for p in list(Path(out).glob("*.vtkhdf")) + list(Path(".").glob("posix.*.bin")):
+        for p in [f for f in Path(out).rglob("*") if f.is_file()] + list(
+            Path(".").glob("posix.*.bin")
+        ):
             fd = os.open(p, os.O_RDONLY)
             os.fsync(fd)
             os.close(fd)
@@ -234,7 +243,13 @@ def run(args):
 
 def sweep(args):
     cores = cores_of(args.cores)
-    configs = [(r, p) for r in args.ranks for p in args.pools if r * p <= len(cores)]
+    configs = [
+        (d, r, p)
+        for d in args.drivers
+        for r in args.ranks
+        for p in args.pools
+        if r * p <= len(cores)
+    ]
     work = Path(args.work).resolve()
     env = dict(
         os.environ,
@@ -246,10 +261,10 @@ def sweep(args):
     print(
         f"cores {args.cores}, {args.cells}^2 cells, patches {args.patch}, {args.dumps} dumps"
     )
-    head = f"{'ranks':>5} {'pools':>5} {'MB':>7} {'dump ms':>8} {'MB/s':>7} {'convert':>8} {'write':>7} {'write MB/s':>10} {'posix MB/s':>10} {'ctxsw v/i':>11} {'fsync ms':>8}"
+    head = f"{'driver':>10} {'ranks':>5} {'pools':>5} {'MB':>7} {'dump ms':>8} {'MB/s':>7} {'convert':>8} {'write':>7} {'write MB/s':>10} {'posix MB/s':>10} {'ctxsw v/i':>11} {'fsync ms':>8}"
     print(head)
-    for ranks, pools in configs:
-        d = work / f"r{ranks}_p{pools}"
+    for driver, ranks, pools in configs:
+        d = work / f"{driver}_r{ranks}_p{pools}"
         shutil.rmtree(d, ignore_errors=True)
         d.mkdir(parents=True)
         cmd = ["taskset", "-c", ",".join(map(str, cores)), "mpirun", "-n", str(ranks)]
@@ -270,7 +285,7 @@ def sweep(args):
         p = subprocess.run(
             cmd,
             cwd=d,
-            env=dict(env, PHARE_THREAD_POOLS=str(pools)),
+            env=dict(env, PHARE_THREAD_POOLS=str(pools), DAMN_HDF5_DRIVER=driver),
             capture_output=True,
             text=True,
         )
@@ -281,6 +296,7 @@ def sweep(args):
             )
             continue
         r = json.loads(lines[-1][7:])
+        r["driver"] = driver
         # the scopes, the slowest rank's (the timing files are written as the simulators go)
         timings = [d / f".phare/timings/rank.{k}.txt" for k in range(ranks)]
         for key, name in [("convert_ms", "convert"), ("write_ms", "write")]:
@@ -294,7 +310,7 @@ def sweep(args):
         mbs = r["mb"] / (r["dump_ms"] / 1e3)
         wmbs = r["mb"] / (r["write_ms"] / 1e3) if r["write_ms"] else float("nan")
         print(
-            f"{ranks:>5} {pools:>5} {r['mb']:>7.1f} {r['dump_ms']:>8.1f} {mbs:>7.0f} {r['convert_ms']:>8.1f}"
+            f"{driver:>10} {ranks:>5} {pools:>5} {r['mb']:>7.1f} {r['dump_ms']:>8.1f} {mbs:>7.0f} {r['convert_ms']:>8.1f}"
             f" {r['write_ms']:>7.1f} {wmbs:>10.0f} {r['posix_mbs']:>10.0f}"
             f" {r['nvcsw']:>5.0f}/{r['nivcsw']:<5.0f} {r['fsync_ms']:>8.1f}",
             flush=True,
@@ -315,6 +331,9 @@ def main():
     )
     a.add_argument("--ranks", type=int, nargs="+", default=[1, 2, 4, 8])
     a.add_argument("--pools", type=int, nargs="+", default=[1, 2, 4])
+    a.add_argument(
+        "--drivers", nargs="+", default=["mpio"], help="HDF5 drivers: mpio, subfiling"
+    )
     a.add_argument("--cells", type=int, default=512)
     a.add_argument("--patch", type=int, default=64)
     a.add_argument(
