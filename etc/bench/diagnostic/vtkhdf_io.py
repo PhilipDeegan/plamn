@@ -182,6 +182,10 @@ def run(args):
 
     # bytes: every file's size after the last dump, over the dumps (rank 0)
     etc.mpi_barrier()
+    # the driver asked for is the one used: subfiling leaves subfiles (a module without it ignores
+    #  DAMN_HDF5_DRIVER)
+    if os.environ.get("DAMN_HDF5_DRIVER") == "subfiling" and not any(Path(out).rglob("*subfile*")):
+        raise RuntimeError("DAMN_HDF5_DRIVER=subfiling but no subfiles: not the subfiling VFD")
     # every file: subfiling writes subfiles and a config beside each .vtkhdf
     mb = (
         sum(p.stat().st_size for p in Path(out).rglob("*") if p.is_file())
