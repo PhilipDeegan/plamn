@@ -163,6 +163,9 @@ public:
     // domain_values of every patch of level ln, in level order, on every rank (collective)
     NO_DISCARD std::vector<double> all_domain_values(std::string const& name,
                                                      std::size_t const ln = 0);
+    // every rank's domain values of level ln, one per point (a point patches share once), in
+    //  point order: the same for any decomposition (collective)
+    NO_DISCARD std::vector<double> level_values(std::string const& name, std::size_t ln = 0);
 
     // per level, on rank 0 (collective, "" on other ranks), as PHARE's Simulator::summary:
     //   lvl:<n> (<patches>,<cells>,<patch ghost cells>,<level ghost cells>) parts(<particles>),
@@ -336,6 +339,8 @@ private:
     typename Patch_t::ParticlesSynchronisedMover_t mover_{};
 
     std::array<int, dimension> patch_size_{};
+    // cells per direction of the blocks level 0 is cut on when rebalanced
+    static constexpr int rebalance_block = 8;
     std::vector<int> domainBox_;
     std::vector<double> cellWidth_;
     double dt_          = 0;

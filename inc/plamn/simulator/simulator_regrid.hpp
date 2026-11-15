@@ -214,21 +214,22 @@ bool Simulator<opts>::should_rebalance_()
     });
 }
 
-// level 0's patches (the same boxes) partitioned again by the particles they hold, its data
-// moved to the new owners, its ghosts and moments refilled; then each finer level the same
-// (regrid_level_ onto its own boxes: nothing new to refine)
+// level 0 partitioned again by the particles it holds: the domain's patches (as at setup) cut
+// on blocks where a rank's share ends inside one (damn::amr::cut_partition), so level 0's boxes
+// may change; its data moved to the new owners, its ghosts and moments refilled; then each finer
+// level the same (regrid_level_ onto its own boxes: nothing new to refine)
 template<auto opts>
 void Simulator<opts>::rebalance_(double const t)
 {
     DAMN_LOG_SCOPE(1, "Simulator::rebalance_");
     auto const pgw = Patch_t::particle_ghost_width;
 
-    std::vector<Box_t> boxes;
-    for (auto const& p : hierarchy_.levels[0].patches)
-        boxes.push_back(p.box);
+    auto const boxes = damn::amr::chop(hierarchy_.domain, patch_size_);
+    auto const block = damn::core::ConstArray<int, dimension>(rebalance_block);
+    auto const cut   = damn::amr::cut_partition(
+        boxes, block, particle_weights_(0, damn::amr::blocks(boxes, block)), n_ranks_);
     auto const old0 = hierarchy_.levels[0];
-    auto level0     = damn::amr::make_level(
-        0, boxes, damn::amr::partition(boxes, particle_weights_(0, boxes), n_ranks_));
+    auto level0     = damn::amr::make_level(0, cut.boxes, cut.ranks);
 
     if (!damn::amr::same_decomposition(old0, level0))
     {

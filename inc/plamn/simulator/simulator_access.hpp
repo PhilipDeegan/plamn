@@ -20,6 +20,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <format>
+#include <map>
 #include <numeric>
 #include <sstream>
 #include <stdexcept>
@@ -101,6 +102,57 @@ std::vector<double> Simulator<opts>::all_domain_values(std::string const& name,
         next_value[patch.rank] += size;
     }
     return ordered;
+}
+
+template<auto opts>
+std::vector<double> Simulator<opts>::level_values(std::string const& name, std::size_t const ln)
+{
+    auto& ld = levels_.at(ln).data;
+    std::vector<int> points; // dimension per point
+    std::vector<double> values;
+    for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
+    {
+        auto const& cells = ld.patches[i].box;
+        bool const found  = damn::amr::with_resource(ld.data[i], name, [&](auto& r) {
+            if constexpr (damn::amr::BoxData<std::decay_t<decltype(r)>, dimension>)
+                damn::core::for_each_point(domain_box(r, cells), [&](auto const& p) {
+                    for (std::size_t d = 0; d < dimension; ++d)
+                        points.push_back(p[d]);
+                    values.push_back(value(r, cells, p));
+                });
+        });
+        if (!found)
+            throw std::runtime_error("plamn Simulator: no resource " + name);
+    }
+    if (n_ranks_ > 1)
+    {
+        auto const gather = [&]<typename T>(std::vector<T> const& v, MPI_Datatype const type) {
+            int const n = static_cast<int>(v.size());
+            std::vector<int> counts(n_ranks_), displs(n_ranks_);
+            MPI_Allgather(&n, 1, MPI_INT, counts.data(), 1, MPI_INT, MPI_COMM_WORLD);
+            std::partial_sum(counts.begin(), counts.end() - 1, displs.begin() + 1);
+            std::vector<T> all(static_cast<std::size_t>(displs.back() + counts.back()));
+            MPI_Allgatherv(v.data(), n, type, all.data(), counts.data(), displs.data(), type,
+                           MPI_COMM_WORLD);
+            return all;
+        };
+        points = gather(points, MPI_INT);
+        values = gather(values, MPI_DOUBLE);
+    }
+
+    std::map<std::array<int, dimension>, double> by_point;
+    for (std::size_t k = 0; k < values.size(); ++k)
+    {
+        std::array<int, dimension> p{};
+        for (std::size_t d = 0; d < dimension; ++d)
+            p[d] = points[k * dimension + d];
+        by_point.emplace(p, values[k]); // the first patch's
+    }
+    std::vector<double> out;
+    out.reserve(by_point.size());
+    for (auto const& [p, v] : by_point)
+        out.push_back(v);
+    return out;
 }
 
 template<auto opts>
