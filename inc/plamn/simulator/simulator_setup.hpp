@@ -158,6 +158,7 @@ void Simulator<opts>::setup_()
 
     register_resources_();
     setup_restarts_();
+    setup_diagnostics_();
 }
 
 // what moves between patches, named as for_each_resource(HybridPatch) names it
