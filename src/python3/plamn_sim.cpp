@@ -69,6 +69,7 @@ NB_MODULE(PLAMN_SIM_MODULE, m)
         // over ranks (collective)
         .def("all_domain_values", &Simulator::all_domain_values, nb::arg("name"),
              nb::arg("level") = 0)
+        .def("level_values", &Simulator::level_values, nb::arg("name"), nb::arg("level") = 0)
         .def("total_particle_count", &Simulator::total_particle_count, nb::arg("level") = 0)
         .def("particle_counts_per_rank", &Simulator::particle_counts_per_rank, nb::arg("level") = 0)
         .def("rank", &Simulator::rank)

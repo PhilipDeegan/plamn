@@ -13,6 +13,10 @@ nothing changes in a step. The fine level holds the coarse particles under it, s
 2D: a small double Harris sheet with one sheet refined stays finite, its fine level holding the
 coarse particles under it, split. With refinement="tagging", level 1 starts on the sheets and is
 regridded every 2 steps, divergence B kept at its initial (discretization) value.
+
+Load balancing (pyphare's LoadBalancer, with tagging, on more than one rank): a beam drifting
+across the patches unbalances the ranks; rebalancing brings them back without changing B, also
+when whole patches are too coarse to balance (level 0 cut on blocks, damn::amr::cut_partition).
 """
 
 import unittest
@@ -24,7 +28,7 @@ import pyplamn
 pyplamn.patch()
 
 import pyphare.pharein as ph  # noqa: E402
-from pyphare.simulator.simulator import Simulator  # noqa: E402
+from pyphare.simulator.simulator import Simulator, startMPI  # noqa: E402
 
 PPC = 100
 
@@ -82,7 +86,7 @@ def alfven(refined, steps):
     return out
 
 
-def harris(steps, tagging=False, measure=None):
+def harris(steps, tagging=False, measure=None, load_balancer=None):
     ph.global_vars.sim = None
     ph.clearDict()
     L = 0.5
@@ -153,6 +157,8 @@ def harris(steps, tagging=False, measure=None):
         },
     )
     ph.ElectronModel(closure="isothermal", Te=0.0)
+    if load_balancer:
+        ph.LoadBalancer(**load_balancer)
     simulator = Simulator(sim, log_to_file=False).setup().initialize()
     cpp = simulator.cpp_sim
     initial = [cpp.total_particle_count(ln) for ln in range(cpp.n_levels())]
@@ -177,6 +183,69 @@ def harris(steps, tagging=False, measure=None):
     return out
 
 
+def drift(load_balancer, steps=120, patch=(10, 10)):
+    """level 0's rank imbalance (max / mean - 1 of the particles per rank) after each step, and
+    B at the end: uniform protons and a drifting beam blob, refinement="tagging" (2 levels)
+    """
+    ph.global_vars.sim = None
+    ph.clearDict()
+    sim = ph.Simulation(
+        time_step=0.01,
+        time_step_nbr=steps,
+        cells=(60, 60),
+        dl=(0.2, 0.2),
+        largest_patch_size=patch,
+        hyper_resistivity=0.001,
+        refinement="tagging",
+        max_nbr_levels=2,
+        strict=True,
+    )
+    L = sim.simulation_domain()[0]
+
+    def blob(x, y):
+        dx = (x + L / 2) % L - L / 2  # centred at x = 0, periodic
+        rho = 0.5 * np.exp(-(dx**2 + (y - L / 2) ** 2))
+        rho[rho < 1e-3] = 0  # no beam particles there
+        return rho
+
+    def const(v):
+        return lambda x, y: v + 0 * x
+
+    def pop(density, vx, ppc, seed):
+        return {
+            "charge": 1,
+            "density": density,
+            "vbulkx": const(vx),
+            "vbulky": const(0.0),
+            "vbulkz": const(0.0),
+            **{f"vth{c}": const(0.3) for c in "xyz"},
+            "nbr_part_per_cell": ppc,
+            "init": {"seed": seed},
+        }
+
+    ph.MaxwellianFluidModel(
+        bx=const(1.0),
+        by=const(0.0),
+        bz=const(0.0),
+        protons=pop(const(1.0), 0.0, 10, 1),
+        beam=pop(blob, 3.0, 100, 2),
+    )
+    ph.ElectronModel(closure="isothermal", Te=0.0)
+    if load_balancer:
+        ph.LoadBalancer(**load_balancer)
+    simulator = Simulator(sim, log_to_file=False).setup().initialize()
+    cpp = simulator.cpp_sim
+    imbalance = []
+    for k in range(steps + 1):
+        per_rank = np.asarray(cpp.particle_counts_per_rank(0), dtype=float)
+        imbalance.append(per_rank.max() / per_rank.mean() - 1)
+        if k < steps:
+            simulator.advance()
+    B = np.concatenate([np.asarray(cpp.level_values(f"EM_B_{q}", 0)) for q in "xyz"])
+    simulator.reset()
+    return {"imbalance": imbalance, "B": B}
+
+
 def max_divb(simulator):
     """max |div B| per level, over every patch's cells, over the ranks (collective)"""
     from pyphare.pharesee.hierarchy.fromsim import hierarchy_from_sim
@@ -184,7 +253,9 @@ def max_divb(simulator):
     hx = hierarchy_from_sim(simulator, qty="EM_B_x")
     hy = hierarchy_from_sim(simulator, qty="EM_B_y")
     out = []
-    for ln in range(simulator.cpp_sim.n_levels()):  # every rank: a level may have none here
+    for ln in range(
+        simulator.cpp_sim.n_levels()
+    ):  # every rank: a level may have none here
         dx = 0.4 / 2**ln
         m = 0.0
         here = ln in hx.levels()
@@ -245,6 +316,37 @@ class HybridRefinementTest(unittest.TestCase):
         for B in out["B"]:
             self.assertTrue(np.all(np.isfinite(B)))
             self.assertLess(np.abs(B).max(), 2)
+
+    def test_load_balancing_moves_patches_not_physics(self):
+        """a beam population, only in a blob, drifting along B across the patches: without
+        load balancing the ranks' particles drift apart, every 30 steps it brings them back.
+        The physics is the same: B at the end as without it, to round off"""
+        startMPI()  # before asking how many ranks: pyphare starts it with the first simulator
+        if pyplamn.etc.mpi_size() < 2:
+            self.skipTest("one rank: nothing to balance (--tags mpi runs it on 3)")
+        no, lb = drift(None), drift(dict(every=30, tol=0.05))
+        for step in (40, 100):  # after a rebalance (at the start of steps 30, 60, 90)
+            self.assertLess(lb["imbalance"][step], no["imbalance"][step], step)
+        self.assertGreater(max(no["imbalance"]), 0.4)
+        self.assertLess(lb["imbalance"][100], 0.15)
+        self.assertLess(np.abs(lb["B"] - no["B"]).max(), 1e-12)
+
+    def test_load_balancing_cuts_patches(self):
+        """6 level 0 patches (20 x 30) for 3 ranks, the beam blob in one: partitioned whole at
+        initialization the ranks are 0.25+ apart (a patch is too coarse a unit); each rebalance
+        (start of steps 0, 30, 60) cuts level 0 on blocks and brings them within 0.15, B the same
+        as without the step 30 and 60 rebalances"""
+        startMPI()
+        if pyplamn.etc.mpi_size() < 2:
+            self.skipTest("one rank: nothing to balance (--tags mpi runs it on 3)")
+        patch, steps = (20, 30), 61
+        no = drift(None, steps, patch)
+        lb = drift(dict(every=30, tol=0.05), steps, patch)
+        self.assertGreater(lb["imbalance"][0], 0.25)
+        for step in (1, 31, 61):  # just after each rebalance
+            self.assertLess(lb["imbalance"][step], 0.15, step)
+        self.assertLess(lb["imbalance"][61], no["imbalance"][61])
+        self.assertLess(np.abs(lb["B"] - no["B"]).max(), 1e-12)
 
 
 if __name__ == "__main__":
