@@ -112,31 +112,23 @@ def files():
 
 
 def live(level, what, component):
-    """this rank's patch datas of a quantity's component on a level, from the DataWrangler"""
-    if what == "B":
-        return level.getB(component)
-    if what == "E":
-        return level.getE(component)
-    if what == "charge_density":
-        return level.getNi()  # the ions' charge density (PHARE's getNi)
-    if what == "mass_density":
-        return level.getRho() if hasattr(level, "getRho") else None
-    if what == "bulkVelocity":
-        return level.getVi(component)
+    """this rank's patch datas of a quantity's component on a level, from the DataWrangler
+    (every quantity written has a getter)"""
     if isinstance(what, tuple):
         q, name = what
-        if q in ("density", "charge_density"):  # getN: a population's charge density
-            return level.getN(name)
-        if q == "flux":
-            return level.getFlux(component, name)
-    return None
-
-
-def scale(what):
-    """file / live: a population's particle density is its charge density / its charge"""
-    if isinstance(what, tuple) and what[0] == "density":
-        return 1.0 / populations[what[1]][1]
-    return 1.0
+        return {
+            "density": lambda: level.getDensity(name),
+            "charge_density": lambda: level.getN(name),
+            "flux": lambda: level.getFlux(component, name),
+        }[q]()
+    return {
+        "B": lambda: level.getB(component),
+        "E": lambda: level.getE(component),
+        "charge_density": lambda: level.getNi(),
+        "mass_density": lambda: level.getMassDensity(),
+        "bulkVelocity": lambda: level.getVi(component),
+        "charge_flux": lambda: level.getChargeFlux(component),
+    }[what]()
 
 
 def primal(pd, centering):
@@ -261,10 +253,7 @@ class VtkDiagnosticsTest(unittest.TestCase):
                         at[(tuple(lo), tuple(up))] = data[row : row + points]
                         row += points * X_TIMES
                     for c, component in enumerate(comps or "x"):
-                        pds = live(level, what, component if comps else None)
-                        if pds is None:
-                            continue  # no live accessor for it here
-                        for pd in pds:
+                        for pd in live(level, what, component if comps else None):
                             key = (tuple(pd.lower), tuple(pd.upper))
                             self.assertIn(key, at, f"{name} {ln}")
                             centering = (
@@ -274,7 +263,7 @@ class VtkDiagnosticsTest(unittest.TestCase):
                             )
                             np.testing.assert_allclose(
                                 at[key][:, c],
-                                primal(pd, centering) * scale(what),
+                                primal(pd, centering),
                                 rtol=1e-6,
                                 atol=1e-6,
                                 err_msg=f"{name} level {ln} {key} {component}",
