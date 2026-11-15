@@ -152,6 +152,11 @@ NB_MODULE(plamn_etc, m)
              [](Dict& self, std::string const& path, InArray const& array) {
                  self.add(path, V(array.data(), array.data() + array.shape(0)));
              })
+        // a python list (pyphare's elapsed_timestamps): pybind11 takes it as an array
+        .def("add_array_as_vector",
+             [](Dict& self, std::string const& path, std::vector<double> const& values) {
+                 self.add<std::vector<double>>(path, values);
+             })
         .def("addInitFunction1D",
              [](Dict& self, std::string const& path, nb::callable fn) {
                  self.add(path, init_function<1>(std::move(fn)));

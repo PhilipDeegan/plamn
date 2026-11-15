@@ -12,6 +12,8 @@ the same ranks. Run with any number of ranks (the same for both), e.g.
 
 import shutil
 import unittest
+from datetime import timedelta
+from time import sleep
 from pathlib import Path
 
 import numpy as np
@@ -82,14 +84,20 @@ def setup_model(ppc=100):
     ph.ElectronModel(closure="isothermal", Te=0.12)
 
 
-def simulation(restart_dir, restart_time=None, **kwargs):
+def simulation(
+    restart_dir, restart_time=None, restart_options=None, setup=True, **kwargs
+):
+    """a Simulator, set up and initialized; restart_options: as is, else a restart at
+    restart_step (restart_time None) or restarting at restart_time; setup=False: the Simulation
+    """
     ph.global_vars.sim = None
     ph.clearDict()
-    restart_options = dict(dir=restart_dir, mode="overwrite")
-    if restart_time is None:
-        restart_options["timestamps"] = [timestep * restart_step]
-    else:
-        restart_options["restart_time"] = restart_time
+    if restart_options is None:
+        restart_options = dict(dir=restart_dir, mode="overwrite")
+        if restart_time is None:
+            restart_options["timestamps"] = [timestep * restart_step]
+        else:
+            restart_options["restart_time"] = restart_time
     args = dict(
         time_step_nbr=10,
         time_step=timestep,
@@ -101,6 +109,8 @@ def simulation(restart_dir, restart_time=None, **kwargs):
     args.update(kwargs)
     sim = ph.Simulation(**args)
     setup_model()
+    if not setup:
+        return sim
     return Simulator(sim, log_to_file=False).setup().initialize()
 
 
@@ -184,6 +194,83 @@ class RestartsTest(unittest.TestCase):
     def test_tagging(self):
         first = self.run_both(steps=10, refinement="tagging", max_nbr_levels=3)
         self.assertGreater(first.cpp_sim.n_levels(), 1)
+
+    def test_restarts_elapsed_time(self):
+        """a restart after 1 s of wall time: the first advance after a 2 s wait writes it"""
+        opts = dict(
+            dir=self.dir, mode="overwrite", elapsed_timestamps=[timedelta(seconds=1)]
+        )
+        sim = simulation(
+            self.dir, restart_options=opts, setup=False, refinement_boxes={}
+        )
+        self.assertEqual(sim.restart_options["elapsed_timestamps"], [1])
+        first = (
+            Simulator(sim, log_to_file=False).setup().cpp_initialize()
+        )  # no dump at t0
+        self.simulators.append(first)
+        sleep(2)
+        first.advance()  # writes the restart, at the first step
+        first.advance()
+
+        second = simulation(self.dir, restart_time=timestep, refinement_boxes={})
+        self.simulators.append(second)
+        second.advance()
+        self.assertSameState(state(first), state(second), "after step 2")
+
+    def test_mode_conserve(self):
+        """mode="conserve" leaves out the timestamps there is already a restart for"""
+        self.simulators.append(simulation(self.dir, refinement_boxes={}))
+        for _ in range(restart_step):
+            self.simulators[-1].advance()
+        opts = dict(dir=self.dir, mode="conserve", timestamps=[timestep * restart_step])
+        sim = simulation(
+            self.dir, restart_options=opts, setup=False, refinement_boxes={}
+        )
+        self.assertEqual(len(sim.restart_options["timestamps"]), 0)
+
+    def test_trailing_slash(self):
+        """dir//: still one directory per time"""
+        opts = dict(dir=self.dir + "//", mode="overwrite", timestamps=[timestep])
+        s = simulation(self.dir, restart_options=opts, refinement_boxes={})
+        self.simulators.append(s)
+        s.advance()
+        written = pyplamn.etc.restart_path_for_time(self.dir + "//", timestep)
+        self.assertTrue((Path(written) / "restart.h5").exists(), written)
+
+    def test_advanced_restarts_options(self):
+        """keep_last 3 and restart_time "auto": a restart every step for 7 steps, then from the
+        last for 3 more: only the 8th to 10th steps' are left, the next "auto" is the 10th
+        """
+        import pyphare.pharein.restarts as restarts
+
+        def run(steps, timestamps):
+            opts = dict(
+                dir=self.dir,
+                mode="overwrite",
+                keep_last=3,
+                timestamps=timestamps,
+                restart_time="auto",
+            )
+            s = simulation(
+                self.dir,
+                restart_options=opts,
+                time_step_nbr=steps,
+                cells=10,
+                refinement_boxes={},
+            )
+            self.simulators.append(s)
+            for _ in range(steps):
+                s.advance()
+            return opts
+
+        run(7, timestep * np.arange(8))
+        opts = run(3, timestep * np.arange(7, 11))
+        self.assertEqual(restarts.restart_time(dict(opts, restart_time="auto")), 0.01)
+        if pyplamn.etc.mpi_rank() == 0:
+            times = sorted(
+                float(d.name) for d in Path(self.dir).iterdir() if d.is_dir()
+            )
+            np.testing.assert_allclose(times, timestep * np.arange(8, 11))
 
     def test_directory_names(self):
         """10 digits each side of the point: steps far below pyphare's 5 decimals apart"""
