@@ -157,6 +157,7 @@ void Simulator<opts>::setup_()
     ohm_info_.emplace(core::OhmInfo::FROM(sim["algo"]["ohm"]));
 
     register_resources_();
+    setup_restarts_();
 }
 
 // what moves between patches, named as for_each_resource(HybridPatch) names it

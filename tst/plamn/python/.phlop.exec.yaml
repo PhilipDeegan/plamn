@@ -31,3 +31,8 @@ test_hybrid_refinement.py:
   - {}
   - tags: [mpi]
     prefix: "mpirun --oversubscribe -n 3"
+
+test_restarts.py:
+  - {}
+  - tags: [mpi]
+    prefix: "mpirun --oversubscribe -n 3"
