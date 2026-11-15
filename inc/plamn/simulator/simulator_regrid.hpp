@@ -11,6 +11,7 @@
 #include "damn/amr/level_map.hpp"
 #include "damn/amr/partition.hpp"
 #include "damn/amr/regrid.hpp"
+#include "damn/amr/topology.hpp"
 #include "damn/core/def.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/box_spans.hpp"
@@ -226,8 +227,9 @@ void Simulator<opts>::rebalance_(double const t)
 
     auto const boxes = damn::amr::chop(hierarchy_.domain, patch_size_);
     auto const block = damn::core::ConstArray<int, dimension>(rebalance_block);
-    auto const cut   = damn::amr::cut_partition(
-        boxes, block, particle_weights_(0, damn::amr::blocks(boxes, block)), n_ranks_);
+    auto const cut = damn::amr::cut_partition(boxes, block,
+                                              particle_weights_(0, damn::amr::blocks(boxes, block)),
+                                              damn::amr::node_share_capacity(topology_));
     auto const old0 = hierarchy_.levels[0];
     auto level0     = damn::amr::make_level(0, cut.boxes, cut.ranks);
 

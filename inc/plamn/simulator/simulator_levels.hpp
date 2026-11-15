@@ -10,6 +10,7 @@
 #include "damn/amr/level_map.hpp"
 #include "damn/amr/neighbours.hpp"
 #include "damn/amr/partition.hpp"
+#include "damn/amr/topology.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/logger.hpp"
 #include "damn/core/math/array.hpp"
@@ -62,7 +63,7 @@ Simulator<opts>::level_of_(int const ln, std::vector<Box_t> const& boxes)
         ln, patches,
         damn::amr::partition(
             patches, isInitialized_ ? particle_weights_(ln, patches) : box_weights_(ln, patches),
-            n_ranks_));
+            damn::amr::node_share_capacity(topology_)));
 }
 
 template<auto opts>
