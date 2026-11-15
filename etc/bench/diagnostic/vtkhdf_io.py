@@ -118,13 +118,20 @@ def simulation(args, out):
         fluid.append("momentum_tensor")
         pop_q.append("momentum_tensor")
     for q in ["E", "B"]:
-        ph.ElectromagDiagnostics(quantity=q, write_timestamps=timestamps)
+        ph.ElectromagDiagnostics(
+            quantity=q, write_timestamps=timestamps, flush_every=args.flush_every
+        )
     for q in fluid:
-        ph.FluidDiagnostics(quantity=q, write_timestamps=timestamps)
+        ph.FluidDiagnostics(
+            quantity=q, write_timestamps=timestamps, flush_every=args.flush_every
+        )
     for name in ["protons", "alpha"]:
         for q in pop_q:
             ph.FluidDiagnostics(
-                quantity=q, write_timestamps=timestamps, population_name=name
+                quantity=q,
+                write_timestamps=timestamps,
+                population_name=name,
+                flush_every=args.flush_every,
             )
     return sim
 
@@ -184,11 +191,17 @@ def run(args):
     etc.mpi_barrier()
     # the driver asked for is the one used: subfiling leaves subfiles (a module without it ignores
     #  DAMN_HDF5_DRIVER)
-    if os.environ.get("DAMN_HDF5_DRIVER") == "subfiling" and not any(Path(out).rglob("*subfile*")):
-        raise RuntimeError("DAMN_HDF5_DRIVER=subfiling but no subfiles: not the subfiling VFD")
+    if os.environ.get("DAMN_HDF5_DRIVER") == "subfiling" and not any(
+        Path(out).rglob("*subfile*")
+    ):
+        raise RuntimeError(
+            "DAMN_HDF5_DRIVER=subfiling but no subfiles: not the subfiling VFD"
+        )
     # every file: subfiling writes subfiles and a config beside each .vtkhdf
     mb = (
-        sum(p.stat().st_size for p in Path(out).rglob("*") if p.is_file())
+        sum(
+            p.stat().st_blocks * 512 for p in Path(out).rglob("*") if p.is_file()
+        )  # allocated: subfiles hold unwritten stripe space
         / 1e6
         / args.dumps
     )
@@ -263,7 +276,7 @@ def sweep(args):
     )
     results = []
     print(
-        f"cores {args.cores}, {args.cells}^2 cells, patches {args.patch}, {args.dumps} dumps"
+        f"cores {args.cores}, {args.cells}^2 cells, patches {args.patch}, {args.dumps} dumps, flush_every {args.flush_every}"
     )
     head = f"{'driver':>10} {'ranks':>5} {'pools':>5} {'MB':>7} {'dump ms':>8} {'MB/s':>7} {'convert':>8} {'write':>7} {'write MB/s':>10} {'posix MB/s':>10} {'ctxsw v/i':>11} {'fsync ms':>8}"
     print(head)
@@ -286,6 +299,7 @@ def sweep(args):
             ).items()
         ]
         cmd += ["--momentum"] if args.momentum else []
+        cmd += [f"--flush-every={args.flush_every}"]
         p = subprocess.run(
             cmd,
             cwd=d,
@@ -335,6 +349,9 @@ def main():
     )
     a.add_argument("--ranks", type=int, nargs="+", default=[1, 2, 4, 8])
     a.add_argument("--pools", type=int, nargs="+", default=[1, 2, 4])
+    a.add_argument(
+        "--flush-every", type=int, default=1, help="dumps per file open (0: never)"
+    )
     a.add_argument(
         "--drivers", nargs="+", default=["mpio"], help="HDF5 drivers: mpio, subfiling"
     )
