@@ -7,6 +7,7 @@
 //   todo: async (no wait), the jobs must then outlive the launch, see .gpu_todo
 
 #include "damn/core/def/damn_config.hpp"
+#include "damn/core/exec/kernels.hpp" // IWYU pragma: keep (gpu::Vec_t, gpu::TileLauncher: GPU builds)
 
 #include "plamn/core/data/field/field_tiles.hpp"
 

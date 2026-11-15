@@ -3,8 +3,10 @@
 
 #include "damn/core/meta/for_N.hpp"
 #include "damn/core/def/damn_config.hpp"
+#include "damn/core/exec/kernels.hpp" // IWYU pragma: keep (gpu::Vec_t, gpu::TileLauncher: GPU builds)
 
 #include "plamn/core/data/field/field_tiles.hpp"
+#include "plamn/core/numerics/faraday/faraday.hpp" // IWYU pragma: keep (Faraday: GPU builds)
 #include "plamn/core/numerics/differential_operators.hpp"
 #include "plamn/core/data/field/field_expr.hpp"
 #include "plamn/core/data/grid/layout.hpp"
