@@ -16,7 +16,7 @@ regridded every 2 steps, divergence B kept at its initial (discretization) value
 
 Load balancing (pyphare's LoadBalancer, with tagging, on more than one rank): a beam drifting
 across the patches unbalances the ranks; rebalancing brings them back without changing B, also
-with patches larger than a rank's share (level 0 cut on blocks, damn::amr::cut_partition).
+when whole patches are too coarse to balance (level 0 cut on blocks, damn::amr::cut_partition).
 """
 
 import unittest
@@ -331,20 +331,21 @@ class HybridRefinementTest(unittest.TestCase):
         self.assertLess(lb["imbalance"][100], 0.15)
         self.assertLess(np.abs(lb["B"] - no["B"]).max(), 1e-12)
 
-    def test_load_balancing_cuts_patches_larger_than_a_share(self):
-        """two level 0 patches for 3 ranks: whole, one rank has none (imbalance 0.5 after
-        initialize); rebalanced at the start of step 0 (both runs) and 30 (with every=30),
-        level 0 is cut on blocks and every rank is within a block or so of the share"""
+    def test_load_balancing_cuts_patches(self):
+        """6 level 0 patches (20 x 30) for 3 ranks, the beam blob in one: partitioned whole at
+        initialization the ranks are 0.25+ apart (a patch is too coarse a unit); each rebalance
+        (start of steps 0, 30, 60) cuts level 0 on blocks and brings them within 0.15, B the same
+        as without the step 30 and 60 rebalances"""
         startMPI()
         if pyplamn.etc.mpi_size() < 2:
             self.skipTest("one rank: nothing to balance (--tags mpi runs it on 3)")
-        patch, steps = (30, 60), 31
+        patch, steps = (20, 30), 61
         no = drift(None, steps, patch)
         lb = drift(dict(every=30, tol=0.05), steps, patch)
-        self.assertGreaterEqual(lb["imbalance"][0], 0.5)
-        for step in (1, 31):  # just after each rebalance
+        self.assertGreater(lb["imbalance"][0], 0.25)
+        for step in (1, 31, 61):  # just after each rebalance
             self.assertLess(lb["imbalance"][step], 0.15, step)
-        self.assertLess(lb["imbalance"][31], no["imbalance"][31])
+        self.assertLess(lb["imbalance"][61], no["imbalance"][61])
         self.assertLess(np.abs(lb["B"] - no["B"]).max(), 1e-12)
 
 
