@@ -244,7 +244,7 @@ public:
     }
 
     // the particles, not the gaps (sorted)
-    std::size_t nbr_particles() const
+    NO_DISCARD std::size_t nbr_particles() const
     {
         std::size_t n = 0;
         for_each_range(shell(), [&](auto, auto const size) { n += size; });
@@ -393,14 +393,14 @@ private:
     }
 
     // the end of the last non empty chunk before c, the start of the first after c
-    std::size_t prev_end_(std::size_t const c) const
+    NO_DISCARD std::size_t prev_end_(std::size_t const c) const
     {
         for (std::size_t k = c; k-- > 0;)
             if (this->sizes_[k])
                 return this->starts_[k] + this->sizes_[k];
         return 0;
     }
-    std::size_t next_start_(std::size_t const c) const
+    NO_DISCARD std::size_t next_start_(std::size_t const c) const
     {
         for (std::size_t k = c + 1; k < this->sizes_.size(); ++k)
             if (this->sizes_[k])

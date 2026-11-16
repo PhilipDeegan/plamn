@@ -45,7 +45,7 @@ struct GapsTest : public ::testing::Test
     Layout_t const layout     = *TestLayout<Layout_t>{cells};
     Box_t const box           = layout.cells;
     std::map<double, Cell_t> where; // id -> cell
-    std::mt19937 rng{1234};
+    std::mt19937 rng{1234};         // NOLINT(bugprone-random-generator-seed): reproducible
 
     Chunked_t make(double const slack, double const border = 3)
     {
@@ -196,7 +196,7 @@ TEST_F(Gaps1D, anArrivingParticleTakesTheLargerGapThenTheOtherThenNeighboursSlid
     expect_consistent(ps, "inserted");
     // then cascading slides, until no chunk within reach has a gap
     std::size_t in = 3;
-    for (double id = 1003; arrive(id); ++id)
+    while (arrive(1000. + static_cast<double>(in)))
         ++in;
     expect_consistent(ps, "full");
     EXPECT_GT(in, 4u);
