@@ -102,7 +102,8 @@ profile:
       paths: inc
       headers: -x c++-header
       # namespace a::b in forward declarations, plamn's include mappings
-      args: -Xiwyu --cxx17ns -Xiwyu --mapping_file=res/iwyu.imp
+      # without thrust, as before host thrust: iwyu would map thrust's and libcudacxx's internals
+      args: -DDAMN_HAVE_THRUST=0 -Xiwyu --cxx17ns -Xiwyu --mapping_file=res/iwyu.imp
 
 # iwyu's suggestions applied (fix_include): CI builds this and fails on any resulting diff
 # mpicxx adds MPI's include directories itself, iwyu needs them given (Debian/Ubuntu openmpi)
@@ -118,6 +119,7 @@ profile:
       inc: /usr/lib/x86_64-linux-gnu/openmpi/include /usr/lib/x86_64-linux-gnu/openmpi/include/openmpi
       headers: -x c++-header
       # namespace a::b in forward declarations, plamn's include mappings
-      args: -Xiwyu --cxx17ns -Xiwyu --mapping_file=res/iwyu.imp
+      # without thrust, as before host thrust: iwyu would map thrust's and libcudacxx's internals
+      args: -DDAMN_HAVE_THRUST=0 -Xiwyu --cxx17ns -Xiwyu --mapping_file=res/iwyu.imp
       fix: --nocomments --noreorder --nosafe_headers # keeps the include order: damn, plamn, other, system
       system_last: true

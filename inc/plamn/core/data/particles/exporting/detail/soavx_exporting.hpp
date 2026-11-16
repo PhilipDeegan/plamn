@@ -8,6 +8,7 @@
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/vector.hpp"
 #include "damn/core/meta/for_N.hpp"
+#include "damn/core/meta/type_meta.hpp"
 #include "damn/core/memory/memory.hpp"
 
 #include "plamn/core/data/particles/particles_def.hpp"
@@ -53,9 +54,10 @@ struct ParticlesExporter<LayoutMode::SoAVX, alloc_mde>
     template<typename Src, typename Boxes>
     void delete_particles_in(Src& src, Boxes const& boxes)
     {
-        auto const list  = box_list_(boxes);
-        auto const view  = list.view();
-        src.resize(partition_(src, [=] DAMN_ALL(auto const& cell) { return !view.contains(cell); }));
+        auto const list = box_list_(boxes);
+        auto const view = list.view();
+        src.resize(
+            partition_(src, [=] DAMN_ALL(auto const& cell) { return !view.contains(cell); }));
     }
 
     template<typename Src, std::size_t dim>
@@ -75,8 +77,8 @@ struct ParticlesExporter<LayoutMode::SoAVX, alloc_mde>
     template<typename Dst, typename Src, std::size_t dim>
     void move_in_domain(Dst& dst, Src& src, damn::core::Box<int, dim> const& domain_box)
     {
-        auto const kept = partition_(
-            src, [=] DAMN_ALL(auto const& cell) { return !isIn(cell, domain_box); });
+        auto const kept
+            = partition_(src, [=] DAMN_ALL(auto const& cell) { return !isIn(cell, domain_box); });
         move_tail_(dst, src, kept);
     }
 
@@ -86,8 +88,8 @@ struct ParticlesExporter<LayoutMode::SoAVX, alloc_mde>
     {
         auto const list = box_list_(ghost_box.remove(domain_box));
         auto const view = list.view();
-        auto const kept = partition_(
-            src, [=] DAMN_ALL(auto const& cell) { return !view.contains(cell); });
+        auto const kept
+            = partition_(src, [=] DAMN_ALL(auto const& cell) { return !view.contains(cell); });
         move_tail_(dst, src, kept);
     }
 
@@ -149,35 +151,9 @@ private:
         }();
         return static_cast<std::size_t>(std::distance(it, pivot));
 #else
-        // CPU, by index: the kept particles first (in order: stable), then every column
-        //  permuted through a scratch copy
-        if constexpr (alloc_mode == damn::AllocatorMode::GPU_UNIFIED)
-            throw std::runtime_error("SoAVX partitioning on the device needs thrust");
-        else
-        {
-            std::size_t const n = src.size();
-            std::vector<std::size_t> order, rest;
-            order.reserve(n);
-            for (std::size_t i = 0; i < n; ++i)
-                (keep(src.copy(i).iCell()) ? order : rest).push_back(i);
-            std::size_t const pivot = order.size();
-            if (rest.empty())
-                return pivot;
-            order.insert(order.end(), rest.begin(), rest.end());
-            std::apply(
-                [&](auto&... column) {
-                    (
-                        [&](auto& c) {
-                            std::vector<std::decay_t<decltype(c[0])>> const was(c.begin(),
-                                                                                c.begin() + n);
-                            for (std::size_t k = 0; k < n; ++k)
-                                c[k] = was[order[k]];
-                        }(column),
-                        ...);
-                },
-                src.as_tuple());
-            return pivot;
-        }
+        static_assert(damn::core::dependent_false_v<decltype(src)>,
+                      "SoAVX partitioning needs thrust (on the host too: damn's tpp/cccl)");
+        return 0;
 #endif
     }
 

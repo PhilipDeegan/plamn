@@ -8,8 +8,8 @@
 //             its offsets are stale (a change since the last sort()) in memory order instead
 //   into it   appended, then sort(): the result's offsets are valid
 //
-// it has no element iteration (Particles::begin), so the generic converter cannot read it, and
-// would leave it unsorted when writing it
+// the generic converter would read it in memory order (its thrust iterators), not the layout's,
+// and leave it unsorted when writing it
 
 #include "damn/core/def/damn_config.hpp"
 
