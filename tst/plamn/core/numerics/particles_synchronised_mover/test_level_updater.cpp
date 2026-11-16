@@ -10,6 +10,11 @@
 //            around it, each patch holding those in its ghost box (patches meeting on the level
 //            border share them: PHAREHUB/PHARE#1579's corner case)
 //
+// moments as PHAREHUB/PHARE#1441 (and the simulator): after the exchange each patch deposits its
+// domain particles (depositDomain), the level's moments are then every patch's sum on each node
+// (the border sums, periodic images included): the same as the level as one patch, within the
+// summation order.
+//
 // uniform E and B: the push is the same whichever patch holds a particle and the comparison is
 // exact. Every layout picks its updater
 // (ParticlesSynchronisedMoverFor_t): AoSMapped serial, AoS flat parallel, AoSCMTS tiled parallel
@@ -23,6 +28,8 @@
 #include "damn/core/meta/type_meta.hpp"
 #include "damn/core/sys/env.hpp"
 
+#include "plamn/amr/resources.hpp"
+#include "plamn/core/data/field/field_box.hpp"
 #include "plamn/core/data/particles/particles.hpp"
 #include "plamn/core/data/particles/appending/particles_appending.hpp"
 #include "plamn/core/data/particles/comparing/particles_comparing.hpp"
@@ -45,6 +52,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <map>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -277,6 +285,60 @@ struct LevelRun
     {
         push(l);
         exchange(l);
+        for (auto& patch : l.patches)
+            Mover_t::depositDomain(patch.model.state.ions, patch.layout);
+    }
+
+    // node -> {density, flux x, y, z}: every patch's deposit summed on each node of the level
+    //  (its domain nodes; on a periodic level 0 the nodes modulo the domain)
+    using Node_t    = std::array<int, dim>;
+    using Moments_t = std::map<Node_t, std::array<double, 4>>;
+    Moments_t level_moments(Level& l) const
+    {
+        auto constexpr gw = Layout_t::ghost_width;
+        auto const shell  = [&]() { // the level's nodes
+            auto b = level_box;
+            for (std::size_t d = 0; d < dim; ++d)
+                b.upper[d] += 1;
+            return b;
+        }();
+        auto const canonical = [&](Point_t p) {
+            if (!refined) // periodic level 0: node cells == the level's first one
+                for (std::size_t d = 0; d < dim; ++d)
+                    p[d] = ((p[d] % cells) + cells) % cells;
+            return p;
+        };
+        Moments_t sums;
+        for (auto& patch : l.patches)
+        {
+            auto& pop         = *patch.model.state.ions.begin(); // the population
+            auto const cells_ = patch.layout.cells;
+            // fn(resource) of a field: tiled ones through their tiles' deposits summed into one
+            //  patch grid
+            auto const with_resource = [&](auto& field, auto&& fn) {
+                if constexpr (is_field_tile_set_v<std::decay_t<decltype(field)>>)
+                {
+                    auto grid = reduce_single(field);
+                    fn(amr::field_resource<gw>(grid));
+                }
+                else
+                    fn(amr::field_resource<gw>(field));
+            };
+            auto const add = [&](auto& field, std::size_t const k) {
+                with_resource(field, [&](auto const& res) {
+                    damn::core::for_each_point(grow(Box_t{cells_.lower, cells_.upper + 1}, gw),
+                                               [&](auto const& p) {
+                                                   auto const node = canonical(Point_t{p});
+                                                   if (!refined or isIn(node, shell))
+                                                       sums[*node][k] += value(res, cells_, p);
+                                               });
+                });
+            };
+            add(pop.particleDensity(), 0);
+            for (std::size_t c = 0; c < 3; ++c)
+                add(pop.flux()[c], 1 + c);
+        }
+        return sums;
     }
 
     AoS_t level_domain(Level const& l) const
@@ -340,6 +402,27 @@ struct LevelUpdaterTest : public ::testing::Test
         ASSERT_TRUE(report) << what << ": " << report.why();
     }
 
+    // the same nodes, each moment within the summation order (relative to the largest)
+    static void expect_same_moments(auto const& r, auto const& c, std::string const& what)
+    {
+        ASSERT_EQ(r.size(), c.size()) << what;
+        std::array<double, 4> scale{}, worst{};
+        for (auto const& [node, m] : r)
+            for (std::size_t k = 0; k < 4; ++k)
+                scale[k] = std::max(scale[k], std::abs(m[k]));
+        for (auto const& [node, m] : r)
+        {
+            auto const it = c.find(node);
+            ASSERT_TRUE(it != c.end()) << what;
+            for (std::size_t k = 0; k < 4; ++k)
+                worst[k] = std::max(worst[k], std::abs(m[k] - it->second[k]));
+        }
+        for (std::size_t k = 0; k < 4; ++k)
+            EXPECT_LE(worst[k], 1e-14 * std::max(1., scale[k]))
+                << what << ": " << std::array{"density", "flux x", "flux y", "flux z"}[k]
+                << " max |diff| " << worst[k] << " of " << scale[k];
+    }
+
     void run()
     {
         Run_t run;
@@ -359,6 +442,8 @@ struct LevelUpdaterTest : public ::testing::Test
                 ref_run.step(ref);
                 auto const what = "push " + std::to_string(i) + ", patches of " + std::to_string(n);
                 expect_same(run.level_domain(one), run.level_domain(cmp), what + " (vs one patch)");
+                expect_same_moments(run.level_moments(one), run.level_moments(cmp),
+                                    what + " moments (vs one patch)");
                 // another push implementation (MultiBoris): the same arithmetic in another
                 //  order, a ULP or so per push, as test_multi_updater's tolerance (|v| <= 6)
                 expect_same(ref_run.level_domain(ref), run.level_domain(cmp),
