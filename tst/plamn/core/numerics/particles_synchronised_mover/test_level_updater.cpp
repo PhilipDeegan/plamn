@@ -202,7 +202,7 @@ struct LevelRun
 
     // the level ghosts a patch holds: those of its ghost box whose cell it owns, each held by one
     //  patch (Simulator's own_level_ghosts_)
-    AoS_t owned_level_ghosts(damn::amr::Hierarchy<dim> const& h, Box_t const& box) const
+    NO_DISCARD AoS_t owned_level_ghosts(damn::amr::Hierarchy<dim> const& h, Box_t const& box) const
     {
         auto mine            = in_box(level_ghosts, grow(box, pgw));
         auto const elsewhere = damn::amr::owned_elsewhere(h, ln, box, static_cast<int>(pgw));
