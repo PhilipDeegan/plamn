@@ -284,9 +284,9 @@ public:
         if constexpr (alloc_mode == damn::AllocatorMode::CPU or !atomic_ops)
         {
             if constexpr (is_soavx(Particles::layout_mode))
-            {
-                for (auto const& it : particles)
-                    interp_.particleToMesh(it, rhoP, flux, layout, coef);
+            { // by index: the columns' iterators need thrust
+                for (std::size_t i = 0; i < particles.size(); ++i)
+                    interp_.particleToMesh(particles.copy(i), rhoP, flux, layout, coef);
             }
             else
                 interp_(particles, rhoP, flux, layout, coef);
