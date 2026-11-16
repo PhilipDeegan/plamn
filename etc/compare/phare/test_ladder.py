@@ -126,10 +126,19 @@ class LadderTest(unittest.TestCase):
     def test_4_advance_L1(self):
         self.check("advance_L1")
 
-    def test_5_advance_L2(self):
+    def test_5_init_L2(self):
+        self.check("init_L2")
+
+    def test_5_init_L2_nested(self):
+        self.check("init_L2_nested")
+
+    def test_6_advance_L2(self):
         self.check("advance_L2")
 
-    def test_6_harris_2d(self):
+    def test_6_advance_L2_nested(self):
+        self.check("advance_L2_nested")
+
+    def test_7_harris_2d(self):
         self.check("harris_2d")
 
 

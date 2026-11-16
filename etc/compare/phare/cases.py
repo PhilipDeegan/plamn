@@ -5,7 +5,11 @@ previous one, so the first case that differs says where (as tiling_gpu's tests/s
   init_L1      + a refined level made from level 0                    one box
   advance_L0   + push, deposit, field solve                           1 step
   advance_L1   + level ghosts, substeps, sync (coarsening), reflux    one box, 1 step
+  init_L2      + a level 2 whose ghosts need level 1's ghosts         two boxes
+               (2 level 1 cells inside level 1: less than the 3 its ghosts reach, 2 + stencil)
+  init_L2_nested   the same, 4 cells inside: level 1's domains only
   advance_L2   + a third level, several syncs                         two boxes, 4 steps
+  advance_L2_nested  the same, 4 cells inside
   harris_2d    + tagging, regrids, load balancing                     3 levels, 2 steps
 
 The model is PHARE's tests/simulator/advance/test_advance_hybrid.py (getHierarchy), the sizes,
@@ -38,7 +42,10 @@ CASES = {
     "init_L1": dict(boxes=((1, 12),), steps=0),
     "advance_L0": dict(boxes=(), steps=1),
     "advance_L1": dict(boxes=((1, 12),), steps=1),
+    "init_L2": dict(boxes=((1, 12), (4, 21)), steps=0),
+    "init_L2_nested": dict(boxes=((1, 12), (6, 19)), steps=0),
     "advance_L2": dict(boxes=((1, 12), (4, 21)), steps=4),
+    "advance_L2_nested": dict(boxes=((1, 12), (6, 19)), steps=4),
     "harris_2d": dict(harris=True, steps=2),
 }
 
