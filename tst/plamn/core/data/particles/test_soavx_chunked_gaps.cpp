@@ -1,4 +1,4 @@
-// SoAVXChunked's gaps (particles_soavx_chunked.hpp), 1D and 2D: chunks per cell with free slots
+// SoAVXChunked's gaps (particles_soavx_chunked.hpp), 1D, 2D and 3D: chunks per cell with free slots
 // between them, so particles change cells without a full sort. No updater, no pusher: particles'
 // cells are changed by hand, as a push would, then resettle() puts them back in their cells'
 // chunks.
@@ -25,6 +25,7 @@
 #include <map>
 #include <random>
 #include <set>
+#include <tuple>
 #include <vector>
 
 namespace plamn::core
@@ -75,6 +76,9 @@ struct GapsTest : public ::testing::Test
     void expect_consistent(Chunked_t const& ps, std::string const& when) const
     {
         ASSERT_TRUE(ps.sorted()) << when;
+        std::map<Cell_t, std::set<double>> ids_of; // the reference, by cell
+        for (auto const& [id, c] : where)
+            ids_of[c].insert(id);
         std::vector<bool> in_chunk(ps.size(), false);
         std::size_t previous_end = 0, particles = 0;
         damn::core::for_each_point(ps.shell(), [&](auto const& point) {
@@ -82,6 +86,8 @@ struct GapsTest : public ::testing::Test
             for (std::size_t d = 0; d < dim; ++d)
                 cell[d] = point[d];
             auto const [start, size] = chunk(ps, cell);
+            auto const expected      = ids_of.contains(cell) ? ids_of[cell] : std::set<double>{};
+            EXPECT_EQ(size, expected.size()) << when;
             if (size == 0)
                 return;
             EXPECT_GE(start, previous_end) << when << ": chunks overlap or out of order";
@@ -95,10 +101,6 @@ struct GapsTest : public ::testing::Test
                 for (std::size_t d = 0; d < dim; ++d)
                     EXPECT_EQ(ps.iCell(i)[d], cell[d]) << when << ": a particle in another cell";
             }
-            std::set<double> expected;
-            for (auto const& [id, c] : where)
-                if (c == cell)
-                    expected.insert(id);
             EXPECT_EQ(ids, expected) << when << ": cell " << cell[0];
             particles += size;
         });
@@ -173,7 +175,7 @@ TEST_F(Gaps1D, aLeavingParticleFreesTheEndWithTheSmallerGap)
     EXPECT_EQ(ps.cell_range(c5).second, n0 - 2);
 }
 
-TEST_F(Gaps1D, anArrivingParticleTakesTheLargerGapThenTheOtherThenANeighbourSlides)
+TEST_F(Gaps1D, anArrivingParticleTakesTheLargerGapThenTheOtherThenNeighboursSlide)
 {
     auto ps = make(.1);
     // cell 5's gaps: 1 before (cell 4's), 1 after (its own); cell 6's after it 1, 4's before it 1
@@ -188,13 +190,18 @@ TEST_F(Gaps1D, anArrivingParticleTakesTheLargerGapThenTheOtherThenANeighbourSlid
             where[id] = {5};
         return in;
     };
-    EXPECT_TRUE(arrive(1000));  // tail (a tie)
-    EXPECT_TRUE(arrive(1001));  // head, cell 4's gap
-    EXPECT_TRUE(arrive(1002));  // cell 6 slides up into its tail gap
-    EXPECT_TRUE(arrive(1003));  // cell 4 slides down into its head gap (cell 3's)
-    EXPECT_FALSE(arrive(1004)); // none left: a sort is needed
+    EXPECT_TRUE(arrive(1000)); // tail (a tie)
+    EXPECT_TRUE(arrive(1001)); // head, cell 4's gap
+    EXPECT_TRUE(arrive(1002)); // cell 6 slides up into its tail gap
     expect_consistent(ps, "inserted");
-    EXPECT_EQ(ps.cell_range(Cell_t{5}).second, ppc + 4);
+    // then cascading slides, until no chunk within reach has a gap
+    std::size_t in = 3;
+    for (double id = 1003; arrive(id); ++id)
+        ++in;
+    expect_consistent(ps, "full");
+    EXPECT_GT(in, 4u);
+    EXPECT_LE(in, ps.size() - 200); // the gaps of the whole array at most
+    EXPECT_EQ(ps.cell_range(Cell_t{5}).second, ppc + in);
 }
 
 TEST_F(Gaps1D, resettleMovesParticlesBetweenCellsWithoutASort)
@@ -270,18 +277,18 @@ TEST_F(Gaps2D, aMoveAlongXUsesTheGapsOfAChunkARowAway)
     expect_consistent(ps, "moved along x");
     EXPECT_EQ(ps.cell_range(Cell_t{5, 4}).second, ppc + room);
 
-    // more, one at a time: (5, 4)'s neighbours slide over for a while, then a sort
-    std::size_t slid = 0;
-    for (bool sorted = false; !sorted; ++slid)
+    // the rest of (4, 4), one at a time: (5, 4)'s neighbours slide over, cascading
+    std::size_t slid = 0, sorts = 0;
+    while (ps.cell_range(Cell_t{4, 4}).second)
     {
         auto const [s2, n2]         = ps.cell_range(Cell_t{4, 4});
         components(ps).iCell[0][s2] = 5;
         where[ps.weight(s2)]        = ps.iCell(s2);
-        sorted                      = ps.resettle(box, [](auto const&) {});
-        expect_consistent(ps, "move " + std::to_string(slid));
-        ASSERT_LT(slid, ppc);
+        sorts += ps.resettle(box, [](auto const&) {});
+        expect_consistent(ps, "move " + std::to_string(++slid));
     }
-    EXPECT_GT(slid, 1u); // at least one taken by a slide
+    EXPECT_EQ(ps.cell_range(Cell_t{5, 4}).second, 2 * ppc);
+    EXPECT_LT(sorts, slid); // most taken by slides
 }
 
 // the slack as a constant per cell (border weight 1) or weighted to the border cells (3)
@@ -376,6 +383,102 @@ TEST_F(Gaps2D, resettleSortsOnlyWhenAChunkHasNoRoom)
     std::cout << "2D: " << sorts << " sorts in 50 resettles of 60 moves, " << left << " left"
               << std::endl;
 }
+
+
+using Gaps3D = GapsTest<3>;
+
+TEST_F(Gaps3D, sortLeavesTheSlackBetweenChunksBorderCellsMore)
+{
+    // 20000 particles, 2000 slots: 488 border cells weight 3, 512 inside 1 (1976)
+    auto const ps = make(.1);
+    expect_consistent(ps, "sorted");
+    EXPECT_EQ(ps.nbr_particles(), 20000u);
+    auto const gap_after = [&](Cell_t const& cell) {
+        auto const [start, size] = ps.cell_range(cell);
+        auto const [next, _]     = ps.cell_range(Cell_t{cell[0], cell[1], cell[2] + 1});
+        return next - (start + size);
+    };
+    EXPECT_EQ(gap_after({0, 0, 0}), 3u); // 2000 * 3 / 1976
+    EXPECT_EQ(gap_after({4, 4, 4}), 1u); // 2000 / 1976
+    EXPECT_EQ(ps.size(), 20000u + 488 * 3 + 512 * 1);
+}
+
+// constant (1) or border weighted (3) slack; bulk motion along x (cells a plane apart in memory)
+//  or z (the contiguous direction)
+struct Gaps3DMotion : public Gaps3D,
+                      public ::testing::WithParamInterface<std::tuple<double, std::size_t>>
+{
+};
+
+TEST_P(Gaps3DMotion, randomMoves)
+{
+    auto const [weight, _] = GetParam();
+    auto ps                = make(.1, weight);
+    std::size_t sorts      = 0;
+    for (std::size_t round = 0; round < 20; ++round)
+    {
+        move_some(ps, 600); // 3%
+        std::vector<Particle<3>> out;
+        sorts += ps.resettle(box, [&](auto const& p) { out.push_back(p); });
+        for (auto const& p : out)
+            where.erase(p.weight());
+        expect_consistent(ps, "round " + std::to_string(round));
+    }
+    std::cout << "3D random moves, border weight " << weight << ": " << sorts
+              << " sorts in 20 resettles of 600 moves" << std::endl;
+}
+
+// bulk motion: each round 5% of the particles move one cell along dir, those past the box's
+//  upper side leave, as many arrive at its lower side (from the upstream neighbour)
+TEST_P(Gaps3DMotion, bulkMotion)
+{
+    auto const [weight, dir] = GetParam();
+    auto ps                  = make(.1, weight);
+    std::size_t sorts = 0, moved = 0;
+    std::uniform_int_distribution<int> across(box.lower[0], box.upper[0]);
+    double id = 1e7;
+    for (std::size_t round = 0; round < 20; ++round)
+    {
+        std::uniform_int_distribution<std::size_t> any(0, ps.size() - 1);
+        std::set<std::size_t> chosen;
+        while (chosen.size() < 1000)
+            if (auto const i = any(rng); ps.weight(i) != 0)
+                chosen.insert(i);
+        for (auto const i : chosen)
+        {
+            components(ps).iCell[dir][i] += 1;
+            where[ps.weight(i)] = ps.iCell(i);
+        }
+        std::vector<Particle<3>> out;
+        sorts += ps.resettle(box, [&](auto const& p) { out.push_back(p); });
+        for (auto const& p : out)
+            where.erase(p.weight());
+        moved += chosen.size();
+        for (std::size_t k = 0; k < out.size(); ++k) // as many in, upstream
+        {
+            Particle<3> p;
+            for (std::size_t d = 0; d < 3; ++d)
+                p.iCell()[d] = d == dir ? box.lower[d] : across(rng);
+            p.delta()  = {.5, .5, .5};
+            p.v()      = {0, 0, 0};
+            p.weight() = ++id;
+            where[id]  = p.iCell();
+            if (!ps.insert(p))
+            {
+                ps.push_back(p);
+                ps.sort();
+                ++sorts;
+            }
+        }
+        expect_consistent(ps, "round " + std::to_string(round));
+    }
+    std::cout << "3D bulk motion along " << "xyz"[dir] << ", border weight " << weight << ": "
+              << sorts << " sorts in 20 rounds of 1000 moves" << std::endl;
+}
+
+INSTANTIATE_TEST_SUITE_P(Gaps, Gaps3DMotion,
+                         ::testing::Combine(::testing::Values(1., 3.),
+                                            ::testing::Values(std::size_t{0}, std::size_t{2})));
 
 } // namespace plamn::core
 

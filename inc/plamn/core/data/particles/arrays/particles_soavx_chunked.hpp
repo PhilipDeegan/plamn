@@ -19,8 +19,9 @@
 //  Between sorts, particles change cells without one (resettle(), insert(), remove()): a chunk
 //  grows into the gap at its tail or head, whichever is larger, and shrinks from the end with the
 //  smaller gap (the gaps either side even out); an empty chunk takes the middle of the gap it is
-//  in. A chunk with no room either side has a neighbour slide over by one into its other gap.
-//  Only when neither has room is a full sort needed.
+//  in. A chunk with no room either side has a neighbour slide over by one into its other gap,
+//  which, without one, first has its own neighbour slide (up to max_slides chunks each way). Only
+//  when none of them has room is a full sort needed.
 //
 //  Any other mutation (push, append, erase, resize) leaves the chunks stale: sorted() is false
 //  until the next sort(), range accessors assert sorted(). GPU_UNIFIED sorts on the device
@@ -408,15 +409,19 @@ private:
         return size();
     }
 
-    // the next non empty chunk after c moved up one slot into its tail gap, if it has one
-    bool slide_next_(std::size_t const c)
+    // chunks a slide may cascade through (each moves one particle), before a full sort
+    static constexpr std::size_t max_slides = 8;
+
+    // the next non empty chunk after c moved up one slot into its tail gap, making that gap first
+    //  by sliding the chunk after it (and so on, up to depth chunks): a free slot after c
+    bool slide_next_(std::size_t const c, std::size_t const depth = max_slides)
     {
         for (std::size_t k = c + 1; k < this->sizes_.size(); ++k)
             if (this->sizes_[k])
             {
                 auto& start = this->starts_[k];
                 auto& n     = this->sizes_[k];
-                if (next_start_(k) == start + n)
+                if (next_start_(k) == start + n and (depth == 1 or !slide_next_(k, depth - 1)))
                     return false;
                 move_slot_(start + n, start);
                 this->filler_(start, c);
@@ -425,15 +430,15 @@ private:
             }
         return false;
     }
-    // the previous non empty chunk before c moved down one slot into its head gap, if it has one
-    bool slide_prev_(std::size_t const c)
+    // the previous non empty chunk before c moved down one slot into its head gap, the same way
+    bool slide_prev_(std::size_t const c, std::size_t const depth = max_slides)
     {
         for (std::size_t k = c; k-- > 0;)
             if (this->sizes_[k])
             {
                 auto& start = this->starts_[k];
                 auto& n     = this->sizes_[k];
-                if (prev_end_(k) == start)
+                if (prev_end_(k) == start and (depth == 1 or !slide_prev_(k, depth - 1)))
                     return false;
                 move_slot_(start - 1, start + n - 1);
                 this->filler_(start + n - 1, k);
