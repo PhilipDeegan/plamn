@@ -1012,11 +1012,27 @@ public:
 
         DAMN_LOG_START(3, "ParticleToMesh::operator()");
 
-        auto begin = particles.begin();
-        auto end   = particles.end();
+        // columns (arrays, not ranges): by index, their iterators need thrust
+        bool constexpr by_index = [] {
+            using enum LayoutMode;
+            if constexpr (requires { Particles::layout_mode; })
+                return damn::core::any_in(Particles::layout_mode, SoA, SoAVX, SoAVXChunked);
+            else
+                return false;
+        }();
+        if constexpr (by_index)
+        {
+            for (std::size_t i = 0; i < particles.size(); ++i)
+                particleToMesh(particles.copy(i), particleDensity, flux, layout, coef);
+        }
+        else
+        {
+            auto begin = particles.begin();
+            auto end   = particles.end();
 
-        for (auto currPart = begin; currPart != end; ++currPart)
-            particleToMesh(*currPart, particleDensity, flux, layout, coef);
+            for (auto currPart = begin; currPart != end; ++currPart)
+                particleToMesh(*currPart, particleDensity, flux, layout, coef);
+        }
 
 
         DAMN_LOG_STOP(3, "ParticleToMesh::operator()");

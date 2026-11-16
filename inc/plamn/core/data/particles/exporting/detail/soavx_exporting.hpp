@@ -14,8 +14,10 @@
 
 #include <cstddef>
 #include <stdexcept>
+#include <tuple>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace damn::core
 {
@@ -147,7 +149,35 @@ private:
         }();
         return static_cast<std::size_t>(std::distance(it, pivot));
 #else
-        throw std::runtime_error("SoAVX partitioning needs thrust");
+        // CPU, by index: the kept particles first (in order: stable), then every column
+        //  permuted through a scratch copy
+        if constexpr (alloc_mode == damn::AllocatorMode::GPU_UNIFIED)
+            throw std::runtime_error("SoAVX partitioning on the device needs thrust");
+        else
+        {
+            std::size_t const n = src.size();
+            std::vector<std::size_t> order, rest;
+            order.reserve(n);
+            for (std::size_t i = 0; i < n; ++i)
+                (keep(src.copy(i).iCell()) ? order : rest).push_back(i);
+            std::size_t const pivot = order.size();
+            if (rest.empty())
+                return pivot;
+            order.insert(order.end(), rest.begin(), rest.end());
+            std::apply(
+                [&](auto&... column) {
+                    (
+                        [&](auto& c) {
+                            std::vector<std::decay_t<decltype(c[0])>> const was(c.begin(),
+                                                                                c.begin() + n);
+                            for (std::size_t k = 0; k < n; ++k)
+                                c[k] = was[order[k]];
+                        }(column),
+                        ...);
+                },
+                src.as_tuple());
+            return pivot;
+        }
 #endif
     }
 
