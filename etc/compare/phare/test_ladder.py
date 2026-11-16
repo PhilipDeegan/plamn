@@ -25,8 +25,11 @@ Environment (defaults in brackets):
                  pharevtkhdf (PHAREHUB/PHARE#1595's reader, particles from the data wrangler)
                  [phareh5]
   LADDER_FINE_DUMP  1: fine_dump_lvl_max too (cases.py's _diag_options) [1]
-PHARE checkouts built with PHARE_DIAG_DOUBLES=1, plamn's 2D module with
-./mkn.py --dim 2 --diag-doubles: every code writes doubles.
+  LADDER_NDIM    the dimension (2 or 3; harris_2d is 2D only), runs in <case>_<variant>_<n>d
+                 but for 2D [2]
+PHARE checkouts built with PHARE_DIAG_DOUBLES=1, plamn's module with
+./mkn.py --dim <n> --diag-doubles --cell-jump 1: every code writes doubles, PHARE's ghost
+widths. 3D: PHARE's cpp_3_1_6 (master) / cpp_3_1_6_AoSMapped_CPU (tiling branches).
 """
 
 import os
@@ -44,6 +47,9 @@ MIN_OVERLAP = 0.9  # tagged levels (harris_2d); refinement boxes must overlap fu
 TOLERANCE = {"EM_B": 1e-14, "EM_E": 1e-13, "moments": 1e-13}  # atol per kind
 PHARES = {  # name: PHARE checkout with a CMake build in build/
     "master": "/mkn/git/phare/master",
+    # master (dc62fdd4e) + PHAREHUB/PHARE#1583 (#1579-#1581 in it) + #1582: patch layout
+    #  independent level ghosts, ordered border sums, no ion border max, level 0 B ghosts
+    "next": "/mkn/git/phare/next",
     "tiling_gpu": "/mkn/git/phare/tiling_gpu",
     "tiling_multithreaded": "/mkn/git/phare/tiling_multithreaded",
 }
@@ -75,6 +81,7 @@ def run(code, case, out, largest_patch_size):
     n = int(setting("LADDER_NP", "1"))
     kind = "plamn" if code == "plamn" else "phare"
     cmd = [sys.executable, str(HERE / "run_case.py"), kind, case, str(out)]
+    cmd += ["--ndim", str(ndim())]
     if largest_patch_size:
         cmd += ["--largest-patch-size", str(largest_patch_size)]
     if setting("LADDER_FINE_DUMP", "1") == "1":
@@ -89,6 +96,10 @@ def run(code, case, out, largest_patch_size):
         code_ = subprocess.call(cmd, env=environment(code), cwd=PLAMN, stdout=f, stderr=f)
     if code_:
         raise RuntimeError(f"{' '.join(cmd)} failed ({code_}), see {log}")
+
+
+def ndim():
+    return int(setting("LADDER_NDIM", "2"))
 
 
 def tolerance(stem):
@@ -107,7 +118,9 @@ class LadderTest(unittest.TestCase):
 
         largest = SMALL_PATCHES.get(case, 7) if variant == "small" else None
         ref, cmp = setting("LADDER_REF", "master"), setting("LADDER_CMP", "plamn")
-        base = Path(setting("LADDER_OUT", PLAMN / "phare_outputs" / "compare")) / f"{case}_{variant}"
+        suffix = "" if ndim() == 2 else f"_{ndim()}d"
+        base = Path(setting("LADDER_OUT", PLAMN / "phare_outputs" / "compare"))
+        base = base / f"{case}_{variant}{suffix}"
         names = {code: Path(code).name for code in (ref, cmp)}  # a path: its last part
         for code in (ref, cmp):
             run(code, case, base / names[code], largest)
@@ -151,6 +164,8 @@ class LadderTest(unittest.TestCase):
         self.check("advance_L2_nested")
 
     def test_7_harris_2d(self):
+        if ndim() != 2:
+            self.skipTest("harris_2d is 2D")
         self.check("harris_2d")
 
 
