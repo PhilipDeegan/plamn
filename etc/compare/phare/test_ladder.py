@@ -77,11 +77,13 @@ def environment(code):
     return env
 
 
-def run(code, case, out, largest_patch_size):
+def run(code, case, out, largest_patch_size, steps=None):
     n = int(setting("LADDER_NP", "1"))
     kind = "plamn" if code == "plamn" else "phare"
     cmd = [sys.executable, str(HERE / "run_case.py"), kind, case, str(out)]
     cmd += ["--ndim", str(ndim())]
+    if steps is not None:
+        cmd += ["--steps", str(steps)]
     if largest_patch_size:
         cmd += ["--largest-patch-size", str(largest_patch_size)]
     if setting("LADDER_FINE_DUMP", "1") == "1":

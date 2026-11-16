@@ -27,7 +27,9 @@ INTERP = 1
 CELLS = 14
 DL = 0.2
 TIME_STEP = 0.001
-PPC = 10  # particles per cell: few, so particles can be compared too
+import os
+
+PPC = int(os.environ.get("LADDER_PPC", "10"))  # per cell: few, so particles can be compared too
 SEED = 1337
 POPULATIONS = ["protons"]
 
@@ -49,6 +51,8 @@ CASES = {
     "advance_L2": dict(boxes=((1, 12), (4, 21)), steps=4),
     "advance_L2_nested": dict(boxes=((1, 12), (6, 19)), steps=4),
     "harris_2d": dict(harris=True, steps=2),
+    # compare_physics.py's (not a ladder step): 3 levels, tagging, final B composites
+    "harris_3d": dict(harris3d=True, steps=2),
 }
 
 
@@ -63,7 +67,8 @@ def _diag_options(out, fmt, fine_dump):
 
 
 def _diagnostics(ph, timestamps, pops, fmt="phareh5"):
-    if fmt == "phareh5":  # pharevtkhdf has no particles
+    particles = os.environ.get("LADDER_PARTICLES", "1") == "1"  # 0: fields only
+    if fmt == "phareh5" and particles:  # pharevtkhdf has no particles
         for pop in pops:
             for q in ["domain", "levelGhost"]:
                 ph.ParticleDiagnostics(quantity=q, write_timestamps=timestamps, population_name=pop)
@@ -192,7 +197,7 @@ def _harris_2d(ph, out, case, largest_patch_size, fmt, fine_dump):
             "vthy": vth,
             "vthz": vth,
             "nbr_part_per_cell": PPC,
-            "init": {"seed": 12334},
+            "init": {"seed": int(os.environ.get("LADDER_SEED", "12334"))},
         },
     )
     ph.ElectronModel(closure="isothermal", Te=0.0)
@@ -200,6 +205,79 @@ def _harris_2d(ph, out, case, largest_patch_size, fmt, fine_dump):
     _diagnostics(ph, time_step * np.arange(case["steps"] + 1), POPULATIONS, fmt)
     return sim
 
+
+
+def _harris_3d(ph, out, case, largest_patch_size, fmt, fine_dump):
+    """tiling_gpu's tests/simulator/layouts/test_harris_3d_layouts.py, 3 levels (2 there)."""
+    L, time_step = 0.5, 0.001
+    sim = ph.Simulation(
+        time_step=time_step,
+        final_time=time_step * case["steps"],
+        cells=(20, 20, 20),
+        dl=(0.4, 0.4, 0.4),
+        refinement="tagging",
+        max_nbr_levels=3,
+        nesting_buffer=1,
+        tagging_threshold=0.5,
+        hyper_resistivity=0.008,
+        hyper_mode="spatial",
+        resistivity=0.001,
+        tag_buffer=3,
+        largest_patch_size=largest_patch_size,
+        diag_options=_diag_options(out, fmt, fine_dump),
+    )
+    Lx, Ly, _ = sim.simulation_domain()
+
+    def density(x, y, z):
+        return 0.4 + 1.0 / np.cosh((y - Ly * 0.3) / L) ** 2 + 1.0 / np.cosh((y - Ly * 0.7) / L) ** 2
+
+    def S(y, y0, l):
+        return 0.5 * (1.0 + np.tanh((y - y0) / l))
+
+    def by(x, y, z):
+        x0, y1, y2 = x - 0.5 * Lx, y - 0.3 * Ly, y - 0.7 * Ly
+        return 2 * 0.1 * x0 * (np.exp(-(x0**2 + y1**2)) - np.exp(-(x0**2 + y2**2)))
+
+    def bx(x, y, z):
+        x0, y1, y2 = x - 0.5 * Lx, y - 0.3 * Ly, y - 0.7 * Ly
+        dbx = 2 * 0.1 * (-y1 * np.exp(-(x0**2 + y1**2)) + y2 * np.exp(-(x0**2 + y2**2)))
+        return -1 + 2.0 * (S(y, Ly * 0.3, L) - S(y, Ly * 0.7, L)) + dbx
+
+    def bz(x, y, z):
+        return 0.0 * x
+
+    def T(x, y, z):
+        temp = 1.0 / density(x, y, z) * (0.7 - (bx(x, y, z) ** 2 + by(x, y, z) ** 2) * 0.5)
+        assert np.all(temp > 0)
+        return temp
+
+    def zero(x, y, z):
+        return 0.0 * x
+
+    def vth(x, y, z):
+        return np.sqrt(T(x, y, z))
+
+    ph.MaxwellianFluidModel(
+        bx=bx,
+        by=by,
+        bz=bz,
+        protons={
+            "charge": 1,
+            "density": density,
+            "vbulkx": zero,
+            "vbulky": zero,
+            "vbulkz": zero,
+            "vthx": vth,
+            "vthy": vth,
+            "vthz": vth,
+            "nbr_part_per_cell": PPC,
+            "init": {"seed": int(os.environ.get("LADDER_SEED", "12"))},
+        },
+    )
+    ph.ElectronModel(closure="isothermal", Te=0.0)
+    ph.LoadBalancer(every=1, mode="nppc", tol=0.001)
+    _diagnostics(ph, time_step * np.arange(case["steps"] + 1), POPULATIONS, fmt)
+    return sim
 
 
 def simulation(name, out, ndim=NDIM, largest_patch_size=None, fmt="pharevtkhdf", fine_dump=False):
@@ -212,4 +290,6 @@ def simulation(name, out, ndim=NDIM, largest_patch_size=None, fmt="pharevtkhdf",
     case = CASES[name]
     if case.get("harris"):
         return _harris_2d(ph, out, case, largest_patch_size, fmt, fine_dump)
+    if case.get("harris3d"):
+        return _harris_3d(ph, out, case, largest_patch_size, fmt, fine_dump)
     return _advance_hybrid(ph, out, case, ndim, largest_patch_size, fmt, fine_dump)

@@ -2,7 +2,7 @@
 """Runs one case of cases.py under one code, diagnostics into OUT.
 
   run_case.py phare|plamn CASE OUT [--ndim 2] [--largest-patch-size N] [--fine-dump]
-              [--format phareh5|pharevtkhdf]
+              [--format phareh5|pharevtkhdf] [--steps N]
 
 A case with steps advances them one by one; an init case only initializes (dumps t=0). After
 initializing and after each step, each level's domain particles (from the data wrangler, as
@@ -13,6 +13,7 @@ PYTHONPATH (see test_ladder.py's environment()). One rank (the wrangler's view i
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -73,6 +74,7 @@ def main(argv=None):
     p.add_argument("--largest-patch-size", type=int, default=None)
     p.add_argument("--fine-dump", action="store_true", help="fine_dump_lvl_max (see cases.py)")
     p.add_argument("--format", default="phareh5", choices=["phareh5", "pharevtkhdf"])
+    p.add_argument("--steps", type=int, default=None, help="the case's steps, else cases.py's")
     a = p.parse_args(argv)
 
     sys.path.insert(0, str(Path(__file__).parent))
@@ -85,14 +87,19 @@ def main(argv=None):
     from pyphare.simulator.simulator import Simulator, startMPI
 
     startMPI()
+    if a.steps is not None:
+        cases.CASES[a.case] = dict(cases.CASES[a.case], steps=a.steps)
     sim = cases.simulation(a.case, a.out, a.ndim, a.largest_patch_size, a.format, a.fine_dump)
     simulator = Simulator(sim, log_to_file=False).setup().initialize()
+    keep = os.environ.get("LADDER_PARTICLES", "1") == "1"  # 0: no particles (large runs)
     parts = Path(a.out) / "particles"
-    parts.mkdir(parents=True, exist_ok=True)
-    np.savez(parts / "0.npz", **particle_arrays(simulator, cases.POPULATIONS))
+    if keep:
+        parts.mkdir(parents=True, exist_ok=True)
+        np.savez(parts / "0.npz", **particle_arrays(simulator, cases.POPULATIONS))
     for step in range(1, cases.CASES[a.case]["steps"] + 1):
         simulator.advance()
-        np.savez(parts / f"{step}.npz", **particle_arrays(simulator, cases.POPULATIONS))
+        if keep:
+            np.savez(parts / f"{step}.npz", **particle_arrays(simulator, cases.POPULATIONS))
     simulator.reset()
     return 0
 
