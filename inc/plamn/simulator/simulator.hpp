@@ -46,6 +46,7 @@
 #include "plamn/amr/split/splitter.hpp"
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <format>
 #include <map>
@@ -110,6 +111,7 @@ public:
 
     void initialize() override;
     double advance() override;
+    bool dump_restarts(double timestamp, double timestep) override; // simulator_restarts.hpp
 
     std::vector<int> const& domainBox() const override { return domainBox_; }
     std::vector<double> const& cellWidth() const override { return cellWidth_; }
@@ -207,6 +209,21 @@ private:
 
     void setup_();
 
+    // restarts, see simulator_restarts.hpp
+    void setup_restarts_();
+    NO_DISCARD std::vector<std::string> restart_names_() const;
+    void write_restart_(std::string const& dir);
+    void load_restart_();
+    void rebuild_after_load_();
+    struct Restarts
+    {
+        std::string dir, serialized, load_path;  // load_path: set to restart from it
+        std::vector<double> timestamps, elapsed; // elapsed: seconds of wall time after setup
+        std::size_t next_elapsed = 0;
+        double restart_time      = 0;
+        std::chrono::steady_clock::time_point start;
+    } restarts_;
+
     // one patch's work, for every local patch of level ln
     void per_patch_(std::size_t const ln, auto&& fn)
     {
@@ -265,6 +282,7 @@ private:
     //  size, partitioned along the Hilbert curve by the particles they will hold
     NO_DISCARD damn::amr::Level<dimension> level_of_(int ln, std::vector<Box_t> const& boxes);
     void make_level_(int ln, std::vector<Box_t> const& boxes);
+    void allocate_level_(int ln); // the patch data of hierarchy_'s level ln, linked
     void link_level_(int ln); // neighbours, map to the coarser level, level ghost cells
     // the boxes of level ln + 1 from level ln's tagged cells (collective)
     NO_DISCARD std::vector<Box_t> cluster_(int ln);
@@ -360,6 +378,7 @@ private:
 #include "plamn/simulator/simulator_ghosts.hpp"  // IWYU pragma: export
 #include "plamn/simulator/simulator_levels.hpp"  // IWYU pragma: export
 #include "plamn/simulator/simulator_regrid.hpp"  // IWYU pragma: export
+#include "plamn/simulator/simulator_restarts.hpp" // IWYU pragma: export
 #include "plamn/simulator/simulator_setup.hpp"   // IWYU pragma: export
 
 #endif // PLAMN_SIMULATOR_SIMULATOR_HPP

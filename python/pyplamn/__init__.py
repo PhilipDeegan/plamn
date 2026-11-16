@@ -45,7 +45,9 @@ def cpp_lib(sim):
     # tiling_gpu's does. Without them in the simulation, plamn's defaults
     layout = getattr(sim, "model_layout", None) or "AoSMapped"
     allocator = getattr(sim, "allocator", None) or "CPU"
-    sim_id = f"{sim.ndim}_{sim.interp_order}_{sim.refined_particle_nbr}_{layout}_{allocator}"
+    sim_id = (
+        f"{sim.ndim}_{sim.interp_order}_{sim.refined_particle_nbr}_{layout}_{allocator}"
+    )
     name = f"pyplamn.plamn_cpp_{sim_id}"
     try:
         return importlib.import_module(name)
@@ -68,7 +70,9 @@ def _patch_layout_for():
     import pyphare.core.gridlayout as gridlayout
     from pyphare.core.box import Box
 
-    original = getattr(fromsim.make_layout_for, "_pyplamn_original", fromsim.make_layout_for)
+    original = getattr(
+        fromsim.make_layout_for, "_pyplamn_original", fromsim.make_layout_for
+    )
 
     def make_layout_for(simulator, patch_data, qty, dl, *model):
         if model and model[0] == "MHD":
@@ -109,6 +113,12 @@ def patch():
     cpp.cpp_lib = cpp_lib
 
     _patch_layout_for()
+
+    # restart directories: 10 digits each side of the point, as the C++ restart_path_for_time
+    #  (pyphare's 5 decimals cannot tell small steps apart); keep_last deletes by this name
+    import pyphare.pharein.restarts as restarts
+
+    restarts.format_time = lambda time: f"{time:021.10f}"
 
     validate.log_runtime_config = lambda *a, **k: None
     validate.check_build_config_is_runtime_compatible = lambda *a, **k: None

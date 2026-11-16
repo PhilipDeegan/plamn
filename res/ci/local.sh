@@ -30,7 +30,7 @@ mkn build -dKOqp iwyu_fix -t "$J" -Wx res/mkn/mpi >/dev/null
 git diff --exit-code -- inc src tst
 
 step "clang-tidy (changed lines)"
-python3 res/ci/compile_db.py test_plamn_core -dKO
+python3 res/ci/compile_db.py test_plamn_core,py_etc,py_sim -dKO -x res/mkn/mpi
 git diff -U0 "$mb" -- inc src tst \
   | clang-tidy-diff-22.py -clang-tidy-binary clang-tidy-22 -p1 -path . -j "$J" -quiet \
                           -iregex '.*\.(c|cc|cpp|h|hpp|ipp)' || true

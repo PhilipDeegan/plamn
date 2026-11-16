@@ -4,20 +4,25 @@
 // plamn data as damn::amr resources, for damn's schedules
 //
 //   field_resource<gw>(field):     BoxData, values on the field's nodes (its centering), gw
-//                                  ghost nodes each side
-//   particle_resource<gw>(array):  ParticleData, particles in cells, gw ghost cells
+//                                  ghost nodes each side; a C ordered field (not tiled) also
+//                                  gives damn::hdf5's checkpoints its buffer (box_span)
+//   particle_resource<gw>(array):  ParticleData, particles in cells, gw ghost cells; a layout
+//                                  with components() also gives checkpoints its columns
 //
 // both are small handles over the data, made on the fly in a for_each_resource
 
 #include "damn/core/geometry/box.hpp"
+#include "damn/core/memory/box_span.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/math/array.hpp"
 
+#include "plamn/core/data/particles/particle_components.hpp"
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/layout.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
 
 #include <cstddef>
+#include <stdexcept>
 #include <cstdint>
 #include <utility>
 
@@ -66,6 +71,29 @@ NO_DISCARD auto& value(FieldResource<Field, gw> const& r,
 }
 
 
+// what checkpoints hold of a field: its ghosts too (a refined level's level ghosts were filled
+//  from the coarser level before its synchronization: they cannot be rebuilt bit for bit)
+template<typename Field, std::uint32_t gw>
+NO_DISCARD auto checkpoint_box(FieldResource<Field, gw> const& r,
+                               damn::core::Box<int, Field::dimension> const& cells)
+{
+    return ghost_box(r, cells);
+}
+
+// a C ordered field's values over its ghost box, written and read in place by checkpoints
+template<typename Field, std::uint32_t gw>
+    requires(Field::is_c_ordered)
+NO_DISCARD auto box_span(FieldResource<Field, gw> const& r,
+                         damn::core::Box<int, Field::dimension> const& cells)
+{
+    auto const ghost = ghost_box(r, cells);
+    if (r.field->size() != ghost.size())
+        throw std::runtime_error("plamn::amr::box_span: a field not sized for its ghost box");
+    return damn::core::BoxSpan<typename Field::value_type, Field::dimension>{r.field->data(),
+                                                                             ghost};
+}
+
+
 template<typename Particles, std::uint32_t gw>
 struct ParticleResource
 {
@@ -109,6 +137,21 @@ void append(ParticleResource<Particles, gw>& r, typename Particles::value_type p
     for (std::size_t i = 0; i < Particles::dimension; ++i)
         particle.iCell()[i] += shift[i];
     r.particles->emplace_back(particle);
+}
+
+// the particles' components as checkpoint columns (weight, iCell_x.., delta_x.., v_x..)
+template<typename Particles, std::uint32_t gw>
+    requires core::HasComponents<Particles>
+void for_each_column(ParticleResource<Particles, gw> const& r, auto&& fn)
+{
+    core::components(*r.particles).for_each(fn);
+}
+
+template<typename Particles, std::uint32_t gw>
+    requires core::HasComponents<Particles>
+void resize_columns(ParticleResource<Particles, gw> const& r, std::size_t const n)
+{
+    r.particles->resize(n); // the caller rebuilds the layout's maps (cell map, offsets) after
 }
 
 } // namespace plamn::amr

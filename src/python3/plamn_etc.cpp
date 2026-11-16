@@ -9,6 +9,7 @@
 
 #include "plamn_dict.hpp"
 #include "plamn/initializer/data_provider.hpp"
+#include "plamn/simulator/restart_paths.hpp"
 #include "plamn/simulator/simulator_def.hpp"
 #include "plamn/core/numerics/ohm/ohm.hpp"
 #include "plamn/core/boundary/boundary_defs.hpp"
@@ -16,6 +17,7 @@
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/memory/span.hpp"
 #include "damn/mpi/damn_mpi.hpp"
+#include "damn/hdf5/damn_hdf5.hpp"
 
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
@@ -81,6 +83,20 @@ NB_MODULE(plamn_etc, m)
         .def(nb::init<>())
         .def("finalize", &MpiLifeCycle::finalize)
         .def_static("reset", [] {});
+    // pyphare's restarts: where a time's restart is, and what it was run with
+    m.def("restart_path_for_time", [](std::string const& dir, double const time) {
+        return plamn::simulator::restart_dir_for_time(dir, time);
+    });
+    m.def("serialized_simulation_string", [](std::string const& dir) {
+        DAMN_WITH_HIGHFIVE({
+            damn::hdf5::h5::HighFiveFile file{plamn::simulator::restart_file_in(dir),
+                                              damn::hdf5::h5::HiFile::ReadOnly, false};
+            return file.read_attribute<std::string>("/restart", "serialized_simulation");
+        })
+        throw std::runtime_error("plamn: restarts need HDF5 (damn_hdf5): " + dir);
+    });
+    m.def("patch_data_ids", [](std::string const&) { return std::vector<int>{}; }); // SAMRAI's
+
     m.def("mpi_initialized", &mpi_on);
     m.def("mpi_size", [] {
         int size = 1;
@@ -126,10 +142,20 @@ NB_MODULE(plamn_etc, m)
         .def("add_vector_int", &Dict::add<std::vector<int>>)
         .def("add_double", &Dict::add<double>)
         .def("add_string", &Dict::add<std::string>)
+        // pyphare's serialized simulation: hex as bytes (pybind11 takes bytes as a string)
+        .def("add_string",
+             [](Dict& self, std::string const& path, nb::bytes const& value) {
+                 self.add<std::string>(path, std::string{value.c_str(), value.size()});
+             })
         .def("add_vector_string", &Dict::add<std::vector<std::string>>)
         .def("add_array_as_vector",
              [](Dict& self, std::string const& path, InArray const& array) {
                  self.add(path, V(array.data(), array.data() + array.shape(0)));
+             })
+        // a python list (pyphare's elapsed_timestamps): pybind11 takes it as an array
+        .def("add_array_as_vector",
+             [](Dict& self, std::string const& path, std::vector<double> const& values) {
+                 self.add<std::vector<double>>(path, values);
              })
         .def("addInitFunction1D",
              [](Dict& self, std::string const& path, nb::callable fn) {

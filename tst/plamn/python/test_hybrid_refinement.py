@@ -337,8 +337,10 @@ class HybridRefinementTest(unittest.TestCase):
         (start of steps 0, 30, 60) cuts level 0 on blocks and brings them within 0.15, B the same
         as without the step 30 and 60 rebalances"""
         startMPI()
-        if pyplamn.etc.mpi_size() < 2:
-            self.skipTest("one rank: nothing to balance (--tags mpi runs it on 3)")
+        if (
+            pyplamn.etc.mpi_size() != 3
+        ):  # 6 patches split evenly on 2 ranks: nothing to cut
+            self.skipTest("built for 3 ranks (--tags mpi runs it on 3)")
         patch, steps = (20, 30), 61
         no = drift(None, steps, patch)
         lb = drift(dict(every=30, tol=0.05), steps, patch)

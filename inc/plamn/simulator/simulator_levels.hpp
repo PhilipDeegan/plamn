@@ -70,6 +70,12 @@ template<auto opts>
 void Simulator<opts>::make_level_(int const ln, std::vector<Box_t> const& boxes)
 {
     damn::amr::set_level(hierarchy_, level_of_(ln, boxes));
+    allocate_level_(ln);
+}
+
+template<auto opts>
+void Simulator<opts>::allocate_level_(int const ln)
+{
     auto const& sim   = dict_["simulation"];
     auto const pgw    = Patch_t::particle_ghost_width;
     auto constexpr gw = Patch_t::field_ghost_width;
@@ -125,6 +131,13 @@ void Simulator<opts>::initialize()
     DAMN_LOG_SCOPE(1, "Simulator::initialize");
     if (isInitialized_)
         throw std::runtime_error("plamn Simulator already initialized");
+
+    if (!restarts_.load_path.empty()) // pyphare's restart_time: every level from the file
+    {
+        load_restart_();
+        isInitialized_ = true;
+        return;
+    }
 
     make_level_(0, {hierarchy_.domain});
     initialize_root_();

@@ -17,6 +17,7 @@ profile:
 # python module: pyphare's dict and enums, installed into python/pyplamn
 - name: py_etc
   parent: base
+  self: damn_hdf5
   dep: lang.nanobind
   mod: lang.python3 python3.module
   src: src/python3/plamn_etc.cpp
@@ -28,6 +29,7 @@ profile:
 # AoSMapped, CPU)
 - name: py_sim
   parent: base
+  self: damn_hdf5
   dep: lang.nanobind
   mod: lang.python3 python3.module
   src: src/python3/plamn_sim.cpp
@@ -57,6 +59,10 @@ profile:
 # tpp/damn may be a symlink to a local damn checkout, otherwise it is cloned
 - name: damn
   dep: damn&tpp/damn(https://github.com/PhilipDeegan/damn)[damn_core]
+
+# damn's HDF5 (HighFive, parallel HDF5): restarts, for the python modules (MPI: -x res/mkn/mpi)
+- name: damn_hdf5
+  dep: damn&tpp/damn(https://github.com/PhilipDeegan/damn)[damn_hdf5]
 
 # clang-tidy report (.clang-tidy) over the core tests and the plamn headers they include, needs
 # clang-tidy on PATH

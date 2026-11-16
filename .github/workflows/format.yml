@@ -96,7 +96,7 @@ jobs:
     - run: |  # git before checkout, so the checkout is a repository
         apt-get update
         apt-get install -y --no-install-recommends ca-certificates curl git openssh-client g++ python3 \
-          clang-tidy-22
+          clang-tidy-22 openmpi-bin libopenmpi-dev # mpicxx: the python modules' flags
         clang-tidy-22 --version
 
     - uses: actions/checkout@v4
@@ -124,7 +124,7 @@ jobs:
         git config --global --add safe.directory "$PWD"
         curl -Lo mkn https://github.com/mkn/mkn/releases/download/latest/mkn_nix
         chmod +x mkn && mv mkn /usr/local/bin/mkn
-        python3 res/ci/compile_db.py test_plamn_core -dKO
+        python3 res/ci/compile_db.py test_plamn_core,py_etc,py_sim -dKO -x res/mkn/mpi
 
     - continue-on-error: true # warning only (step level: the job stays green)
       run: |

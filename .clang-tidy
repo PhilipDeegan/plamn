@@ -1,6 +1,8 @@
 # clang-tidy for plamn (mkn's clang.tidy module, profile tidy): checks that find bugs or
 # performance problems, not style (as PHARE's), and unused parameters (parameter sets that want a
 # DAO). plamn's own headers and tests only.
+# bugprone-casting-through-void: off, MPI's own constants (MPI_COMM_WORLD, MPI_DOUBLE ...) are
+#  casts through void *
 Checks: >
   -*,
   bugprone-*,
@@ -9,6 +11,7 @@ Checks: >
   -bugprone-implicit-widening-of-multiplication-result,
   performance-*,
   -performance-avoid-endl,
+  -bugprone-casting-through-void,
   misc-unused-parameters,
   clang-diagnostic-unused-parameter,
   clang-diagnostic-unused-variable,
@@ -17,6 +20,7 @@ CheckOptions:
   # plamn spells [[nodiscard]] through damn's NO_DISCARD macro (damn/core/def.hpp)
   modernize-use-nodiscard.ReplacementString: NO_DISCARD
 HeaderFilterRegex: '.*/(inc|tst)/plamn/.*'
-# the compiler's unused warnings: misc-unused-parameters does not look into templates
-ExtraArgs: [-Wunused-parameter, -Wunused-variable]
+# the compiler's unused warnings (misc-unused-parameters does not look into templates); before
+#  the command: a header's command is inferred from a source's, where after it they read as files
+ExtraArgsBefore: [-Wunused-parameter, -Wunused-variable]
 WarningsAsErrors: ''
