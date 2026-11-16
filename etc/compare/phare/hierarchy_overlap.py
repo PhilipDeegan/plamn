@@ -60,6 +60,7 @@ class ValueDiff:
     max_abs: float
     scale: float
     where: tuple
+    fp32: bool = False  # either side float32 (e.g. a PHARE_/PLAMN_DIAG_DOUBLES=0 build)
 
     @property
     def max_rel(self):
@@ -80,6 +81,12 @@ class Report:
 
     def fail(self, reason):
         self.failed.append(reason)
+
+
+def _fp_tol(atol, rtol, fp32, atol_fp32=None):
+    """pyphare's phare_utilities.any_fp_tol: atol * 1e8 (or atol_fp32) when either side is
+    float32, as PHARE's tests compare float32 diagnostics"""
+    return ((atol_fp32 if atol_fp32 else atol * 1e8) if fp32 else atol), rtol
 
 
 def diagnostic_files(directory):
@@ -191,6 +198,7 @@ def compare_level(quantity, time, ref_ld, cmp_ld, ref_fine, cmp_fine, margin, re
             m = mask[nodes]
             if not m.any():
                 continue
+            worst.fp32 |= ref_ld.dtype == np.float32 or cmp_ld.dtype == np.float32
             ra = ref_ld.view(a, comp)[tuple(slice(l - o, h + 2 - o)
                                             for l, h, o in zip(lo, hi, rg.lower[a]))]
             cb = cmp_ld.view(b, comp)[tuple(slice(l - o, h + 2 - o)
@@ -249,7 +257,7 @@ def compare_runs(ref_dir, cmp_dir, min_overlap=0.9, atol=0.0, rtol=1e-12, margin
         if o.overlap < need:
             report.fail(f"{o.quantity} t={o.time} L{o.level}: overlap {o.overlap:.3f} < {need}")
     for v in report.values:
-        v_atol, v_rtol = tolerance(v.quantity)
+        v_atol, v_rtol = _fp_tol(*tolerance(v.quantity), v.fp32)
         if v.max_abs > v_atol + v_rtol * v.scale:
             report.fail(f"{v.quantity}.{v.component} t={v.time} L{v.level}: max |diff| "
                         f"{v.max_abs:.3e} (rel {v.max_rel:.3e}) at node {v.where}")
@@ -465,6 +473,7 @@ def _compare_h5_level(stem, time, level, rp, cp, rgeom, cgeom, cell_mask, report
             if not m.any():
                 continue
             x, y = ra[sel_r], cb[sel_c]
+            worst.fp32 |= x.dtype == np.float32 or y.dtype == np.float32
             diff = np.where(m, np.abs(x - y), 0.0)
             worst.nodes += int(m.sum())
             worst.scale = max(worst.scale, float(np.abs(x[m]).max()))
@@ -517,7 +526,7 @@ def compare_h5_runs(ref_dir, cmp_dir, min_overlap=0.9, margin=2, quantities=None
         if o.overlap < need:
             report.fail(f"{o.quantity} t={o.time} L{o.level}: overlap {o.overlap:.3f} < {need}")
     for v in report.values:
-        v_atol, v_rtol = tolerance(v.quantity)
+        v_atol, v_rtol = _fp_tol(*tolerance(v.quantity), v.fp32)
         if v.max_abs > v_atol + v_rtol * v.scale:
             report.fail(f"{v.quantity}.{v.component} t={v.time} L{v.level}: max |diff| "
                         f"{v.max_abs:.3e} (rel {v.max_rel:.3e}) at {v.where}")
@@ -601,7 +610,8 @@ def print_report(report, out=sys.stdout, values=True):
         print("values (max |ref - cmp| over the compared nodes):", file=out)
     for v in report.values if values else []:
         print(f"  {v.quantity + '.' + v.component:<40} t={v.time:<10g} L{v.level} "
-              f"nodes {v.nodes:<7} abs {v.max_abs:.3e} rel {v.max_rel:.3e}", file=out)
+              f"nodes {v.nodes:<7} abs {v.max_abs:.3e} rel {v.max_rel:.3e}"
+              f"{' (float32)' if v.fp32 else ''}", file=out)
     if report.particles:
         print("particles (domain: cells both levels hold, ghost: neither):", file=out)
     for d in report.particles:
