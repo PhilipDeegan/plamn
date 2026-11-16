@@ -47,7 +47,6 @@
 
 #include <tuple>
 #include <cstdint>
-#include <numeric>
 #include <algorithm>
 #include <array>
 #include <cstddef>
