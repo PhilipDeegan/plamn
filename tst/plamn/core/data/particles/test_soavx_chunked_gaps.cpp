@@ -204,6 +204,30 @@ TEST_F(Gaps1D, anArrivingParticleTakesTheLargerGapThenTheOtherThenNeighboursSlid
     EXPECT_EQ(ps.cell_range(Cell_t{5}).second, ppc + in);
 }
 
+// an overflowing arrival appended (push_back) until the next sort: the chunks no longer bound
+//  the array, the last cell's tail "gap" would be the appended particles
+TEST_F(Gaps1D, noInsertOnceAppendedToUntilSorted)
+{
+    auto ps = make(.1);
+    Particle<1> p;
+    p.iCell()  = {box.upper[0]};
+    p.delta()  = {.5};
+    p.v()      = {0, 0, 0};
+    p.weight() = 1000;
+    ps.push_back(p);
+    where[p.weight()] = p.iCell();
+    p.weight()        = 1001;
+    EXPECT_FALSE(ps.insert(p));
+    ps.push_back(p);
+    where[p.weight()] = p.iCell();
+    ps.sort();
+    expect_consistent(ps, "appended then sorted");
+    p.weight() = 1002;
+    EXPECT_TRUE(ps.insert(p));
+    where[p.weight()] = p.iCell();
+    expect_consistent(ps, "inserted after the sort");
+}
+
 TEST_F(Gaps1D, resettleMovesParticlesBetweenCellsWithoutASort)
 {
     auto ps = make(.1);

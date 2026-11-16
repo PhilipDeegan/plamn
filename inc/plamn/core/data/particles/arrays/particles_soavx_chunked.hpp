@@ -253,7 +253,7 @@ public:
     }
 
     // a particle into cell's chunk, its tail or head gap, whichever is larger: false if neither
-    //  has room (or cell is outside the shell); the chunks stay sorted
+    //  has room (or cell is outside the shell, or the array was appended to since its sort)
     bool insert(auto const& particle)
         requires(storage_mode == StorageMode::VECTOR);
 
@@ -482,6 +482,8 @@ template<typename Super_>
 bool SoAVXChunkedParticles<Super_>::insert(auto const& particle)
     requires(storage_mode == StorageMode::VECTOR)
 {
+    if (!this->sorted()) // appended to since: the chunks no longer bound the particles
+        return false;
     auto const shell = this->shell();
     damn::core::Point<int, dimension> cell;
     for (std::size_t d = 0; d < dimension; ++d)
