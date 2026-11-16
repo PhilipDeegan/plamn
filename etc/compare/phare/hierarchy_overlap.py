@@ -528,7 +528,9 @@ def compare_h5_runs(ref_dir, cmp_dir, min_overlap=0.9, margin=2, quantities=None
 def compare_h5_particles(ref_dir, cmp_dir, report, atol=1e-12):
     """The particle files (<pop>_domain, <pop>_levelGhost) of two phareh5 runs: per time and
     level, domain particles on the cells both levels hold, level ghost particles on the cells
-    neither holds, matched by cell."""
+    neither holds within the files' particle ghost width of both levels (the smaller: plamn's
+    own ring is wider than PHARE's), each particle once (patches whose ghost boxes overlap hold
+    the same level ghost particles), matched by cell."""
     import h5py
 
     for path in sorted(Path(ref_dir).glob("*.h5")):
@@ -542,9 +544,10 @@ def compare_h5_particles(ref_dir, cmp_dir, report, atol=1e-12):
             for t in sorted(set(rf["t"].keys()) & set(cf["t"].keys()), key=float):
                 for k in sorted(set(rf["t"][t].keys()) & set(cf["t"][t].keys())):
                     level = int(k[2:])
-                    sets, boxes = [], []
+                    sets, boxes, ghosts = [], [], []
                     for f in (rf, cf):
                         patches = _h5_patches(f["t"][t][k])
+                        ghosts += [int(p[3].get("ghosts", 0)) for p in patches]
                         boxes.append((np.array([p[0] for p in patches]),
                                       np.array([p[1] for p in patches])))
                         cols = [p[2] for p in patches if "iCell" in p[2]]
@@ -553,12 +556,24 @@ def compare_h5_particles(ref_dir, cmp_dir, report, atol=1e-12):
                                      for n in ("iCell", "delta", "v", "weight")})
                     parts = [{"icell": s["iCell"], "delta": s["delta"], "v": s["v"],
                               "weight": s["weight"].reshape(-1)} for s in sets]
+                    if kind == "ghost":  # each particle once
+                        for pp in parts:
+                            rows = np.hstack([pp["icell"], pp["delta"], pp["v"],
+                                              pp["weight"][:, None]])
+                            _, first = np.unique(rows, axis=0, return_index=True)
+                            first.sort()
+                            for n in pp:
+                                pp[n] = pp[n][first]
+                    g = min(ghosts) if ghosts else 0
                     masks = []
                     for pp in parts:
-                        inside = [_in_boxes(pp["icell"], *b) if len(b[0]) else
-                                  np.zeros(len(pp["icell"]), bool) for b in boxes]
+                        def within(b, by):
+                            return (_in_boxes(pp["icell"], b[0] - by, b[1] + by) if len(b[0])
+                                    else np.zeros(len(pp["icell"]), bool))
+                        inside = [within(b, 0) for b in boxes]
+                        ring = [within(b, g) for b in boxes]
                         masks.append(inside[0] & inside[1] if kind == "domain"
-                                     else ~inside[0] & ~inside[1])
+                                     else ~inside[0] & ~inside[1] & ring[0] & ring[1])
                     rs, cs = _sorted(parts[0], masks[0]), _sorted(parts[1], masks[1])
                     cells, differs, md, mv, mw = compare_particle_sets(rs, cs)
                     d = ParticleDiff(pop, kind, -1, float(t), level, int(masks[0].sum()),
