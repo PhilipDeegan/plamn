@@ -41,3 +41,8 @@ test_vtk_diagnostics.py:
   - {}
   - tags: [mpi]
     prefix: "mpirun --oversubscribe -n 3"
+
+test_timestepper.py:
+  - {}
+  - tags: [mpi]
+    prefix: "mpirun --oversubscribe -n 3"

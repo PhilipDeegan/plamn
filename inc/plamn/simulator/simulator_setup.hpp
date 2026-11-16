@@ -81,12 +81,10 @@ void Simulator<opts>::setup_()
     if (models != std::vector<std::string>{"HybridModel"})
         throw std::runtime_error("plamn Simulator: only HybridModel for now");
 
-    dt_          = cppdict::get_value(dict_, "simulation/time_step/value", 0.);
+    timestepper_ = Timestepper::FROM(dict_);
+    dt_          = timestepper_.dt();
     timeStepNbr_ = cppdict::get_value(dict_, "simulation/time_step_nbr", 0);
-    finalTime_   = sim["final_time"].template to<double>();
-    if (cppdict::get_value(dict_, "simulation/time_step/mode", TimeStepType::constant)
-        != TimeStepType::constant)
-        throw std::runtime_error("plamn Simulator: constant time step only for now");
+    finalTime_   = timestepper_.final_time();
 
     // the hierarchy: level 0 cells from 0, chopped into the largest patch size
     std::array<char const*, 3> constexpr xyz{"x", "y", "z"};

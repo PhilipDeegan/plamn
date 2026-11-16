@@ -138,9 +138,17 @@ void Simulator<opts>::initialize()
     if (isInitialized_)
         throw std::runtime_error("plamn Simulator already initialized");
 
+    // the steps from the start (or the restart's time), the first dt (adaptive: from the
+    //  initialized levels, as PHARE's for its first dump)
+    auto const start_steps = [&]() {
+        timestepper_.start_at(startTime_);
+        dt_ = timestepper_.next([&](auto const& cfl) { return stable_dt_(cfl); });
+    };
+
     if (!restarts_.load_path.empty()) // pyphare's restart_time: every level from the file
     {
         load_restart_();
+        start_steps();
         isInitialized_ = true;
         return;
     }
@@ -168,7 +176,8 @@ void Simulator<opts>::initialize()
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
         prepare_step_(static_cast<int>(ln), startTime_);
 
-    currentTime_   = startTime_;
+    currentTime_ = startTime_;
+    start_steps();
     isInitialized_ = true;
 }
 

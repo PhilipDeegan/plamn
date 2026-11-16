@@ -19,12 +19,14 @@
 #include "plamn/core/numerics/faraday/faraday_transformer.hpp"
 #include "plamn/core/numerics/ohm/ohm.hpp"
 #include "plamn/core/numerics/ohm/ohm_transformer.hpp"
+#include "plamn/core/numerics/stable_dt/whistler.hpp"
 #include "plamn/core/numerics/particles_synchronised_mover/particles_synchronised_mover_def.hpp"
 
 #include "phlop/timing/scope.hpp"
 
 #include <algorithm>
 #include <cstddef>
+#include <limits>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -35,6 +37,27 @@
 
 namespace plamn
 {
+// PHARE's MultiPhysicsIntegrator::computeStableDt: a level's dt as a level 0 one, times the
+//  substeps of each coarser level (the time ratio per level)
+template<auto opts>
+double Simulator<opts>::stable_dt_(Timestepper::CFL const& cfl)
+{
+    double dt0  = std::numeric_limits<double>::max();
+    double to_0 = 1;
+    for (std::size_t ln = 0; ln < levels_.size(); ++ln)
+    {
+        if (ln > 0)
+            to_0 *= time_ratio();
+        double level = std::numeric_limits<double>::max();
+        per_patch_(ln, [&](auto& patch) {
+            level = std::min(
+                level, core::whistler_dt(patch.layout, patch.massDensity, patch.emB, cfl.wave));
+        });
+        dt0 = std::min(dt0, level * to_0);
+    }
+    return n_ranks_ > 1 ? damn::mpi::min(dt0) : dt0;
+}
+
 template<auto opts>
 double Simulator<opts>::advance()
 {
@@ -45,9 +68,10 @@ double Simulator<opts>::advance()
     if (should_rebalance_())
         rebalance_(currentTime_);
 
+    dt_ = timestepper_.next([&](auto const& cfl) { return stable_dt_(cfl); });
     Hooks hooks{*this};
     damn::amr::advance(hierarchy_, hooks, currentTime_, dt_, time_ratio());
-    currentTime_ += dt_;
+    currentTime_ = timestepper_.end_step();
     ++steps_;
     if (tagging_ and steps_ % regrid_interval_ == 0)
         regrid_(currentTime_);

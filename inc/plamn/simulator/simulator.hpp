@@ -45,6 +45,7 @@
 #include "plamn/initializer/data_provider.hpp"
 #include "plamn/simulator/hybrid_patch.hpp"
 #include "plamn/simulator/simulator_def.hpp"
+#include "plamn/simulator/timestepper.hpp"
 #include "plamn/amr/tagging.hpp"
 #include "plamn/amr/split/split.hpp" // IWYU pragma: keep (the Splitter specializations)
 #include "plamn/amr/split/splitter.hpp"
@@ -427,7 +428,10 @@ private:
     static constexpr int rebalance_block = 8;
     std::vector<int> domainBox_;
     std::vector<double> cellWidth_;
-    double dt_          = 0;
+    Timestepper timestepper_; // each step's dt, the time after it
+    // the adaptive dt: every level's whistler bound as a level 0 dt, the smallest (all ranks)
+    double stable_dt_(Timestepper::CFL const& cfl);
+    double dt_          = 0; // this step's
     int timeStepNbr_    = 0;
     double startTime_   = 0;
     double finalTime_   = 0;
