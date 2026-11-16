@@ -313,12 +313,12 @@ struct LevelRun
         {
             auto& pop         = *patch.model.state.ions.begin(); // the population
             auto const cells_ = patch.layout.cells;
-            // fn(resource) of a field: tiled ones through their tiles' deposits summed into one
-            //  patch grid
+            // fn(resource) of a field: tiled ones reduced, their tiles' deposits (ghosts included)
+            //  summed into one patch grid
             auto const with_resource = [&](auto& field, auto&& fn) {
                 if constexpr (is_field_tile_set_v<std::decay_t<decltype(field)>>)
                 {
-                    auto grid = reduce_single(field);
+                    auto grid = reduce(field);
                     fn(amr::field_resource<gw>(grid));
                 }
                 else
