@@ -219,8 +219,15 @@ def compare_runs(ref_dir, cmp_dir, min_overlap=0.9, atol=0.0, rtol=1e-12, margin
             report.fail(f"{stem}: only in {'ref' if stem in ref_files else 'cmp'}")
     ref_run, cmp_run = Run(str(ref_dir)), Run(str(cmp_dir))
 
+    from pyphare.pharesee.amr.errors import FormatError
+
     for stem in stems:
-        rf, cf = open_field(ref_run, ref_files[stem]), open_field(cmp_run, cmp_files[stem])
+        try:  # e.g. PHARE master's vtkhdf momentum_tensor: the file but no data
+            rf = open_field(ref_run, ref_files[stem])
+            cf = open_field(cmp_run, cmp_files[stem])
+        except FormatError as e:
+            report.fail(f"{stem}: unreadable: {str(e).split(': ', 1)[-1][:120]}")
+            continue
         times, only = common_times(rf.times(), cf.times())
         for t in only:
             report.fail(f"{stem}: time {t} in one run only")
