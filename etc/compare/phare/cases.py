@@ -1,0 +1,190 @@
+"""The PHARE / plamn comparison ladder: one input per case, each case adding one mechanism to the
+previous one, so the first case that differs says where (as tiling_gpu's tests/simulator/layouts).
+
+  init_L0      particle loading, moments, initial fields              no refinement, no step
+  init_L1      + a refined level made from level 0                    one box
+  advance_L0   + push, deposit, field solve                           1 step
+  advance_L1   + level ghosts, substeps, sync (coarsening), reflux    one box, 1 step
+  advance_L2   + a third level, several syncs                         two boxes, 4 steps
+  harris_2d    + tagging, regrids, load balancing                     3 levels, 2 steps
+
+The model is PHARE's tests/simulator/advance/test_advance_hybrid.py (getHierarchy), the sizes,
+seeds and boxes those of tiling_gpu's tests/simulator/layouts; harris_2d is
+tests/simulator/layouts/test_harris_2d_layouts.py. Diagnostics: pharevtkhdf, every step.
+Nothing runs on import: ``simulation(case, out, ...)`` declares the input (pyphare.pharein) of
+whichever code imported pyphare.
+"""
+
+import numpy as np
+
+NDIM = 2
+INTERP = 1
+CELLS = 14
+DL = 0.2
+TIME_STEP = 0.001
+PPC_PER_DIM = [100, 33, 15]
+SEED = 1337
+
+
+def _boxes(ndim, *levels):
+    """refinement_boxes: one box per level, (lo, hi) as cell indices in that level's space."""
+    from pyphare.core.box import nDBox
+
+    return {f"L{i}": {"B0": nDBox(ndim, lo, hi)} for i, (lo, hi) in enumerate(levels)}
+
+
+CASES = {
+    "init_L0": dict(boxes=(), steps=0),
+    "init_L1": dict(boxes=((1, 12),), steps=0),
+    "advance_L0": dict(boxes=(), steps=1),
+    "advance_L1": dict(boxes=((1, 12),), steps=1),
+    "advance_L2": dict(boxes=((1, 12), (4, 21)), steps=4),
+    "harris_2d": dict(harris=True, steps=2),
+}
+
+
+def _diagnostics(ph, timestamps, pops):
+    for q in ["E", "B"]:
+        ph.ElectromagDiagnostics(quantity=q, write_timestamps=timestamps)
+    for q in ["charge_density", "mass_density", "bulkVelocity", "charge_flux"]:
+        ph.FluidDiagnostics(quantity=q, write_timestamps=timestamps)
+    for pop in pops:
+        for q in ["density", "flux"]:
+            ph.FluidDiagnostics(quantity=q, write_timestamps=timestamps, population_name=pop)
+
+
+def _advance_hybrid(ph, out, case, ndim, largest_patch_size):
+    """PHARE's test_advance_hybrid model (bump density, cosine B and V, cold vth)."""
+    sim = ph.Simulation(
+        time_step_nbr=max(case["steps"], 1),
+        time_step=TIME_STEP,
+        cells=[CELLS] * ndim,
+        dl=[DL] * ndim,
+        interp_order=INTERP,
+        refinement_boxes=_boxes(ndim, *case["boxes"]) if case["boxes"] else {},
+        largest_patch_size=largest_patch_size,
+        diag_options={"format": "pharevtkhdf", "options": {"dir": out, "mode": "overwrite"}},
+        strict=True,
+    )
+    L = np.array(sim.simulation_domain())
+
+    def density(*xyz):  # a gaussian bump made periodic
+        hL = L / 2
+        return 0.3 + np.exp(
+            sum(-((L[i] / np.pi * np.sin(np.pi * (xyz[i] - hL[i]) / L[i])) ** 2)
+                for i in range(len(xyz)))
+        )
+
+    def cosines(*xyz):
+        return np.asarray(
+            [0.1 * np.cos(2 * np.pi * xyz[i] / L[i]) for i in range(len(xyz))]
+        ).prod(axis=0)
+
+    def one(*xyz):
+        return 1.0
+
+    def vth(*xyz):
+        return 0.01 + np.zeros_like(xyz[0])
+
+    ph.MaxwellianFluidModel(
+        bx=one,
+        by=cosines,
+        bz=cosines,
+        protons={
+            "charge": 1,
+            "density": density,
+            "vbulkx": cosines,
+            "vbulky": cosines,
+            "vbulkz": cosines,
+            "vthx": vth,
+            "vthy": vth,
+            "vthz": vth,
+            "nbr_part_per_cell": PPC_PER_DIM[ndim - 1],
+            "init": {"seed": SEED},
+        },
+    )
+    ph.ElectronModel(closure="isothermal", Te=0.12)
+    _diagnostics(ph, TIME_STEP * np.arange(case["steps"] + 1), ["protons"])
+    return sim
+
+
+def _harris_2d(ph, out, case, largest_patch_size):
+    """tiling_gpu's tests/simulator/layouts/test_harris_2d_layouts.py, vtkhdf diagnostics."""
+    L, time_step = 0.5, 0.005
+    sim = ph.Simulation(
+        time_step=time_step,
+        final_time=time_step * case["steps"],
+        cells=(100, 50),
+        dl=(0.40, 0.40),
+        refinement="tagging",
+        max_nbr_levels=3,
+        hyper_resistivity=0.002,
+        resistivity=0.001,
+        largest_patch_size=largest_patch_size,
+        diag_options={"format": "pharevtkhdf", "options": {"dir": out, "mode": "overwrite"}},
+        nesting_buffer=1,
+    )
+    Lx, Ly = sim.simulation_domain()
+
+    def density(x, y):
+        return 0.4 + 1.0 / np.cosh((y - Ly * 0.3) / L) ** 2 + 1.0 / np.cosh((y - Ly * 0.7) / L) ** 2
+
+    def S(y, y0, l):
+        return 0.5 * (1.0 + np.tanh((y - y0) / l))
+
+    def by(x, y):
+        x0, y1, y2 = x - 0.5 * Lx, y - 0.3 * Ly, y - 0.7 * Ly
+        return 2 * 0.1 * x0 * (np.exp(-(x0**2 + y1**2)) - np.exp(-(x0**2 + y2**2)))
+
+    def bx(x, y):
+        x0, y1, y2 = x - 0.5 * Lx, y - 0.3 * Ly, y - 0.7 * Ly
+        dbx = 2 * 0.1 * (-y1 * np.exp(-(x0**2 + y1**2)) + y2 * np.exp(-(x0**2 + y2**2)))
+        return -1 + 2.0 * (S(y, Ly * 0.3, L) - S(y, Ly * 0.7, L)) + dbx
+
+    def bz(x, y):
+        return 0.0
+
+    def T(x, y):
+        temp = 1.0 / density(x, y) * (0.7 - (bx(x, y) ** 2 + by(x, y) ** 2) * 0.5)
+        assert np.all(temp > 0)
+        return temp
+
+    def zero(x, y):
+        return 0.0
+
+    def vth(x, y):
+        return np.sqrt(T(x, y))
+
+    ph.MaxwellianFluidModel(
+        bx=bx,
+        by=by,
+        bz=bz,
+        protons={
+            "charge": 1,
+            "density": density,
+            "vbulkx": zero,
+            "vbulky": zero,
+            "vbulkz": zero,
+            "vthx": vth,
+            "vthy": vth,
+            "vthz": vth,
+            "nbr_part_per_cell": 22,
+            "init": {"seed": 12334},
+        },
+    )
+    ph.ElectronModel(closure="isothermal", Te=0.0)
+    ph.LoadBalancer(every=1, mode="nppc", tol=0.001)
+    _diagnostics(ph, time_step * np.arange(case["steps"] + 1), ["protons"])
+    return sim
+
+
+def simulation(name, out, ndim=NDIM, largest_patch_size=None):
+    """Declares case ``name``'s input (pyphare.pharein) with diagnostics in ``out``."""
+    import pyphare.pharein as ph
+
+    ph.global_vars.sim = None
+    ph.clearDict()
+    case = CASES[name]
+    if case.get("harris"):
+        return _harris_2d(ph, out, case, largest_patch_size)
+    return _advance_hybrid(ph, out, case, ndim, largest_patch_size)

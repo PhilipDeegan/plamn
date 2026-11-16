@@ -205,8 +205,10 @@ def compare_level(quantity, time, ref_ld, cmp_ld, ref_fine, cmp_fine, margin, re
 
 
 def compare_runs(ref_dir, cmp_dir, min_overlap=0.9, atol=0.0, rtol=1e-12, margin=2,
-                 quantities=None):
-    """Report of every quantity (file stem) present in both directories."""
+                 quantities=None, tolerance=None):
+    """Report of every quantity (file stem) present in both directories. ``tolerance``:
+    optional ``stem -> (atol, rtol)``, e.g. per kind (B, E, moments) as test_layouts."""
+    tolerance = tolerance or (lambda stem: (atol, rtol))
     from pyphare.pharesee.run import Run
 
     report = Report()
@@ -246,13 +248,15 @@ def compare_runs(ref_dir, cmp_dir, min_overlap=0.9, atol=0.0, rtol=1e-12, margin
         if o.overlap < need:
             report.fail(f"{o.quantity} t={o.time} L{o.level}: overlap {o.overlap:.3f} < {need}")
     for v in report.values:
-        if v.max_abs > atol + rtol * v.scale:
+        v_atol, v_rtol = tolerance(v.quantity)
+        if v.max_abs > v_atol + v_rtol * v.scale:
             report.fail(f"{v.quantity}.{v.component} t={v.time} L{v.level}: max |diff| "
                         f"{v.max_abs:.3e} (rel {v.max_rel:.3e}) at node {v.where}")
     return report
 
 
-def print_report(report, out=sys.stdout):
+def print_report(report, out=sys.stdout, values=True):
+    """Overlaps, then (``values``) every value comparison, then the failures."""
     seen = set()
     print("overlap per level (first quantity per time / level):", file=out)
     for o in report.overlaps:
@@ -262,8 +266,9 @@ def print_report(report, out=sys.stdout):
         print(f"  t={o.time:<10g} L{o.level}: {o.overlap:6.1%}  (ref {o.ref_cells}, cmp "
               f"{o.cmp_cells}, shared {o.shared_cells} cells; patches {o.ref_patches} / "
               f"{o.cmp_patches})", file=out)
-    print("values (max |ref - cmp| over the compared nodes):", file=out)
-    for v in report.values:
+    if values:
+        print("values (max |ref - cmp| over the compared nodes):", file=out)
+    for v in report.values if values else []:
         print(f"  {v.quantity + '.' + v.component:<40} t={v.time:<10g} L{v.level} "
               f"nodes {v.nodes:<7} abs {v.max_abs:.3e} rel {v.max_rel:.3e}", file=out)
     print(f"{len(report.failed)} failure(s)" if report.failed else "all within tolerance",
