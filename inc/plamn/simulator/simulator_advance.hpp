@@ -186,7 +186,9 @@ void Simulator<opts>::fill_ion_borders_(std::size_t const ln)
 }
 
 // the level border's moments: the level ghost particles split from the coarser level at both
-// ends of its step, weighted linearly in time (PHARE's fillIonPopMomentGhosts)
+// ends of its step, weighted linearly in time (PHARE's fillIonPopMomentGhosts), each by the
+// patch owning its cell only (PHAREHUB/PHARE#1580: patches meeting on the level border hold
+// the same ones), before the border sums complete every patch's copy
 template<auto opts>
 void Simulator<opts>::deposit_level_ghosts_(std::size_t const ln, double const t)
 {
@@ -199,6 +201,7 @@ void Simulator<opts>::deposit_level_ghosts_(std::size_t const ln, double const t
     alpha = std::clamp(alpha, 0., 1.);
     per_patch_(ln, [&](auto& patch) {
         Interpolator interpolate;
+        interpolate.skip_cells(patch.level_ghost_not_owned);
         for (auto& pop : patch.ions)
         {
             interpolate(pop.levelGhostParticlesOld(), pop.particleDensity(), pop.flux(),
@@ -275,12 +278,10 @@ void Simulator<opts>::move_ions_(std::size_t const ln, double const t, double co
         });
     }
 
-    // as PHARE (fillFluxBorders, fillDensityBorders, then fillIonPopMomentGhosts): the domain
-    //  deposit summed over patch borders, then each patch's level ghost particles, every one of
-    //  them in its ghost box (patches meeting on the level border hold the same ones: summed
-    //  after, they would count twice there)
-    fill_ion_borders_(ln);
+    // as PHAREHUB/PHARE#1580: each level ghost particle deposited once, by the patch owning its
+    //  cell, then the border sums: every patch's copy of a node the same
     deposit_level_ghosts_(ln, t + dt);
+    fill_ion_borders_(ln);
     compute_moments_(ln);
 }
 

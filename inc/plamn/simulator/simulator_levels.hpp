@@ -76,19 +76,25 @@ void Simulator<opts>::make_level_(int const ln, std::vector<Box_t> const& boxes)
 template<auto opts>
 void Simulator<opts>::allocate_level_(int const ln)
 {
-    auto const& sim   = dict_["simulation"];
-    auto const pgw    = Patch_t::particle_ghost_width;
-    auto constexpr gw = Patch_t::field_ghost_width;
+    auto const& sim = dict_["simulation"];
     levels_.resize(static_cast<std::size_t>(ln) + 1);
     auto& l = levels_[ln];
     l.data  = damn::amr::allocate(hierarchy_.levels[ln], rank_, [&](auto const& p) {
         Layout_t const layout{p.box, damn::amr::mesh_size(hierarchy_, ln),
                               damn::amr::position(hierarchy_, ln, p.box.lower), ln};
-        auto const ghost = damn::core::grow(p.box, damn::core::ConstArray<int, dimension>(pgw));
-        return std::make_unique<Patch_t>(layout, sim,
-                                         damn::amr::covered_by_level(hierarchy_, ln, ghost));
+        return std::make_unique<Patch_t>(layout, sim, surroundings_(ln, p.box));
     });
     link_level_(ln);
+}
+
+template<auto opts>
+typename Simulator<opts>::Patch_t::Surroundings
+Simulator<opts>::surroundings_(int const ln, Box_t const& box) const
+{
+    auto constexpr pgw = static_cast<int>(Patch_t::particle_ghost_width);
+    return {damn::amr::covered_by_level(
+                hierarchy_, ln, damn::core::grow(box, damn::core::ConstArray<int, dimension>(pgw))),
+            damn::amr::held_by_earlier(hierarchy_, ln, box, pgw)};
 }
 
 template<auto opts>
@@ -240,14 +246,15 @@ void Simulator<opts>::initialize_refined_(std::size_t const ln)
 template<auto opts>
 void Simulator<opts>::refined_moments_(std::size_t const ln)
 {
+    // as move_ions_: the domain particles, the level ghosts of the cells each patch owns, then
+    //  the border sums
     per_patch_(ln, [&](auto& patch) {
-        core::deposit_domain<dimension, interp_order>(patch.ions, patch.layout); // as move_ions_
+        core::deposit_domain<dimension, interp_order>(patch.ions, patch.layout);
+        Interpolator interpolate;
+        interpolate.skip_cells(patch.level_ghost_not_owned);
+        core::depositParticles(patch.ions, patch.layout, interpolate, core::LevelGhostDeposit{});
     });
     fill_ion_borders_(ln);
-    // after the border sum, as move_ions_ (patches on the level border share level ghosts)
-    per_patch_(ln, [&](auto& patch) {
-        core::depositParticles(patch.ions, patch.layout, Interpolator{}, core::LevelGhostDeposit{});
-    });
     compute_moments_(ln);
 
     // J from B; E was refined

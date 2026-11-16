@@ -248,15 +248,11 @@ void Simulator<opts>::rebalance_(double const t)
         l.data          = damn::mpi::regrid(map, std::move(l.data), [&](auto const& p) {
             Layout_t const layout{p.box, damn::amr::mesh_size(hierarchy_, 0),
                                   damn::amr::position(hierarchy_, 0, p.box.lower), 0};
-            auto const ghost = damn::core::grow(p.box, damn::core::ConstArray<int, dimension>(pgw));
-            return std::make_unique<Patch_t>(layout, sim,
-                                             damn::amr::covered_by_level(hierarchy_, 0, ghost));
+            return std::make_unique<Patch_t>(layout, sim, surroundings_(0, p.box));
         });
         for (std::size_t i = 0; i < damn::amr::size(l.data); ++i)
         {
-            auto const ghost = damn::core::grow(l.data.patches[i].box,
-                                                damn::core::ConstArray<int, dimension>(pgw));
-            l.data.data[i]->rebox(damn::amr::covered_by_level(hierarchy_, 0, ghost));
+            l.data.data[i]->rebox(surroundings_(0, l.data.patches[i].box));
             for (auto& pop : l.data.data[i]->ions)
                 pop.patchGhostParticles().clear();
         }
@@ -336,19 +332,13 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
     auto const make = [&](auto const& p) {
         Layout_t const layout{p.box, damn::amr::mesh_size(hierarchy_, ln),
                               damn::amr::position(hierarchy_, ln, p.box.lower), ln};
-        auto const ghost = damn::core::grow(p.box, damn::core::ConstArray<int, dimension>(pgw));
-        return std::make_unique<Patch_t>(layout, sim,
-                                         damn::amr::covered_by_level(hierarchy_, ln, ghost));
+        return std::make_unique<Patch_t>(layout, sim, surroundings_(ln, p.box));
     };
     auto& l = levels_[fine];
     l.data  = n_ranks_ > 1 ? damn::mpi::regrid(map, std::move(l.data), make)
                            : damn::amr::regrid(map, std::move(l.data), make);
     for (std::size_t i = 0; i < damn::amr::size(l.data); ++i)
-    {
-        auto const ghost
-            = damn::core::grow(l.data.patches[i].box, damn::core::ConstArray<int, dimension>(pgw));
-        l.data.data[i]->rebox(damn::amr::covered_by_level(hierarchy_, ln, ghost));
-    }
+        l.data.data[i]->rebox(surroundings_(ln, l.data.patches[i].box));
     link_level_(ln);
     l.coarse_t  = t;
     l.coarse_dt = 0; // the coarser level's data at t

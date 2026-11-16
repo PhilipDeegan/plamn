@@ -20,7 +20,6 @@
 
 #include "damn/core/meta/for_N.hpp"
 #include "damn/core/geometry/box.hpp"
-
 #include "plamn/core/def.hpp"
 #include "plamn/plamn_core.hpp"
 #include "plamn/amr/resources.hpp"
@@ -38,7 +37,6 @@
 #include <cstddef>
 #include <limits>
 #include <optional>
-#include <format>
 #include <type_traits>
 #include <utility>
 
@@ -128,10 +126,20 @@ struct HybridPatch
         core::ParticlesPack<Particles_t> pack;
     };
 
-    // dict: the "simulation" node; non_level_ghost: the cells around the patch other
-    // patches of the level cover, periodic images included (damn::amr::covered_by_level)
+    // the patch's particle ghost box and the level's other patches, periodic images included
+    //   non_level_ghost:  the cells other patches cover (damn::amr::covered_by_level)
+    //   held_by_earlier:  the cells an earlier patch (box order) also holds, which it owns:
+    //                     their level ghost particles are its to deposit, PHAREHUB/PHARE#1580
+    //                     (damn::amr::held_by_earlier)
+    struct Surroundings
+    {
+        std::vector<Box_t> non_level_ghost;
+        std::vector<Box_t> held_by_earlier;
+    };
+
+    // dict: the "simulation" node
     HybridPatch(Layout_t const& layout_, initializer::Dict const& dict,
-                std::vector<Box_t> const& non_level_ghost)
+                Surroundings const& surroundings)
         : layout{layout_}
         , em{dict["electromag"]}
         , emPred{"EMPred"}
@@ -139,7 +147,8 @@ struct HybridPatch
         , J{"J", core::HybridQuantity::Vector::J}
         , Bold{"EM_B_old", core::HybridQuantity::Vector::B}
         , ions{dict["ions"]}
-        , boxing{std::in_place, layout, non_level_ghost}
+        , boxing{std::in_place, layout, surroundings.non_level_ghost}
+        , level_ghost_not_owned{surroundings.held_by_earlier}
         , emE{grids(em.E, layout)}
         , emB{grids(em.B, layout)}
         , predE{grids(emPred.E, layout)}
@@ -223,11 +232,14 @@ struct HybridPatch
     VecField_t Bold; // over oldB
     Ions_t ions;
     std::optional<Boxing_t> boxing; // the mover's: rebox() when the level's patches change
+    // the level ghost cells another patch owns: not deposited here (Surroundings)
+    std::vector<Box_t> level_ghost_not_owned;
 
-    // the cells around the patch other patches of the level cover changed (a regrid)
-    void rebox(std::vector<Box_t> const& non_level_ghost)
+    // the level's other patches changed (a regrid)
+    void rebox(Surroundings const& surroundings)
     {
-        boxing.emplace(layout, non_level_ghost);
+        boxing.emplace(layout, surroundings.non_level_ghost);
+        level_ghost_not_owned = surroundings.held_by_earlier;
     }
 
     // storage

@@ -935,6 +935,9 @@ public:
         static_assert(not std::is_const_v<Field>);    // bad!
         static_assert(not std::is_const_v<VecField>); // bad!
 
+        if (n_skipped_ > 0 and skipped_(particle.iCell()))
+            return;
+
         auto& startIndex_           = primal_startIndex_;
         auto& weights_              = primal_weights_;
         auto& [xFlux, yFlux, zFlux] = flux();
@@ -1077,8 +1080,28 @@ public:
     }
 
 
+    // particles in these cells are not deposited (particleToMesh), e.g. the level ghost cells
+    //  another patch owns (PHAREHUB/PHARE#1580): the boxes are kept by the caller, none by
+    //  default (host only)
+    void skip_cells(std::vector<damn::core::Box<int, dim>> const& boxes)
+    {
+        skipped_cells_ = boxes.data();
+        n_skipped_     = boxes.size();
+    }
+
 protected:
     static_assert(dimension <= 3 && dimension > 0 && interpOrder >= 1 && interpOrder <= 3, "error");
+
+    damn::core::Box<int, dim> const* skipped_cells_ = nullptr;
+    std::size_t n_skipped_                          = 0;
+
+    bool skipped_(auto const& cell) const DAMN_ALL
+    {
+        for (std::size_t i = 0; i < n_skipped_; ++i)
+            if (isIn(damn::core::Point{cell}, skipped_cells_[i]))
+                return true;
+        return false;
+    }
 
     template<typename T, std::size_t size>
     using Array = std::array<T, size>;
