@@ -12,6 +12,7 @@
 #include "damn/core/meta/type_meta.hpp"
 #include "damn/core/sys/env.hpp"
 
+#include "plamn/core/data/electromag/electromag.hpp" // IWYU pragma: keep (basic::Electromag: GPU builds)
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/data/tensorfield/tensorfield.hpp"
 #include "plamn/core/data/particles/particles.hpp"

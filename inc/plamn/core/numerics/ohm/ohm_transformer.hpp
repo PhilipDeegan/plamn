@@ -3,6 +3,7 @@
 
 #include "damn/core/meta/constexprifier.hpp"
 #include "damn/core/def/damn_config.hpp"
+#include "damn/core/exec/kernels.hpp" // IWYU pragma: keep (gpu::Vec_t, gpu::TileLauncher: GPU builds)
 
 #include "plamn/core/data/grid/detail/detail.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
