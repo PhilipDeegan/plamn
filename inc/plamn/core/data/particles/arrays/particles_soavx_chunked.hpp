@@ -19,7 +19,8 @@
 //  Between sorts, particles change cells without one (resettle(), insert(), remove()): a chunk
 //  grows into the gap at its tail or head, whichever is larger, and shrinks from the end with the
 //  smaller gap (the gaps either side even out); an empty chunk takes the middle of the gap it is
-//  in. Only when neither side has room is a full sort needed.
+//  in. A chunk with no room either side has a neighbour slide over by one into its other gap.
+//  Only when neither has room is a full sort needed.
 //
 //  Any other mutation (push, append, erase, resize) leaves the chunks stale: sorted() is false
 //  until the next sort(), range accessors assert sorted(). GPU_UNIFIED sorts on the device
@@ -407,6 +408,41 @@ private:
         return size();
     }
 
+    // the next non empty chunk after c moved up one slot into its tail gap, if it has one
+    bool slide_next_(std::size_t const c)
+    {
+        for (std::size_t k = c + 1; k < this->sizes_.size(); ++k)
+            if (this->sizes_[k])
+            {
+                auto& start = this->starts_[k];
+                auto& n     = this->sizes_[k];
+                if (next_start_(k) == start + n)
+                    return false;
+                move_slot_(start + n, start);
+                this->filler_(start, c);
+                ++start;
+                return true;
+            }
+        return false;
+    }
+    // the previous non empty chunk before c moved down one slot into its head gap, if it has one
+    bool slide_prev_(std::size_t const c)
+    {
+        for (std::size_t k = c; k-- > 0;)
+            if (this->sizes_[k])
+            {
+                auto& start = this->starts_[k];
+                auto& n     = this->sizes_[k];
+                if (prev_end_(k) == start)
+                    return false;
+                move_slot_(start - 1, start + n - 1);
+                this->filler_(start + n - 1, k);
+                --start;
+                return true;
+            }
+        return false;
+    }
+
     void move_slot_(std::size_t const to, std::size_t const from)
     {
         auto columns = this->as_tuple();
@@ -450,9 +486,17 @@ bool SoAVXChunkedParticles<Super_>::insert(auto const& particle)
         n = 1;
         return true;
     }
-    std::size_t const head = start - lower, tail = upper - (start + n);
+    std::size_t head = start - lower, tail = upper - (start + n);
     if (head == 0 and tail == 0)
-        return false;
+    { // a neighbour chunk slides over by one into its other gap: its first particle to its tail
+      //  (the next chunk), or its last to its head (the previous one)
+        if (slide_next_(c))
+            tail = 1;
+        else if (slide_prev_(c))
+            head = 1;
+        else
+            return false;
+    }
     if (tail >= head)
         write_slot_(start + n, particle);
     else
