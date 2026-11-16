@@ -24,6 +24,12 @@
 // (ParticlesSynchronisedMoverFor_t): AoSMapped serial, AoS flat parallel, AoSCMTS tiled parallel;
 // on a GPU also AoSPCTS and SoAVX in unified memory, updated on the device
 //
+// crossing particles (CrossingTest): every cell's 3^dim - 1 particles (2, 8, 26) at its centre,
+// each moving to a different neighbour cell's centre in one push, no E or B. Each patch's
+// domain, patch ghost and level ghost particles after a push are then known exactly, the same
+// for every layout and updater; after the patch ghost swap, every level cell holds one particle
+// from each neighbour
+//
 // env: PLAMN_CELLS (level cells per direction), PLAMN_PPC, PLAMN_PUSHES, PLAMN_TIMESTEP, PLAMN_SEED
 
 #include "damn/amr/hierarchy.hpp"
@@ -153,6 +159,58 @@ struct LevelRun
         return boxes;
     }
 
+    // crossing particles (CrossingTest): every cell's 3^dim - 1 particles at its centre, each
+    //  moving to the centre of another neighbour cell in one push, no E or B: every particle's
+    //  next cell is known, whichever layout, updater and patch holds it
+    struct Crossing
+    {
+    };
+    LevelRun() = default;
+    explicit LevelRun(Crossing)
+        : crossing{true}
+        , domain{crossing_particles({level_box})}
+        , level_ghosts{refined ? crossing_particles(ring()) : crossing_particles({})}
+    {
+    }
+    bool const crossing = false;
+
+    // the level ghost cells: the ring of width pgw around the level box
+    std::vector<Box_t> ring() const
+    {
+        return grow(level_box, damn::core::ConstArray<int, dim>(pgw)).remove(level_box);
+    }
+
+    // a particle's direction: its velocity's sign per direction (crossing particles)
+    static auto direction(auto const& particle)
+    {
+        Point_t d;
+        for (std::size_t i = 0; i < dim; ++i)
+            d[i] = (particle.v()[i] > 0) - (particle.v()[i] < 0);
+        return d;
+    }
+
+    AoS_t crossing_particles(std::vector<Box_t> const& boxes) const
+    {
+        auto ps          = make_particles<AoS_t>(*TestLayout<Layout_t>{level_box});
+        double const vel = .1 / dt; // a cell (dx .1) per push
+        for (auto const& box : boxes)
+            damn::core::for_each_point(box, [&](auto const& cell) {
+                damn::core::for_each_point(
+                    Box_t{damn::core::ConstArray<int, dim>(-1),
+                          damn::core::ConstArray<int, dim>(1)},
+                    [&](auto const& d) {
+                        if (Point_t{d} == Point_t{})
+                            return;
+                        std::array<double, 3> v{};
+                        for (std::size_t i = 0; i < dim; ++i)
+                            v[i] = d[i] * vel;
+                        ps.emplace_back(Particle<dim>{1., Point_t{cell}.toArray(),
+                                                      damn::core::ConstArray<double, dim>(.5), v});
+                    });
+            });
+        return ps;
+    }
+
     // the level's particles, once: domain on the level box, level ghosts on the ring around it
     AoS_t const domain = [&]() {
         auto ps = make_particles<AoS_t>(*TestLayout<Layout_t>{level_box});
@@ -192,13 +250,13 @@ struct LevelRun
     }
 
     // the same E and B everywhere (the fixtures' default varies with the local index): a push is
-    //  then the same whichever patch holds the particle
-    static void uniform_fields(auto& em)
+    //  then the same whichever patch holds the particle; none for crossing particles
+    void uniform_fields(auto& em) const
     {
         for (std::size_t c = 0; c < 3; ++c)
         {
-            em.E[c].fill(std::array{.02, -.01, .005}[c]);
-            em.B[c].fill(std::array{1., .2, .3}[c]);
+            em.E[c].fill(crossing ? 0. : std::array{.02, -.01, .005}[c]);
+            em.B[c].fill(crossing ? 0. : std::array{1., .2, .3}[c]);
         }
     }
 
@@ -529,6 +587,171 @@ TYPED_TEST_SUITE(LevelUpdaterTest, LevelPermutations_t, );
 TYPED_TEST(LevelUpdaterTest, patchSplitsHoldTheSameParticles)
 {
     this->run();
+}
+
+
+// crossing particles (LevelRun::Crossing): every particle's next cell is known, so is what the
+//  updater makes of it, the same for every layout and updater
+template<typename Param>
+struct CrossingTest : public ::testing::Test
+{
+    auto constexpr static dim = Param::dim;
+    using Run_t               = LevelRun<Param>;
+    using Point_t             = Run_t::Point_t;
+    using Box_t               = Run_t::Box_t;
+    using AoS_t               = Run_t::AoS_t;
+    using Key                 = std::array<int, 2 * dim>; // its cell, its direction
+
+    Run_t run{typename Run_t::Crossing{}};
+
+    static Key key(Point_t const& cell, Point_t const& d)
+    {
+        Key k;
+        for (std::size_t i = 0; i < dim; ++i)
+        {
+            k[i]       = cell[i];
+            k[dim + i] = d[i];
+        }
+        return k;
+    }
+
+    // the (cell, direction) of every particle of an array, sorted
+    static std::vector<Key> keys(auto const& particles, auto const& layout)
+    {
+        std::vector<Key> out;
+        for (auto const& p : convert_particles<AoS_t>(particles, layout))
+            out.push_back(key(Point_t{p.iCell()}, Run_t::direction(p)));
+        std::sort(out.begin(), out.end());
+        return out;
+    }
+
+    static auto& arrays(auto& patch) { return patch.model.state.ions.populations[0].particles; }
+
+    // one push: each patch's domain, patch ghost and level ghost particles are, from where each
+    //  particle goes: its own domain cells (domain particles and level ghosts entering it),
+    //  another patch's (handed over, as patch ghosts), the level ghost cells of its ghost box
+    //  (level ghosts staying so), else gone (left the level, or the ghost box)
+    void every_leaver_where_expected()
+    {
+        for (int const n : {cells, cells / 2, cells / 4})
+        {
+            auto l = run.make_level(n);
+            std::vector<std::array<std::vector<Key>, 3>> expected(l.patches.size());
+            for (std::size_t i = 0; i < l.patches.size(); ++i)
+            {
+                auto& patch        = l.patches[i];
+                auto const& boxing = l.boxings.at(patch.id);
+                auto const ghostBox
+                    = grow(patch.layout.cells, damn::core::ConstArray<int, dim>(Run_t::pgw));
+                auto& [domain, patch_ghost, level_ghost] = expected[i];
+                auto const go = [&](auto const& particles, bool const is_level_ghost) {
+                    for (auto const& p : convert_particles<AoS_t>(particles, patch.layout))
+                    {
+                        auto const d    = Run_t::direction(p);
+                        auto const dest = Point_t{p.iCell()} + d;
+                        if (isIn(dest, patch.layout.cells))
+                            domain.push_back(key(dest, d));
+                        else if (isIn(dest, boxing.nonLevelGhostBox))
+                            patch_ghost.push_back(key(dest, d));
+                        else if (is_level_ghost and isIn(dest, ghostBox))
+                            level_ghost.push_back(key(dest, d));
+                    }
+                };
+                go(arrays(patch).domain_particles, false);
+                go(arrays(patch).level_ghost_particles, true);
+                for (auto* v : {&domain, &patch_ghost, &level_ghost})
+                    std::sort(v->begin(), v->end());
+            }
+
+            run.push(l);
+
+            std::size_t handed_over = 0;
+            for (std::size_t i = 0; i < l.patches.size(); ++i)
+            {
+                auto& patch     = l.patches[i];
+                auto const what = "patches of " + std::to_string(n) + ", patch " + patch.id;
+                auto const& [domain, patch_ghost, level_ghost] = expected[i];
+                EXPECT_EQ(keys(arrays(patch).domain_particles, patch.layout), domain)
+                    << what << ": domain";
+                EXPECT_EQ(keys(arrays(patch).patch_ghost_particles, patch.layout), patch_ghost)
+                    << what << ": patch ghosts";
+                EXPECT_EQ(keys(arrays(patch).level_ghost_particles, patch.layout), level_ghost)
+                    << what << ": level ghosts";
+                handed_over += patch_ghost.size();
+            }
+            if (n < cells or !Param::refined) // a periodic level's patch is its own neighbour
+                EXPECT_GT(handed_over, 0u);
+        }
+    }
+
+    // then the patch ghost swap: every cell of the level holds one particle from each
+    //  neighbour, in the patch whose domain it is, whatever the split
+    void every_cell_one_particle_per_direction()
+    {
+        for (int const n : {cells, cells / 2, cells / 4})
+            for (std::size_t push = 0; push < 2; ++push)
+            {
+                auto l = run.make_level(n);
+                for (std::size_t i = 0; i <= push; ++i)
+                {
+                    run.push(l);
+                    run.exchange(l);
+                    if (Param::refined)
+                        run.resplit(l); // the level ghost ring full again
+                }
+                for (auto& patch : l.patches)
+                {
+                    std::vector<Key> expected;
+                    damn::core::for_each_point(patch.layout.cells, [&](auto const& cell) {
+                        damn::core::for_each_point(Box_t{damn::core::ConstArray<int, dim>(-1),
+                                                         damn::core::ConstArray<int, dim>(1)},
+                                                   [&](auto const& d) {
+                                                       if (Point_t{d} != Point_t{})
+                                                           expected.push_back(
+                                                               key(Point_t{cell}, Point_t{d}));
+                                                   });
+                    });
+                    std::sort(expected.begin(), expected.end());
+                    EXPECT_EQ(keys(arrays(patch).domain_particles, patch.layout), expected)
+                        << "patches of " << n << ", push " << push << ", patch " << patch.id;
+                }
+            }
+    }
+};
+
+// clang-format off
+using CrossingPermutations_t = testing::Types< // ! notice commas !
+    LevelParam<1, LayoutMode::AoSMapped, Updater::serial, false>
+   ,LevelParam<1, LayoutMode::AoSMapped, Updater::serial, true>
+   ,LevelParam<2, LayoutMode::AoSMapped, Updater::serial, false>
+   ,LevelParam<2, LayoutMode::AoSMapped, Updater::serial, true>
+   ,LevelParam<3, LayoutMode::AoSMapped, Updater::serial, false>
+   ,LevelParam<3, LayoutMode::AoSMapped, Updater::serial, true>
+   ,LevelParam<2, LayoutMode::AoS, Updater::parallel, false>
+   ,LevelParam<2, LayoutMode::AoS, Updater::parallel, true>
+   ,LevelParam<3, LayoutMode::AoS, Updater::parallel, true>
+   ,LevelParam<2, LayoutMode::AoSCMTS, Updater::parallel, false>
+   ,LevelParam<2, LayoutMode::AoSCMTS, Updater::parallel, true>
+   ,LevelParam<3, LayoutMode::AoSCMTS, Updater::parallel, true>
+   ,LevelParam<2, LayoutMode::SoAVXChunked, Updater::parallel, false>
+   ,LevelParam<2, LayoutMode::SoAVXChunked, Updater::parallel, true>
+DAMN_WITH_GPU(
+   ,LevelParam<2, LayoutMode::AoSPCTS, Updater::parallel, true, damn::AllocatorMode::GPU_UNIFIED>
+   ,LevelParam<2, LayoutMode::SoAVX, Updater::parallel, true, damn::AllocatorMode::GPU_UNIFIED>
+)
+>;
+// clang-format on
+
+TYPED_TEST_SUITE(CrossingTest, CrossingPermutations_t, );
+
+TYPED_TEST(CrossingTest, updaterPutsEveryParticleWhereItGoes)
+{
+    this->every_leaver_where_expected();
+}
+
+TYPED_TEST(CrossingTest, levelSwapGivesEveryCellOneParticlePerDirection)
+{
+    this->every_cell_one_particle_per_direction();
 }
 
 } // namespace plamn::core
