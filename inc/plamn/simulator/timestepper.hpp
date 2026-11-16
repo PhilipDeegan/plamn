@@ -13,12 +13,15 @@
 // start is 0, or a restart's time: the steps are counted from it, so a restart may change dt
 // (or the mode)
 
+#include "damn/core/def.hpp"
 #include "plamn/initializer/data_provider.hpp"
 #include "plamn/simulator/simulator_def.hpp"
+#include "dict.hpp"
 
 #include <algorithm>
 #include <cstddef>
 #include <stdexcept>
+#include <string>
 
 namespace plamn
 {

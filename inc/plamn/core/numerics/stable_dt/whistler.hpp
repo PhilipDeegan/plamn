@@ -19,6 +19,8 @@
 #include <cstddef>
 #include <limits>
 #include <numbers>
+#include <algorithm>
+#include <type_traits>
 
 namespace plamn::core
 {
