@@ -1,19 +1,28 @@
 #!/usr/bin/env python3
-"""PHARE vs plamn, case by case (cases.py): each case runs under both codes, then
-hierarchy_overlap compares the diagnostics (PHARE the reference). Run from the plamn root:
+"""PHARE vs plamn, case by case (cases.py): each case runs under two codes, then
+hierarchy_overlap compares the diagnostics. Run from the plamn root:
 
   python3 etc/compare/phare/test_ladder.py [-k advance_L1]     # unittest options
+  LADDER_REF=master LADDER_CMP=tiling_gpu python3 etc/compare/phare/test_ladder.py
+
+A code is ``plamn`` or a PHARE checkout with a CMake build (build/pybindlibs): one of PHARES'
+names below or a path. Comparing the PHARE branches with each other as well as with plamn
+says whether a difference comes from plamn or from the branch plamn was ported from
+(tiling_gpu).
 
 Each case twice: PHARE's default patches ("default") and small patches ("small"), as
 tiling_gpu's layouts tests isolate one mechanism per case. Tolerances per kind (B, E, moments)
 as there; a failure prints the largest difference per quantity / level / time and where.
 
 Environment (defaults in brackets):
-  PHARE_DIR      PHARE checkout built with PHARE_DIAG_DOUBLES=1 [/mkn/git/phare/master]
+  LADDER_REF     reference code [master]
+  LADDER_CMP     compared code [plamn]
+  PHARE_DIR      the PHARE checkout whose pyphare plamn runs with [/mkn/git/phare/master]
   PHARESEE_DIR   PHAREHUB/PHARE#1595 checkout, the reader [/mkn/git/phare/pr_1595]
   LADDER_NP      MPI ranks per run [1]
   LADDER_OUT     where the runs write [phare_outputs/compare]
-plamn's 2D module must be built with ./mkn.py --dim 2 --diag-doubles (PHARE writes doubles).
+PHARE checkouts built with PHARE_DIAG_DOUBLES=1, plamn's 2D module with
+./mkn.py --dim 2 --diag-doubles: every code writes doubles.
 """
 
 import os
@@ -28,18 +37,30 @@ PLAMN = HERE.parents[2]
 SMALL_PATCHES = {"harris_2d": 20}  # largest_patch_size of the "small" variant, else 7
 MIN_OVERLAP = 0.9  # tagged levels (harris_2d); refinement boxes must overlap fully
 TOLERANCE = {"EM_B": 1e-14, "EM_E": 1e-13, "moments": 1e-13}  # atol per kind
+PHARES = {  # name: PHARE checkout with a CMake build in build/
+    "master": "/mkn/git/phare/master",
+    "tiling_gpu": "/mkn/git/phare/tiling_gpu",
+    "tiling_multithreaded": "/mkn/git/phare/tiling_multithreaded",
+}
 
 
 def setting(name, default):
     return os.environ.get(name, default)
 
 
+def phare_dir(code):
+    return Path(PHARES.get(code, code))
+
+
 def environment(code):
-    """PYTHONPATH of a run_case.py process for ``code``."""
-    phare = Path(setting("PHARE_DIR", "/mkn/git/phare/master"))
-    paths = [phare / "build", phare / "pyphare"] if code == "phare" else []
+    """PYTHONPATH of a run_case.py process for ``code`` (plamn, or a PHARE name / path)."""
     if code == "plamn":
-        paths = [PLAMN / "python", phare / "pyphare"]
+        paths = [PLAMN / "python", Path(setting("PHARE_DIR", PHARES["master"])) / "pyphare"]
+    else:
+        phare = phare_dir(code)
+        if not (phare / "build" / "pybindlibs").is_dir():
+            raise RuntimeError(f"{code}: no CMake build in {phare / 'build'}")
+        paths = [phare / "build", phare / "pyphare"]
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join(str(p) for p in paths)
     return env
@@ -47,7 +68,8 @@ def environment(code):
 
 def run(code, case, out, largest_patch_size):
     n = int(setting("LADDER_NP", "1"))
-    cmd = [sys.executable, str(HERE / "run_case.py"), code, case, str(out)]
+    kind = "plamn" if code == "plamn" else "phare"
+    cmd = [sys.executable, str(HERE / "run_case.py"), kind, case, str(out)]
     if largest_patch_size:
         cmd += ["--largest-patch-size", str(largest_patch_size)]
     if n > 1:
@@ -75,13 +97,15 @@ class LadderTest(unittest.TestCase):
         import hierarchy_overlap
 
         largest = SMALL_PATCHES.get(case, 7) if variant == "small" else None
+        ref, cmp = setting("LADDER_REF", "master"), setting("LADDER_CMP", "plamn")
         base = Path(setting("LADDER_OUT", PLAMN / "phare_outputs" / "compare")) / f"{case}_{variant}"
-        for code in ("phare", "plamn"):
-            run(code, case, base / code, largest)
+        names = {code: Path(code).name for code in (ref, cmp)}  # a path: its last part
+        for code in (ref, cmp):
+            run(code, case, base / names[code], largest)
         report = hierarchy_overlap.compare_runs(
-            base / "phare", base / "plamn", min_overlap=MIN_OVERLAP, margin=2,
+            base / names[ref], base / names[cmp], min_overlap=MIN_OVERLAP, margin=2,
             tolerance=tolerance)
-        print(f"\n==== {case} ({variant} patches)")
+        print(f"\n==== {case} ({variant} patches): {ref} vs {cmp}")
         hierarchy_overlap.print_report(report, values=False)
         self.assertTrue(report, f"{case} ({variant}): {len(report.failed)} failure(s)")
 
