@@ -14,11 +14,9 @@
 #include "plamn/core/data/particles/particles_def.hpp"
 
 #include <cstddef>
-#include <stdexcept>
 #include <tuple>
 #include <type_traits>
 #include <utility>
-#include <vector>
 
 namespace damn::core
 {
