@@ -14,6 +14,7 @@
 // for_each_resource names what damn's schedules may move:
 //   EM_B_x... EM_E_x..., EMPred_B_x..., EMAvg_E_x...,
 //   <pop>_density, <pop>_charge_density, <pop>_flux_x...,
+//   ions_charge_density, ions_charge_flux_x... (the totals, what a synchronization coarsens),
 //   EM_E_old_x..., EM_B_old_x..., EM_fluxSum_E_x... (AMR),
 //   <pop>_domain, <pop>_patch_ghost, <pop>_level_ghost[_old, _new] (particles)
 
@@ -286,6 +287,10 @@ void for_each_resource(HybridPatch<opts>& patch, auto&& fn)
     detail::vector_resources<gw>("EM_E_old", patch.oldE, fn);
     detail::vector_resources<gw>("EM_B_old", patch.oldB, fn);
     detail::vector_resources<gw>("EM_fluxSum_E", patch.fluxSumE, fn);
+
+    auto charge_density = amr::field_resource<gw>(patch.chargeDensity);
+    fn("ions_charge_density", charge_density);
+    detail::vector_resources<gw>("ions_charge_flux", patch.chargeFlux, fn);
 
     for (auto& pop : patch.populations)
     {

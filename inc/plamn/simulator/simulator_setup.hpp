@@ -198,6 +198,11 @@ void Simulator<opts>::register_resources_()
     add("EMPred_B", components("EMPred_B"));
     add("EMAvg_E", components("EMAvg_E"));
 
+    // the totals a synchronization coarsens, their ghosts refilled after it (PHARE's
+    //  chargeDensitySynchronizers_, ionChargeFluxSynchronizers_)
+    add("IonMoments", components("ions_charge_flux"));
+    add("IonMoments", damn::amr::same_names({"ions_charge_density"}));
+
     auto const& ions    = dict_["simulation"]["ions"];
     auto const nbr_pops = ions["nbrPopulations"].template to<std::size_t>();
     for (std::size_t i = 0; i < nbr_pops; ++i)

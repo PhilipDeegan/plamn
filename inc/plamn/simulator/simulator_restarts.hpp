@@ -70,6 +70,10 @@ std::vector<std::string> Simulator<opts>::restart_names_() const
     for (auto const* em : {"EM_B", "EM_E"})
         for (auto const* c : {"_x", "_y", "_z"})
             names.push_back(std::string{em} + c);
+    // the totals a synchronization coarsened: not the populations' sum on a coarser level
+    names.push_back("ions_charge_density");
+    for (auto const* c : {"_x", "_y", "_z"})
+        names.push_back(std::string{"ions_charge_flux"} + c);
     for (auto const& pop : population_names_)
     {
         names.push_back(pop + "_domain");
@@ -193,8 +197,8 @@ void Simulator<opts>::load_restart_()
 }
 
 // what the running simulator holds between steps, from what was stored: the particles' maps,
-// the level ghost particles (split from the coarser level, as first_step_ does), the total
-// moments (from the populations'), J (from B), and every level's old copies
+// the level ghost particles (split from the coarser level, as first_step_ does), the mass
+// density and bulk velocity (from the populations'), J (from B), and every level's old copies
 template<auto opts>
 void Simulator<opts>::rebuild_after_load_()
 {
@@ -217,7 +221,20 @@ void Simulator<opts>::rebuild_after_load_()
                     pop.levelGhostParticles() = pop.levelGhostParticlesOld();
             });
         }
-        compute_moments_(ln); // the totals, from the populations' (stored)
+        // the mass density and bulk velocity from the populations' (stored); the charge
+        //  density and flux as stored (coarsened where a finer level was synchronized)
+        per_patch_(ln, [&](auto& patch) {
+            std::vector<std::vector<double>> stored;
+            auto const each = [&](auto&& fn) {
+                fn(patch.chargeDensity);
+                for (auto& c : patch.chargeFlux)
+                    fn(c);
+            };
+            each([&](auto const& g) { stored.emplace_back(g.data(), g.data() + g.size()); });
+            patch.ions.update();
+            std::size_t i = 0;
+            each([&](auto& g) { std::copy(stored[i].begin(), stored[i].end(), g.data()), ++i; });
+        });
         per_patch_(
             ln, [&](auto& patch) { core::AmpereTransformer{}(patch.layout, patch.em.B, patch.J); });
         prepare_step_(static_cast<int>(ln), t);

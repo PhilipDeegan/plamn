@@ -121,8 +121,10 @@ void Simulator<opts>::last_step_(int const ln)
     });
 }
 
-// level ln onto ln - 1, both at t: E and the moments coarsened, then the coarser level's B
-// recomputed from the fine time average of E (reflux), then its ghosts refilled
+// level ln onto ln - 1, both at t: E and the total ion charge density and flux coarsened (as
+// PHARE's synchronize: the populations' moments, the mass density and the bulk velocity stay the
+// coarser level's own), then the coarser level's B recomputed from the fine time average of E
+// (reflux), then its ghosts refilled
 template<auto opts>
 void Simulator<opts>::synchronize_(int const level_number, double const t)
 {
@@ -131,14 +133,8 @@ void Simulator<opts>::synchronize_(int const level_number, double const t)
     auto const coarse = ln - 1;
 
     coarsen_(ln, amr::ElectricFieldCoarsener{}, amr::vector_pairs("EM_E", "EM_E"));
-    std::vector<damn::amr::LevelPair> moments;
-    for (auto const& name : population_names_)
-    {
-        for (auto const& p : amr::vector_pairs(name + "_flux", name + "_flux"))
-            moments.push_back(p);
-        moments.push_back({name + "_density", name + "_density", ""});
-        moments.push_back({name + "_charge_density", name + "_charge_density", ""});
-    }
+    auto moments = amr::vector_pairs("ions_charge_flux", "ions_charge_flux");
+    moments.push_back({"ions_charge_density", "ions_charge_density", ""});
     coarsen_(ln, amr::MomentsCoarsener{}, moments);
 
     // reflux: the coarser Eavg under the fine level is the fine one's time average
@@ -154,8 +150,7 @@ void Simulator<opts>::synchronize_(int const level_number, double const t)
 
     // ghosts after the coarsening
     fill_electric_ghosts_(coarse, "EM_E", t);
-    copy_(coarse, damn::amr::fill_ghosts, "IonPopMoments");
-    compute_moments_(coarse);
+    copy_(coarse, damn::amr::fill_ghosts, "IonMoments");
     fine_dump_(coarse, t);
 }
 
