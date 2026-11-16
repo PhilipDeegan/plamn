@@ -46,6 +46,7 @@
 #include "phlop/timing/scope.hpp"
 
 #include <tuple>
+#include <cmath>
 #include <cstdint>
 #include <algorithm>
 #include <array>
@@ -262,9 +263,9 @@ public:
         requires(storage_mode == StorageMode::VECTOR);
 
     // after particles' cells changed (a push): each chunk's particles no longer in its cell taken
-    //  out; those whose cell is in keep inserted into their new chunk (else a full sort, they
-    //  appended), the others given to leave(particle). Returns whether it sorted
-    bool resettle(box_t const& keep, auto&& leave)
+    //  out; those keep(cell) (or in the box keep) inserted into their new chunk (else a full sort,
+    //  they appended), the others given to leave(particle). Returns whether it sorted
+    bool resettle(auto const& keep, auto&& leave)
         requires(storage_mode == StorageMode::VECTOR);
 
     std::size_t count(box_t const& box) const
@@ -284,6 +285,17 @@ public:
     {
         this->unsort();
         Super_::resize(s);
+    }
+
+    // sorted without gaps: the particles only, in cell order (e.g. to be written out); sort()
+    //  lays the gaps out again
+    void compact()
+        requires(storage_mode == StorageMode::VECTOR)
+    {
+        auto const slack = this->slack_;
+        this->slack_     = 0;
+        sort();
+        this->slack_ = slack;
     }
 
     template<typename Particle_t>
@@ -535,9 +547,15 @@ void SoAVXChunkedParticles<Super_>::remove(std::size_t const c, std::size_t cons
 }
 
 template<typename Super_>
-bool SoAVXChunkedParticles<Super_>::resettle(box_t const& keep, auto&& leave)
+bool SoAVXChunkedParticles<Super_>::resettle(auto const& keep, auto&& leave)
     requires(storage_mode == StorageMode::VECTOR)
 {
+    auto const kept = [&](auto const& cell) {
+        if constexpr (std::is_same_v<std::decay_t<decltype(keep)>, box_t>)
+            return isIn(damn::core::Point<int, dimension>{cell}, keep);
+        else
+            return keep(cell);
+    };
     DAMN_LOG_SCOPE(2, "SoAVXChunked::resettle");
     DAMN_ASSERT(this->sorted());
     std::vector<Particle_t> moved; // the particles that changed cell
@@ -563,7 +581,7 @@ bool SoAVXChunkedParticles<Super_>::resettle(box_t const& keep, auto&& leave)
     std::vector<Particle_t> overflow; // no room in their chunk
     for (auto const& p : moved)
     {
-        if (!isIn(damn::core::Point<int, dimension>{p.iCell()}, keep))
+        if (!kept(p.iCell()))
             leave(p);
         else if (!insert(p))
             overflow.push_back(p);
@@ -646,9 +664,17 @@ void SoAVXChunkedParticles<Super_>::sort()
         };
         for (std::size_t c = 0; c < cells; ++c)
             total += weight(cell_of_(c));
+        // the running total rounded: slack slots in all, each cell its share (an interior cell
+        //  whose share is under 1 has one now and then, not never)
+        double running        = 0;
+        std::size_t allocated = 0;
         for (std::size_t c = 0; c < cells; ++c)
-            gaps[c] = static_cast<chunk_offset_t>(static_cast<double>(slack) * weight(cell_of_(c))
-                                                  / total);
+        {
+            running += static_cast<double>(slack) * weight(cell_of_(c)) / total;
+            auto const upto = static_cast<std::size_t>(std::llround(running));
+            gaps[c]         = static_cast<chunk_offset_t>(upto - allocated);
+            allocated       = upto;
+        }
     }
     std::size_t slots_total = 0;
     for (std::size_t c = 0; c < cells; ++c)

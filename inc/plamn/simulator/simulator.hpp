@@ -154,9 +154,25 @@ public:
         std::size_t n = 0;
         per_patch_(ln, [&](auto& patch) {
             for (auto& pop : patch.ions)
-                n += pop.domainParticles().size();
+                n += real_particles_(pop.domainParticles());
         });
         return n;
+    }
+
+    // an array's particles: SoAVXChunked's without its gaps (weight 0)
+    NO_DISCARD static std::size_t real_particles_(auto const& particles)
+    {
+        if constexpr (requires { particles.nbr_particles(); })
+        {
+            if (particles.sorted())
+                return particles.nbr_particles();
+            std::size_t n = 0;
+            for (std::size_t i = 0; i < particles.size(); ++i)
+                n += particles.weight(i) != 0;
+            return n;
+        }
+        else
+            return particles.size();
     }
 
     NO_DISCARD int rank() const { return rank_; }

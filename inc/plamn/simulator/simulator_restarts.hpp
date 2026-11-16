@@ -141,6 +141,18 @@ void Simulator<opts>::write_restart_(std::string const& dir)
                              static_cast<std::uint64_t>(rebalance_check_->steps_to_next_check));
     }
 
+    // SoAVXChunked: the particles written without the domains' gaps, laid out again after, as
+    //  loading does (the same memory order then on both sides of a restart)
+    auto const compacting = [&](bool const compact) {
+        if constexpr (Patch_t::Particles_t::layout_mode == core::LayoutMode::SoAVXChunked)
+            for (std::size_t ln = 0; ln < levels_.size(); ++ln)
+                per_patch_(ln, [&](auto& patch) {
+                    for (auto& pop : patch.ions)
+                        compact ? pop.domainParticles().compact() : pop.domainParticles().sort();
+                });
+    };
+    compacting(true);
+
     auto const names = restart_names_();
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
     {
@@ -149,6 +161,7 @@ void Simulator<opts>::write_restart_(std::string const& dir)
     }
     for (std::size_t ln = 0; ln < clustered_.size(); ++ln)
         write_boxes(file, "/clustered" + std::to_string(ln), clustered_[ln]);
+    compacting(false);
 #else
     throw std::runtime_error("plamn Simulator: restarts need HDF5 (damn_hdf5): " + dir);
 #endif
@@ -208,8 +221,12 @@ void Simulator<opts>::rebuild_after_load_()
     {
         per_patch_(ln, [](auto& patch) {
             for (auto& pop : patch.ions)
+            {
                 if constexpr (requires { pop.domainParticles().remap(); })
                     pop.domainParticles().remap();
+                if constexpr (requires { pop.domainParticles().compact(); }) // SoAVXChunked
+                    pop.domainParticles().sort(); // the gaps as at initialization
+            }
         });
         if (ln > 0)
         {

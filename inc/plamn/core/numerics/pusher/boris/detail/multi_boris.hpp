@@ -511,6 +511,8 @@ struct MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>
         if constexpr (is_soavx(Particles_t::layout_mode))
             for (std::size_t i = 0; i < particles.size(); ++i)
             {
+                if (particles.weight(i) == 0) // SoAVXChunked's gaps
+                    continue;
                 auto particle = particles.copy(i);
                 fn(particle);
                 if constexpr (store)
@@ -674,12 +676,12 @@ void MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>::move_gpu_c
     static_assert(has_gpu_copy);
     using Deposit_t = core::Interpolator<dim, Layout_t::options.interp_order, /*atomic=*/true>;
 
-    auto view            = in.accessor[i];
-    auto [ions, em]      = view.args;
-    auto const layout    = view.layout;
-    auto const halfdt    = in.mesh(layout.dx, in.dt);
-    auto const ghostBox  = damn::core::grow(layout.cells, Layout_t::options.particle_ghost_width);
-    auto const nlgb      = in.gpu_nlgb[i];
+    auto view           = in.accessor[i];
+    auto [ions, em]     = view.args;
+    auto const layout   = view.layout;
+    auto const halfdt   = in.mesh(layout.dx, in.dt);
+    auto const ghostBox = damn::core::grow(layout.cells, Layout_t::options.particle_ghost_width);
+    auto const nlgb     = in.gpu_nlgb[i];
 
     for (auto& pop : ions)
     {

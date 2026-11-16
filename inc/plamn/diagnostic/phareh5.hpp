@@ -37,9 +37,11 @@
 #include <format>
 #include <type_traits>
 
-namespace damn::core {
-template <typename Type, std::size_t dim> struct Box;
-}  // namespace damn::core
+namespace damn::core
+{
+template<typename Type, std::size_t dim>
+struct Box;
+} // namespace damn::core
 
 namespace plamn::diagnostic::phareh5
 {
@@ -126,25 +128,27 @@ NO_DISCARD auto particle_columns(Particles const& particles)
 {
     auto constexpr dim = std::decay_t<Particles>::dimension;
     ParticleColumns<dim> out;
-    out.n = particles.size();
-    if (out.n == 0)
+    if (particles.size() == 0)
         return out;
     auto const c = core::components(particles);
-    out.weight.resize(out.n);
-    out.iCell.resize(out.n * dim);
-    out.delta.resize(out.n * dim);
-    out.v.resize(out.n * 3);
-    for (std::size_t j = 0; j < out.n; ++j)
+    out.weight.reserve(particles.size());
+    out.iCell.reserve(particles.size() * dim);
+    out.delta.reserve(particles.size() * dim);
+    out.v.reserve(particles.size() * 3);
+    for (std::size_t j = 0; j < particles.size(); ++j)
     {
-        out.weight[j] = c.weight[j];
+        if (c.weight[j] == 0) // SoAVXChunked's gaps
+            continue;
+        out.weight.push_back(c.weight[j]);
         for (std::size_t i = 0; i < dim; ++i)
         {
-            out.iCell[j * dim + i] = c.iCell[i][j];
-            out.delta[j * dim + i] = c.delta[i][j];
+            out.iCell.push_back(c.iCell[i][j]);
+            out.delta.push_back(c.delta[i][j]);
         }
         for (std::size_t i = 0; i < 3; ++i)
-            out.v[j * 3 + i] = c.v[i][j];
+            out.v.push_back(c.v[i][j]);
     }
+    out.n = out.weight.size();
     return out;
 }
 

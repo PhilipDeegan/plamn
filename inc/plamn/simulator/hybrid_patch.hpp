@@ -20,6 +20,7 @@
 
 #include "damn/core/meta/for_N.hpp"
 #include "damn/core/geometry/box.hpp"
+#include "damn/core/sys/env.hpp"
 #include "plamn/core/def.hpp"
 #include "plamn/plamn_core.hpp"
 #include "plamn/amr/resources.hpp"
@@ -54,18 +55,18 @@ struct HybridPatch
     auto static constexpr field_ghost_width    = Layout_t::ghost_width;
     auto static constexpr particle_ghost_width = Layout_t::options.particle_ghost_width;
 
-    using Electromag_t                 = Types::Electromag_t;
-    using VecField_t                   = Types::VecField_t;
-    using Ions_t                       = Types::Ions_t;
-    using Electrons_t                  = Types::Electrons_t;
+    using Electromag_t = Types::Electromag_t;
+    using VecField_t   = Types::VecField_t;
+    using Ions_t       = Types::Ions_t;
+    using Electrons_t  = Types::Electrons_t;
     // AoSMapped: the serial per patch mover, else a level's (Simulator::move_ions_)
     using ParticlesSynchronisedMover_t
         = core::ParticlesSynchronisedMoverFor_t<Particles_t, Layout_t>;
     static constexpr bool per_patch_mover
         = std::is_same_v<ParticlesSynchronisedMover_t,
                          core::ParticlesSynchronisedMover<Particles_t, Layout_t>>;
-    using Boxing_t                     = ParticlesSynchronisedMover_t::Boxing_t;
-    using Box_t                        = damn::core::Box<int, dimension>;
+    using Boxing_t = ParticlesSynchronisedMover_t::Boxing_t;
+    using Box_t    = damn::core::Box<int, dimension>;
 
     template<std::size_t N>
     using Grids = std::array<Grid_t, N>;
@@ -116,6 +117,14 @@ struct HybridPatch
                    &level_ghost, &level_ghost_old, &level_ghost_new}
         {
             auto&& [F, M, pd, cd, particles] = pop.getCompileTimeResourcesViewList();
+            if constexpr (Particles_t::layout_mode == core::LayoutMode::SoAVXChunked)
+            { // the domain's chunks with gaps between them (particles_soavx_chunked.hpp): changes
+              //  of cell without a sort (PLAMN_CHUNK_SLACK, a fraction of the particles,
+              //  PLAMN_CHUNK_BORDER, the border cells' weight to 1 inside)
+                static double const slack  = damn::core::get_env_as("PLAMN_CHUNK_SLACK", .1);
+                static double const border = damn::core::get_env_as("PLAMN_CHUNK_BORDER", 3.);
+                domain.set_slack(slack, layout.cells, border);
+            }
             bind(F, flux); // M: over scratch grids when computed (simulator_computed.hpp)
             pd.setBuffer(&density);
             cd.setBuffer(&charge_density);

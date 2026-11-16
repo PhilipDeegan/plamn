@@ -243,6 +243,33 @@ void unpack_items(ParticleResource<Particles, gw>& r, std::byte const*& at,
     at += sizeof(n);
     if (n == 0)
         return;
+    if constexpr (Particles::layout_mode == core::LayoutMode::SoAVXChunked)
+        if (particles.sorted())
+        { // into their chunks' gaps, one at a time: a particle from each component's stream
+            auto constexpr dim      = Particles::dimension;
+            std::byte const* weight = at;
+            std::byte const* icell  = weight + n * sizeof(double);
+            std::byte const* delta  = icell + n * dim * sizeof(int);
+            std::byte const* v      = delta + n * dim * sizeof(double);
+            for (std::size_t k = 0; k < n; ++k)
+            {
+                typename Particles::value_type p;
+                std::memcpy(&p.weight(), weight + k * sizeof(double), sizeof(double));
+                for (std::size_t d = 0; d < dim; ++d)
+                {
+                    std::memcpy(&p.iCell()[d], icell + (d * n + k) * sizeof(int), sizeof(int));
+                    p.iCell()[d] += shift[d];
+                    std::memcpy(&p.delta()[d], delta + (d * n + k) * sizeof(double),
+                                sizeof(double));
+                }
+                for (std::size_t d = 0; d < 3; ++d)
+                    std::memcpy(&p.v()[d], v + (d * n + k) * sizeof(double), sizeof(double));
+                if (!particles.insert(p))
+                    particles.push_back(p); // a sort after all of them (items_appended)
+            }
+            at = v + n * 3 * sizeof(double);
+            return;
+        }
     auto const was = particles.size();
     particles.resize(was + n);
     auto const c = core::components(particles);
@@ -269,6 +296,19 @@ void append_items_from(ParticleResource<Particles, gw>& dst,
     auto const index = detail::selected(*src.particles, box, shift);
     if (index.empty())
         return;
+    if constexpr (Particles::layout_mode == core::LayoutMode::SoAVXChunked)
+        if (dst.particles->sorted() and src.particles != dst.particles)
+        { // into their chunks' gaps
+            for (auto const i : index)
+            {
+                auto p = src.particles->copy(i);
+                for (std::size_t d = 0; d < Particles::dimension; ++d)
+                    p.iCell()[d] += shift[d];
+                if (!dst.particles->insert(p))
+                    dst.particles->push_back(p); // a sort after all of them (items_appended)
+            }
+            return;
+        }
     auto& out      = *dst.particles;
     auto const was = out.size();
     out.resize(was + index.size()); // src's columns too if the same: read after
@@ -315,7 +355,8 @@ template<typename Particles, std::uint32_t gw>
 void items_appended(ParticleResource<Particles, gw>& r)
 {
     if constexpr (Particles::layout_mode == core::LayoutMode::SoAVXChunked)
-        r.particles->sort();
+        if (!r.particles->sorted()) // appended to, not only inserted into its gaps
+            r.particles->sort();
 }
 
 // the particles' components as checkpoint columns (weight, iCell_x.., delta_x.., v_x..)

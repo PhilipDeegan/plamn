@@ -47,9 +47,23 @@ namespace plamn::core
 // only (Simulator's own_level_ghosts_): one in a cell another patch of the level covers is
 // handed to that patch as a patch ghost, as a domain particle would be (no other patch has a
 // copy of it to keep instead, PHAREHUB/PHARE#1579); one leaving the ghost box is deleted
+namespace detail
+{
+    template<typename Particles_t>
+    void post_move_sync_all(Particles_t& domain, Particles_t& patchGhost, Particles_t& levelGhost,
+                            auto const& boxing);
+} // namespace detail
+
 template<typename Particles_t>
 void post_move_sync(Particles_t& domain, Particles_t& patchGhost, Particles_t& levelGhost,
                     auto const& boxing)
+{
+    detail::post_move_sync_all(domain, patchGhost, levelGhost, boxing);
+}
+
+template<typename Particles_t>
+void detail::post_move_sync_all(Particles_t& domain, Particles_t& patchGhost,
+                                Particles_t& levelGhost, auto const& boxing)
 {
     auto const& nonOwnedBoxes = boxing.nonOwnedBoxes;
 
@@ -106,6 +120,56 @@ struct PostMoveSyncCells
 
 template<typename Boxing_t>
 PostMoveSyncCells(Boxing_t const&) -> PostMoveSyncCells<Boxing_t>;
+
+
+// SoAVXChunked (host): the domain's particles that changed cell back into their chunks' gaps
+//  (resettle), level ghosts entering the domain into its gaps, no sort while there is room; the
+//  same fates as post_move_sync's (PostMoveSyncCells). Not sorted yet: post_move_sync's way
+template<typename Particles_t>
+    requires(Particles_t::layout_mode == LayoutMode::SoAVXChunked
+             and Particles_t::alloc_mode == damn::AllocatorMode::CPU)
+void post_move_sync(Particles_t& domain, Particles_t& patchGhost, Particles_t& levelGhost,
+                    auto const& boxing)
+{
+    if (!domain.sorted())
+    {
+        detail::post_move_sync_all(domain, patchGhost, levelGhost, boxing);
+        return;
+    }
+    PostMoveSyncCells const cells{boxing};
+    domain.resettle([&](auto const& cell) { return cells.owned(cell); },
+                    [&](auto const& p) {
+                        if (cells.to_patch_ghost(p.iCell()))
+                            patchGhost.push_back(p);
+                    });
+
+    bool appended    = false;
+    std::size_t kept = 0;
+    for (std::size_t i = 0; i < levelGhost.size(); ++i)
+    {
+        auto const cell = levelGhost.iCell(i);
+        if (cells.owned(cell))
+        {
+            auto const p = levelGhost.copy(i);
+            if (!domain.insert(p))
+            {
+                domain.push_back(p);
+                appended = true;
+            }
+        }
+        else if (cells.keep_level_ghost(cell))
+        {
+            if (kept != i)
+                levelGhost.assign(levelGhost.copy(i), kept);
+            ++kept;
+        }
+        else if (cells.to_patch_ghost(cell))
+            patchGhost.push_back(levelGhost.copy(i));
+    }
+    levelGhost.resize(kept);
+    if (appended)
+        domain.sort();
+}
 
 
 // tiled layouts: a tile only holds particles whose cell it (clamp) owns, and emplace_back
@@ -686,8 +750,9 @@ void FlatParallelParticlesSynchronisedMover<Particles_t, Layout>::updatePopulati
             if constexpr (Particles_t::layout_mode == LayoutMode::SoAVXChunked)
             {
                 DAMN_LOG_SCOPE(2, "FlatParallelParticlesSynchronisedMover::on_moved");
-                // offsets stale after the push and the sync
-                pop.domainParticles().template on_moved<ParticleType::Domain>();
+                // chunks stale after the push and the sync, but the domain's (resettled)
+                if (!pop.domainParticles().sorted())
+                    pop.domainParticles().template on_moved<ParticleType::Domain>();
                 pop.patchGhostParticles().template on_moved<ParticleType::PatchGhost>();
                 pop.levelGhostParticles().template on_moved<ParticleType::LevelGhost>();
             }

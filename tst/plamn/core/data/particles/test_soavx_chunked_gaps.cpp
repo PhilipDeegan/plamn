@@ -140,9 +140,9 @@ TEST_F(Gaps1D, sortLeavesTheSlackBetweenChunksBorderCellsMore)
         auto const [next, _]     = ps.cell_range(Cell_t{x + 1});
         return next - (start + size);
     };
-    EXPECT_EQ(gap_after(0), 4u); // 20 * 3 / 14
-    EXPECT_EQ(gap_after(4), 1u); // 20 * 1 / 14
-    EXPECT_EQ(ps.size(), 200u + 2 * 4 + 8 * 1);
+    EXPECT_EQ(gap_after(0), 4u);     // 20 * 3 / 14, rounded
+    EXPECT_EQ(gap_after(4), 1u);     // its share of the running total: 1 or 2
+    EXPECT_EQ(ps.size(), 200u + 20); // the slack exactly
 }
 
 TEST_F(Gaps1D, withoutSlackChunksAreContiguous)
@@ -256,10 +256,14 @@ TEST_F(Gaps2D, sortLeavesTheSlackBetweenChunksBorderCellsMore)
     auto const ps = make(.1);
     expect_consistent(ps, "sorted");
     EXPECT_EQ(ps.nbr_particles(), 2000u);
-    EXPECT_EQ(gap_after(ps, {0, 0}), 3u); // 200 * 3 / 172
-    EXPECT_EQ(gap_after(ps, {0, 4}), 3u); // the x = 0 border
-    EXPECT_EQ(gap_after(ps, {4, 4}), 1u); // 200 / 172
-    EXPECT_EQ(ps.size(), 2000u + 36 * 3 + 64 * 1);
+    for (auto const& cell : {std::array{0, 0}, std::array{0, 4}}) // the x = 0 border
+    {
+        EXPECT_GE(gap_after(ps, cell), 3u); // 200 * 3 / 172: 3 or 4
+        EXPECT_LE(gap_after(ps, cell), 4u);
+    }
+    EXPECT_GE(gap_after(ps, {4, 4}), 1u); // 200 / 172: 1 or 2
+    EXPECT_LE(gap_after(ps, {4, 4}), 2u);
+    EXPECT_EQ(ps.size(), 2000u + 200); // the slack exactly
 }
 
 TEST_F(Gaps2D, aMoveAlongXUsesTheGapsOfAChunkARowAway)
@@ -398,9 +402,11 @@ TEST_F(Gaps3D, sortLeavesTheSlackBetweenChunksBorderCellsMore)
         auto const [next, _]     = ps.cell_range(Cell_t{cell[0], cell[1], cell[2] + 1});
         return next - (start + size);
     };
-    EXPECT_EQ(gap_after({0, 0, 0}), 3u); // 2000 * 3 / 1976
-    EXPECT_EQ(gap_after({4, 4, 4}), 1u); // 2000 / 1976
-    EXPECT_EQ(ps.size(), 20000u + 488 * 3 + 512 * 1);
+    EXPECT_GE(gap_after({0, 0, 0}), 3u); // 2000 * 3 / 1976: 3 or 4
+    EXPECT_LE(gap_after({0, 0, 0}), 4u);
+    EXPECT_GE(gap_after({4, 4, 4}), 1u); // 2000 / 1976: 1 or 2
+    EXPECT_LE(gap_after({4, 4, 4}), 2u);
+    EXPECT_EQ(ps.size(), 20000u + 2000); // the slack exactly
 }
 
 // constant (1) or border weighted (3) slack; bulk motion along x (cells a plane apart in memory)

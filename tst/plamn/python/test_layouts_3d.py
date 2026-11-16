@@ -141,6 +141,7 @@ def state(simulator, np):
             for c in PARTICLE_COLUMNS:
                 columns[c].append(np.array(components[c], dtype=float))
         rows = np.stack([np.concatenate(columns[c]) for c in PARTICLE_COLUMNS], axis=1)
+        rows = rows[rows[:, PARTICLE_COLUMNS.index("weight")] != 0]  # SoAVXChunked's gaps
         out[f"particles@{ln}"] = rows[np.lexsort(rows.T[::-1])]
     out["levels"] = np.array([cpp.n_levels()])
     return out
