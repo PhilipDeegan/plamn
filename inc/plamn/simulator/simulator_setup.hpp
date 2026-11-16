@@ -4,6 +4,7 @@
 // plamn::Simulator: the input: hierarchy, refinement, tagging, load balancing, resources
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
+#include "damn/core/exec/thread_pool.hpp"
 #include "damn/amr/hierarchy.hpp"
 #include "damn/amr/neighbours.hpp"
 #include "damn/amr/topology.hpp"
@@ -28,6 +29,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <cstdlib>
 #include <type_traits>
 #include <vector>
 // plamn::Simulator: the input: hierarchy, refinement, tagging, load balancing, resources
@@ -56,6 +58,23 @@ void Simulator<opts>::setup_()
     {
         damn::mpi::start_scope_timing(timings_prefix);
         timing_ = true;
+    }
+
+    // damn's thread pools (process wide): pyphare's threading, PHARE_THREAD_POOLS and
+    //  PHARE_THREADS_PER_POOL first if set (as PHARE). A pool works a patch, its threads the
+    //  patch's tiles; reconfigured only when it differs
+    {
+        auto const setting = [&](char const* env, std::string const& key) {
+            if (auto const* v = std::getenv(env); v and *v)
+                return static_cast<std::size_t>(std::stoul(v));
+            return static_cast<std::size_t>(
+                cppdict::get_value(dict_, "simulation/threading/" + key, 1));
+        };
+        auto const pools   = setting("PHARE_THREAD_POOLS", "pools");
+        auto const threads = setting("PHARE_THREADS_PER_POOL", "threads_per_pool");
+        using Pool         = damn::core::ThreadPool;
+        if (pools != Pool::n_pools or threads != Pool::threads_per_pool)
+            Pool::INSTANCE().configure(pools, threads);
     }
 
     auto const models = sim["models"].template to<std::vector<std::string>>();
@@ -157,7 +176,9 @@ void Simulator<opts>::setup_()
     ohm_info_.emplace(core::OhmInfo::FROM(sim["algo"]["ohm"]));
 
     register_resources_();
+    setup_computed_();
     setup_restarts_();
+    setup_diagnostics_();
 }
 
 // what moves between patches, named as for_each_resource(HybridPatch) names it

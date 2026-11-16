@@ -99,7 +99,16 @@ def _finalize_mpi():
         life_cycle.finalize()
 
 
+_patched = False
+
+
 def patch():
+    """idempotent: test classes call it from setUpClass (nothing runs at import)"""
+    global _patched
+    if _patched:
+        return
+    _patched = True
+
     import pyphare.cpp as cpp
     import pyphare.cpp.validate as validate
     import pyphare.pharein as ph

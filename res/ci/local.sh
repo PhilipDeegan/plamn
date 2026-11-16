@@ -17,6 +17,12 @@ mkn build test -p test_plamn_core -dKO -t "$J"
 step "python modules (1D, 2D)"
 ./mkn.py --dim 1 2
 
+step "C++ diagnostics tests (embedded python): 1 rank (mkn test), then 3"
+mkn build test -p test_plamn_diagnostics -dKO -t "$J" -x res/mkn/mpi
+for t in bin/test_plamn_diagnostics/test/*_test_diagnostics_*d.cpp; do
+  mpirun --oversubscribe -n 3 "$t"
+done
+
 step "python tests: one process each, the 1 and 3 rank cases at the same time (as CI)"
 PYTHONPATH=python:$PYPHARE/pyphare:tst/plamn/python \
   python3 -m phlop.run.test_cases -i tst -c 4 --tags mpi

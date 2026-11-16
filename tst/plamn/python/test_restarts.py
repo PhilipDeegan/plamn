@@ -20,10 +20,9 @@ import numpy as np
 
 import pyplamn
 
-pyplamn.patch()
 
-import pyphare.pharein as ph  # noqa: E402
-from pyphare.simulator.simulator import Simulator, startMPI  # noqa: E402
+import pyphare.pharein as ph
+from pyphare.simulator.simulator import Simulator, startMPI
 
 timestep = 0.001
 restart_step = 4
@@ -139,6 +138,10 @@ def state(simulator):
 
 
 class RestartsTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        pyplamn.patch()
+
     def setUp(self):
         startMPI()
         # the same on every rank of a run, its own per test and rank count: phlop runs a test
