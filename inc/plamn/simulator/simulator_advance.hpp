@@ -261,22 +261,26 @@ void Simulator<opts>::move_ions_(std::size_t const ln, double const t, double co
             mover_.updatePopulations(patch.ions, patch.emAvg, *patch.boxing, dt, mode);
         });
     }
+    if (mode != core::UpdaterMode::domain_only)
+    {
+        // as PHAREHUB/PHARE#1441 (and the level initialization): the particles that left their
+        //  patch go to the patch owning their cell first, then each patch deposits its domain
+        //  particles, every particle once (the domain_only predictor deposits its pushed copies
+        //  in the updater)
+        copy_(ln, damn::amr::gather_leaving, "IonGhostParticles");
+        per_patch_(ln, [](auto& patch) {
+            for (auto& pop : patch.ions)
+                pop.patchGhostParticles().clear();
+            core::deposit_domain<dimension, interp_order>(patch.ions, patch.layout);
+        });
+    }
+
     // as PHARE (fillFluxBorders, fillDensityBorders, then fillIonPopMomentGhosts): the domain
     //  deposit summed over patch borders, then each patch's level ghost particles, every one of
     //  them in its ghost box (patches meeting on the level border hold the same ones: summed
     //  after, they would count twice there)
     fill_ion_borders_(ln);
     deposit_level_ghosts_(ln, t + dt);
-
-    if (mode != core::UpdaterMode::domain_only)
-    {
-        // particles that left their patch go to the patch owning their cell
-        copy_(ln, damn::amr::gather_leaving, "IonGhostParticles");
-        per_patch_(ln, [](auto& patch) {
-            for (auto& pop : patch.ions)
-                pop.patchGhostParticles().clear();
-        });
-    }
     compute_moments_(ln);
 }
 

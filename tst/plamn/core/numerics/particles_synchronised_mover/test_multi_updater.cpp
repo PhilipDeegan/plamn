@@ -118,6 +118,8 @@ void update_serial(UpdaterMode mode, auto& patches)
 
             Boxing_t const boxing{layout, {layout.cells}};
             ParticlesSynchronisedMover_t{}.updatePopulations(ions, electromag, boxing, dt, mode);
+            if (mode == UpdaterMode::all) // moves only, the domain deposit follows
+                ParticlesSynchronisedMover_t::depositDomain(ions, layout);
             ions.computeChargeDensity();
             ions.computeBulkVelocity();
         }
@@ -158,6 +160,8 @@ void update_parallel(UpdaterMode mode, auto& patches)
             for (auto& patch : patches)
             {
                 auto& [layout, ions, em, electromag] = patch.model.state;
+                if (mode == UpdaterMode::all) // moves only, the domain deposit follows
+                    ParticlesSynchronisedMover_t::depositDomain(ions, layout);
                 ions.computeChargeDensity();
                 ions.computeBulkVelocity();
             }

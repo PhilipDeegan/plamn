@@ -688,6 +688,9 @@ TYPED_TEST(ParticlesSynchronisedMoverTest, momentsAreChangedInParticlesAndMoment
 
     assert(no_nans(this->ions.velocity()(Component::X)));
     this->update(UpdaterMode::all);
+    // mode all moves only: the domain deposit follows (after the exchange in a run)
+    ParticlesSynchronisedMoverTest<TypeParam>::ParticlesSynchronisedMover_t::depositDomain(
+        this->ions, this->layout);
     assert(no_nans(this->ions.velocity()(Component::X)));
 
     this->fillIonsMomentsGhosts();
@@ -944,6 +947,8 @@ struct ParticlesSynchronisedMoverOwnershipTest : public ParticlesSynchronisedMov
         }
 
         ionUpdater.updatePopulations(*this->ions, *this->EM, boxing, this->dt, mode);
+        if (mode == UpdaterMode::all) // mode all moves only, the domain deposit follows
+            ParticlesSynchronisedMover_t::depositDomain(*this->ions, this->layout);
 
         std::size_t ipop = 0;
         for (auto& pop : this->ions)
@@ -999,7 +1004,7 @@ TYPED_TEST_SUITE(ParticlesSynchronisedMoverOwnershipTest, OwnershipPermutations,
 
 
 TYPED_TEST(ParticlesSynchronisedMoverOwnershipTest,
-           particleEnteringNonOwnedCellLeavesDomainAndIsDepositedOnce)
+           particleEnteringNonOwnedCellLeavesDomainAndIsNotDepositedHere)
 {
     typename TestFixture::ParticlesSynchronisedMover_t ionUpdater{};
 
@@ -1018,6 +1023,7 @@ TYPED_TEST(ParticlesSynchronisedMoverOwnershipTest,
     }
 
     ionUpdater.updatePopulations(*this->ions, *this->EM, boxing, this->dt, UpdaterMode::all);
+    TestFixture::ParticlesSynchronisedMover_t::depositDomain(*this->ions, this->layout);
 
     std::size_t ipop = 0;
     for (auto& pop : this->ions)
@@ -1035,8 +1041,9 @@ TYPED_TEST(ParticlesSynchronisedMoverOwnershipTest,
         EXPECT_EQ(TestFixture::count(patchGhost, [](auto const& p) { return p.iCell()[0] == 60; }),
                   nbrCrossing[ipop]);
 
+        // the leaving particles are deposited by the patch owning their cell, after the exchange
         auto const deposited = TestFixture::total(pop.particleDensity());
-        auto const expected  = TestFixture::weights(domain) + TestFixture::weights(patchGhost);
+        auto const expected  = TestFixture::weights(domain);
         EXPECT_NEAR(deposited, expected, 1e-10 * expected);
         ++ipop;
     }
