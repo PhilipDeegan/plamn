@@ -23,6 +23,8 @@
 #include "damn/hdf5/vtkhdf.hpp"
 #endif
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -47,8 +49,9 @@ void Simulator<opts>::setup_diagnostics_()
     if (auto const format = get("format", std::string{"phareh5"}); format != "pharevtkhdf")
         throw std::runtime_error("plamn diagnostics: format " + format
                                  + " not supported (pharevtkhdf)");
-    diagnostics_.dir        = get("filePath", std::string{"phare_output"});
-    diagnostics_.overwrite  = get("mode", std::string{}) == "overwrite";
+    diagnostics_.dir               = get("filePath", std::string{"phare_output"});
+    diagnostics_.overwrite         = get("mode", std::string{}) == "overwrite";
+    diagnostics_.fine_dump_lvl_max = get("fine_dump_lvl_max", 0);
     diagnostics_.quantities = ::plamn::diagnostic::hybrid_quantities<View_t>(population_names_);
     for (auto const& d : diagnostics_.list) // unknown quantities: at setup, not at a dump
         if (!is_computed(d.quantity))
@@ -69,7 +72,18 @@ bool Simulator<opts>::dump_diagnostics(double const timestamp, double const time
 }
 
 template<auto opts>
-void Simulator<opts>::dump_vtkhdf_(diagnostic::Diagnostic& diag, double const time)
+void Simulator<opts>::fine_dump_(std::size_t const ln, double const time)
+{
+    auto const level0_end = currentTime_ + dt_; // advance() adds dt_ after the levels
+    if (ln == 0 or static_cast<int>(ln) > diagnostics_.fine_dump_lvl_max
+        or std::abs(time - level0_end) <= 1e-12 * std::max(1., std::abs(level0_end)))
+        return;
+    for (auto& diag : diagnostics_.list)
+        dump_vtkhdf_(diag, time, static_cast<int>(ln));
+}
+
+template<auto opts>
+void Simulator<opts>::dump_vtkhdf_(diagnostic::Diagnostic& diag, double const time, int const only)
 {
     DAMN_LOG_SCOPE(1, "Simulator::dump_vtkhdf_");
 #if DAMN_HAS_HIGHFIVE
@@ -143,7 +157,7 @@ void Simulator<opts>::dump_vtkhdf_(diagnostic::Diagnostic& diag, double const ti
     vtkhdf::append_step<Float>(*file, time);
     for (int ln = 0; ln < max_levels; ++ln)
     {
-        if (static_cast<std::size_t>(ln) >= levels_.size())
+        if (static_cast<std::size_t>(ln) >= levels_.size() or (only >= 0 and ln != only))
         {
             damn::amr::Level<dimension> const none{ln, {}};
             vtkhdf::append_level<Float>(*file, ln, none, rank_, components,

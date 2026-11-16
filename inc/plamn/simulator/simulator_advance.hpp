@@ -65,6 +65,8 @@ void Simulator<opts>::advance_level_(int const level_number, double const t, dou
     average_(ln, t, dt);
     move_ions_(ln, t, dt, core::UpdaterMode::all);
     corrector_(ln, t, dt);
+    if (ln + 1 == levels_.size()) // the finest; coarser ones after their synchronization
+        fine_dump_(ln, t + dt);
 
     // the finest level's share of the coarser level's reflux, per substep: the time average of
     //  E over them (coarser finer levels accumulate theirs when synchronized)
@@ -154,6 +156,7 @@ void Simulator<opts>::synchronize_(int const level_number, double const t)
     fill_electric_ghosts_(coarse, "EM_E", t);
     copy_(coarse, damn::amr::fill_ghosts, "IonPopMoments");
     compute_moments_(coarse);
+    fine_dump_(coarse, t);
 }
 
 template<auto opts>

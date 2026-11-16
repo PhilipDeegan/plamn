@@ -242,13 +242,19 @@ private:
 
     // diagnostics, see simulator_diagnostics.hpp
     void setup_diagnostics_();
-    void dump_vtkhdf_(diagnostic::Diagnostic& diag, double time);
+    // only >= 0: that level only, the others written empty (PHARE's dump_level)
+    void dump_vtkhdf_(diagnostic::Diagnostic& diag, double time, int only = -1);
+    // PHARE's fine_dump_lvl_max: every diagnostic, level ln only, at the end of its substeps
+    //  that are not a level 0 step's end (the finest after advancing, coarser ones after their
+    //  synchronization)
+    void fine_dump_(std::size_t ln, double time);
     using View_t = decltype(simulator::view(std::declval<Patch_t&>()));
     struct Diagnostics
     {
         using Float = std::conditional_t<PLAMN_DIAG_DOUBLES, double, float>;
         std::string dir;
-        bool overwrite = false; // pyphare's mode "overwrite": truncated at the first dump only
+        bool overwrite = false;    // pyphare's mode "overwrite": truncated at the first dump only
+        int fine_dump_lvl_max = 0; // PHARE's: levels 1 to it dumped at their substeps, 0: none
         std::vector<diagnostic::Diagnostic> list;
         std::map<std::string, diagnostic::Accessor<View_t>> quantities;
 #if DAMN_HAS_HIGHFIVE
