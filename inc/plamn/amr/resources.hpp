@@ -181,6 +181,8 @@ namespace detail
         auto const c = core::components(particles);
         for (std::size_t i = 0; i < particles.size(); ++i)
         {
+            if (c.weight[i] == 0) // SoAVXChunked's gaps
+                continue;
             damn::core::Point<int, dim> cell;
             for (std::size_t d = 0; d < dim; ++d)
                 cell[d] = c.iCell[d][i] + shift[d];

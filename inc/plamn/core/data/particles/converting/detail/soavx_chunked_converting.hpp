@@ -34,7 +34,8 @@ namespace detail
         if (!src.sorted())
         {
             for (std::size_t i = 0; i < src.size(); ++i)
-                out.emplace_back(src.copy(i));
+                if (src.weight(i) != 0) // not a gap
+                    out.emplace_back(src.copy(i));
             return;
         }
         src.for_each_range(src.shell(), [&](auto const start, auto const size) {
@@ -63,7 +64,7 @@ Dst ParticlesConverter<SoAVXChunked, CPU, AoS, CPU>::operator()( //
 {
     auto out = make_particles<Dst>(layout);
     detail::soavx_chunked_into(src, out);
-    assert(src.size() == out.size()); // every particle is in the shell the offsets cover
+    assert(!src.sorted() or src.nbr_particles() == out.size()); // all in the chunks' shell
     return out;
 }
 

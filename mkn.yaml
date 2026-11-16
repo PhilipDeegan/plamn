@@ -45,6 +45,7 @@ profile:
   test: tst/plamn/core/data/grid/test_layout.cpp
         tst/plamn/core/data/particles/test_particle_components.cpp
         tst/plamn/core/data/particles/test_particle_synchronisation.cpp
+        tst/plamn/core/data/particles/test_soavx_chunked_gaps.cpp
         tst/plamn/core/numerics/particles_synchronised_mover/test_updater.cpp
         tst/plamn/core/numerics/particles_synchronised_mover/test_multi_updater.cpp
         tst/plamn/core/numerics/particles_synchronised_mover/test_level_updater.cpp

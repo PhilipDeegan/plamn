@@ -1,18 +1,30 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTICLES_SOAVX_CHUNKED_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLES_SOAVX_CHUNKED_HPP
 
-// SoAVXChunked: SoAVX sorted by cell, with per cell offsets (CSR), as AoSMapped is AoS + CellMap
+// SoAVXChunked: SoAVX sorted by cell, with per cell chunks, as AoSMapped is AoS + CellMap
 //
-//  offsets_[c] is the first particle of cell c, offsets_[c + 1] - offsets_[c] its count, cells c
+//  starts_[c] is the first particle of cell c, sizes_[c] its count, cells c
 //  flattened in C order (last direction fastest) over shell() = grow(box, 1) (as AoSMapped's
 //  CellMap, the safe outer shell). A span of cells along the last direction is then one
 //  contiguous range of particles: selecting / exporting a box is a list of ranges.
 //
-//  The offsets are rebuilt by sort() only: a counting sort (histogram with a slot per particle,
-//  exclusive scan, one scatter of all columns into a second set of columns, swapped in).
-//  Any mutation (push, append, erase, resize) leaves them stale: sorted() is false until the
-//  next sort(), range accessors assert sorted(). GPU_UNIFIED sorts on the device (thrust), the
-//  order of particles within a cell is then not deterministic (atomic slots), CPU is stable.
+//  Each cell's chunk is starts_[c], sizes_[c]: chunks are in cell order, with gaps between them,
+//  free slots holding fillers (weight 0, the cell of the chunk before them). sort() lays them out:
+//  a counting sort (histogram with a slot per particle, exclusive scan of each cell's particles
+//  and gap, one scatter of all columns into a second set of columns, swapped in), the gaps the
+//  slack: a fraction of the particles spread over the patch's cells, border cells weighted (their
+//  particles leave to and arrive from other patches; inside, about as many enter a cell as leave
+//  it), none in the shell outside the box. Without slack (the default) chunks are contiguous.
+//
+//  Between sorts, particles change cells without one (resettle(), insert(), remove()): a chunk
+//  grows into the gap at its tail or head, whichever is larger, and shrinks from the end with the
+//  smaller gap (the gaps either side even out); an empty chunk takes the middle of the gap it is
+//  in. Only when neither side has room is a full sort needed.
+//
+//  Any other mutation (push, append, erase, resize) leaves the chunks stale: sorted() is false
+//  until the next sort(), range accessors assert sorted(). GPU_UNIFIED sorts on the device
+//  (thrust), the order of particles within a cell is then not deterministic (atomic slots), CPU
+//  is stable.
 
 #include "damn/core/vector.hpp"
 #include "damn/core/operators.hpp"
@@ -37,6 +49,8 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <limits>
+#include <vector>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
@@ -56,7 +70,7 @@ namespace plamn::core
 using chunk_offset_t = std::uint32_t;
 
 
-// the offsets view shared by the vector and the span: shell box + offsets pointer
+// the chunks view shared by the vector and the span: shell box + starts and sizes pointers
 template<std::size_t dim>
 struct SoAVXChunks
 {
@@ -72,31 +86,34 @@ struct SoAVXChunks
     }
 
     // calls fn(start, size) per contiguous particle range of the cells of box (clipped to
-    //  shell), adjacent ranges merged, empty ones skipped
-    static void for_each_range(box_t const& shell, chunk_offset_t const* offsets,
-                               box_t const& box, auto&& fn)
+    //  shell), adjacent ranges merged (no gap between them), empty ones skipped
+    static void for_each_range(box_t const& shell, chunk_offset_t const* starts,
+                               chunk_offset_t const* sizes, box_t const& box, auto&& fn)
     {
         auto const clipped = box * shell;
         if (!clipped)
             return;
 
         std::size_t start = 0, size = 0;
-        damn::core::for_each_span(*clipped, [&](auto const& span_start, std::uint32_t const span_size) {
-            auto const c0 = flat(shell, span_start);
-            auto const s  = offsets[c0];
-            auto const n  = offsets[c0 + span_size] - s;
-            if (n == 0)
-                return;
-            if (size > 0 and start + size == s)
-                size += n;
-            else
-            {
-                if (size > 0)
-                    fn(start, size);
-                start = s;
-                size  = n;
-            }
-        });
+        damn::core::for_each_span(*clipped,
+                                  [&](auto const& span_start, std::uint32_t const span_size) {
+                                      auto const c0 = flat(shell, span_start);
+                                      for (std::size_t c = c0; c < c0 + span_size; ++c)
+                                      {
+                                          std::size_t const s = starts[c], n = sizes[c];
+                                          if (n == 0)
+                                              continue;
+                                          if (size > 0 and start + size == s)
+                                              size += n;
+                                          else
+                                          {
+                                              if (size > 0)
+                                                  fn(start, size);
+                                              start = s;
+                                              size  = n;
+                                          }
+                                      }
+                                  });
         if (size > 0)
             fn(start, size);
     }
@@ -115,18 +132,21 @@ struct SoAVXChunkedSpan : public SoAVXSpan<dim, alloc_mode_, _const_>
     SoAVXChunkedSpan(Particles_t& particles)
         : Super{particles, 0, particles.size()}
         , box_{particles.box()}
-        , offsets_{particles.offsets_data()}
+        , starts_{particles.starts_data()}
+        , sizes_{particles.sizes_data()}
         , sorted_{particles.sorted()}
     {
     }
 
     auto& box() const DAMN_ALL { return box_; }
-    auto offsets_data() const DAMN_ALL { return offsets_; }
+    auto starts_data() const DAMN_ALL { return starts_; }
+    auto sizes_data() const DAMN_ALL { return sizes_; }
     bool sorted() const DAMN_ALL { return sorted_; }
 
     box_t box_;
-    chunk_offset_t const* offsets_ = nullptr;
-    bool sorted_                   = false;
+    chunk_offset_t const* starts_ = nullptr;
+    chunk_offset_t const* sizes_  = nullptr;
+    bool sorted_                  = false;
 };
 
 
@@ -146,17 +166,33 @@ struct SoAVXChunkedVector : public SoAVXVector<dim, alloc_mode_>
     }
 
     auto& box() const { return box_; }
-    auto offsets_data() const { return offsets_.data(); }
+    auto starts_data() const { return starts_.data(); }
+    auto sizes_data() const { return sizes_.data(); }
     bool sorted() const { return sorted_ and sorted_size_ == this->size(); }
 
-    // the offsets are stale after any change to the particles, until the next sort()
+    // the chunks are stale after any change to the particles but resettle / insert / remove,
+    //  until the next sort()
     void unsort() { sorted_ = false; }
 
+    // sort()'s gaps: slack (a fraction of the particles) over domain's cells (the patch's: box()
+    //  is the cell map's, larger), its border cells weighted border to 1 inside
+    void set_slack(double const fraction, box_t const& domain, double const border = 3)
+    {
+        slack_         = fraction;
+        slack_domain_  = domain;
+        border_weight_ = border;
+    }
+
     box_t box_;
-    container_t<chunk_offset_t> offsets_; // ncells + 1, see top of file
-    container_t<chunk_offset_t> slots_;   // per particle slot in its cell, sort() scratch
-    Super scratch_;                       // the columns sort() scatters into, then swaps in
-    bool sorted_              = false;
+    container_t<chunk_offset_t> starts_; // per cell, see top of file
+    container_t<chunk_offset_t> sizes_;  // per cell
+    container_t<chunk_offset_t> gaps_;   // per cell, after its chunk, sort() scratch
+    container_t<chunk_offset_t> slots_;  // per particle slot in its cell, sort() scratch
+    double slack_         = 0;
+    box_t slack_domain_   = {};
+    double border_weight_ = 3;
+    Super scratch_; // the columns sort() scatters into, then swaps in
+    bool sorted_             = false;
     std::size_t sorted_size_ = 0;
 };
 
@@ -188,24 +224,47 @@ public:
     SoAVXChunkedParticles& operator=(SoAVXChunkedParticles const&) = default;
     SoAVXChunkedParticles& operator=(SoAVXChunkedParticles&&)      = default;
 
-    // the cells the offsets cover
+    // the cells the chunks cover
     auto shell() const { return damn::core::grow(this->box(), 1); }
 
     // particles of cell, as {start, size}
     auto cell_range(auto const& cell) const
     {
         DAMN_ASSERT(this->sorted());
-        auto const* offsets = this->offsets_data();
-        auto const c        = Chunks::flat(shell(), cell);
-        return std::pair<std::size_t, std::size_t>{offsets[c], offsets[c + 1] - offsets[c]};
+        auto const c = Chunks::flat(shell(), cell);
+        return std::pair<std::size_t, std::size_t>{this->starts_[c], this->sizes_[c]};
     }
 
     // fn(start, size) per contiguous range of the particles in box, see SoAVXChunks
     void for_each_range(box_t const& box, auto&& fn) const
     {
         DAMN_ASSERT(this->sorted());
-        Chunks::for_each_range(shell(), this->offsets_data(), box, fn);
+        Chunks::for_each_range(shell(), this->starts_data(), this->sizes_data(), box, fn);
     }
+
+    // the particles, not the gaps (sorted)
+    std::size_t nbr_particles() const
+    {
+        std::size_t n = 0;
+        for_each_range(shell(), [&](auto, auto const size) { n += size; });
+        return n;
+    }
+
+    // a particle into cell's chunk, its tail or head gap, whichever is larger: false if neither
+    //  has room (or cell is outside the shell); the chunks stay sorted
+    bool insert(auto const& particle)
+        requires(storage_mode == StorageMode::VECTOR);
+
+    // the particle of slot i, in the chunk of cell c (flat), out: the end of the chunk with the
+    //  smaller gap next to it fills the hole, so the gaps either side even out
+    void remove(std::size_t c, std::size_t i)
+        requires(storage_mode == StorageMode::VECTOR);
+
+    // after particles' cells changed (a push): each chunk's particles no longer in its cell taken
+    //  out; those whose cell is in keep inserted into their new chunk (else a full sort, they
+    //  appended), the others given to leave(particle). Returns whether it sorted
+    bool resettle(box_t const& keep, auto&& leave)
+        requires(storage_mode == StorageMode::VECTOR);
 
     std::size_t count(box_t const& box) const
     {
@@ -214,7 +273,8 @@ public:
         return n;
     }
 
-    // counting sort by cell over shell(), all columns moved together, offsets rebuilt
+    // counting sort by cell over shell(), all columns moved together, chunks laid out with the
+    //  slack's gaps between them (weight 0 slots, dropped: gaps)
     void sort()
         requires(storage_mode == StorageMode::VECTOR);
 
@@ -257,7 +317,7 @@ public:
         std::apply([&](auto&... column) { ((column.reserve(s)), ...); }, this->as_tuple());
     }
 
-    // the offsets are kept eagerly, as AoSMapped's CellMap: rebuilt after every change
+    // the chunks are kept eagerly, as AoSMapped's CellMap: rebuilt after every change
     //  through these hooks (appends, the post push sync), queries assert sorted()
     template<auto type>
     void on_appended()
@@ -290,11 +350,24 @@ public:
         damn::core::for_N<std::tuple_size_v<decltype(columns)>>([&](auto c) {
             auto& column = std::get<c>(columns);
             damn::resize(column, offset + n);
-            damn::core::mem::copy<alloc_mode>(column.data() + offset, std::get<c>(that_columns).data(), n);
+            damn::core::mem::copy<alloc_mode>(column.data() + offset,
+                                              std::get<c>(that_columns).data(), n);
         });
     }
 
     std::size_t nbr_particles_in(box_t const& box) const { return count(box); }
+
+    // a gap slot of chunk c (flat): weight 0, the chunk's cell
+    void filler_(std::size_t const i, std::size_t const c)
+    {
+        auto const cell  = cell_of_(c);
+        this->weight_[i] = 0;
+        damn::core::for_N<dimension>([&](auto d) {
+            this->iCell_[d][i] = cell[d];
+            this->delta_[d][i] = 0;
+        });
+        damn::core::for_N<3>([&](auto d) { this->v_[d][i] = 0; });
+    }
 
     std::size_t nbr_particles_in(std::array<int, dimension> const& cell) const
     {
@@ -303,7 +376,157 @@ public:
 
 private:
     using Particle_t = Particle<dimension>;
+
+    // the cell of flat index c in the shell
+    std::array<int, dimension> cell_of_(std::size_t c) const
+    {
+        auto const shell = this->shell();
+        std::array<int, dimension> cell;
+        for (std::size_t d = dimension; d-- > 0;)
+        {
+            auto const n = static_cast<std::size_t>(shell.upper[d] - shell.lower[d] + 1);
+            cell[d]      = shell.lower[d] + static_cast<int>(c % n);
+            c /= n;
+        }
+        return cell;
+    }
+
+    // the end of the last non empty chunk before c, the start of the first after c
+    std::size_t prev_end_(std::size_t const c) const
+    {
+        for (std::size_t k = c; k-- > 0;)
+            if (this->sizes_[k])
+                return this->starts_[k] + this->sizes_[k];
+        return 0;
+    }
+    std::size_t next_start_(std::size_t const c) const
+    {
+        for (std::size_t k = c + 1; k < this->sizes_.size(); ++k)
+            if (this->sizes_[k])
+                return this->starts_[k];
+        return size();
+    }
+
+    void move_slot_(std::size_t const to, std::size_t const from)
+    {
+        auto columns = this->as_tuple();
+        damn::core::for_N<std::tuple_size_v<decltype(columns)>>(
+            [&](auto k) { std::get<k>(columns)[to] = std::get<k>(columns)[from]; });
+    }
+
+    void write_slot_(std::size_t const i, auto const& p)
+    {
+        this->weight_[i] = p.weight();
+        damn::core::for_N<dimension>([&](auto d) {
+            this->iCell_[d][i] = p.iCell()[d];
+            this->delta_[d][i] = p.delta()[d];
+        });
+        damn::core::for_N<3>([&](auto d) { this->v_[d][i] = p.v()[d]; });
+    }
 };
+
+
+template<typename Super_>
+bool SoAVXChunkedParticles<Super_>::insert(auto const& particle)
+    requires(storage_mode == StorageMode::VECTOR)
+{
+    auto const shell = this->shell();
+    damn::core::Point<int, dimension> cell;
+    for (std::size_t d = 0; d < dimension; ++d)
+        cell[d] = particle.iCell()[d];
+    if (!isIn(cell, shell))
+        return false;
+    auto const c     = Chunks::flat(shell, cell);
+    auto& start      = this->starts_[c];
+    auto& n          = this->sizes_[c];
+    auto const lower = prev_end_(c);
+    auto const upper = next_start_(c);
+    if (n == 0)
+    { // the middle of the gap it is in
+        if (upper == lower)
+            return false;
+        start = static_cast<chunk_offset_t>(lower + (upper - lower) / 2);
+        write_slot_(start, particle);
+        n = 1;
+        return true;
+    }
+    std::size_t const head = start - lower, tail = upper - (start + n);
+    if (head == 0 and tail == 0)
+        return false;
+    if (tail >= head)
+        write_slot_(start + n, particle);
+    else
+        write_slot_(--start, particle);
+    ++n;
+    return true;
+}
+
+template<typename Super_>
+void SoAVXChunkedParticles<Super_>::remove(std::size_t const c, std::size_t const i)
+    requires(storage_mode == StorageMode::VECTOR)
+{
+    auto& start = this->starts_[c];
+    auto& n     = this->sizes_[c];
+    DAMN_ASSERT(n > 0 and i >= start and i < start + n);
+    std::size_t const head = start - prev_end_(c), tail = next_start_(c) - (start + n);
+    if (tail <= head)
+    { // the last fills the hole, the tail gap grows
+        auto const last = start + n - 1;
+        if (i != last)
+            move_slot_(i, last);
+        this->filler_(last, c);
+    }
+    else
+    { // the first fills it, the head gap grows
+        if (i != start)
+            move_slot_(i, start);
+        this->filler_(start, c);
+        ++start;
+    }
+    --n;
+}
+
+template<typename Super_>
+bool SoAVXChunkedParticles<Super_>::resettle(box_t const& keep, auto&& leave)
+    requires(storage_mode == StorageMode::VECTOR)
+{
+    DAMN_LOG_SCOPE(2, "SoAVXChunked::resettle");
+    DAMN_ASSERT(this->sorted());
+    std::vector<Particle_t> moved; // the particles that changed cell
+    for (std::size_t c = 0; c < this->sizes_.size(); ++c)
+    {
+        auto const cell = cell_of_(c);
+        for (std::size_t i = this->starts_[c]; i < this->starts_[c] + this->sizes_[c];)
+        {
+            bool stays = true;
+            for (std::size_t d = 0; d < dimension; ++d)
+                stays = stays and this->iCell_[d][i] == cell[d];
+            if (stays)
+            {
+                ++i;
+                continue;
+            }
+            moved.push_back(this->copy(i));
+            remove(c, i); // slot i holds another particle of the chunk now, or is its head gap
+            if (i < this->starts_[c])
+                i = this->starts_[c];
+        }
+    }
+    std::vector<Particle_t> overflow; // no room in their chunk
+    for (auto const& p : moved)
+    {
+        if (!isIn(damn::core::Point<int, dimension>{p.iCell()}, keep))
+            leave(p);
+        else if (!insert(p))
+            overflow.push_back(p);
+    }
+    if (overflow.empty())
+        return false;
+    for (auto const& p : overflow)
+        this->push_back(p);
+    sort();
+    return true;
+}
 
 
 template<typename Super_>
@@ -311,24 +534,22 @@ void SoAVXChunkedParticles<Super_>::sort()
     requires(storage_mode == StorageMode::VECTOR)
 {
     DAMN_LOG_SCOPE(2, "SoAVXChunked::sort");
-    auto static constexpr gpu = alloc_mode == damn::AllocatorMode::GPU_UNIFIED;
-    using Op                  = damn::core::Operators<chunk_offset_t, /*atomic=*/gpu, /*GPU=*/gpu>;
+    auto static constexpr gpu  = alloc_mode == damn::AllocatorMode::GPU_UNIFIED;
+    using Op                   = damn::core::Operators<chunk_offset_t, /*atomic=*/gpu, /*GPU=*/gpu>;
+    auto static constexpr none = std::numeric_limits<chunk_offset_t>::max(); // a gap's slot
 
     auto const shell        = this->shell();
     std::size_t const n     = size();
     std::size_t const cells = shell.size();
 
-    damn::resize(this->offsets_, cells + 1, /*copy=*/false);
+    damn::resize(this->starts_, cells, /*copy=*/false);
+    damn::resize(this->sizes_, cells, /*copy=*/false);
+    damn::resize(this->gaps_, cells, /*copy=*/false);
     damn::resize(this->slots_, n, /*copy=*/false);
-    damn::resize(this->scratch_.weight_, n, false);
-    damn::core::for_N<dimension>([&](auto d) {
-        damn::resize(this->scratch_.iCell_[d], n, false);
-        damn::resize(this->scratch_.delta_[d], n, false);
-    });
-    damn::core::for_N<3>([&](auto d) { damn::resize(this->scratch_.v_[d], n, false); });
 
-    auto* const offsets = this->offsets_.data();
+    auto* const sizes   = this->sizes_.data();
     auto* const slots   = this->slots_.data();
+    auto const* weights = this->weight_.data();
     auto cells_of       = damn::core::for_N<dimension, damn::core::for_N_R_mode::make_array>(
         [&](auto d) -> int const* { return this->iCell_[d].data(); });
     auto const cell_idx = [=] DAMN_ALL(std::size_t const i) {
@@ -338,51 +559,96 @@ void SoAVXChunkedParticles<Super_>::sort()
         return Chunks::flat(shell, cell);
     };
 
-    // particles' columns in, scratch columns out, flat lists of pointers
-    auto const columns = [](auto& v) {
-        return std::apply([](auto&... c) { return std::make_tuple(c.data()...); }, v.as_tuple());
-    };
-    auto const src = columns(*this);
-    auto const dst = columns(this->scratch_);
-
+    // 1. each particle's slot in its cell, the cells' sizes (gaps: weight 0, dropped)
     auto const count = [=] DAMN_ALL(std::size_t const i) {
-        slots[i] = Op{offsets[cell_idx(i)]}.increment_return_old();
+        slots[i] = weights[i] == 0 ? none : Op{sizes[cell_idx(i)]}.increment_return_old();
     };
-    auto const scatter = [=] DAMN_ALL(std::size_t const i) {
-        auto const to = offsets[cell_idx(i)] + slots[i];
-        damn::core::for_N<std::tuple_size_v<decltype(src)>>(
-            [&](auto c) { std::get<c>(dst)[to] = std::get<c>(src)[i]; });
-    };
-
+    std::fill(sizes, sizes + cells, chunk_offset_t{0});
     if constexpr (gpu)
     {
 #if DAMN_HAVE_THRUST
         auto const first = thrust::counting_iterator<std::size_t>(0);
-        thrust::fill(thrust::device, offsets, offsets + cells + 1, chunk_offset_t{0});
         thrust::for_each(thrust::device, first, first + n, count);
-        thrust::exclusive_scan(thrust::device, offsets, offsets + cells + 1, offsets);
-        thrust::for_each(thrust::device, first, first + n, scatter);
 #else
         throw std::runtime_error("SoAVXChunked GPU sort needs thrust");
 #endif
     }
     else
-    {
-        std::fill(offsets, offsets + cells + 1, chunk_offset_t{0});
         for (std::size_t i = 0; i < n; ++i)
             count(i);
-        std::exclusive_scan(offsets, offsets + cells + 1, offsets, chunk_offset_t{0});
+
+    // 2. the gaps (the slack over the box's cells, border cells weighted), the chunks' starts
+    std::size_t particles = 0;
+    for (std::size_t c = 0; c < cells; ++c)
+        particles += sizes[c];
+    auto* const gaps   = this->gaps_.data();
+    auto* const starts = this->starts_.data();
+    std::fill(gaps, gaps + cells, chunk_offset_t{0});
+    if (auto const slack = static_cast<std::size_t>(this->slack_ * static_cast<double>(particles)))
+    {
+        auto const box    = this->slack_domain_;
+        double total      = 0;
+        auto const weight = [&](auto const& cell) {
+            if (!isIn(damn::core::Point<int, dimension>{cell}, box))
+                return 0.;
+            for (std::size_t d = 0; d < dimension; ++d)
+                if (cell[d] == box.lower[d] or cell[d] == box.upper[d])
+                    return this->border_weight_;
+            return 1.;
+        };
+        for (std::size_t c = 0; c < cells; ++c)
+            total += weight(cell_of_(c));
+        for (std::size_t c = 0; c < cells; ++c)
+            gaps[c] = static_cast<chunk_offset_t>(static_cast<double>(slack) * weight(cell_of_(c))
+                                                  / total);
+    }
+    std::size_t slots_total = 0;
+    for (std::size_t c = 0; c < cells; ++c)
+    {
+        starts[c] = static_cast<chunk_offset_t>(slots_total);
+        slots_total += sizes[c] + gaps[c];
+    }
+
+    // 3. the particles into their slots of the scratch columns, swapped in, the gaps filled
+    damn::resize(this->scratch_.weight_, slots_total, false);
+    damn::core::for_N<dimension>([&](auto d) {
+        damn::resize(this->scratch_.iCell_[d], slots_total, false);
+        damn::resize(this->scratch_.delta_[d], slots_total, false);
+    });
+    damn::core::for_N<3>([&](auto d) { damn::resize(this->scratch_.v_[d], slots_total, false); });
+    auto const columns = [](auto& v) {
+        return std::apply([](auto&... c) { return std::make_tuple(c.data()...); }, v.as_tuple());
+    };
+    auto const src     = columns(*this);
+    auto const dst     = columns(this->scratch_);
+    auto const scatter = [=] DAMN_ALL(std::size_t const i) {
+        if (slots[i] == none)
+            return;
+        auto const to = starts[cell_idx(i)] + slots[i];
+        damn::core::for_N<std::tuple_size_v<decltype(src)>>(
+            [&](auto c) { std::get<c>(dst)[to] = std::get<c>(src)[i]; });
+    };
+    if constexpr (gpu)
+    {
+#if DAMN_HAVE_THRUST
+        auto const first = thrust::counting_iterator<std::size_t>(0);
+        thrust::for_each(thrust::device, first, first + n, scatter);
+#endif
+    }
+    else
         for (std::size_t i = 0; i < n; ++i)
             scatter(i);
-    }
 
     auto mine   = this->as_tuple();
     auto theirs = this->scratch_.as_tuple();
     damn::core::for_N<std::tuple_size_v<decltype(mine)>>(
         [&](auto c) { std::get<c>(mine).swap(std::get<c>(theirs)); });
+    for (std::size_t c = 0; c < cells; ++c)
+        for (std::size_t i = starts[c] + sizes[c]; i < starts[c] + sizes[c] + gaps[c]; ++i)
+            this->filler_(i, c);
 
     this->sorted_      = true;
-    this->sorted_size_ = n;
+    this->sorted_size_ = slots_total;
 }
 
 
