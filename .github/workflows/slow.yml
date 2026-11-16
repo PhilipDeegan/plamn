@@ -34,14 +34,17 @@ jobs:
         repository: PhilipDeegan/damn
         ssh-key: ${{ secrets.DAMN_DEPLOY_KEY }}
         path: tpp/damn
-    - name: damn's branch of the same name, if it has one (a plamn PR that needs a damn PR)
+    - name: damn's branch of the same name (a plamn PR that needs a damn PR), else the PR's base (next)
       env:
         BRANCH: ${{ github.head_ref || github.ref_name }}
+        BASE: ${{ github.base_ref }}
       run: |
         cd tpp/damn && git config --global --add safe.directory "$PWD"
-        if [ "$BRANCH" != master ] && git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null; then
-          git fetch -q --depth 1 origin "$BRANCH" && git checkout -q FETCH_HEAD
-        fi
+        for b in "$BRANCH" "$BASE"; do
+          if [ -n "$b" ] && [ "$b" != master ] && git ls-remote --exit-code --heads origin "$b" >/dev/null; then
+            git fetch -q --depth 1 origin "$b" && git checkout -q FETCH_HEAD && break
+          fi
+        done
         echo "damn: $(git log --oneline -1)"
 
     - name: test_plamn_core_slow
