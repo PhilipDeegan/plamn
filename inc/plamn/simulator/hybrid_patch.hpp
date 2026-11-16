@@ -58,7 +58,12 @@ struct HybridPatch
     using VecField_t                   = Types::VecField_t;
     using Ions_t                       = Types::Ions_t;
     using Electrons_t                  = Types::Electrons_t;
-    using ParticlesSynchronisedMover_t = core::ParticlesSynchronisedMover<Particles_t, Layout_t>;
+    // AoSMapped: the serial per patch mover, else a level's (Simulator::move_ions_)
+    using ParticlesSynchronisedMover_t
+        = core::ParticlesSynchronisedMoverFor_t<Particles_t, Layout_t>;
+    static constexpr bool per_patch_mover
+        = std::is_same_v<ParticlesSynchronisedMover_t,
+                         core::ParticlesSynchronisedMover<Particles_t, Layout_t>>;
     using Boxing_t                     = ParticlesSynchronisedMover_t::Boxing_t;
     using Box_t                        = damn::core::Box<int, dimension>;
 

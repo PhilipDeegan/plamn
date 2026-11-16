@@ -10,6 +10,7 @@
 #include "damn/core/logger.hpp"
 
 #include "plamn/simulator/simulator.hpp" // IWYU pragma: keep (the class)
+#include "plamn/simulator/level_accessor.hpp"
 #include "plamn/amr/coarsen.hpp"
 #include "plamn/amr/level_pairs.hpp"
 #include "plamn/amr/refine.hpp"
@@ -30,6 +31,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 // plamn::Simulator: time refined advance, SolverPPC per level, synchronization and reflux
@@ -330,9 +332,19 @@ void Simulator<opts>::move_ions_(std::size_t const ln, double const t, double co
     DAMN_LOG_SCOPE(1, "Simulator::move_ions");
     {
         DAMN_LOG_SCOPE(1, "Simulator::move_ions::push"); // and deposit
-        per_patch_(ln, [&](auto& patch) {
-            mover_.updatePopulations(patch.ions, patch.emAvg, *patch.boxing, dt, mode);
-        });
+        if constexpr (Patch_t::per_patch_mover)
+            per_patch_(ln, [&](auto& patch) {
+                mover_.updatePopulations(patch.ions, patch.emAvg, *patch.boxing, dt, mode);
+            });
+        else
+        { // the level's patches at once, each with its boxing by patch id
+            auto& data = levels_[ln].data;
+            simulator::LevelAccessor<LevelData_t, Patch_t, &Patch_t::emAvg> accessor{data};
+            std::unordered_map<std::string, typename Patch_t::Boxing_t> boxings;
+            for (std::size_t i = 0; i < accessor.size(); ++i)
+                boxings.try_emplace(accessor.id(i), *data.data[i]->boxing);
+            mover_.updatePopulations(accessor, boxings, dt, mode);
+        }
     }
     if (mode != core::UpdaterMode::domain_only)
     {
