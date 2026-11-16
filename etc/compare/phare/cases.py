@@ -14,8 +14,8 @@ previous one, so the first case that differs says where (as tiling_gpu's tests/s
 
 The model is PHARE's tests/simulator/advance/test_advance_hybrid.py (getHierarchy), the sizes,
 seeds and boxes those of tiling_gpu's tests/simulator/layouts (10 particles per cell); harris_2d is
-tests/simulator/layouts/test_harris_2d_layouts.py. Diagnostics: pharevtkhdf, every step
-(optionally every fine level substep too, see _diag_options).
+tests/simulator/layouts/test_harris_2d_layouts.py. Diagnostics every step (fields, particles in
+phareh5), and every fine level substep with fine_dump (_diag_options).
 Nothing runs on import: ``simulation(case, out, ...)`` declares the input (pyphare.pharein) of
 whichever code imported pyphare.
 """
@@ -29,6 +29,7 @@ DL = 0.2
 TIME_STEP = 0.001
 PPC = 10  # particles per cell: few, so particles can be compared too
 SEED = 1337
+POPULATIONS = ["protons"]
 
 
 def _boxes(ndim, *levels):
@@ -53,16 +54,19 @@ CASES = {
 
 def _diag_options(out, fmt, fine_dump):
     """the regular dumps; with fine_dump, also each fine level at the end of its substeps
-    (fine_dump_lvl_max). PHARE master's pharevtkhdf writes those with level tables shorter than
-    the steps, so PHARE then writes phareh5; PHAREHUB/PHARE#1595 reads neither format's per-level
-    dumps (it needs level 0 at every time)."""
+    (fine_dump_lvl_max: phareh5, PHARE master's pharevtkhdf writes them with level tables
+    shorter than the steps, PHAREHUB/PHARE#1379 fixes it)."""
     options = {"dir": out, "mode": "overwrite"}
     if fine_dump:
         options["fine_dump_lvl_max"] = 10
     return {"format": fmt, "options": options}
 
 
-def _diagnostics(ph, timestamps, pops):
+def _diagnostics(ph, timestamps, pops, fmt="phareh5"):
+    if fmt == "phareh5":  # pharevtkhdf has no particles
+        for pop in pops:
+            for q in ["domain", "levelGhost"]:
+                ph.ParticleDiagnostics(quantity=q, write_timestamps=timestamps, population_name=pop)
     for q in ["E", "B"]:
         ph.ElectromagDiagnostics(quantity=q, write_timestamps=timestamps)
     for q in ["charge_density", "mass_density", "bulkVelocity", "charge_flux"]:
@@ -123,7 +127,7 @@ def _advance_hybrid(ph, out, case, ndim, largest_patch_size, fmt, fine_dump):
         },
     )
     ph.ElectronModel(closure="isothermal", Te=0.12)
-    _diagnostics(ph, TIME_STEP * np.arange(case["steps"] + 1), ["protons"])
+    _diagnostics(ph, TIME_STEP * np.arange(case["steps"] + 1), POPULATIONS, fmt)
     return sim
 
 
@@ -193,11 +197,9 @@ def _harris_2d(ph, out, case, largest_patch_size, fmt, fine_dump):
     )
     ph.ElectronModel(closure="isothermal", Te=0.0)
     ph.LoadBalancer(every=1, mode="nppc", tol=0.001)
-    _diagnostics(ph, time_step * np.arange(case["steps"] + 1), ["protons"])
+    _diagnostics(ph, time_step * np.arange(case["steps"] + 1), POPULATIONS, fmt)
     return sim
 
-
-POPULATIONS = ["protons"]
 
 
 def simulation(name, out, ndim=NDIM, largest_patch_size=None, fmt="pharevtkhdf", fine_dump=False):

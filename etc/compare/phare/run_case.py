@@ -2,6 +2,7 @@
 """Runs one case of cases.py under one code, diagnostics into OUT.
 
   run_case.py phare|plamn CASE OUT [--ndim 2] [--largest-patch-size N] [--fine-dump]
+              [--format phareh5|pharevtkhdf]
 
 A case with steps advances them one by one; an init case only initializes (dumps t=0). After
 initializing and after each step, each level's domain particles (from the data wrangler, as
@@ -71,6 +72,7 @@ def main(argv=None):
     p.add_argument("--ndim", type=int, default=2)
     p.add_argument("--largest-patch-size", type=int, default=None)
     p.add_argument("--fine-dump", action="store_true", help="fine_dump_lvl_max (see cases.py)")
+    p.add_argument("--format", default="phareh5", choices=["phareh5", "pharevtkhdf"])
     a = p.parse_args(argv)
 
     sys.path.insert(0, str(Path(__file__).parent))
@@ -83,8 +85,7 @@ def main(argv=None):
     from pyphare.simulator.simulator import Simulator, startMPI
 
     startMPI()
-    fmt = "phareh5" if a.code == "phare" and a.fine_dump else "pharevtkhdf"  # cases._diag_options
-    sim = cases.simulation(a.case, a.out, a.ndim, a.largest_patch_size, fmt, a.fine_dump)
+    sim = cases.simulation(a.case, a.out, a.ndim, a.largest_patch_size, a.format, a.fine_dump)
     simulator = Simulator(sim, log_to_file=False).setup().initialize()
     parts = Path(a.out) / "particles"
     parts.mkdir(parents=True, exist_ok=True)
