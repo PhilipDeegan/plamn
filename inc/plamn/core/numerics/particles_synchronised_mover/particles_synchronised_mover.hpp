@@ -28,6 +28,7 @@
 #include "particles_synchronised_mover_def.hpp" // = UpdaterMode
 #include "mkn/gpu.hpp"
 #include "phlop/timing/scope.hpp"
+#include "damn/core/geometry/point.hpp"
 
 #include <string>
 #include <optional>
@@ -44,7 +45,8 @@ namespace plamn::core
 {
 
 // after a REF move: domain particles leaving the owned domain become patch ghosts or are
-// deleted, level ghosts entering it become domain particles
+// deleted, level ghosts entering it become domain particles, those in a cell another patch of the
+// level covers are that patch's (deleted: PHAREHUB/PHARE#1579)
 template<typename Particles_t>
 void post_move_sync(Particles_t& domain, Particles_t& patchGhost, Particles_t& levelGhost,
                     auto const& boxing)
@@ -60,6 +62,7 @@ void post_move_sync(Particles_t& domain, Particles_t& patchGhost, Particles_t& l
         delete_particles_in(levelGhost, nonOwnedBoxes);
     }
     move_in_domain(domain, levelGhost, boxing.domainBox);
+    delete_particles_in(levelGhost, boxing.nonLevelGhostBox);
     delete_particles_not_in(levelGhost, boxing.ghostBox);
     delete_particles_not_in(domain, boxing.domainBox);
 }
@@ -82,10 +85,12 @@ struct PostMoveSyncCells
         return isIn(cell, boxing.domainBox) or isIn(cell, boxing.nonLevelGhostBox);
     }
 
-    // level ghosts not owned: still in the ghost layer -> kept, else (non-owned, gone) deleted
+    // level ghosts not owned: still in the level ghost layer (no patch of the level covers the
+    //  cell) -> kept, else (non-owned, another patch's, gone) deleted
     bool keep_level_ghost(auto const& cell) const
     {
-        return !isIn(cell, boxing.domainBox) and isIn(cell, boxing.ghostBox);
+        return !isIn(cell, boxing.domainBox) and isIn(cell, boxing.ghostBox)
+               and !isIn(damn::core::Point{cell}, boxing.nonLevelGhostBox);
     }
 
     bool touches_non_owned(auto const& box) const
