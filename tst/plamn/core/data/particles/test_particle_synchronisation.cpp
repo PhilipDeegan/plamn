@@ -24,6 +24,8 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
+#include <limits>
 
 
 namespace plamn::core
@@ -548,6 +550,53 @@ TYPED_TEST(LevelGhostSyncTest, test_level_ghost_move_sync_works)
     }
 }
 
+
+
+// SoAVXChunked's converters (it has no element iteration): AoS -> SoAVXChunked sorts, its
+//  offsets give each cell's particles; back to AoS, cell by cell through them, the same particles
+template<typename Dim>
+struct SoAVXChunkedConvertingTest : public ::testing::Test
+{
+};
+using ChunkedDims_t
+    = testing::Types<std::integral_constant<std::size_t, 1>, std::integral_constant<std::size_t, 2>,
+                     std::integral_constant<std::size_t, 3>>;
+TYPED_TEST_SUITE(SoAVXChunkedConvertingTest, ChunkedDims_t, );
+
+TYPED_TEST(SoAVXChunkedConvertingTest, roundTripKeepsParticlesAndOffsetsCountCells)
+{
+    auto constexpr dim  = TypeParam::value;
+    auto constexpr opts = SimOpts{.dimension = dim, .layout_mode = LayoutMode::SoAVXChunked};
+    using Layout_t      = PLAMN_Types<opts>::Hybrid::Layout_t;
+    using AoS_t         = ParticlesAoS<dim>;
+    using Chunked_t     = Particles<ParticlesOptions{dim, LayoutMode::SoAVXChunked}>;
+
+    Layout_t const layout = *TestLayout<Layout_t>{std::uint32_t{6}};
+    auto aos              = make_particles<AoS_t>(layout);
+    add_particles(aos, layout.cells, 7);
+    add_ghost_particles(aos, layout.cells, 3, 1); // and in the shell (box + 1) the offsets cover
+    delta_disperse(aos);
+    vary_velocity(aos, -6, 6);
+
+    auto const chunked = convert_particles<Chunked_t>(aos, layout);
+    ASSERT_TRUE(chunked.sorted());
+    ASSERT_EQ(chunked.size(), aos.size());
+    damn::core::for_each_point(chunked.shell(), [&](auto const& cell) {
+        auto const expected = std::count_if(
+            aos.begin(), aos.end(), [&](auto const& p) { return Point{p.iCell()} == Point{cell}; });
+        EXPECT_EQ(chunked.cell_range(cell).second, static_cast<std::size_t>(expected))
+            << Point{cell};
+    });
+
+    auto back           = convert_particles<AoS_t>(chunked, layout);
+    auto const sort_box = grow(layout.cells, 1);
+    auto reference      = aos;
+    sort_particles(back, sort_box);
+    sort_particles(reference, sort_box);
+    auto const report
+        = compare_particles(reference, back, std::numeric_limits<double>::denorm_min());
+    EXPECT_TRUE(report) << report.why();
+}
 
 } // namespace plamn::core
 
