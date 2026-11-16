@@ -72,6 +72,7 @@ class Report:
 
     overlaps: list = field(default_factory=list)
     values: list = field(default_factory=list)
+    particles: list = field(default_factory=list)
     failed: list = field(default_factory=list)
 
     def __bool__(self):
@@ -255,6 +256,104 @@ def compare_runs(ref_dir, cmp_dir, min_overlap=0.9, atol=0.0, rtol=1e-12, margin
     return report
 
 
+@dataclass
+class ParticleDiff:
+    pop: str
+    kind: str  # domain (cells in the level) or ghost (level ghost particles, cells outside it)
+    step: int
+    time: float
+    level: int
+    ref_count: int
+    cmp_count: int
+    cells: int  # compared cells
+    cells_count_differs: int  # cells whose number of particles differs
+    max_delta: float
+    max_v: float
+    max_weight: float
+
+
+def _in_boxes(icell, lower, upper):
+    inside = np.zeros(len(icell), dtype=bool)
+    for lo, hi in zip(lower, upper):
+        inside |= np.all((icell >= lo) & (icell <= hi), axis=1)
+    return inside
+
+
+def _sorted(parts, mask):
+    p = {k: v[mask] for k, v in parts.items()}
+    keys = [p["weight"]] + [p["v"][:, i] for i in range(p["v"].shape[1])[::-1]]
+    keys += [p["delta"][:, i] for i in range(p["delta"].shape[1])[::-1]]
+    keys += [p["icell"][:, i] for i in range(p["icell"].shape[1])[::-1]]
+    order = np.lexsort(keys)  # icell first, then delta, v, weight
+    return {k: v[order] for k, v in p.items()}
+
+
+def compare_particle_sets(r, c):
+    """(cells, cells whose count differs, max |delta|, |v|, |weight| diffs over the cells with
+    equal counts) of two sorted particle sets."""
+    rc, ri, rn = np.unique(r["icell"], axis=0, return_index=True, return_counts=True)
+    cc, ci, cn = np.unique(c["icell"], axis=0, return_index=True, return_counts=True)
+    cells = {tuple(x): (i, n) for x, i, n in zip(rc, ri, rn)}
+    other = {tuple(x): (i, n) for x, i, n in zip(cc, ci, cn)}
+    differs, md, mv, mw = 0, 0.0, 0.0, 0.0
+    for cell in set(cells) | set(other):
+        if cell not in cells or cell not in other or cells[cell][1] != other[cell][1]:
+            differs += 1
+            continue
+        (i, n), (j, _) = cells[cell], other[cell]
+        md = max(md, float(np.abs(r["delta"][i:i + n] - c["delta"][j:j + n]).max()))
+        mv = max(mv, float(np.abs(r["v"][i:i + n] - c["v"][j:j + n]).max()))
+        mw = max(mw, float(np.abs(r["weight"][i:i + n] - c["weight"][j:j + n]).max()))
+    return len(set(cells) | set(other)), differs, md, mv, mw
+
+
+def _level_boxes(run, path, time):
+    """{level: (lower, upper)} of the diagnostics file at ``path`` at ``time``."""
+    f = open_field(run, path)
+    return {ld.level: (np.asarray(ld.geom.lower), np.asarray(ld.geom.upper))
+            for ld in f.levels_data(time)}
+
+
+def compare_particles(ref_dir, cmp_dir, report, atol=1e-12, boxes_from="EM_B"):
+    """Domain particles saved by run_case.py (<dir>/particles/<step>.npz): per step,
+    population and level, on the cells both levels hold (level boxes from each run's
+    ``boxes_from`` diagnostics at that time), matched by cell (sorted by cell, delta, v,
+    weight). Appends to report."""
+    from pyphare.pharesee.run import Run
+
+    ref_files = {int(p.stem): p for p in (Path(ref_dir) / "particles").glob("*.npz")}
+    cmp_files = {int(p.stem): p for p in (Path(cmp_dir) / "particles").glob("*.npz")}
+    runs = (Run(str(ref_dir)), Run(str(cmp_dir)))
+    paths = (diagnostic_files(ref_dir)[boxes_from], diagnostic_files(cmp_dir)[boxes_from])
+    for step in sorted(set(ref_files) & set(cmp_files)):
+        r, c = np.load(ref_files[step]), np.load(cmp_files[step])
+        time = float(r["time"][0])
+        ref_boxes, cmp_boxes = (_level_boxes(run, path, time) for run, path in zip(runs, paths))
+        keys = sorted({k.rsplit("/", 1)[0] for k in r.files if k != "time"}
+                      | {k.rsplit("/", 1)[0] for k in c.files if k != "time"})
+        for key in keys:
+            pop, lvl = key.split("/")
+            level = int(lvl[1:])
+            if f"{key}/icell" not in r.files or f"{key}/icell" not in c.files:
+                report.fail(f"particles {key} step {step}: in one run only")
+                continue
+            rp = {n: r[f"{key}/{n}"] for n in ("icell", "delta", "v", "weight")}
+            cp = {n: c[f"{key}/{n}"] for n in ("icell", "delta", "v", "weight")}
+            both = [ref_boxes[level], cmp_boxes[level]]
+            rm = _in_boxes(rp["icell"], *both[0]) & _in_boxes(rp["icell"], *both[1])
+            cm = _in_boxes(cp["icell"], *both[0]) & _in_boxes(cp["icell"], *both[1])
+            rs, cs = _sorted(rp, rm), _sorted(cp, cm)
+            cells, differs, md, mv, mw = compare_particle_sets(rs, cs)
+            d = ParticleDiff(pop, "domain", step, time, level, int(rm.sum()), int(cm.sum()),
+                             cells, differs, md, mv, mw)
+            report.particles.append(d)
+            if differs or max(md, mv, mw) > atol:
+                report.fail(f"particles {pop} step {step} L{level}: {d.ref_count} / "
+                            f"{d.cmp_count}, {differs} of {cells} cells differ in count, max "
+                            f"|delta| {md:.2e} |v| {mv:.2e} |weight| {mw:.2e}")
+    return report
+
+
 def print_report(report, out=sys.stdout, values=True):
     """Overlaps, then (``values``) every value comparison, then the failures."""
     seen = set()
@@ -271,6 +370,12 @@ def print_report(report, out=sys.stdout, values=True):
     for v in report.values if values else []:
         print(f"  {v.quantity + '.' + v.component:<40} t={v.time:<10g} L{v.level} "
               f"nodes {v.nodes:<7} abs {v.max_abs:.3e} rel {v.max_rel:.3e}", file=out)
+    if report.particles:
+        print("particles (domain, cells both levels hold):", file=out)
+    for d in report.particles:
+        print(f"  {d.pop} step {d.step} L{d.level}: {d.ref_count} / {d.cmp_count} particles, "
+              f"{d.cells_count_differs} of {d.cells} cells differ in count, max |delta| "
+              f"{d.max_delta:.1e} |v| {d.max_v:.1e} |weight| {d.max_weight:.1e}", file=out)
     print(f"{len(report.failed)} failure(s)" if report.failed else "all within tolerance",
           file=out)
     for f in report.failed:

@@ -13,8 +13,9 @@ previous one, so the first case that differs says where (as tiling_gpu's tests/s
   harris_2d    + tagging, regrids, load balancing                     3 levels, 2 steps
 
 The model is PHARE's tests/simulator/advance/test_advance_hybrid.py (getHierarchy), the sizes,
-seeds and boxes those of tiling_gpu's tests/simulator/layouts; harris_2d is
-tests/simulator/layouts/test_harris_2d_layouts.py. Diagnostics: pharevtkhdf, every step.
+seeds and boxes those of tiling_gpu's tests/simulator/layouts (10 particles per cell); harris_2d is
+tests/simulator/layouts/test_harris_2d_layouts.py. Diagnostics: pharevtkhdf, every step
+(optionally every fine level substep too, see _diag_options).
 Nothing runs on import: ``simulation(case, out, ...)`` declares the input (pyphare.pharein) of
 whichever code imported pyphare.
 """
@@ -26,7 +27,7 @@ INTERP = 1
 CELLS = 14
 DL = 0.2
 TIME_STEP = 0.001
-PPC_PER_DIM = [100, 33, 15]
+PPC = 10  # particles per cell: few, so particles can be compared too
 SEED = 1337
 
 
@@ -50,6 +51,17 @@ CASES = {
 }
 
 
+def _diag_options(out, fmt, fine_dump):
+    """the regular dumps; with fine_dump, also each fine level at the end of its substeps
+    (fine_dump_lvl_max). PHARE master's pharevtkhdf writes those with level tables shorter than
+    the steps, so PHARE then writes phareh5; PHAREHUB/PHARE#1595 reads neither format's per-level
+    dumps (it needs level 0 at every time)."""
+    options = {"dir": out, "mode": "overwrite"}
+    if fine_dump:
+        options["fine_dump_lvl_max"] = 10
+    return {"format": fmt, "options": options}
+
+
 def _diagnostics(ph, timestamps, pops):
     for q in ["E", "B"]:
         ph.ElectromagDiagnostics(quantity=q, write_timestamps=timestamps)
@@ -60,7 +72,7 @@ def _diagnostics(ph, timestamps, pops):
             ph.FluidDiagnostics(quantity=q, write_timestamps=timestamps, population_name=pop)
 
 
-def _advance_hybrid(ph, out, case, ndim, largest_patch_size):
+def _advance_hybrid(ph, out, case, ndim, largest_patch_size, fmt, fine_dump):
     """PHARE's test_advance_hybrid model (bump density, cosine B and V, cold vth)."""
     sim = ph.Simulation(
         time_step_nbr=max(case["steps"], 1),
@@ -70,7 +82,7 @@ def _advance_hybrid(ph, out, case, ndim, largest_patch_size):
         interp_order=INTERP,
         refinement_boxes=_boxes(ndim, *case["boxes"]) if case["boxes"] else {},
         largest_patch_size=largest_patch_size,
-        diag_options={"format": "pharevtkhdf", "options": {"dir": out, "mode": "overwrite"}},
+        diag_options=_diag_options(out, fmt, fine_dump),
         strict=True,
     )
     L = np.array(sim.simulation_domain())
@@ -106,7 +118,7 @@ def _advance_hybrid(ph, out, case, ndim, largest_patch_size):
             "vthx": vth,
             "vthy": vth,
             "vthz": vth,
-            "nbr_part_per_cell": PPC_PER_DIM[ndim - 1],
+            "nbr_part_per_cell": PPC,
             "init": {"seed": SEED},
         },
     )
@@ -115,7 +127,7 @@ def _advance_hybrid(ph, out, case, ndim, largest_patch_size):
     return sim
 
 
-def _harris_2d(ph, out, case, largest_patch_size):
+def _harris_2d(ph, out, case, largest_patch_size, fmt, fine_dump):
     """tiling_gpu's tests/simulator/layouts/test_harris_2d_layouts.py, vtkhdf diagnostics."""
     L, time_step = 0.5, 0.005
     sim = ph.Simulation(
@@ -128,7 +140,7 @@ def _harris_2d(ph, out, case, largest_patch_size):
         hyper_resistivity=0.002,
         resistivity=0.001,
         largest_patch_size=largest_patch_size,
-        diag_options={"format": "pharevtkhdf", "options": {"dir": out, "mode": "overwrite"}},
+        diag_options=_diag_options(out, fmt, fine_dump),
         nesting_buffer=1,
     )
     Lx, Ly = sim.simulation_domain()
@@ -175,7 +187,7 @@ def _harris_2d(ph, out, case, largest_patch_size):
             "vthx": vth,
             "vthy": vth,
             "vthz": vth,
-            "nbr_part_per_cell": 22,
+            "nbr_part_per_cell": PPC,
             "init": {"seed": 12334},
         },
     )
@@ -185,13 +197,17 @@ def _harris_2d(ph, out, case, largest_patch_size):
     return sim
 
 
-def simulation(name, out, ndim=NDIM, largest_patch_size=None):
-    """Declares case ``name``'s input (pyphare.pharein) with diagnostics in ``out``."""
+POPULATIONS = ["protons"]
+
+
+def simulation(name, out, ndim=NDIM, largest_patch_size=None, fmt="pharevtkhdf", fine_dump=False):
+    """Declares case ``name``'s input (pyphare.pharein) with diagnostics in ``out``, in
+    format ``fmt``."""
     import pyphare.pharein as ph
 
     ph.global_vars.sim = None
     ph.clearDict()
     case = CASES[name]
     if case.get("harris"):
-        return _harris_2d(ph, out, case, largest_patch_size)
-    return _advance_hybrid(ph, out, case, ndim, largest_patch_size)
+        return _harris_2d(ph, out, case, largest_patch_size, fmt, fine_dump)
+    return _advance_hybrid(ph, out, case, ndim, largest_patch_size, fmt, fine_dump)

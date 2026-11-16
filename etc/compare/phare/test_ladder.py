@@ -21,11 +21,13 @@ Environment (defaults in brackets):
   PHARESEE_DIR   PHAREHUB/PHARE#1595 checkout, the reader [/mkn/git/phare/pr_1595]
   LADDER_NP      MPI ranks per run [1]
   LADDER_OUT     where the runs write [phare_outputs/compare]
+  LADDER_FINE_DUMP  1: fine_dump_lvl_max too (cases.py's _diag_options) [0]
 PHARE checkouts built with PHARE_DIAG_DOUBLES=1, plamn's 2D module with
 ./mkn.py --dim 2 --diag-doubles: every code writes doubles.
 """
 
 import os
+import shutil
 import subprocess
 import sys
 import unittest
@@ -72,8 +74,11 @@ def run(code, case, out, largest_patch_size):
     cmd = [sys.executable, str(HERE / "run_case.py"), kind, case, str(out)]
     if largest_patch_size:
         cmd += ["--largest-patch-size", str(largest_patch_size)]
+    if setting("LADDER_FINE_DUMP", "0") == "1":
+        cmd += ["--fine-dump"]
     if n > 1:
         cmd = ["mpirun", "--oversubscribe", "-n", str(n)] + cmd
+    shutil.rmtree(out, ignore_errors=True)  # no files of an earlier run (another format)
     log = Path(f"{out}.log")
     log.parent.mkdir(parents=True, exist_ok=True)
     with open(log, "w") as f:
@@ -105,6 +110,7 @@ class LadderTest(unittest.TestCase):
         report = hierarchy_overlap.compare_runs(
             base / names[ref], base / names[cmp], min_overlap=MIN_OVERLAP, margin=2,
             tolerance=tolerance)
+        hierarchy_overlap.compare_particles(base / names[ref], base / names[cmp], report)
         print(f"\n==== {case} ({variant} patches): {ref} vs {cmp}")
         hierarchy_overlap.print_report(report, values=False)
         self.assertTrue(report, f"{case} ({variant}): {len(report.failed)} failure(s)")
