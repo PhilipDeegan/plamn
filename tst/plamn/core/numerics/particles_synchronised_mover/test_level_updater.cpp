@@ -21,7 +21,8 @@
 //
 // uniform E and B: the push is the same whichever patch holds a particle, within rounding (the
 // interpolation weights come from patch local indexes). Every layout picks its updater
-// (ParticlesSynchronisedMoverFor_t): AoSMapped serial, AoS flat parallel, AoSCMTS tiled parallel
+// (ParticlesSynchronisedMoverFor_t): AoSMapped serial, AoS flat parallel, AoSCMTS tiled parallel;
+// with mkn.gpu also AoSPCTS and SoAVX in unified memory, updated on the device
 //
 // env: PLAMN_CELLS (level cells per direction), PLAMN_PPC, PLAMN_PUSHES, PLAMN_TIMESTEP, PLAMN_SEED
 
@@ -73,13 +74,15 @@ auto static const seed = damn::core::get_env_as("PLAMN_SEED", std::size_t{1067})
 
 enum class Updater : std::uint16_t { serial = 0, parallel };
 
-template<std::size_t _dim, auto _layout_mode, auto _updater, bool _refined>
+template<std::size_t _dim, auto _layout_mode, auto _updater, bool _refined,
+         auto _alloc_mode = damn::AllocatorMode::CPU>
 struct LevelParam
 {
     auto constexpr static dim         = _dim;
     auto constexpr static layout_mode = _layout_mode;
     auto constexpr static updater     = _updater;
     auto constexpr static refined     = _refined;
+    auto constexpr static alloc_mode  = _alloc_mode;
 };
 
 
@@ -89,9 +92,8 @@ struct LevelRun
 {
     auto constexpr static dim     = Param::dim;
     auto constexpr static refined = Param::refined;
-    auto constexpr static opts    = SimOpts{.dimension   = dim,
-                                            .layout_mode = Param::layout_mode,
-                                            .alloc_mode  = damn::AllocatorMode::CPU};
+    auto constexpr static opts    = SimOpts{
+        .dimension = dim, .layout_mode = Param::layout_mode, .alloc_mode = Param::alloc_mode};
 
     using CoreTypes   = PLAMN_Types<opts>::Hybrid;
     using Layout_t    = CoreTypes::Layout_t;
@@ -255,21 +257,25 @@ struct LevelRun
         }
     }
 
-    void push(Level& l) const
+    void push(Level& l, UpdaterMode const mode = UpdaterMode::all) const
     {
         if constexpr (Param::updater == Updater::serial)
             for (auto& patch : l.patches)
                 Mover_t{}.updatePopulations(patch.model.state.ions, patch.model.state.electromag,
-                                            l.boxings.at(patch.id), dt, UpdaterMode::all);
+                                            l.boxings.at(patch.id), dt, mode);
         else
         {
             auto accessor = test::make_model_level_accessor(l.patches, [&](int i) {
                 return std::forward_as_tuple(l.patches[i].model.state.ions,
                                              l.patches[i].model.state.electromag);
             });
-            Mover_t{}.updatePopulations(accessor, l.boxings, dt, UpdaterMode::all);
+            Mover_t{}.updatePopulations(accessor, l.boxings, dt, mode);
         }
     }
+
+    // the predictor (domain_only): the moments of the particles' pushed copies, each deposited
+    //  by the patch holding it where it lands on the level (the particles stay)
+    void predict(Level& l) const { push(l, UpdaterMode::domain_only); }
 
     // patch ghost particles to the patch owning their cell, a periodic image's cell shifted
     void exchange(Level& l) const
@@ -465,6 +471,10 @@ struct LevelUpdaterTest : public ::testing::Test
                              << cmp.patches.size() << " patches of " << n);
             for (std::size_t i = 0; i < pushes; ++i)
             {
+                // the predictor's moments are those of the push that follows (the same pushes,
+                //  deposited by the patch holding a particle rather than by the one it ends in)
+                run.predict(cmp);
+                auto const predicted = run.level_moments(cmp);
                 run.step(one);
                 run.step(cmp);
                 ref_run.step(ref);
@@ -482,6 +492,8 @@ struct LevelUpdaterTest : public ::testing::Test
                             atol);
                 expect_same_moments(run.level_moments(one), run.level_moments(cmp),
                                     what + " moments (vs one patch)");
+                expect_same_moments(predicted, run.level_moments(cmp),
+                                    what + " moments (predictor vs push)");
                 // another push implementation (MultiBoris): the same arithmetic in another
                 //  order, a ULP or so per push, as test_multi_updater's tolerance (|v| <= 6)
                 expect_same(ref_run.level_domain(ref), run.level_domain(cmp),
@@ -503,6 +515,12 @@ using LevelPermutations_t = testing::Types< // ! notice commas !
    ,LevelParam<2, LayoutMode::AoSCMTS, Updater::parallel, true>
    ,LevelParam<2, LayoutMode::SoAVXChunked, Updater::parallel, false>
    ,LevelParam<2, LayoutMode::SoAVXChunked, Updater::parallel, true>
+DAMN_WITH_MKN_GPU( // on the device: mkn_xyz's updater, its tiled and flat GPU kernels
+   ,LevelParam<2, LayoutMode::AoSPCTS, Updater::parallel, false, damn::AllocatorMode::GPU_UNIFIED>
+   ,LevelParam<2, LayoutMode::AoSPCTS, Updater::parallel, true, damn::AllocatorMode::GPU_UNIFIED>
+   ,LevelParam<2, LayoutMode::SoAVX, Updater::parallel, false, damn::AllocatorMode::GPU_UNIFIED>
+   ,LevelParam<2, LayoutMode::SoAVX, Updater::parallel, true, damn::AllocatorMode::GPU_UNIFIED>
+)
 >;
 // clang-format on
 
