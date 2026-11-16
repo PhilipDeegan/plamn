@@ -22,7 +22,7 @@
 // uniform E and B: the push is the same whichever patch holds a particle, within rounding (the
 // interpolation weights come from patch local indexes). Every layout picks its updater
 // (ParticlesSynchronisedMoverFor_t): AoSMapped serial, AoS flat parallel, AoSCMTS tiled parallel;
-// with mkn.gpu also AoSPCTS and SoAVX in unified memory, updated on the device
+// on a GPU also AoSPCTS and SoAVX in unified memory, updated on the device
 //
 // env: PLAMN_CELLS (level cells per direction), PLAMN_PPC, PLAMN_PUSHES, PLAMN_TIMESTEP, PLAMN_SEED
 
@@ -515,7 +515,7 @@ using LevelPermutations_t = testing::Types< // ! notice commas !
    ,LevelParam<2, LayoutMode::AoSCMTS, Updater::parallel, true>
    ,LevelParam<2, LayoutMode::SoAVXChunked, Updater::parallel, false>
    ,LevelParam<2, LayoutMode::SoAVXChunked, Updater::parallel, true>
-DAMN_WITH_MKN_GPU( // on the device: mkn_xyz's updater, its tiled and flat GPU kernels
+DAMN_WITH_GPU( // on the device: mkn_xyz's updater, its tiled and flat GPU kernels
    ,LevelParam<2, LayoutMode::AoSPCTS, Updater::parallel, false, damn::AllocatorMode::GPU_UNIFIED>
    ,LevelParam<2, LayoutMode::AoSPCTS, Updater::parallel, true, damn::AllocatorMode::GPU_UNIFIED>
    ,LevelParam<2, LayoutMode::SoAVX, Updater::parallel, false, damn::AllocatorMode::GPU_UNIFIED>
