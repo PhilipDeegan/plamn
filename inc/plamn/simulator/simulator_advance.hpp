@@ -266,8 +266,12 @@ void Simulator<opts>::move_ions_(std::size_t const ln, double const t, double co
             mover_.updatePopulations(patch.ions, patch.emAvg, *patch.boxing, dt, mode);
         });
     }
-    deposit_level_ghosts_(ln, t + dt);
+    // as PHARE (fillFluxBorders, fillDensityBorders, then fillIonPopMomentGhosts): the domain
+    //  deposit summed over patch borders, then each patch's level ghost particles, every one of
+    //  them in its ghost box (patches meeting on the level border hold the same ones: summed
+    //  after, they would count twice there)
     fill_ion_borders_(ln);
+    deposit_level_ghosts_(ln, t + dt);
 
     if (mode != core::UpdaterMode::domain_only)
     {

@@ -243,9 +243,12 @@ void Simulator<opts>::refined_moments_(std::size_t const ln)
     per_patch_(ln, [&](auto& patch) {
         core::resetMoments(patch.ions);
         core::depositParticles(patch.ions, patch.layout, Interpolator{}, core::DomainDeposit{});
-        core::depositParticles(patch.ions, patch.layout, Interpolator{}, core::LevelGhostDeposit{});
     });
     fill_ion_borders_(ln);
+    // after the border sum, as move_ions_ (patches on the level border share level ghosts)
+    per_patch_(ln, [&](auto& patch) {
+        core::depositParticles(patch.ions, patch.layout, Interpolator{}, core::LevelGhostDeposit{});
+    });
     compute_moments_(ln);
 
     // J from B; E was refined
