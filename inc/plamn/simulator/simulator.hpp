@@ -225,6 +225,7 @@ private:
         }
         void last_step(int ln) { self.last_step_(ln); }
         void synchronize(int ln, double t) { self.synchronize_(ln, t); }
+        void after_step(int ln, double t, bool last) { self.after_step_(ln, t, last); }
     };
 
     void setup_();
@@ -350,7 +351,12 @@ private:
     typename Patch_t::Surroundings surroundings_(int ln, Box_t const& box) const;
     // the boxes of level ln + 1 from level ln's tagged cells (collective)
     NO_DISCARD std::vector<Box_t> cluster_(int ln);
-    void regrid_(double t);
+    // the levels finer than from re-clustered (tagging) at t; always: re-made even where their
+    //  boxes did not change (SAMRAI's, see RegridMode)
+    void regrid_(double t, int from = 0, bool always = false);
+    // regrid_mode high: the finer levels of ln regridded at SAMRAI's regrid points, after a step
+    //  of ln to t (last: ln's last substep of its coarser level's step)
+    void after_step_(int ln, double t, bool last);
     void regrid_level_(int ln, std::vector<Box_t> const& boxes, double t);
     void initialize_root_();
     void initialize_refined_(std::size_t ln);
@@ -405,7 +411,20 @@ private:
     damn::amr::ClusteringOptions<dimension> clustering_;
     std::vector<std::vector<Box_t>> clustered_; // per level: the boxes it was clustered to
     int regrid_interval_ = 2;                   // SAMRAI's for ratio 2 with time refinement
-    int steps_           = 0;
+    // when levels are regridded (simulation/AMR/regrid_mode, or PLAMN_REGRID_MODE):
+    //   normal  tagging: every regrid_interval_ level 0 steps, a level only where its boxes
+    //           changed; refinement boxes: never
+    //   high    PHARE's (SAMRAI's TimeRefinementIntegrator and GriddingAlgorithm): after every
+    //           regrid_interval_-th substep of a level within its coarser level's step, its finer
+    //           levels re-made (unless the coarser level regrids then too); tagging: re-clustered,
+    //           re-made even with unchanged boxes; refinement boxes: re-made with the same boxes,
+    //           during level 0's first step only (SAMRAI marks the user's boxes changed for its
+    //           first cycle). For comparisons with PHARE: a regrid is not a no-op (the level
+    //           ghost fields are refilled after the synchronization)
+    enum class RegridMode : std::uint8_t { normal, high };
+    RegridMode regrid_mode_ = RegridMode::normal;
+    std::vector<int> level_steps_; // per level > 0: its substeps in the coarser level's step
+    int steps_ = 0;
     // simulation/AMR/loadbalancing (pyphare's LoadBalancer), with refinement="tagging"
     struct LoadBalancing
     {

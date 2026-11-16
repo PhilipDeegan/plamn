@@ -101,6 +101,14 @@ void Simulator<opts>::setup_()
         cellWidth_.push_back(hierarchy_.dx[i]);
     }
     auto const& amr = sim["AMR"];
+    {
+        auto mode = cppdict::get_value(dict_, "simulation/AMR/regrid_mode", std::string{"normal"});
+        if (auto const* env = std::getenv("PLAMN_REGRID_MODE"))
+            mode = env;
+        if (mode != "normal" and mode != "high")
+            throw std::runtime_error("plamn Simulator: regrid_mode normal or high, not " + mode);
+        regrid_mode_ = mode == "high" ? RegridMode::high : RegridMode::normal;
+    }
     if (amr.contains("largest_patch_size"))
     {
         auto const largest = amr["largest_patch_size"].template to<std::vector<int>>();

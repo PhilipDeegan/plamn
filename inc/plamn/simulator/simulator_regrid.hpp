@@ -272,15 +272,16 @@ void Simulator<opts>::rebalance_(double const t)
 // every level but the finest allowed tagged and clustered again: a finer level whose boxes
 // changed is regridded (made, if new; removed, with the finer, if nothing is tagged)
 template<auto opts>
-void Simulator<opts>::regrid_(double const t)
+void Simulator<opts>::regrid_(double const t, int const from, bool const always)
 {
     DAMN_LOG_SCOPE(1, "Simulator::regrid_");
-    for (int ln = 0; ln + 1 < hierarchy_.max_levels and ln < static_cast<int>(levels_.size()); ++ln)
+    for (int ln = from; ln + 1 < hierarchy_.max_levels and ln < static_cast<int>(levels_.size());
+         ++ln)
     {
         auto const boxes = cluster_(ln);
         auto const fine  = static_cast<std::size_t>(ln) + 1;
         clustered_.resize(std::max(clustered_.size(), fine + 1));
-        if (fine < levels_.size() and boxes == clustered_[fine])
+        if (fine < levels_.size() and boxes == clustered_[fine] and !always)
             continue;
         if (boxes.empty())
         {

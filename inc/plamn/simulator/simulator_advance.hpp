@@ -73,15 +73,46 @@ double Simulator<opts>::advance()
     damn::amr::advance(hierarchy_, hooks, currentTime_, dt_, time_ratio());
     currentTime_ = timestepper_.end_step();
     ++steps_;
-    if (tagging_ and steps_ % regrid_interval_ == 0)
+    if (regrid_mode_ == RegridMode::normal and tagging_ and steps_ % regrid_interval_ == 0)
         regrid_(currentTime_);
     return dt_;
+}
+
+// SAMRAI's TimeRefinementIntegrator::atRegridPoint / coarserLevelRegridsToo: level ln regrids its
+//  finer levels after every regrid_interval_-th of its steps within the coarser level's step
+//  (level 0: its steps), if it can have a finer level, unless that is its last substep and the
+//  coarser level regrids then too (which regrids them all)
+template<auto opts>
+void Simulator<opts>::after_step_(int const ln, double const t, bool const last)
+{
+    if (regrid_mode_ != RegridMode::high)
+        return;
+    auto const steps = [&](int const l) { // level 0: this step not counted yet (advance())
+        return l == 0 ? steps_ + 1 : level_steps_.at(static_cast<std::size_t>(l));
+    };
+    auto const at_regrid_point = [&](int const l) {
+        return l + 1 < hierarchy_.max_levels and steps(l) > 0 and steps(l) % regrid_interval_ == 0;
+    };
+    if (!at_regrid_point(ln) or (ln > 0 and last and at_regrid_point(ln - 1)))
+        return;
+    if (tagging_)
+        regrid_(t, ln, /*always=*/true);
+    else if (steps_ == 0) // refinement boxes: level 0's first step only
+        for (int fine = ln + 1; fine < static_cast<int>(levels_.size()); ++fine)
+        {
+            std::vector<Box_t> boxes;
+            for (auto const& p : hierarchy_.levels[fine].patches)
+                boxes.push_back(p.box);
+            regrid_level_(fine, boxes, t);
+        }
 }
 
 template<auto opts>
 void Simulator<opts>::advance_level_(int const level_number, double const t, double const dt)
 {
     auto const ln = static_cast<std::size_t>(level_number);
+    level_steps_.resize(std::max(level_steps_.size(), ln + 1));
+    ++level_steps_[ln];
     predictor1_(ln, t, dt);
     average_(ln, t, dt);
     move_ions_(ln, t, dt, core::UpdaterMode::domain_only);
@@ -118,9 +149,11 @@ void Simulator<opts>::first_step_(int const level_number, double, double const c
                                   double const coarse_dt)
 {
     auto const ln = static_cast<std::size_t>(level_number);
-    auto& l       = levels_[ln];
-    l.coarse_t    = coarse_t;
-    l.coarse_dt   = coarse_dt;
+    level_steps_.resize(std::max(level_steps_.size(), ln + 1));
+    level_steps_[ln] = 0; // SAMRAI counts a level's steps within the coarser level's step
+    auto& l          = levels_[ln];
+    l.coarse_t       = coarse_t;
+    l.coarse_dt      = coarse_dt;
     per_patch_(ln, [](auto& patch) {
         for (auto& pop : patch.ions)
             pop.levelGhostParticlesNew().clear();
