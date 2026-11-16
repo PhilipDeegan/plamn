@@ -78,7 +78,7 @@ auto static const dt
     = damn::core::get_env_as("PLAMN_TIMESTEP", double{.015}); // dl .1, |v| <= 6: < 1 cell
 auto static const seed = damn::core::get_env_as("PLAMN_SEED", std::size_t{1067});
 
-enum class Updater : std::uint16_t { serial = 0, parallel };
+enum class Updater : std::uint8_t { serial = 0, parallel };
 
 template<std::size_t _dim, auto _layout_mode, auto _updater, bool _refined,
          auto _alloc_mode = damn::AllocatorMode::CPU>
@@ -124,7 +124,7 @@ struct LevelRun
                                     : Box_t{damn::core::ConstArray<int, dim>(0),
                                             damn::core::ConstArray<int, dim>(cells - 1)};
 
-    damn::amr::Hierarchy<dim> hierarchy(std::vector<Box_t> const& patch_boxes) const
+    NO_DISCARD damn::amr::Hierarchy<dim> hierarchy(std::vector<Box_t> const& patch_boxes) const
     {
         damn::amr::Hierarchy<dim> h;
         h.domain     = Box_t{damn::core::ConstArray<int, dim>(0),
@@ -140,7 +140,7 @@ struct LevelRun
     }
 
     // the level box cut into patches of size (at most) n per direction
-    std::vector<Box_t> split(int const n) const
+    NO_DISCARD std::vector<Box_t> split(int const n) const
     {
         std::vector<Box_t> boxes{level_box};
         for (std::size_t d = 0; d < dim; ++d)
@@ -175,7 +175,7 @@ struct LevelRun
     bool const crossing = false;
 
     // the level ghost cells: the ring of width pgw around the level box
-    std::vector<Box_t> ring() const
+    NO_DISCARD std::vector<Box_t> ring() const
     {
         return grow(level_box, damn::core::ConstArray<int, dim>(pgw)).remove(level_box);
     }
@@ -189,7 +189,7 @@ struct LevelRun
         return d;
     }
 
-    AoS_t crossing_particles(std::vector<Box_t> const& boxes) const
+    NO_DISCARD AoS_t crossing_particles(std::vector<Box_t> const& boxes) const
     {
         auto ps          = make_particles<AoS_t>(*TestLayout<Layout_t>{level_box});
         double const vel = .1 / dt; // a cell (dx .1) per push
@@ -279,7 +279,7 @@ struct LevelRun
         std::unordered_map<std::string, Boxing_t> boxings;
     };
 
-    Level make_level(int const n) const
+    NO_DISCARD Level make_level(int const n) const
     {
         auto const boxes = split(n);
         Level l{hierarchy(boxes), {}, {}};
@@ -343,6 +343,7 @@ struct LevelRun
             shifts.push_back(s);
 
         std::vector<AoS_t> arriving;
+        arriving.reserve(l.patches.size());
         for (auto& patch : l.patches)
             arriving.push_back(make_particles<AoS_t>(patch.layout));
         for (auto& patch : l.patches)
@@ -433,7 +434,7 @@ struct LevelRun
         return sums;
     }
 
-    AoS_t level_domain(Level const& l) const
+    NO_DISCARD AoS_t level_domain(Level const& l) const
     {
         auto all = make_particles<AoS_t>(*TestLayout<Layout_t>{level_box});
         for (auto const& patch : l.patches)

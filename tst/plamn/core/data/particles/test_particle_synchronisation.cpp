@@ -68,7 +68,7 @@ struct ParticleArrayConstructionTest : public ::testing::Test
 
     Layout_t const layout = *TestLayout<Layout_t>{cells};
 
-    ParticleArray_t setup_particles() const // test movable
+    NO_DISCARD ParticleArray_t setup_particles() const // test movable
     {
         auto ps = make_particles<ParticleArray_t>(layout);
         add_particles(ps, layout.cells, ppc);
