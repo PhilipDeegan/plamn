@@ -244,7 +244,7 @@ void unpack_items(ParticleResource<Particles, gw>& r, std::byte const*& at,
     if (n == 0)
         return;
     if constexpr (Particles::layout_mode == core::LayoutMode::SoAVXChunked)
-        if (particles.sorted())
+        if (particles.sorted() and particles.has_slack())
         { // into their chunks' gaps, one at a time: a particle from each component's stream
             auto constexpr dim      = Particles::dimension;
             std::byte const* weight = at;
@@ -297,7 +297,8 @@ void append_items_from(ParticleResource<Particles, gw>& dst,
     if (index.empty())
         return;
     if constexpr (Particles::layout_mode == core::LayoutMode::SoAVXChunked)
-        if (dst.particles->sorted() and src.particles != dst.particles)
+        if (dst.particles->sorted() and dst.particles->has_slack()
+            and src.particles != dst.particles)
         { // into their chunks' gaps
             for (auto const i : index)
             {

@@ -124,14 +124,15 @@ PostMoveSyncCells(Boxing_t const&) -> PostMoveSyncCells<Boxing_t>;
 
 // SoAVXChunked (host): the domain's particles that changed cell back into their chunks' gaps
 //  (resettle), level ghosts entering the domain into its gaps, no sort while there is room; the
-//  same fates as post_move_sync's (PostMoveSyncCells). Not sorted yet: post_move_sync's way
+//  same fates as post_move_sync's (PostMoveSyncCells). Not sorted yet, or without slack (a sort
+//  each push): post_move_sync's way
 template<typename Particles_t>
     requires(Particles_t::layout_mode == LayoutMode::SoAVXChunked
              and Particles_t::alloc_mode == damn::AllocatorMode::CPU)
 void post_move_sync(Particles_t& domain, Particles_t& patchGhost, Particles_t& levelGhost,
                     auto const& boxing)
 {
-    if (!domain.sorted())
+    if (!domain.sorted() or !domain.has_slack())
     {
         detail::post_move_sync_all(domain, patchGhost, levelGhost, boxing);
         return;

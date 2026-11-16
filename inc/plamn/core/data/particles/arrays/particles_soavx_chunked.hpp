@@ -176,6 +176,9 @@ struct SoAVXChunkedVector : public SoAVXVector<dim, alloc_mode_>
     //  until the next sort()
     void unsort() { sorted_ = false; }
 
+    // gaps between the chunks (set_slack): 0, none, a sort on every change of cell
+    NO_DISCARD bool has_slack() const { return slack_ > 0; }
+
     // sort()'s gaps: slack (a fraction of the particles) over domain's cells (the patch's: box()
     //  is the cell map's, larger), its border cells weighted border to 1 inside
     void set_slack(double const fraction, box_t const& domain, double const border = 3)
