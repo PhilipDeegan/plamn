@@ -4,8 +4,9 @@
 // pharevtkhdf diagnostics (PHARE's format, see damn/hdf5/vtkhdf.hpp for the file), the pieces:
 //
 //   Diagnostic, diagnostics_from(dict)   what pyphare declared (simulation/diagnostics/<type>/
-//                                        <type><N>: quantity, write_timestamps, flush_every);
-//                                        the electromag and fluid ones (others: not written)
+//                                        <type><N>: quantity, write_timestamps, flush_every,
+//                                        attributes); electromag, fluid and particle (phareh5
+//                                        only) ones (others: not written)
 //   due(diagnostic, t, dt)               PHARE's schedule: a timestamp within dt of t (as
 //                                        floats), past ones caught up
 //   file_name(quantity)                  /ions/pop/protons/flux -> ions_pop_protons_flux.vtkhdf
@@ -41,6 +42,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace plamn::diagnostic
@@ -50,16 +52,17 @@ struct Diagnostic
     std::string type, quantity;
     std::vector<double> timestamps;
     std::size_t flush_every = 1, next = 0, dumps = 0;
+    std::vector<std::pair<std::string, std::string>> attributes; // phareh5's /py_attrs
 };
 
-// pyphare's diagnostics that are written as pharevtkhdf: electromag and fluid
+// pyphare's diagnostics plamn writes: electromag and fluid, particle (phareh5 only)
 NO_DISCARD inline std::vector<Diagnostic> diagnostics_from(initializer::Dict const& dict)
 {
     std::vector<Diagnostic> out;
     if (!dict["simulation"].contains("diagnostics"))
         return out;
     auto const& diags = dict["simulation"]["diagnostics"];
-    for (auto const* type : {"electromag", "fluid"})
+    for (auto const* type : {"electromag", "fluid", "particle"})
     {
         if (!diags.contains(type))
             continue;
@@ -74,6 +77,13 @@ NO_DISCARD inline std::vector<Diagnostic> diagnostics_from(initializer::Dict con
                 diag.timestamps = d["write_timestamps"].template to<std::vector<double>>();
             if (d.contains("flush_every"))
                 diag.flush_every = d["flush_every"].template to<std::size_t>();
+            if (d.contains("n_attributes"))
+                for (std::size_t i = 0; i < d["n_attributes"].template to<std::size_t>(); ++i)
+                {
+                    auto const at = "attribute_" + std::to_string(i);
+                    diag.attributes.emplace_back(d[at + "_key"].template to<std::string>(),
+                                                 d[at + "_value"].template to<std::string>());
+                }
             out.push_back(diag);
         }
     }

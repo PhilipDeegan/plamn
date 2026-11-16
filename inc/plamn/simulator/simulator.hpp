@@ -244,6 +244,11 @@ private:
     void setup_diagnostics_();
     // only >= 0: that level only, the others written empty (PHARE's dump_level)
     void dump_vtkhdf_(diagnostic::Diagnostic& diag, double time, int only = -1);
+    // only >= 0: that level only (PHARE's dump_level: the time holds that level)
+    void dump_phareh5_(diagnostic::Diagnostic& diag, double time, int only = -1);
+    void dump_(diagnostic::Diagnostic& diag, double time, int only = -1); // the format's
+    // a particle diagnostic's population index (/ions/pop/<name>/domain or levelGhost)
+    NO_DISCARD std::size_t particle_population_(std::string const& quantity) const;
     // PHARE's fine_dump_lvl_max: every diagnostic, level ln only, at the end of its substeps
     //  that are not a level 0 step's end (the finest after advancing, coarser ones after their
     //  synchronization)
@@ -253,6 +258,7 @@ private:
     {
         using Float = std::conditional_t<PLAMN_DIAG_DOUBLES, double, float>;
         std::string dir;
+        bool phareh5   = false;    // else pharevtkhdf
         bool overwrite = false;    // pyphare's mode "overwrite": truncated at the first dump only
         int fine_dump_lvl_max = 0; // PHARE's: levels 1 to it dumped at their substeps, 0: none
         std::vector<diagnostic::Diagnostic> list;
