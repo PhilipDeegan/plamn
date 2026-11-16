@@ -5,6 +5,8 @@
 // parallel and flat ones, their MultiBoris): per patch its id (the key of the boxings), layout,
 // and args (ions, electromag), electromag the HybridPatch member pushed with (e.g. emAvg)
 
+#include "damn/core/def.hpp"
+
 #include <cstddef>
 #include <string>
 #include <tuple>
@@ -30,7 +32,7 @@ struct LevelAccessor
         auto& patchID() const { return id; }
     };
 
-    std::size_t size() const { return data.data.size(); }
+    NO_DISCARD std::size_t size() const { return data.data.size(); }
 
     View operator[](std::size_t const i)
     {
@@ -38,7 +40,10 @@ struct LevelAccessor
         return View{id(i), patch.layout, {patch.ions, patch.*electromag}};
     }
 
-    std::string id(std::size_t const i) const { return std::to_string(data.patches[i].id); }
+    NO_DISCARD std::string id(std::size_t const i) const
+    {
+        return std::to_string(data.patches[i].id);
+    }
 
     LevelData& data;
 };
