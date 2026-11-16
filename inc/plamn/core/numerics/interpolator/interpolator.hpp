@@ -24,7 +24,6 @@
 #include <optional>
 #include <utility>
 #include <variant>
-#include <format>
 
 namespace plamn::core
 {
