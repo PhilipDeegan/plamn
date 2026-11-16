@@ -20,6 +20,7 @@
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/layout.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
+#include "plamn/core/data/particles/particles_def.hpp"
 
 #include <cstddef>
 #include <stdexcept>
@@ -27,6 +28,7 @@
 #include <vector>
 #include <cstring>
 #include <utility>
+#include <format>
 
 namespace plamn::core
 {
