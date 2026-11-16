@@ -374,6 +374,9 @@ private:
     void compute_moments_(std::size_t ln);
     void fill_ion_borders_(std::size_t ln);
     void deposit_level_ghosts_(std::size_t ln, double t);
+    // a level ghost particle lives in one patch, its cell's owner (Surroundings): the others'
+    //  copies of a split dropped, old (initialization, regrid, restart) or new (coarse step)
+    void own_level_ghosts_(std::size_t ln, bool new_ghosts);
     void move_ions_(std::size_t ln, double t, double dt, core::UpdaterMode mode);
     template<auto electromag>
     void ampere_ohm_(std::size_t ln);

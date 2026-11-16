@@ -744,12 +744,8 @@ void MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>::push_copie
         if (!push<type>(particle, args...))
             return;
 
-        bool const deposits = [&]() {
-            if constexpr (type == ParticleType::Domain)
-                return isIn(particle.iCell(), boxing.nonLevelGhostBox);
-            else
-                return boxing.isOwned(particle.iCell());
-        }();
+        // level ghosts as domain particles: each is held by one patch only
+        bool const deposits = isIn(particle.iCell(), boxing.nonLevelGhostBox);
 
         if (deposits)
             interp.particleToMesh(particle, rhoP, flux, layout);
@@ -1046,14 +1042,11 @@ struct MultiBorisFunctors
         auto F               = tile_at(pop.flux(), tile_idx);
         Interpolator_t interp;
 
+        // level ghosts as domain particles (each is held by one patch, and lives only in its
+        //  clamp-owner tile: seen once), the tile reduction folds halo contributions into the
+        //  neighbours
         auto const deposits = [&](auto const& p) {
-            if constexpr (particle_type == ParticleType::Domain)
-                return !is_border || isIn(p.iCell(), patch_boxings.nonLevelGhostBox);
-            else
-                // level ghosts live only in their clamp-owner tile, so each is seen
-                // once: deposit any entering the patch domain into this tile's fields,
-                // the tile reduction folds halo contributions into the neighbours
-                return patch_boxings.isOwned(p.iCell());
+            return !is_border || isIn(p.iCell(), patch_boxings.nonLevelGhostBox);
         };
 
         // batched in phases (copy + half step, m2p + accelerate + half step, deposit) as

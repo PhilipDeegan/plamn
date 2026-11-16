@@ -844,11 +844,11 @@ struct ParticlesSynchronisedMoverOwnershipTest : public ParticlesSynchronisedMov
         (*this->EM).B.zero();
     }
 
+    // the patch alone on its level: its ghost cells are level ghost cells, where its level
+    //  ghosts are (a level ghost lives in one patch, in cells no patch of the level covers)
     Boxing_t makeBoxing(std::vector<Box_t> const& nonOwned) const
     {
-        return {this->layout,
-                {damn::core::grow(this->layout.cells, Super::Layout::options.particle_ghost_width)},
-                nonOwned};
+        return {this->layout, {this->layout.cells}, nonOwned};
     }
 
     static Box_t box(int lower, int upper) { return Box_t{{lower}, {upper}}; }
@@ -889,7 +889,8 @@ struct ParticlesSynchronisedMoverOwnershipTest : public ParticlesSynchronisedMov
 
     static double total(auto const& field) { return sum(field); }
 
-    // level ghosts move into the first domain cell, which is owned or not
+    // level ghosts move into the first domain cell, which is owned (domain) or not (handed to
+    //  its owner, as a patch ghost)
     void checkLevelGhostExport(bool const withNonOwned)
     {
         using ParticlesSynchronisedMover_t = Super::ParticlesSynchronisedMover_t;
@@ -917,6 +918,9 @@ struct ParticlesSynchronisedMoverOwnershipTest : public ParticlesSynchronisedMov
             auto const& domain = pop.domainParticles();
             EXPECT_EQ(domain.size(), nbrDomain[ipop] + (withNonOwned ? 0 : nbrEntering[ipop]));
             EXPECT_EQ(count(domain, [&](auto const& p) { return !boxing.isOwned(p.iCell()); }), 0u);
+            EXPECT_EQ(
+                count(pop.patchGhostParticles(), [](auto const& p) { return p.iCell()[0] == 0; }),
+                withNonOwned ? nbrEntering[ipop] : 0u);
             ++ipop;
         }
     }
@@ -942,8 +946,10 @@ struct ParticlesSynchronisedMoverOwnershipTest : public ParticlesSynchronisedMov
                     enteringWeights += p.weight();
             ASSERT_GT(enteringWeights, 0.);
 
-            expected.push_back(weights(pop.domainParticles())
-                               + (withNonOwned ? 0. : enteringWeights));
+            // domain_only: deposited where it lands, by the one patch holding it; all: by the
+            //  patch whose domain it enters, after the exchange
+            bool const here = mode == UpdaterMode::domain_only or !withNonOwned;
+            expected.push_back(weights(pop.domainParticles()) + (here ? enteringWeights : 0.));
         }
 
         ionUpdater.updatePopulations(*this->ions, *this->EM, boxing, this->dt, mode);
@@ -1056,7 +1062,7 @@ TYPED_TEST(ParticlesSynchronisedMoverOwnershipTest, levelGhostEnteringOwnedCellI
     this->checkLevelGhostExport(/*withNonOwned=*/false);
 }
 
-TYPED_TEST(ParticlesSynchronisedMoverOwnershipTest, levelGhostEnteringNonOwnedCellIsNotExported)
+TYPED_TEST(ParticlesSynchronisedMoverOwnershipTest, levelGhostEnteringNonOwnedCellIsHandedOver)
 {
     this->checkLevelGhostExport(/*withNonOwned=*/true);
 }
@@ -1068,7 +1074,7 @@ TYPED_TEST(ParticlesSynchronisedMoverOwnershipTest,
 }
 
 TYPED_TEST(ParticlesSynchronisedMoverOwnershipTest,
-           levelGhostEnteringNonOwnedCellIsNotDepositedInMomentsOnlyMode)
+           levelGhostEnteringNonOwnedCellIsDepositedInMomentsOnlyMode)
 {
     this->checkLevelGhostDeposit(/*withNonOwned=*/true, UpdaterMode::domain_only);
 }
@@ -1078,7 +1084,8 @@ TYPED_TEST(ParticlesSynchronisedMoverOwnershipTest, levelGhostEnteringOwnedCellI
     this->checkLevelGhostDeposit(/*withNonOwned=*/false, UpdaterMode::all);
 }
 
-TYPED_TEST(ParticlesSynchronisedMoverOwnershipTest, levelGhostEnteringNonOwnedCellIsNotDeposited)
+TYPED_TEST(ParticlesSynchronisedMoverOwnershipTest,
+           levelGhostEnteringNonOwnedCellIsNotDepositedHere)
 {
     this->checkLevelGhostDeposit(/*withNonOwned=*/true, UpdaterMode::all);
 }

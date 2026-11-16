@@ -2,21 +2,25 @@
 // the simulator updates it (its boxing from the level's other patches: damn's covered_by_level,
 // as Simulator::rebox), the patch ghost particles then handed to the patch owning their cell
 // (periodic images included) by box overlaps, no damn schedules. Each push, every patch split of
-// the level must hold exactly the particles of the same level as one patch: the same push, the
-// same exchanges, nothing duplicated or lost at patch borders and corners
+// the level must hold the particles of the same level as one patch: the same push, the same
+// exchanges, nothing duplicated or lost at patch borders and corners
 //
 //   level 0  periodic, no level border
 //   level 1  a box inside a periodic level 1 domain, its level ghost particles in the ring
-//            around it, each patch holding those in its ghost box (patches meeting on the level
-//            border share them: PHAREHUB/PHARE#1579's corner case)
+//            around it (patches meeting on the level border hold cells of it in common:
+//            PHAREHUB/PHARE#1579's corner case)
+//
+// level ghosts as the simulator: each held by one patch, its cell's owner (the nearest,
+// damn::amr::owned_elsewhere), handed over as a patch ghost when it enters another patch's
+// domain, split again every 2 pushes (a coarse step).
 //
 // moments as PHAREHUB/PHARE#1441 (and the simulator): after the exchange each patch deposits its
 // domain particles (depositDomain), the level's moments are then every patch's sum on each node
 // (the border sums, periodic images included): the same as the level as one patch, within the
 // summation order.
 //
-// uniform E and B: the push is the same whichever patch holds a particle and the comparison is
-// exact. Every layout picks its updater
+// uniform E and B: the push is the same whichever patch holds a particle, within rounding (the
+// interpolation weights come from patch local indexes). Every layout picks its updater
 // (ParticlesSynchronisedMoverFor_t): AoSMapped serial, AoS flat parallel, AoSCMTS tiled parallel
 //
 // env: PLAMN_CELLS (level cells per direction), PLAMN_PPC, PLAMN_PUSHES, PLAMN_TIMESTEP, PLAMN_SEED
@@ -196,6 +200,17 @@ struct LevelRun
         }
     }
 
+    // the level ghosts a patch holds: those of its ghost box whose cell it owns, each held by one
+    //  patch (Simulator's own_level_ghosts_)
+    AoS_t owned_level_ghosts(damn::amr::Hierarchy<dim> const& h, Box_t const& box) const
+    {
+        auto mine            = in_box(level_ghosts, grow(box, pgw));
+        auto const elsewhere = damn::amr::owned_elsewhere(h, ln, box, static_cast<int>(pgw));
+        std::erase_if(mine.vector(),
+                      [&](auto const& p) { return isIn(Point_t{p.iCell()}, elsewhere); });
+        return mine;
+    }
+
     // a level of patches, its boxings and their ids
     struct Level
     {
@@ -216,7 +231,7 @@ struct LevelRun
             auto& particles = ions.populations[0].particles;
             append<ParticleType::Domain>(in_box(domain, boxes[i]), particles.domain_particles,
                                          layout);
-            append<ParticleType::LevelGhost>(in_box(level_ghosts, grow(boxes[i], pgw)),
+            append<ParticleType::LevelGhost>(owned_level_ghosts(l.h, boxes[i]),
                                              particles.level_ghost_particles, layout);
             auto& patch = l.patches.emplace_back(layout, std::move(ions));
             patch.id    = std::to_string(i);
@@ -225,6 +240,19 @@ struct LevelRun
                                                                  l.h, ln, grow(boxes[i], pgw))});
         }
         return l;
+    }
+
+    // the level ghosts split again, as every coarse step (2 fine pushes): the same ones (no
+    //  coarser level here), each patch's owned
+    void resplit(Level& l) const
+    {
+        for (auto& patch : l.patches)
+        {
+            auto& ghosts = patch.model.state.ions.populations[0].particles.level_ghost_particles;
+            ghosts.clear();
+            append<ParticleType::LevelGhost>(owned_level_ghosts(l.h, patch.layout.cells), ghosts,
+                                             patch.layout);
+        }
     }
 
     void push(Level& l) const
@@ -440,14 +468,24 @@ struct LevelUpdaterTest : public ::testing::Test
                 run.step(one);
                 run.step(cmp);
                 ref_run.step(ref);
+                if (Param::refined and i % 2 == 1) // a coarse step: level ghosts split again
+                {
+                    run.resplit(one);
+                    run.resplit(cmp);
+                    ref_run.resplit(ref);
+                }
                 auto const what = "push " + std::to_string(i) + ", patches of " + std::to_string(n);
-                expect_same(run.level_domain(one), run.level_domain(cmp), what + " (vs one patch)");
+                // the same particles; their values within rounding: the interpolation weights
+                //  come from patch local indexes (a ULP or so apart between splits)
+                auto const atol = 1e-15 * 4 * 6 * (i + 1);
+                expect_same(run.level_domain(one), run.level_domain(cmp), what + " (vs one patch)",
+                            atol);
                 expect_same_moments(run.level_moments(one), run.level_moments(cmp),
                                     what + " moments (vs one patch)");
                 // another push implementation (MultiBoris): the same arithmetic in another
                 //  order, a ULP or so per push, as test_multi_updater's tolerance (|v| <= 6)
                 expect_same(ref_run.level_domain(ref), run.level_domain(cmp),
-                            what + " (vs AoSMapped serial)", 1e-15 * 4 * 6 * (i + 1));
+                            what + " (vs AoSMapped serial)", atol);
             }
         }
     }

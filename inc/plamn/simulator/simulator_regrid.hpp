@@ -379,6 +379,7 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
     for (auto const& name : population_names_)
         refine_(fine, amr::ParticleSplitter<Splitter_t>{}, LevelRegion::LevelGhosts,
                 {{name + "_domain", name + "_level_ghost_old", ""}});
+    own_level_ghosts_(fine, /*new_ghosts=*/false);
     per_patch_(fine, [](auto& patch) {
         for (auto& pop : patch.ions)
             pop.levelGhostParticles() = pop.levelGhostParticlesOld();

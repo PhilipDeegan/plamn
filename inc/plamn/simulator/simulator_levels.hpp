@@ -94,7 +94,7 @@ Simulator<opts>::surroundings_(int const ln, Box_t const& box) const
     auto constexpr pgw = static_cast<int>(Patch_t::particle_ghost_width);
     return {damn::amr::covered_by_level(
                 hierarchy_, ln, damn::core::grow(box, damn::core::ConstArray<int, dimension>(pgw))),
-            damn::amr::held_by_earlier(hierarchy_, ln, box, pgw)};
+            damn::amr::owned_elsewhere(hierarchy_, ln, box, pgw)};
 }
 
 template<auto opts>
@@ -235,6 +235,7 @@ void Simulator<opts>::initialize_refined_(std::size_t const ln)
         refine_(ln, amr::ParticleSplitter<Splitter_t>{}, LevelRegion::LevelGhosts,
                 {{name + "_domain", name + "_level_ghost_old", ""}});
     }
+    own_level_ghosts_(ln, /*new_ghosts=*/false);
     per_patch_(ln, [](auto& patch) {
         for (auto& pop : patch.ions)
             pop.levelGhostParticles() = pop.levelGhostParticlesOld();
@@ -246,13 +247,11 @@ void Simulator<opts>::initialize_refined_(std::size_t const ln)
 template<auto opts>
 void Simulator<opts>::refined_moments_(std::size_t const ln)
 {
-    // as move_ions_: the domain particles, the level ghosts of the cells each patch owns, then
-    //  the border sums
+    // as move_ions_: the domain particles, the level ghosts (each held by one patch), then the
+    //  border sums
     per_patch_(ln, [&](auto& patch) {
         core::deposit_domain<dimension, interp_order>(patch.ions, patch.layout);
-        Interpolator interpolate;
-        interpolate.skip_cells(patch.level_ghost_not_owned);
-        core::depositParticles(patch.ions, patch.layout, interpolate, core::LevelGhostDeposit{});
+        core::depositParticles(patch.ions, patch.layout, Interpolator{}, core::LevelGhostDeposit{});
     });
     fill_ion_borders_(ln);
     compute_moments_(ln);

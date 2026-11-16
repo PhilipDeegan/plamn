@@ -128,13 +128,13 @@ struct HybridPatch
 
     // the patch's particle ghost box and the level's other patches, periodic images included
     //   non_level_ghost:  the cells other patches cover (damn::amr::covered_by_level)
-    //   held_by_earlier:  the cells an earlier patch (box order) also holds, which it owns:
-    //                     their level ghost particles are its to deposit, PHAREHUB/PHARE#1580
-    //                     (damn::amr::held_by_earlier)
+    //   owned_elsewhere:  the cells another patch holding them owns (the nearest): their
+    //                     level ghost particles are its alone (Simulator's own_level_ghosts_;
+    //                     damn::amr::owned_elsewhere)
     struct Surroundings
     {
         std::vector<Box_t> non_level_ghost;
-        std::vector<Box_t> held_by_earlier;
+        std::vector<Box_t> owned_elsewhere;
     };
 
     // dict: the "simulation" node
@@ -148,7 +148,7 @@ struct HybridPatch
         , Bold{"EM_B_old", core::HybridQuantity::Vector::B}
         , ions{dict["ions"]}
         , boxing{std::in_place, layout, surroundings.non_level_ghost}
-        , level_ghost_not_owned{surroundings.held_by_earlier}
+        , level_ghost_not_owned{surroundings.owned_elsewhere}
         , emE{grids(em.E, layout)}
         , emB{grids(em.B, layout)}
         , predE{grids(emPred.E, layout)}
@@ -232,14 +232,14 @@ struct HybridPatch
     VecField_t Bold; // over oldB
     Ions_t ions;
     std::optional<Boxing_t> boxing; // the mover's: rebox() when the level's patches change
-    // the level ghost cells another patch owns: not deposited here (Surroundings)
+    // the level ghost cells another patch owns: their level ghosts are its (Surroundings)
     std::vector<Box_t> level_ghost_not_owned;
 
     // the level's other patches changed (a regrid)
     void rebox(Surroundings const& surroundings)
     {
         boxing.emplace(layout, surroundings.non_level_ghost);
-        level_ghost_not_owned = surroundings.held_by_earlier;
+        level_ghost_not_owned = surroundings.owned_elsewhere;
     }
 
     // storage

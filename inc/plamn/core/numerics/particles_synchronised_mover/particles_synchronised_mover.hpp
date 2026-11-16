@@ -43,8 +43,10 @@ namespace plamn::core
 {
 
 // after a REF move: domain particles leaving the owned domain become patch ghosts or are
-// deleted, level ghosts entering it become domain particles, those in a cell another patch of the
-// level covers are that patch's (deleted: PHAREHUB/PHARE#1579)
+// deleted, level ghosts entering it become domain particles. A level ghost lives in one patch
+// only (Simulator's own_level_ghosts_): one in a cell another patch of the level covers is
+// handed to that patch as a patch ghost, as a domain particle would be (no other patch has a
+// copy of it to keep instead, PHAREHUB/PHARE#1579); one leaving the ghost box is deleted
 template<typename Particles_t>
 void post_move_sync(Particles_t& domain, Particles_t& patchGhost, Particles_t& levelGhost,
                     auto const& boxing)
@@ -54,13 +56,13 @@ void post_move_sync(Particles_t& domain, Particles_t& patchGhost, Particles_t& l
     delete_particles_not_in(domain, boxing.nonLevelGhostBox);
     move_in_ghost_layer(patchGhost, domain, boxing.domainBox, boxing.nonLevelGhostBox);
     if (!nonOwnedBoxes.empty())
-    {
         for (auto const& box : nonOwnedBoxes)
+        {
             move_in_domain(patchGhost, domain, box);
-        delete_particles_in(levelGhost, nonOwnedBoxes);
-    }
+            move_in_domain(patchGhost, levelGhost, box);
+        }
     move_in_domain(domain, levelGhost, boxing.domainBox);
-    delete_particles_in(levelGhost, boxing.nonLevelGhostBox);
+    move_in_ghost_layer(patchGhost, levelGhost, boxing.domainBox, boxing.nonLevelGhostBox);
     delete_particles_not_in(levelGhost, boxing.ghostBox);
     delete_particles_not_in(domain, boxing.domainBox);
 }
@@ -84,7 +86,7 @@ struct PostMoveSyncCells
     }
 
     // level ghosts not owned: still in the level ghost layer (no patch of the level covers the
-    //  cell) -> kept, else (non-owned, another patch's, gone) deleted
+    //  cell) -> kept, in another patch's cell -> patch ghost (to_patch_ghost), else deleted
     bool keep_level_ghost(auto const& cell) const
     {
         return !isIn(cell, boxing.domainBox) and isIn(cell, boxing.ghostBox)
@@ -153,6 +155,8 @@ void post_move_sync_tile(Particles_t& domain, Particles_t& patchGhost, Particles
             domain()[ti]().emplace_back(ps[idx]);
         else if (cells.keep_level_ghost(cell))
             continue;
+        else if (cells.to_patch_ghost(cell))
+            patchGhost()[ti]().emplace_back(ps[idx]);
         erased.push_back(idx);
     }
     levelGhost.erase_in_tile(ti, erased);
@@ -186,7 +190,8 @@ void deposit_domain(auto& ions, auto const& layout)
 {
     DAMN_LOG_SCOPE(3, "ParticlesSynchronisedMover::depositDomain");
     resetMoments(ions);
-    depositParticles(ions, layout, Interpolating<dim, interp_order>{}, DomainDeposit{}); // tiles too
+    depositParticles(ions, layout, Interpolating<dim, interp_order>{},
+                     DomainDeposit{}); // tiles too
 }
 
 /**
@@ -274,8 +279,8 @@ void ParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositDomain_(
 
         interpolator_(allowed, pop.particleDensity(), pop.flux(), layout);
 
-        // push those in the ghostArea (i.e. stop pushing if they're not out of it)
-        // deposit moments on those which leave to go inOwnedDomain
+        // level ghosts: pushed while in the ghost box, deposited where they land on the level,
+        //  as domain particles (each is held by one patch only)
 
         auto pushAndAccumulateGhosts = [&](auto const& inputArray) {
             tmp_particles_ = inputArray; // work on local copy
@@ -284,7 +289,7 @@ void ParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositDomain_(
 
             auto enteredInDomain
                 = pusher_.move(outRange, outRange, em, pop.charge(), pop.mass(), interpolator_,
-                               layout, boxing.inGhostBox, boxing.inOwnedDomain);
+                               layout, boxing.inGhostBox, boxing.inNonLevelGhostBox);
 
             interpolator_(enteredInDomain, pop.particleDensity(), pop.flux(), layout);
         };
@@ -310,9 +315,8 @@ void ParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositDomain_(
    evolves moments and particles from time n to n+1
  */
 template<typename Particles_t, typename Layout>
-void ParticlesSynchronisedMover<Particles_t, Layout>::updateAll_(auto& ions,
-                                                                           auto const& em,
-                                                                           Boxing_t const& boxing)
+void ParticlesSynchronisedMover<Particles_t, Layout>::updateAll_(auto& ions, auto const& em,
+                                                                 Boxing_t const& boxing)
 {
     DAMN_LOG_SCOPE(1, "ParticlesSynchronisedMover::updateAll_");
 
@@ -368,6 +372,12 @@ void ParticlesSynchronisedMover<Particles_t, Layout>::updateAll_(auto& ions,
             auto& particleArray = particleRange.array();
             particleArray.export_particles(domainParticles,
                                            [&](auto const& cell) { return boxing.isOwned(cell); });
+            // in another patch's cell: handed to it, as a patch ghost
+            particleArray.export_particles(pop.patchGhostParticles(), [&](auto const& cell) {
+                return !boxing.isOwned(cell)
+                       and (isIn(cell, boxing.domainBox)
+                            or isIn(damn::core::Point{cell}, boxing.nonLevelGhostBox));
+            });
 
             particleArray.erase(damn::core::makeRange(particleArray, inGhostLayerRange.iend(),
                                                       particleArray.size()));

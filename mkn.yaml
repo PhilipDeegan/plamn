@@ -47,6 +47,7 @@ profile:
         tst/plamn/core/data/particles/test_particle_synchronisation.cpp
         tst/plamn/core/numerics/particles_synchronised_mover/test_updater.cpp
         tst/plamn/core/numerics/particles_synchronised_mover/test_multi_updater.cpp
+        tst/plamn/core/numerics/particles_synchronised_mover/test_level_updater.cpp
         tst/plamn/core/numerics/faraday/test_tileset_faraday.cpp
         tst/plamn/core/numerics/ampere/test_tileset_ampere.cpp
         tst/plamn/core/numerics/ohm/test_tileset_ohm.cpp

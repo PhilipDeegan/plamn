@@ -216,6 +216,7 @@ void Simulator<opts>::rebuild_after_load_()
             for (auto const& name : population_names_)
                 refine_(ln, amr::ParticleSplitter<Splitter_t>{}, LevelRegion::LevelGhosts,
                         {{name + "_domain", name + "_level_ghost_old", ""}});
+            own_level_ghosts_(ln, /*new_ghosts=*/false);
             per_patch_(ln, [](auto& patch) {
                 for (auto& pop : patch.ions)
                     pop.levelGhostParticles() = pop.levelGhostParticlesOld();

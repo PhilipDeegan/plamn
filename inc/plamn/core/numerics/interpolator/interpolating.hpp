@@ -154,9 +154,6 @@ public:
         particleToMesh(particles, layout, rhoP, flux, coef);
     }
 
-    // the particles of these cells not deposited (Interpolator::skip_cells), host paths
-    void skip_cells(auto const& boxes) { interp_.skip_cells(boxes); }
-
     // LevelGhost: level ghosts live only in their clamp-owner tile and are deposited before
     // the tile reduction + border sums (fillFluxBorders/fillDensityBorders), so like domain
     // particles each tile deposits only its own, the reduction completes the tile seams
