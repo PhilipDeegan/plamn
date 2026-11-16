@@ -8,6 +8,7 @@
     ./mkn.py --scope-flags 1=time,mem,perf_all 2=time,perf_all   # phlop per scope metrics
     ./mkn.py --sync-pools                 # damn's thread pools run tasks on the calling thread
     ./mkn.py --dim 2 --diag-doubles       # diagnostics in double precision, as PHARE_DIAG_DOUBLES=1
+    ./mkn.py --dim 2 --cell-jump 1        # PHARE's ghost widths (particles may move 1 cell a step)
 
 The permutation is set with compile definitions (PLAMN_SIM_*, see src/python3/plamn_sim.cpp)
 and the module named as pyplamn looks for it: plamn_cpp_<dim>_<interp>_<refined>_<layout>_<alloc>,
@@ -92,6 +93,11 @@ def main(argv):
     )
     parser.add_argument("--log-level", type=int, choices=[0, 1, 2, 3], help="DAMN_LOG_LEVEL")
     parser.add_argument(
+        "--cell-jump",
+        type=int,
+        help="PLAMN_PARTICLE_ALLOWED_CELL_JUMP (default 2; 1: PHARE's ghost widths)",
+    )
+    parser.add_argument(
         "--diag-doubles",
         action="store_true",
         help="PLAMN_DIAG_DOUBLES: diagnostics in double precision (PHARE_DIAG_DOUBLES)",
@@ -117,6 +123,8 @@ def main(argv):
         scoping += ["-DDAMN_THREAD_POOL_SYNC=1"]
     if args.diag_doubles:
         scoping += ["-DPLAMN_DIAG_DOUBLES=1"]
+    if args.cell_jump is not None:
+        scoping += [f"-DPLAMN_PARTICLE_ALLOWED_CELL_JUMP={args.cell_jump}"]
     for flags in args.scope_flags:
         level, _, keys = flags.partition("=")
         valid = {"time", "mem", "perf_light", "perf_all"}

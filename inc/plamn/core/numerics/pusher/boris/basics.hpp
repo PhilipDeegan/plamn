@@ -40,7 +40,7 @@ auto static advance(Particle_t& p, std::array<Float, dim> const& halfDtOverDl) D
     {
         Float delta = p.delta()[iDim] + static_cast<Float>(halfDtOverDl[iDim] * p.v()[iDim]);
         if constexpr (alloc == damn::AllocatorMode::CPU)
-            if (std::abs(delta) > particle_allowed_cell_jump)
+            if (std::abs(delta) > particle_half_push_limit)
                 damn::throw_exception<MoveTwoCellException>(delta, p.v()[iDim]);
 
         Float iCell     = std::floor(delta);
@@ -122,9 +122,9 @@ auto advance_noavx(Particles_t& ps, Args const&... args) DAMN_ALL
         auto& deldim     = ps.delta()[iDim][pidx];
         auto const delta = deldim + static_cast<Float>(halfDtOverDl[iDim] * ps.v()[iDim][pidx]);
         if constexpr (Particles_t::alloc_mode == damn::AllocatorMode::CPU)
-            if (std::abs(delta) > particle_allowed_cell_jump)
+            if (std::abs(delta) > particle_half_push_limit)
                 damn::throw_runtime_error("Error, particle moves more than "
-                                          "particle_allowed_cell_jump cells in a half push");
+                                          "particle_half_push_limit cells in a half push");
 
         auto iCell = std::floor(delta);
         deldim     = delta - iCell;
