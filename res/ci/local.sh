@@ -12,7 +12,7 @@ mb=$(git merge-base "$BASE" HEAD)
 step() { echo; echo "== $*"; }
 
 step "core tests"
-mkn build test -p test_plamn_core -dKO -t "$J"
+mkn build test -p test_plamn_core -dKO -t "$J" -x res/mkn/thrust
 
 step "python modules (1D, 2D)"
 ./mkn.py --dim 1 2

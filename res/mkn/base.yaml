@@ -3,6 +3,12 @@ super: settings
 
 property:
   sys.arch: ${ARCH}
+  # host thrust (damn's tpp/cccl): CPU settings only (mpi, hpc, thrust), never a GPU one (ROCm's
+  #  rocThrust / CUDA's CCCL must win). Relative: each project compiles from its own directory,
+  #  damn's sources find tpp/cccl, plamn's tpp/damn/tpp/cccl; the compiler skips the missing ones
+  cpu.thrust: >-
+    -Itpp/cccl/thrust -Itpp/cccl/libcudacxx/include -Itpp/cccl/cub
+    -Itpp/damn/tpp/cccl/thrust -Itpp/damn/tpp/cccl/libcudacxx/include -Itpp/damn/tpp/cccl/cub
 
 find:
   hdf5:

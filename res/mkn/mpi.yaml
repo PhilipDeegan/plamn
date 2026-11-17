@@ -9,5 +9,5 @@ compiler:
 file:
   - type: cpp:cxx:cc
     archiver: ar -cr
-    compiler: mpicxx -std=c++20 -fPIC
+    compiler: mpicxx -std=c++20 -fPIC ${cpu.thrust}
     linker: mpicxx
