@@ -85,6 +85,19 @@ def simulation_without_unknown_keywords(ph, overrides, dropped):
     return make
 
 
+def particles_per_level(simulator, pop="protons"):
+    """domain particles per level, from the data wrangler (the ladder's reader, both codes)"""
+    sys.path.insert(0, str(PLAMN / "etc/compare/phare"))
+    from run_case import domain_particles
+
+    dw = simulator.data_wrangler()
+    counts = []
+    for ilvl in range(dw.getNumberOfLevels()):
+        got = domain_particles(dw, ilvl, pop)
+        counts.append(0 if got is None else len(got[3]))
+    return counts
+
+
 def child(args):
     """runs in the code's own process and cwd: one coarse step, timed"""
     if args.code == "plamn":
@@ -115,18 +128,23 @@ def child(args):
 
     t0 = time.perf_counter()
     simulator = Simulator(sim, log_to_file=False).setup().initialize()
-    t1 = time.perf_counter()
+    init_s = time.perf_counter() - t0
+    initial = particles_per_level(simulator)  # outside the timed regions
+    t0 = time.perf_counter()
     for _ in range(args.steps):
         simulator.advance()
-    t2 = time.perf_counter()
+    steps_s = time.perf_counter() - t0
+    final = particles_per_level(simulator)
     levels = simulator.data_wrangler().getNumberOfLevels()
     simulator.reset()
     result = {
         "code": args.code,
-        "init_s": t1 - t0,
-        "steps_s": t2 - t1,
+        "init_s": init_s,
+        "steps_s": steps_s,
         "steps": args.steps,
         "levels": levels,
+        "particles_initial": initial,
+        "particles_final": final,
         "ppc": module.ppc,
         "cells": list(module.cells),
         "dropped": sorted(set(dropped)),
@@ -160,6 +178,10 @@ def parent(args):
         f"\nharris {args.ndim}D, {args.steps} coarse step(s), max {args.levels} levels, AoSMapped, 1 rank"
     )
     print(f"{'code':10} {'levels':>6} {'ppc':>4} {'init s':>9} {'step(s) s':>10}  dropped keywords")
+    for r in rows:
+        print(
+            f"{r['code']:10} particles per level, initial {r['particles_initial']} final {r['particles_final']}"
+        )
     for r in rows:
         print(
             f"{r['code']:10} {r['levels']:>6} {r['ppc']:>4} {r['init_s']:>9.3f} {r['steps_s']:>10.3f}  "
