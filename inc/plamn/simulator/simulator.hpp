@@ -377,6 +377,7 @@ private:
     void initialize_root_();
     void initialize_refined_(std::size_t ln);
     void refined_moments_(std::size_t ln); // a refined level's moments and J from its particles
+    void sort_refined_particles_(std::size_t ln); // SoAVXChunked: chunks before the first push
 
     // level ghost fills (patch ghosts, then level ghosts from the coarser level at time t)
     void fill_magnetic_ghosts_(std::size_t ln, std::string const& key, double t);

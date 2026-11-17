@@ -51,4 +51,4 @@ jobs:
       run: |
         curl -Lo mkn https://github.com/mkn/mkn/releases/download/latest/mkn_nix
         chmod +x mkn
-        KLOG=3 ./mkn clean build test -dtKOqp test_plamn_core_slow -Wx res/mkn/mpi
+        KLOG=3 ./mkn clean build test -dKOqp test_plamn_core_slow -Wx res/mkn/mpi -t 4

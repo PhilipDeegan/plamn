@@ -4,10 +4,8 @@
 #include "damn/core/logger.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/operators.hpp"
-#include "damn/core/meta/for_N.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/geometry/box.hpp"
-
 #include "plamn/core/def.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
@@ -19,8 +17,6 @@
 #include <cstddef>
 #include <type_traits>
 #include <cstdint>
-#include <optional>
-#include <utility>
 #include <variant>
 
 namespace plamn::core
@@ -229,18 +225,6 @@ public:
         }
         return fieldAtParticle;
     }
-
-
-    template<typename... Args>
-    inline void avx(Args&&... args) const DAMN_ALL
-    {
-        auto const& [field, weight, value] = std::forward_as_tuple(args...);
-
-
-        //
-        // for (auto ix = 0u; ix < order_size; ++ix)
-        // value
-    }
 };
 
 
@@ -286,12 +270,6 @@ public:
         }
         // assert(!std::isnan(fieldAtParticle));
         return fieldAtParticle;
-    }
-
-
-    template<typename... Args>
-    inline void avx(Args&&... args) const DAMN_ALL
-    {
     }
 };
 
@@ -347,78 +325,7 @@ public:
         }
         return fieldAtParticle;
     }
-
-    template<typename Layout, typename... Args>
-    inline auto avx(Args&&... args) const DAMN_ALL
-    {
-        auto constexpr scalar_qts = []() constexpr {
-            using enum HybridQuantity::Scalar;
-            return std::array{Ex, Ey, Ez, Bx, By, Bz};
-        }();
-
-        auto constexpr centerings
-            = damn::core::for_N<scalar_qts.size(), damn::core::for_N_R_mode::make_array>(
-                [&](auto i) { return centering<Layout::dimension>(scalar_qts[i]); });
-
-        auto&& [qts, starts, weights] = std::forward_as_tuple(args...);
-        using Qts                     = std::decay_t<decltype(qts)>;
-        auto constexpr n_qtys         = std::tuple_size_v<Qts>;
-        auto const order_size         = weights[0][0].size();
-        using Arr                     = std::decay_t<decltype(weights[0][0][0])>;
-        auto constexpr N_parts        = Arr::size();
-        // static_assert(N_parts == 8);
-        std::array<Arr, n_qtys> ebs;
-
-        // weights[qty][dim][support][pidx]
-        auto const caster
-            = [](auto const i) { return static_cast<std::underlying_type_t<QtyCentering>>(i); };
-
-        for (auto q = 0u; q < n_qtys; ++q)
-        {
-            // for_N<n_qtys>([&](auto q) {
-            auto const xci    = caster(centerings[q][0]);
-            auto const yci    = caster(centerings[q][1]);
-            auto const zci    = caster(centerings[q][2]);
-            auto const& field = qts[q];
-
-            auto const& xW8s = weights[xci][0];
-            auto const& yW8s = weights[yci][1];
-            auto const& zW8s = weights[zci][2];
-            auto const& xSi  = starts[xci][0];
-            auto const& ySi  = starts[yci][1];
-            auto const& zSi  = starts[zci][2];
-
-            for (auto ix = 0u; ix < order_size; ++ix)
-            {
-                Arr Yinterp = 0.;
-                for (auto iy = 0u; iy < order_size; ++iy)
-                {
-                    Arr Zinterp = 0.;
-                    for (auto iz = 0u; iz < order_size; ++iz)
-                    {
-                        Arr fvs{std::nullopt}; // memory not initialized!
-
-                        for (std::uint8_t i = 0; i < N_parts; i++)
-                            fvs[i] = field([](auto const&... args) {
-                                return std::array{static_cast<std::uint32_t>(args)...};
-                            }(xSi[i] + ix, ySi[i] + iy, zSi[i] + iz));
-
-                        Zinterp += fvs * zW8s[iz];
-                    }
-                    Zinterp *= yW8s[iy];
-                    Yinterp += Zinterp;
-                }
-                Yinterp *= xW8s[ix];
-                ebs[q] += Yinterp;
-            }
-        } //);
-
-
-        return ebs;
-    }
 };
-
-
 
 
 //! ParticleToMesh projects a particle density and flux to given grids
@@ -746,15 +653,16 @@ protected:
 
 
     template<auto centering>
-    auto indexAndWeights_(damn::core::Box<int, dim> const& amrbox, auto const& iCell_,
-                          auto const& delta) DAMN_ALL
+    DAMN_ALWAYS_INLINE auto indexAndWeights_(damn::core::Box<int, dim> const& amrbox,
+                                             auto const& iCell_, auto const& delta) DAMN_ALL
     {
         indexAndWeights__<centering>(
             [&] DAMN_ALL(auto const& point) { return point - amrbox.lower; }, iCell_, delta);
     }
 
     template<auto centering>
-    auto indexAndWeights_(auto const& layout, auto const& iCell_, auto const& delta) DAMN_ALL
+    DAMN_ALWAYS_INLINE auto indexAndWeights_(auto const& layout, auto const& iCell_,
+                                             auto const& delta) DAMN_ALL
     {
         return indexAndWeights__<centering>(
             [&] DAMN_ALL(auto const& point) { return to_local(layout, point); }, iCell_, delta);
@@ -806,63 +714,6 @@ public:
         return particle_EB;
     }
 
-
-
-    template<std::uint8_t N, template<typename, std::size_t> typename Array_t, typename Layout,
-             typename... Args>
-    inline auto m2p_avx(Layout const& layout, Args&&... args) DAMN_ALL
-    {
-        static_assert(interpOrder == 1);
-
-        using ArrayFp64 = Array_t<double, N>;
-
-        auto constexpr dual_offset = .5;
-
-        auto const& [particles, Em, start] = std::forward_as_tuple(args...);
-        auto const& deltas                 = particles.delta();
-        auto const& iCells                 = particles.iCell().data() + start;
-
-        auto const delts
-            = damn::core::for_N<Layout::dimension, damn::core::for_N_R_mode::make_array>(
-                [&](auto i) { return deltas[i].data() + start; });
-
-        auto const fpiCells = [&]() {
-            Array<ArrayFp64, dim> fpiCells;
-            for (std::size_t i = 0; i < N; ++i)
-            {
-                auto const lCell = to_local(layout, iCells[i]);
-                for (std::size_t d = 0; d < dim; ++d)
-                    fpiCells[d][i] = lCell[d];
-            }
-            return fpiCells;
-        }();
-
-        using AVXCenteredWeights
-            = Array<Array<Array<ArrayFp64, nbrPointsSupport(interpOrder)>, dim>, 2>;
-        AVXCenteredWeights centered_weights; // [centering][dim][support][pidx]
-
-        Array<Array<ArrayFp64, dim>, 2> centered_pos, centered_starts;
-
-        damn::core::for_N<2>([&](auto c) {
-            auto constexpr centering = static_cast<QtyCentering>(c());
-            for (std::size_t d = 0; d < dim; ++d)
-            {
-                for (std::size_t i = 0; i < N; ++i)
-                {
-                    centered_pos[c][d][i] = fpiCells[d][i] + delts[d][i];
-                    if constexpr (centering == QtyCentering::dual)
-                        centered_pos[c][d][i] -= dual_offset;
-                    centered_starts[c][d][i]
-                        = fpiCells[d][i] - computeStartLeftShift<centering>(delts[d][i]);
-                }
-                weightComputer_.template compute<ArrayFp64>( //
-                    centered_pos[c][d], centered_starts[c][d], centered_weights[c][d]);
-            }
-        });
-
-
-        return meshToParticle_.template avx<Layout>(Em, centered_starts, centered_weights);
-    }
 
 
 
@@ -1082,9 +933,11 @@ protected:
     Weights primal_weights_;
 
 private:
+    // always inlined: six per m2p, out of line (gcc merges the identical instantiations) they
+    //  cost a call each per particle
     template<auto quantity, typename Layout>
-    NO_DISCARD auto meshToParticle(auto const& field, Layout const&,
-                                   auto const& indexWeights) DAMN_ALL
+    NO_DISCARD DAMN_ALWAYS_INLINE auto meshToParticle(auto const& field, Layout const&,
+                                                      auto const& indexWeights) DAMN_ALL
     {
         return meshToParticle_.template op<Layout, quantity>(field, indexWeights);
     }

@@ -1,7 +1,7 @@
 // plamn_etc: the C++ side pyphare needs before a simulator exists
 //
 //   Dict:  the simulation input, owned by a python object. pyphare's DictPopulator calls
-//          its add_* methods (pyplamn makes dict_populator.dictator() return it)
+//          its add_* methods (plamn makes dict_populator.dictator() return it)
 //   enums: the integer values pyphare writes with add_enum_int
 //
 // user init functions are python callables kept in C++ (InitFunction<dim>): called with
@@ -62,7 +62,7 @@ struct MpiLifeCycle
         {
             // MPI_THREAD_MULTIPLE only for HDF5's subfiling (its concentrator threads call MPI,
             //  damn/hdf5/h5_file.hpp): it costs every message elsewhere (locks, transports).
-            //  PHARE's PHARE_H5_SUB_FILES (PHAREHUB/PHARE#1177) is damn's DAMN_H5_SUB_FILES
+            //  PHARE's PHARE_H5_SUB_FILES is damn's DAMN_H5_SUB_FILES
             if (auto const* n = std::getenv("PHARE_H5_SUB_FILES");
                 n and !std::getenv("DAMN_H5_SUB_FILES"))
                 setenv("DAMN_H5_SUB_FILES", n, 1);

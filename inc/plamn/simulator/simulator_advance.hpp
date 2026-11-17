@@ -261,7 +261,7 @@ void Simulator<opts>::fill_ion_borders_(std::size_t const ln)
 // the level border's moments: the level ghost particles split from the coarser level at both
 // ends of its step, weighted linearly in time (PHARE's fillIonPopMomentGhosts), before the
 // border sums complete every patch's copy: each is held by one patch (own_level_ghosts_),
-// deposited once (PHAREHUB/PHARE#1580)
+// deposited once (as PHARE: each level ghost deposited once)
 template<auto opts>
 void Simulator<opts>::deposit_level_ghosts_(std::size_t const ln, double const t)
 {
@@ -348,11 +348,16 @@ void Simulator<opts>::move_ions_(std::size_t const ln, double const t, double co
     }
     if (mode != core::UpdaterMode::domain_only)
     {
-        // as PHAREHUB/PHARE#1441 (and the level initialization): the particles that left their
+        // as PHARE's deposit after the exchange (and the level initialization): the particles that
+        // left their
         //  patch go to the patch owning their cell first, then each patch deposits its domain
         //  particles, every particle once (the domain_only predictor deposits its pushed copies
         //  in the updater)
-        copy_(ln, damn::amr::gather_leaving, "IonGhostParticles");
+        {
+            DAMN_LOG_SCOPE(2, "Simulator::move_ions::gather_leaving");
+            copy_(ln, damn::amr::gather_leaving, "IonGhostParticles");
+        }
+        DAMN_LOG_SCOPE(2, "Simulator::move_ions::deposit_domain");
         per_patch_(ln, [](auto& patch) {
             for (auto& pop : patch.ions)
                 pop.patchGhostParticles().clear();
@@ -360,9 +365,12 @@ void Simulator<opts>::move_ions_(std::size_t const ln, double const t, double co
         });
     }
 
-    // as PHAREHUB/PHARE#1580: each level ghost particle deposited once, by the patch holding it,
+    // as PHARE: each level ghost particle deposited once, by the patch holding it,
     //  then the border sums: every patch's copy of a node the same
-    deposit_level_ghosts_(ln, t + dt);
+    {
+        DAMN_LOG_SCOPE(2, "Simulator::move_ions::deposit_level_ghosts");
+        deposit_level_ghosts_(ln, t + dt);
+    }
     fill_ion_borders_(ln);
     compute_moments_(ln);
 }

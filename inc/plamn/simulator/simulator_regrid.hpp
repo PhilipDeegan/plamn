@@ -223,7 +223,6 @@ template<auto opts>
 void Simulator<opts>::rebalance_(double const t)
 {
     DAMN_LOG_SCOPE(1, "Simulator::rebalance_");
-    auto const pgw = Patch_t::particle_ghost_width;
 
     auto const boxes = damn::amr::chop(hierarchy_.domain, patch_size_);
     auto const block = damn::core::ConstArray<int, dimension>(rebalance_block);
@@ -311,7 +310,6 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
     DAMN_LOG_SCOPE(1, "Simulator::regrid_level_");
     using damn::amr::LevelRegion;
     auto const fine   = static_cast<std::size_t>(ln);
-    auto const pgw    = Patch_t::particle_ghost_width;
     auto constexpr gw = Patch_t::field_ghost_width;
 
     // the old level's cells, periodic images included
@@ -385,6 +383,7 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
         for (auto& pop : patch.ions)
             pop.levelGhostParticles() = pop.levelGhostParticlesOld();
     });
+    sort_refined_particles_(fine);
 
     refined_moments_(fine);
     prepare_step_(ln, t);

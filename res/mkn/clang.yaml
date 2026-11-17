@@ -1,21 +1,19 @@
-property:
-  cxx.flags: --std=c++20 -fPIC -fsized-deallocation
-  lnk.flags: -Wl,-z,defs -fuse-ld=gold 
-local:
-  repo: /mkn/r
-  mod-repo: /mkn/m
-remote:
-  repo: git@github.com:mkn/
-  mod-repo: git@github.com:mkn-mod/
+# clang (22) behind Open MPI's mpicxx: as mpi.yaml (base's HDF5 and host thrust), compiled by clang.
+#  Also for clang's analysis modules, eg
+#    OPT_VIEWER=/bin/true ./mkn.py --dim 2 -- -m clang.llvm-mca,clang.llvm-optrec -x res/mkn/clang
+#  (build the modules with gcc first, as their READMEs say: they load into mkn)
+super: base
+
 env: |
-  OMPI_CXX=clang++-17
-  PATH=/opt/mpi/cuda/bin:${PATH}
+  OMPI_CXX=clang++-22
+
 compiler:
   mask:
     g++:
       mpicxx
+
 file:
   - type: cpp:cxx:cc
     archiver: ar -cr
-    compiler:  mpicxx ${cxx.flags} 
-    linker:  mpicxx ${lnk.both}
+    compiler: mpicxx -std=c++20 -fPIC -fsized-deallocation ${cpu.thrust}
+    linker: mpicxx -pthread

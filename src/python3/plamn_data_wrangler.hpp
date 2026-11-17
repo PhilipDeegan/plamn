@@ -2,7 +2,7 @@
 #define PLAMN_PYTHON3_PLAMN_DATA_WRANGLER_HPP
 
 // Live, zero-copy access to a running simulator's data from python, the API of PHARE's
-//  DataWrangler (PHAREHUB/PHARE#1400, #1171), so pyphare's hierarchy_from_sim works unchanged:
+//  DataWrangler (PHARE's live DataWrangler), so pyphare's hierarchy_from_sim works unchanged:
 //
 //   DataWrangler(simulator, hierarchy)   hierarchy: unused, plamn's is the simulator's own
 //     getNumberOfLevels()
@@ -68,8 +68,9 @@ FieldView<dim> field_view(auto& field)
     return FieldView<dim>(field.data(), dim, shape.data(), nb::handle());
 }
 
+// hidden as the module is (-fvisibility=hidden): its member templates take the bindings' lambdas
 template<typename Simulator>
-class HybridPatchLevel
+class [[gnu::visibility("hidden")]] HybridPatchLevel
 {
     auto static constexpr dim = Simulator::dimension;
     using Patch_t             = Simulator::Patch_t;

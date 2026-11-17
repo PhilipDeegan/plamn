@@ -2,14 +2,14 @@
 
 needs the py_etc and py_sim modules built (mkn build -p py_etc / -p py_sim), then from
 the plamn root:
-    PYTHONPATH=python:$PHARE/pyphare:tst/plamn/python python3 -m phlop.run.test_cases -i tst
+    PYTHONPATH=.:$PHARE/pyphare:tst/plamn/python python3 -m phlop.run.test_cases -i tst
 """
 
 import unittest
 
 import numpy as np
 
-import pyplamn
+import plamn
 
 
 import alfven1d
@@ -66,7 +66,7 @@ def run(largest_patch_size):
 class HybridAlfven1DTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        pyplamn.patch()
+        plamn.patch()
 
     def check(self, result, patches):
         self.assertEqual(result["patches"], patches)

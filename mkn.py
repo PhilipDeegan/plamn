@@ -11,14 +11,15 @@
     ./mkn.py --dim 2 --cell-jump 1        # PHARE's ghost widths (particles may move 1 cell a step)
 
 The permutation is set with compile definitions (PLAMN_SIM_*, see src/python3/plamn_sim.cpp)
-and the module named as pyplamn looks for it: plamn_cpp_<dim>_<interp>_<refined>_<layout>_<alloc>,
+and the module named as plamn looks for it: plamn_cpp_<dim>_<interp>_<refined>_<layout>_<alloc>,
 pyphare's simulator id. Run from the plamn root; py_etc is built once first unless --no-etc.
 The modules use MPI: built with res/mkn/mpi's settings (mpicxx) unless -x is given after --.
 
 Scopes (DAMN_LOG_SCOPE(level, "name")) up to --log-level (default 2) are phlop scopes; what each
 level records is chosen at build time with --scope-flags <level>=<any of time,mem,perf_light,
-perf_all> (default: time), and at run time: PHARE_SCOPE_TIMING=1 writes .phare/timings/rank.<r>.txt,
-PHLOP_SCOPE_MEM=1 adds memory, PHLOP_PERF_LIGHT / PHLOP_PERF_ALL hardware counters (see
+perf_all,io> (default: time), and at run time: PHARE_SCOPE_TIMING=1 writes .phare/timings/rank.<r>.txt,
+PHLOP_SCOPE_MEM=1 adds memory, PHLOP_SCOPE_IO=1 the thread's I/O (/proc/thread-self/io),
+PHLOP_PERF_LIGHT / PHLOP_PERF_ALL hardware counters (see
 damn/core/def/phlop.hpp); python3 -m phlop.timing.scope_timer times|perf|variance reads them.
 Hardware counters count the calling thread: --sync-pools (DAMN_THREAD_POOL_SYNC) for serial
 numbers that include the pools' work.
@@ -59,14 +60,14 @@ def has_name_option():
         return False
 
 
-def mkn(profile, extra, defines=(), out=None, own_dir=False):
+def mkn(profile, extra, jobs, defines=(), out=None, own_dir=False):
     # mkn rebuilds by timestamps, not compile arguments: each permutation builds in its own
     # directory (-N), or, with an mkn without -N, in a cleaned bin/<profile> (ccache keeps it
     # cheap)
     cmd = ["mkn"]
     if own_dir and not has_name_option():
         cmd += ["clean"]
-    cmd += ["build", "-p", profile, "-dKO", "-t", "8"]
+    cmd += ["build", "-p", profile, "-dKO", "-t", str(jobs)]
     if own_dir and has_name_option():
         cmd += ["-N", out]
     if out:
@@ -88,6 +89,7 @@ def main(argv):
     parser.add_argument("--layout", nargs="+", default=["AoSMapped"], choices=LAYOUTS)
     parser.add_argument("--allocator", nargs="+", default=["CPU"], choices=ALLOCATORS)
     parser.add_argument("--no-etc", action="store_true", help="don't build py_etc")
+    parser.add_argument("--jobs", type=int, default=8, help="mkn -t (CI: 4)")
     parser.add_argument(
         "--sync-pools", action="store_true", help="DAMN_THREAD_POOL_SYNC: no pool threads"
     )
@@ -107,7 +109,7 @@ def main(argv):
         nargs="+",
         default=[],
         metavar="LEVEL=FLAGS",
-        help="phlop scope flags per log level, e.g. 1=time,mem,perf_all",
+        help="phlop scope flags per log level, e.g. 1=time,mem,perf_all,io",
     )
     if "--" in argv:
         at = argv.index("--")
@@ -127,13 +129,13 @@ def main(argv):
         scoping += [f"-DPLAMN_PARTICLE_ALLOWED_CELL_JUMP={args.cell_jump}"]
     for flags in args.scope_flags:
         level, _, keys = flags.partition("=")
-        valid = {"time", "mem", "perf_light", "perf_all"}
+        valid = {"time", "mem", "perf_light", "perf_all", "io"}
         if level not in ("1", "2", "3") or not keys or not set(keys.split(",")) <= valid:
             print(f"--scope-flags {flags}: <1|2|3>=<any of {','.join(sorted(valid))}>")
             return 1
         scoping += [f"-DDAMN_LOG_SCOPE_FLAGS_{level}={keys}"]
 
-    if not args.no_etc and mkn("py_etc", extra):
+    if not args.no_etc and mkn("py_etc", extra, args.jobs):
         return 1
 
     for dim, interp, layout, allocator in itertools.product(
@@ -153,7 +155,7 @@ def main(argv):
             f"-DPLAMN_SIM_ALLOCATOR={allocator}",
             f"-DPLAMN_SIM_MODULE={name}",
         ] + scoping
-        if mkn("py_sim", extra, defines, out=name, own_dir=True):
+        if mkn("py_sim", extra, args.jobs, defines, out=name, own_dir=True):
             return 1
     return 0
 

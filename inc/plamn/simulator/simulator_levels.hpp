@@ -249,8 +249,25 @@ void Simulator<opts>::initialize_refined_(std::size_t const ln)
         for (auto& pop : patch.ions)
             pop.levelGhostParticles() = pop.levelGhostParticlesOld();
     });
+    sort_refined_particles_(ln);
 
     refined_moments_(ln);
+}
+
+// the particles refined into a level (new or regridded) are appended unsorted: SoAVXChunked lays
+//  them out in chunks here, so the level's first pushes take the per cell kernels too (they
+//  need sorted arrays)
+template<auto opts>
+void Simulator<opts>::sort_refined_particles_(std::size_t const ln)
+{
+    if constexpr (opts.layout_mode == core::LayoutMode::SoAVXChunked)
+        per_patch_(ln, [](auto& patch) {
+            for (auto& pop : patch.ions)
+                for (auto* ps : {&pop.domainParticles(), &pop.levelGhostParticles(),
+                                 &pop.levelGhostParticlesOld()})
+                    if (!ps->sorted())
+                        ps->sort();
+        });
 }
 
 template<auto opts>

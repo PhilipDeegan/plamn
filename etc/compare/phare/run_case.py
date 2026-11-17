@@ -81,9 +81,9 @@ def main(argv=None):
     import cases
 
     if a.code == "plamn":
-        import pyplamn
+        import plamn
 
-        pyplamn.patch()
+        plamn.patch()
     from pyphare.simulator.simulator import Simulator, startMPI
 
     startMPI()

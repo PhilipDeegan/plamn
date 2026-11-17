@@ -16,7 +16,7 @@ each level is compared as a set of cells:
             region's values are coarsened onto the level below it.
             Pass: max |ref - cmp| <= atol + rtol * max |ref| (over the compared nodes).
 
-Files are read with the pharesee reader of PHAREHUB/PHARE#1595 (pyphare.pharesee.amr):
+Files are read with the pharesee VTKHDF reader (pyphare.pharesee.amr):
 .vtkhdf and .h5 alike, all primal. Put that pyphare on PYTHONPATH.
 
   python3 etc/compare/phare/hierarchy_overlap.py REF_DIR CMP_DIR [--min-overlap 0.9] ...
@@ -99,7 +99,7 @@ def diagnostic_files(directory):
 
 
 def open_field(run, path):
-    """Lazy AMR field of every time in ``path`` (PHARE#1595's Run opener)."""
+    """Lazy AMR field of every time in ``path`` (the pharesee VTKHDF reader's Run opener)."""
     return run._open_path(str(path), None, None)
 
 

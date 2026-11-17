@@ -185,7 +185,6 @@ struct BoxExpander // expands border tiles to cover the patch ghost box
         auto const per_dim = [&](auto const di) {
             if (inbox.lower[di] == patch_box.lower[di])
                 box.lower[di] = ghost_box.lower[di];
-            auto const hi = inbox.upper[di];
             if (inbox.upper[di] == patch_box.upper[di])
                 box.upper[di] = ghost_box.upper[di];
         };

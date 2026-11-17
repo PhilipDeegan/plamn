@@ -10,7 +10,7 @@ import unittest
 
 import numpy as np
 
-import pyplamn
+import plamn
 
 
 import pyphare.pharein as ph
@@ -99,7 +99,7 @@ def expected_particles(protons_density):
 class LoadBalancingTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        pyplamn.patch()
+        plamn.patch()
 
     def init(self, protons_density):
         self.simulator = (

@@ -1,7 +1,7 @@
 """live, zero-copy access to plamn's simulation data through pyphare's hierarchy_from_sim
-(PHAREHUB/PHARE#1400): needs a pyphare with the DataWrangler of PHAREHUB/PHARE#1171
+(as PHARE's): needs a pyphare with the live DataWrangler
 
-    PYTHONPATH=python:$PHARE_WRANGLER/pyphare:tst/plamn/python \
+    PYTHONPATH=.:$PHARE_WRANGLER/pyphare:tst/plamn/python \
         python3 -m phlop.run.test_cases -i tst/plamn/python/test_data_wrangler.py
 """
 
@@ -9,7 +9,7 @@ import unittest
 
 import numpy as np
 
-import pyplamn
+import plamn
 
 
 import alfven1d
@@ -21,7 +21,7 @@ try:
     from pyphare.pharesee.hierarchy.patchdata import (
         LiveParticleData,
     )  # noqa: F401
-except ImportError:  # a pyphare without PHARE#1171
+except ImportError:  # a pyphare without the live DataWrangler
     hierarchy_from_sim = None
 
 CELLS = 100
@@ -38,12 +38,12 @@ def domain(hier, qty):
 
 
 @unittest.skipIf(
-    hierarchy_from_sim is None, "pyphare has no live DataWrangler (PHARE#1171)"
+    hierarchy_from_sim is None, "pyphare has no live DataWrangler"
 )
 class DataWranglerTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        pyplamn.patch()
+        plamn.patch()
 
     def setUp(self):
         ph.global_vars.sim = None
@@ -197,14 +197,14 @@ def config_2d():
 
 
 @unittest.skipIf(
-    hierarchy_from_sim is None, "pyphare has no live DataWrangler (PHARE#1171)"
+    hierarchy_from_sim is None, "pyphare has no live DataWrangler"
 )
 class DataWrangler2DTest(unittest.TestCase):
     """the checks of PHARE's test_data_wrangler.py test_hybrid (2D, interp 1), on one level"""
 
     @classmethod
     def setUpClass(cls):
-        pyplamn.patch()
+        plamn.patch()
 
     def setUp(self):
         self.simulator = Simulator(config_2d(), log_to_file=False).setup().initialize()

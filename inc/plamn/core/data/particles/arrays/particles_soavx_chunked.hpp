@@ -37,12 +37,10 @@
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/logger.hpp"
 #include "damn/core/meta/for_N.hpp"
-
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/arrays/particles_soavx.hpp"
 #include "plamn/core/data/particles/particle.hpp"
-
 #include "phlop/timing/scope.hpp"
 
 #include <tuple>
@@ -56,6 +54,8 @@
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
+#include <format>
+#include <iterator>
 
 #if DAMN_HAVE_THRUST
 #include <thrust/scan.h>
@@ -373,6 +373,22 @@ public:
 
     std::size_t nbr_particles_in(box_t const& box) const { return count(box); }
 
+    // the push's record of the particles that changed cell (their slot, the chunk of the cell
+    //  they left): resettle() then takes them instead of scanning every chunk. Only a push of a
+    //  sorted array records (every particle that crossed), sort() drops it, resettle() uses it up
+    void begin_crossers()
+    {
+        crossers_.clear();
+        crossers_valid_ = this->sorted();
+    }
+    void add_crosser(std::size_t const slot, auto const& from)
+    {
+        damn::core::Point<int, dimension> cell;
+        for (std::size_t d = 0; d < dimension; ++d)
+            cell[d] = from[d];
+        crossers_.emplace_back(slot, Chunks::flat(shell(), cell));
+    }
+
     // a gap slot of chunk c (flat): weight 0, the chunk's cell
     void filler_(std::size_t const i, std::size_t const c)
     {
@@ -392,6 +408,13 @@ public:
 
 private:
     using Particle_t = Particle<dimension>;
+
+    std::vector<std::pair<std::size_t, std::size_t>> crossers_; // (slot, chunk), see add_crosser
+    bool crossers_valid_ = false;
+
+    // take the recorded crossers out of their chunks: their slots filled from the chunks' tails
+    //  (each chunk's crossers are consecutive and ascending: one pass per chunk)
+    void take_crossers_(std::vector<Particle_t>& moved);
 
     // the cell of flat index c in the shell
     std::array<int, dimension> cell_of_(std::size_t c) const
@@ -552,6 +575,38 @@ void SoAVXChunkedParticles<Super_>::remove(std::size_t const c, std::size_t cons
 }
 
 template<typename Super_>
+void SoAVXChunkedParticles<Super_>::take_crossers_(std::vector<Particle_t>& moved)
+{
+    DAMN_LOG_SCOPE(3, "SoAVXChunked::take_crossers");
+    crossers_valid_ = false;
+    moved.reserve(crossers_.size());
+    for (auto const& [slot, c] : crossers_)
+    {
+        moved.push_back(this->copy(slot));
+        this->weight_[slot] = 0; // a hole until filled
+    }
+    for (std::size_t k = 0; k < crossers_.size();)
+    {
+        auto const c = crossers_[k].second;
+        auto& n      = this->sizes_[c];
+        auto end     = static_cast<std::size_t>(this->starts_[c]) + n;
+        for (; k < crossers_.size() and crossers_[k].second == c; ++k)
+        {
+            auto const hole = crossers_[k].first;
+            while (end > hole and this->weight_[end - 1] == 0) // holes at the tail: gap
+                filler_(--end, c);
+            if (end <= hole)
+                continue; // trimmed off with the tail
+            move_slot_(hole, end - 1);
+            filler_(--end, c);
+        }
+        n = static_cast<std::remove_reference_t<decltype(n)>>(end - this->starts_[c]);
+    }
+    crossers_.clear();
+}
+
+
+template<typename Super_>
 bool SoAVXChunkedParticles<Super_>::resettle(auto const& keep, auto&& leave)
     requires(storage_mode == StorageMode::VECTOR)
 {
@@ -564,25 +619,28 @@ bool SoAVXChunkedParticles<Super_>::resettle(auto const& keep, auto&& leave)
     DAMN_LOG_SCOPE(2, "SoAVXChunked::resettle");
     DAMN_ASSERT(this->sorted());
     std::vector<Particle_t> moved; // the particles that changed cell
-    for (std::size_t c = 0; c < this->sizes_.size(); ++c)
-    {
-        auto const cell = cell_of_(c);
-        for (std::size_t i = this->starts_[c]; i < this->starts_[c] + this->sizes_[c];)
+    if (crossers_valid_)
+        take_crossers_(moved);
+    else
+        for (std::size_t c = 0; c < this->sizes_.size(); ++c)
         {
-            bool stays = true;
-            for (std::size_t d = 0; d < dimension; ++d)
-                stays = stays and this->iCell_[d][i] == cell[d];
-            if (stays)
+            auto const cell = cell_of_(c);
+            for (std::size_t i = this->starts_[c]; i < this->starts_[c] + this->sizes_[c];)
             {
-                ++i;
-                continue;
+                bool stays = true;
+                for (std::size_t d = 0; d < dimension; ++d)
+                    stays = stays and this->iCell_[d][i] == cell[d];
+                if (stays)
+                {
+                    ++i;
+                    continue;
+                }
+                moved.push_back(this->copy(i));
+                remove(c, i); // slot i holds another particle of the chunk now, or is its head gap
+                if (i < this->starts_[c])
+                    i = this->starts_[c];
             }
-            moved.push_back(this->copy(i));
-            remove(c, i); // slot i holds another particle of the chunk now, or is its head gap
-            if (i < this->starts_[c])
-                i = this->starts_[c];
         }
-    }
     std::vector<Particle_t> overflow; // no room in their chunk
     for (auto const& p : moved)
     {
@@ -605,6 +663,7 @@ void SoAVXChunkedParticles<Super_>::sort()
     requires(storage_mode == StorageMode::VECTOR)
 {
     DAMN_LOG_SCOPE(2, "SoAVXChunked::sort");
+    crossers_valid_            = false; // the slots change
     auto static constexpr gpu  = alloc_mode == damn::AllocatorMode::GPU_UNIFIED;
     using Op                   = damn::core::Operators<chunk_offset_t, /*atomic=*/gpu, /*GPU=*/gpu>;
     auto static constexpr none = std::numeric_limits<chunk_offset_t>::max(); // a gap's slot

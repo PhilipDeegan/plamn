@@ -46,7 +46,8 @@ struct UsableTensorFieldImpl
     using Layout_t     = Options::Layout_t;
     using Grid_t       = Options::Grid_t;
     using Field_t      = Options::Field_t;
-    using Super_t      = TensorField<Field_t, HybridQuantity, opts.rank>;
+    using Quantity     = decltype(Layout_t::options)::FieldOptions::Quantity; // Hybrid or MHD
+    using Super_t      = TensorField<Field_t, Quantity, opts.rank>;
 };
 
 
@@ -164,7 +165,7 @@ public:
 protected:
     auto static make_grids(auto const& compNames, auto const& layout, tensor_t qty)
     {
-        auto qts = HybridQuantity::componentsQuantities(qty);
+        auto qts = Impl_t::Quantity::componentsQuantities(qty);
         return damn::core::for_N<N_elements, damn::core::for_N_R_mode::make_array>(
             [&](auto i) { return Grid_t{compNames[i], layout, qts[i], 0}; });
     }

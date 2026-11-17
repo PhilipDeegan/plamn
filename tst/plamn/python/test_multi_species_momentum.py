@@ -6,14 +6,14 @@ uniform magnetic field and no current. With J = 0 the total force on the ions is
 (sum_s q_s n_s V_s - Ne Ve) x B, which vanishes only if the electron velocity is the
 charge-weighted ion velocity. The total ion momentum, i.e. the mass-weighted bulk velocity, must
 then stay constant. Using the mass-weighted velocity in Ohm's law instead makes it rotate
-(PHAREHUB/PHARE#1466).
+(the multi species momentum fix).
 """
 
 import unittest
 
 import numpy as np
 
-import pyplamn
+import plamn
 
 
 import pyphare.pharein as ph
@@ -95,7 +95,7 @@ def level_bulk_velocity(simulator, ilvl):
 class MultiSpeciesMomentumTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        pyplamn.patch()
+        plamn.patch()
 
     def tearDown(self):
         if hasattr(self, "simulator"):

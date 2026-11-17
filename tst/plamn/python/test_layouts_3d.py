@@ -72,7 +72,7 @@ PARTICLE_COLUMNS = (
 
 
 def module_built(layout, allocator):
-    name = f"pyplamn.plamn_cpp_{NDIM}_{INTERP}_{REFINED}_{layout}_{allocator}"
+    name = f"plamn.plamn_cpp_{NDIM}_{INTERP}_{REFINED}_{layout}_{allocator}"
     try:
         return importlib.util.find_spec(name) is not None
     except ModuleNotFoundError:
@@ -150,9 +150,9 @@ def state(simulator, np):
 def run(case, layout, allocator, out):
     import numpy as np
 
-    import pyplamn
+    import plamn
 
-    pyplamn.patch()
+    plamn.patch()
     import pyphare.pharein as ph
     from pyphare.core.box import nDBox
     from pyphare.simulator.simulator import Simulator, startMPI

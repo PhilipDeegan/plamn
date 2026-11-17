@@ -24,7 +24,7 @@ constexpr inline std::uint32_t roundUpToEven(std::uint32_t n)
  * @brief Most cells a domain particle may move in one advance (two half pushes): a CFL for
  * particles.
  *
- * A domain particle moving further throws (PHAREHUB/PHARE#1565); level ghost particles leaving the
+ * A domain particle moving further throws (the cell jump limit); level ghost particles leaving the
  * particle ghost box are dropped. The particle and field ghost widths below follow from it.
  * PLAMN_PARTICLE_ALLOWED_CELL_JUMP=1: PHARE master's widths (fields 2, 4, 4 and particles 1, 2, 2
  * for interp 1, 2, 3), e.g. to compare with PHARE

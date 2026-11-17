@@ -79,7 +79,7 @@ jobs:
     - run: |
         curl -Lo mkn https://github.com/mkn/mkn/releases/download/latest/mkn_nix
         chmod +x mkn
-        KLOG=3 ./mkn build -dtKOqp iwyu_fix -Wx res/mkn/mpi # build: the module must link
+        KLOG=3 ./mkn build -dKOqp iwyu_fix -Wx res/mkn/mpi -t 4 # build: the module must link
         git config --global --add safe.directory "$PWD"
         if ! git diff --exit-code -- inc src tst; then
           echo "run: mkn build -p iwyu_fix -x res/mkn/mpi, and commit the result"

@@ -10,7 +10,8 @@
 //   due(diagnostic, t, dt)               PHARE's schedule: a timestamp within dt of t (as
 //                                        floats), past ones caught up
 //   file_name(quantity)                  /ions/pop/protons/flux -> ions_pop_protons_flux.vtkhdf
-//   hybrid_quantities(population_names)  quantity -> its fields on a patch (PHAREHUB/PHARE#1476's
+//   hybrid_quantities(population_names)  quantity -> its fields on a patch (PHARE's VTKHDF
+//   diagnostics'
 //                                        accessors), components in file order; an unknown
 //                                        quantity throws (quantity_for)
 //   primal_into(PrimalInto{field, cells, out, n_components, component})
@@ -72,7 +73,7 @@ NO_DISCARD inline std::vector<Diagnostic> diagnostics_from(initializer::Dict con
             if (!diags[type].contains(key))
                 break;
             auto const& d = diags[type][key];
-            Diagnostic diag{type, d["quantity"].template to<std::string>()};
+            Diagnostic diag{.type = type, .quantity = d["quantity"].template to<std::string>()};
             if (d.contains("write_timestamps"))
                 diag.timestamps = d["write_timestamps"].template to<std::vector<double>>();
             if (d.contains("flush_every"))

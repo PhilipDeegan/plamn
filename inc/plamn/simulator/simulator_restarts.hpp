@@ -10,7 +10,7 @@
 //     /level<ln>    a damn::hdf5 checkpoint of EM_B_*, EM_E_*, each population's domain
 //                   particles and moments; /clustered<ln>: the boxes the level was clustered to
 //
-// only what the next step needs and cannot rebuild bit for bit (PHAREHUB/PHARE#1410): B, E and
+// only what the next step needs and cannot rebuild bit for bit (as PHARE's restarts): B, E and
 // the populations' moments with their ghosts (a refined level's level ghosts were filled from
 // the coarser level before its synchronization; the moments' border sums and coarsenings come
 // in an order a fresh deposit does not repeat), and the domain particles. The total moments,

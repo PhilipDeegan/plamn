@@ -17,9 +17,9 @@ populations = {"protons": (1.0, 1.0), "alpha": (4.0, 2.0)}  # name: (mass, charg
 
 
 def declare():
-    import pyplamn
+    import plamn
 
-    pyplamn.patch()
+    plamn.patch()
 
     import pyphare.pharein as ph
 

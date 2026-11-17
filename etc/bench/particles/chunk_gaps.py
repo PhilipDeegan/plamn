@@ -5,7 +5,7 @@ diagnostics, one process (one rank, one thread) per run, each slack (PLAMN_CHUNK
 gaps, the post push sync and the exchange sort each time) in turn, repeated. --vbulk: the
 protons drift along x (about along B: little v x B), every particle's cell changing the same way
 
-  PYTHONPATH=python:<pyphare> python3 etc/bench/particles/chunk_gaps.py \\
+  PYTHONPATH=.:<pyphare> python3 etc/bench/particles/chunk_gaps.py \\
       [--case harris_2d|harris_3d] [--vbulk 0] [--steps 20] [--ppc 100] \\
       [--slacks 0,.05,.1,.2] [--repeat 2]
 
@@ -43,9 +43,9 @@ def child(case, vbulk, steps, ppc):
     cases.PPC = ppc
     cases._diagnostics = lambda *args, **kwargs: None  # timing the steps, not the dumps
 
-    import pyplamn
+    import plamn
 
-    pyplamn.patch()
+    plamn.patch()
     from pyphare.simulator.simulator import Simulator, startMPI
 
     import pyphare.pharein as ph
@@ -98,7 +98,7 @@ def run(slack, args):
     with tempfile.TemporaryDirectory() as tmp:
         paths = [str(Path(p).resolve()) for p in os.environ.get("PYTHONPATH", "").split(":") if p]
         env = dict(os.environ, PLAMN_CHUNK_SLACK=str(slack), PHARE_SCOPE_TIMING="1",
-                   PYTHONPATH=":".join([str(ROOT / "python")] + paths))  # run in tmp
+                   PYTHONPATH=":".join([str(ROOT)] + paths))  # run in tmp
         env.pop("PHARE_THREAD_POOLS", None)
         env.pop("PHARE_THREADS_PER_POOL", None)
         out = subprocess.run(

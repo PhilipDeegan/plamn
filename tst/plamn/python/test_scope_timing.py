@@ -1,4 +1,4 @@
-"""PHARE_SCOPE_TIMING=1: phlop's scope timers (DAMN_LOG_SCOPE, PHAREHUB/PHARE#1585), one file per
+"""PHARE_SCOPE_TIMING=1: phlop's scope timers (DAMN_LOG_SCOPE, as PHARE's), one file per
 rank, .phare/timings/rank.<r>.txt, written when the simulator goes; and Simulator.summary(), as
 PHARE's. On any number of ranks (phlop: --tags mpi runs it on 3):
 
@@ -12,7 +12,7 @@ import re
 import unittest
 from pathlib import Path
 
-import pyplamn
+import plamn
 
 
 import alfven1d
@@ -49,7 +49,7 @@ def config():
 class ScopeTimingTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        pyplamn.patch()
+        plamn.patch()
 
     def test_a_file_per_rank_and_summary(self):
         cwd = Path.cwd()

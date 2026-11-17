@@ -160,13 +160,13 @@ def scope_ms(path, key):
 def run(args):
     """one configuration: every rank dumps, writes its numbers, rank 0 gathers them"""
     import numpy as np
-    import pyplamn
+    import plamn
 
-    pyplamn.patch()
+    plamn.patch()
     from pyphare.simulator.simulator import Simulator, startMPI
 
     startMPI()
-    etc = pyplamn.etc
+    etc = plamn.etc
     rank, size = etc.mpi_rank(), etc.mpi_size()
     out = "diags"
 
@@ -285,7 +285,7 @@ def sweep(args):
     work = Path(args.work).resolve()
     env = dict(
         os.environ,
-        PYTHONPATH=os.pathsep.join([str(ROOT / "python"), str(PYPHARE / "pyphare")]),
+        PYTHONPATH=os.pathsep.join([str(ROOT), str(PYPHARE / "pyphare")]),
         PHARE_SCOPE_TIMING="1",
         OMP_NUM_THREADS="1",
     )

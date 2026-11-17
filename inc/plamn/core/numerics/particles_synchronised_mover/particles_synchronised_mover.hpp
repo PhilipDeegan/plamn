@@ -46,7 +46,7 @@ namespace plamn::core
 // deleted, level ghosts entering it become domain particles. A level ghost lives in one patch
 // only (Simulator's own_level_ghosts_): one in a cell another patch of the level covers is
 // handed to that patch as a patch ghost, as a domain particle would be (no other patch has a
-// copy of it to keep instead, PHAREHUB/PHARE#1579); one leaving the ghost box is deleted
+// copy of it to keep instead, the level ghost duplicate fix); one leaving the ghost box is deleted
 namespace detail
 {
     template<typename Particles_t>
@@ -248,7 +248,7 @@ void post_move_sync(Particles_t& domain, Particles_t& patchGhost, Particles_t& l
 
 // the moments of a patch's domain particles, reset first, to be completed by the border sums: as
 //  at level initialization, after mode all's push and the particle exchange, every particle on
-//  the patch owning its cell (PHAREHUB/PHARE#1441's depositDomain: leavers deposited once, by
+//  the patch owning its cell (PHARE's depositDomain after the exchange: leavers deposited once, by
 //  their new patch)
 template<std::size_t dim, std::size_t interp_order>
 void deposit_domain(auto& ions, auto const& layout)

@@ -18,11 +18,11 @@ Environment (defaults in brackets):
   LADDER_REF     reference code [master]
   LADDER_CMP     compared code [plamn]
   PHARE_DIR      the PHARE checkout whose pyphare plamn runs with [/mkn/git/phare/master]
-  PHARESEE_DIR   PHAREHUB/PHARE#1595 checkout, the reader [/mkn/git/phare/pr_1595]
+  PHARESEE_DIR   the pharesee VTKHDF reader's checkout [/mkn/git/phare/pr_1595]
   LADDER_NP      MPI ranks per run [1]
   LADDER_OUT     where the runs write [phare_outputs/compare]
   LADDER_FORMAT  phareh5 (fields in their centering, particles, every time read directly) or
-                 pharevtkhdf (PHAREHUB/PHARE#1595's reader, particles from the data wrangler)
+                 pharevtkhdf (the pharesee VTKHDF reader, particles from the data wrangler)
                  [phareh5]
   LADDER_FINE_DUMP  1: fine_dump_lvl_max too (cases.py's _diag_options) [1]
   LADDER_NDIM    the dimension (2 or 3; harris_2d is 2D only), runs in <case>_<variant>_<n>d
@@ -47,7 +47,7 @@ MIN_OVERLAP = 0.9  # tagged levels (harris_2d); refinement boxes must overlap fu
 TOLERANCE = {"EM_B": 1e-14, "EM_E": 1e-13, "moments": 1e-13}  # atol per kind
 PHARES = {  # name: PHARE checkout with a CMake build in build/
     "master": "/mkn/git/phare/master",
-    # master (dc62fdd4e) + PHAREHUB/PHARE#1583 (#1579-#1581 in it) + #1582: patch layout
+    # master (dc62fdd4e) + the level ghost and patch layout fixes: patch layout
     #  independent level ghosts, ordered border sums, no ion border max, level 0 B ghosts
     "next": "/mkn/git/phare/next",
     "tiling_gpu": "/mkn/git/phare/tiling_gpu",
@@ -66,7 +66,7 @@ def phare_dir(code):
 def environment(code):
     """PYTHONPATH of a run_case.py process for ``code`` (plamn, or a PHARE name / path)."""
     if code == "plamn":
-        paths = [PLAMN / "python", Path(setting("PHARE_DIR", PHARES["master"])) / "pyphare"]
+        paths = [PLAMN, Path(setting("PHARE_DIR", PHARES["master"])) / "pyphare"]
     else:
         phare = phare_dir(code)
         if not (phare / "build" / "pybindlibs").is_dir():

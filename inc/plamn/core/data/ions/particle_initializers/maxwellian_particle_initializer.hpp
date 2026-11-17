@@ -256,7 +256,7 @@ void MaxwellianParticleInitializer<Particles_t, Layout>::loadParticles(Particles
             damn::core::cell_key(seed, populationKey_, layout.level, iCell)};
         ParticleDeltaDistribution<double> deltaDistrib;
         std::array<double, 3> particleVelocity;
-        std::array<std::array<double, 3>, 3> basis;
+        std::array<std::array<double, 3>, 3> basis{}; // set and read only for Basis::Magnetic
 
         if (basis_ == Basis::Magnetic)
         {

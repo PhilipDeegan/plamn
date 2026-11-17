@@ -292,7 +292,7 @@ inline auto sum_not_nan(basic::Field<opts> const& f)
 
 
 template<auto opts>
-void check_field(basic::Field<opts> const& f, auto const& layout)
+void check_field(basic::Field<opts> const& /*f*/, auto const& /*layout*/)
 {
 }
 

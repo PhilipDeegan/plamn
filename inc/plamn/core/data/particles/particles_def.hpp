@@ -199,15 +199,15 @@ auto it_dist(I0&& i0, I1&& i1)
 }
 
 
-// !!! TODO(PHAREHUB/PHARE#1565): TEMPORARY, REMOVE WITH #1565 !!!
+// !!! TODO(cell-jump-limit): TEMPORARY, REMOVE WITH THE CELL JUMP LIMIT !!!
 // cells to map around the particle ghost box, so the selectors (cell map partitions) see every
 // particle a push can produce. A half push moves a particle up to 2 cells (Boris throws past
 // that): level ghosts are selected after each half push, up to 2 cells past the ghost box;
 // domain particles after both, up to 4 cells past the domain, which is the ghost box shrunk by
 // the particle ghost width.
-// #1565 makes this irrelevant: domain particles throw before leaving the ghost box, level ghosts
-// out of it are dropped by a predicate before interpolation, not through the cell map. Then
-// remove this and the margin in make_particles below (grep "#1565").
+// the cell jump limit makes this irrelevant: domain particles throw before leaving the ghost box,
+// level ghosts out of it are dropped by a predicate before interpolation, not through the cell map.
+// Then remove this and the margin in make_particles below (grep "cell-jump-limit").
 NO_DISCARD int constexpr particleMapMargin(int const particleGhostWidth)
 {
     return std::max(2, 4 - particleGhostWidth);
@@ -225,7 +225,7 @@ Particles_t make_particles(damn::core::Box<T, D> const& box, std::size_t const g
         return Particles_t{box, ghost_cells};
     else if constexpr (damn::core::any_in(Particles_t::layout_mode, AoSMapped, SoAVXChunked))
     {
-        // !!! TODO(PHAREHUB/PHARE#1565): TEMPORARY margin, back to grow(box, ghost_cells) !!!
+        // !!! TODO(cell-jump-limit): TEMPORARY margin, back to grow(box, ghost_cells) !!!
         int const ghosts = static_cast<int>(ghost_cells);
         return Particles_t{damn::core::grow(box, ghosts + particleMapMargin(ghosts))};
     }

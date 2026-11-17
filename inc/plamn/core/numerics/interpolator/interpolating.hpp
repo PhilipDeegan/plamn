@@ -21,6 +21,10 @@
 
 #include "interpolator.hpp"
 
+#if defined(MKN_WITH_MKN_AVX) // cell_deposit_sorted
+#include "cell_gather.hpp"
+#endif
+
 #include <cassert>
 #include <string>
 #include <iostream>
@@ -159,8 +163,8 @@ public:
     // particles each tile deposits only its own, the reduction completes the tile seams
     // GPU_UNIFIED falls back to the CPU path until there's an optimized GPU version
     template<auto type = ParticleType::Domain, typename Particles>
-    void particleToMesh(Particles const& particles, auto const& layout, auto& rhoP, auto& flux,
-                        double coef = 1.)
+    void particleToMesh(Particles const& particles, auto const& /*layout: the tiles'*/, auto& rhoP,
+                        auto& flux, double coef = 1.)
         requires(damn::core::any_in(Particles::layout_mode, LayoutMode::AoSPCTS,
                                     LayoutMode::AoSCMTS))
     DAMN_ALL
@@ -206,8 +210,8 @@ public:
     }
 
     template<auto type = ParticleType::Domain, typename Particles>
-    void particleToMesh(Particles const& particles, auto const& layout, auto& rhoP, auto& flux,
-                        double coef = 1.)
+    void particleToMesh(Particles const& particles, auto const& /*layout: the tiles'*/, auto& rhoP,
+                        auto& flux, double coef = 1.)
         requires(Particles::layout_mode == LayoutMode::AoSTS)
     DAMN_ALL
     {
@@ -286,8 +290,19 @@ public:
         {
             if constexpr (is_soavx(Particles::layout_mode))
             {
+#if defined(MKN_WITH_MKN_AVX)
+                if constexpr (Particles::layout_mode == LayoutMode::SoAVXChunked
+                              and alloc_mode == damn::AllocatorMode::CPU and interpOrder == 1)
+                    if (particles.sorted() and coef == 1.)
+                    {
+                        cell_deposit_sorted<mkn::avx::Options::N<double>()>(particles, rhoP, flux,
+                                                                            layout);
+                        return;
+                    }
+#endif
                 for (auto const& it : particles)
-                    interp_.particleToMesh(it, rhoP, flux, layout, coef);
+                    if (it.weight() != 0) // SoAVXChunked's gaps
+                        interp_.particleToMesh(it, rhoP, flux, layout, coef);
             }
             else
                 interp_(particles, rhoP, flux, layout, coef);

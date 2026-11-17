@@ -4,7 +4,7 @@
 # PYPHARE: the PHARE checkout pyphare comes from (default ~/git/phare/mkn).
 #   res/ci/local.sh [base, default origin/next: PRs target next]
 set -euo pipefail
-BASE=${1:-origin/next}
+BASE=${1:-origin/master} # as CI: the PR base (next -> master)
 J=${JOBS:-8}
 PYPHARE=${PYPHARE:-$HOME/git/phare/mkn}
 mb=$(git merge-base "$BASE" HEAD)
@@ -24,7 +24,7 @@ for t in bin/test_plamn_diagnostics/test/*_test_diagnostics_*d.cpp; do
 done
 
 step "python tests: one process each, the 1 and 3 rank cases at the same time (as CI)"
-PYTHONPATH=python:$PYPHARE/pyphare:tst/plamn/python \
+PYTHONPATH=.:$PYPHARE/pyphare:tst/plamn/python \
   python3 -m phlop.run.test_cases -i tst -c 4 --tags mpi
 
 step "clang-format (changed lines)"

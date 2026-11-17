@@ -1,6 +1,6 @@
 // pharevtkhdf diagnostics from C++, as PHARE's tests/diagnostic (test-diagnostics.cpp): the
 // simulation is a python script (diagnostics_job.py), run by an embedded interpreter through
-// pyphare and pyplamn, which fill plamn's Dict; the Simulator is made from that Dict here, dumps,
+// pyphare and plamn, which fill plamn's Dict; the Simulator is made from that Dict here, dumps,
 // and the files are read back with HighFive and checked against the patches' data:
 //
 //   every file: PHARE's root attributes, VTKHDF's, one step at t0
@@ -14,7 +14,7 @@
 // dimension binaries keep a compile's memory down); run from the plamn root, on any number of
 // ranks. PYPHARE: the PHARE checkout pyphare comes from (default ~/git/phare/mkn)
 //
-// the Dict is handed over by address (pyplamn's Dict.address()): plamn_etc and this binary are
+// the Dict is handed over by address (plamn's Dict.address()): plamn_etc and this binary are
 // built from the same headers, the Dict is used in place, the interpreter kept alive meanwhile
 // (its init functions are python callables)
 
@@ -66,7 +66,7 @@ using Point         = damn::core::Point<int, dim>;
 std::vector<std::tuple<std::string, double, double>> const populations{{"protons", 1., 1.},
                                                                        {"alpha", 4., 2.}};
 
-plamn::initializer::Dict* dict = nullptr; // pyplamn's, filled by the job
+plamn::initializer::Dict* dict = nullptr; // plamn's, filled by the job
 std::string out_dir;
 
 int rank()
@@ -354,14 +354,14 @@ int main(int argc, char** argv)
     {
         auto const job = R"(
 import os, sys
-sys.path[:0] = ["python", os.environ.get("PYPHARE", os.path.expanduser("~/git/phare/mkn"))
+sys.path[:0] = [".", os.environ.get("PYPHARE", os.path.expanduser("~/git/phare/mkn"))
                 + "/pyphare", "tst/plamn/simulator"]
 import diagnostics_job
 diagnostics_job.declare()
 import pyphare.pharein as ph
 ph.populateDict()
-import pyplamn
-plamn_dict = pyplamn.current_dict().address()
+import plamn
+plamn_dict = plamn.current_dict().address()
 )";
         if (PyRun_SimpleString(job) != 0)
             throw std::runtime_error("diagnostics_job.py failed");
@@ -372,7 +372,7 @@ plamn_dict = pyplamn.current_dict().address()
 
         result = RUN_ALL_TESTS();
     }
-    // the Dict's python functions go with the interpreter (pyplamn's atexit clear_dict)
+    // the Dict's python functions go with the interpreter (plamn's atexit clear_dict)
     Py_Finalize();
 
     // a failed run's files kept to look at, as PHARE

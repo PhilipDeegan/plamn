@@ -170,9 +170,6 @@ void transform(FieldTileSet<GL, ND, PQ> const& in0, FieldTileSet<GL, ND, PQ> con
 
     for (std::size_t i = 0; i < size; ++i)
     {
-        auto& i0 = in0[i]();
-        auto& i1 = in1[i]();
-        auto& o0 = out[i]();
         std::transform(in0[i]().begin(), in0[i]().end(), in1[i]().begin(), out[i]().begin(), fn);
     }
 }

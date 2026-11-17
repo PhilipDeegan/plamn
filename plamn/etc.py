@@ -1,6 +1,6 @@
 """plamn's stand-in for pyphare's pybindlibs.cpp_etc
 
-pyphare.cpp.cpp_etc_lib() returns this module once pyplamn.patch() ran. MPI is plamn_etc's:
+pyphare.cpp.cpp_etc_lib() returns this module once plamn.patch() ran. MPI is plamn_etc's:
 started by pyphare's startMPI() (SamraiLifeCycle is MPI's life cycle), finalized at exit.
 """
 

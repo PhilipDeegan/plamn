@@ -14,7 +14,7 @@ profile:
   self: damn
   arg: -std=c++20
 
-# python module: pyphare's dict and enums, installed into python/pyplamn
+# python module: pyphare's dict and enums, installed into plamn
 - name: py_etc
   parent: base
   self: damn_hdf5
@@ -23,7 +23,7 @@ profile:
   src: src/python3/plamn_etc.cpp
   mode: shared
   out: plamn_etc
-  install: python/pyplamn
+  install: plamn
 
 # python modules: a simulator permutation, ./mkn.py builds any (default: 1D, interp 1,
 # AoSMapped, CPU)
@@ -35,7 +35,7 @@ profile:
   src: src/python3/plamn_sim.cpp
   mode: shared
   out: plamn_cpp_1_1_2_AoSMapped_CPU
-  install: python/pyplamn
+  install: plamn
 
 - name: test_plamn_core
   inc: . tpp/damn
@@ -51,12 +51,17 @@ profile:
         tst/plamn/core/numerics/particles_synchronised_mover/test_level_updater.cpp
         tst/plamn/core/numerics/faraday/test_tileset_faraday.cpp
         tst/plamn/core/numerics/ampere/test_tileset_ampere.cpp
+        tst/plamn/core/numerics/primitive_conservative/test_primitive_conservative.cpp
+        tst/plamn/core/numerics/godunov/test_godunov.cpp
+        tst/plamn/core/numerics/constrained_transport/test_upwind_ct.cpp
+        tst/plamn/core/numerics/finite_volume/test_finite_volume_euler.cpp
+        tst/plamn/core/numerics/time_integrator/test_mhd_time_integrator.cpp
         tst/plamn/core/numerics/ohm/test_tileset_ohm.cpp
         tst/plamn/amr/test_refine_coarsen.cpp
         tst/plamn/amr/test_tagging.cpp
 
 # C++ diagnostics tests embedding python (PHARE's tests/diagnostic): the simulation from
-# tst/plamn/simulator/diagnostics_job.py, through pyphare and pyplamn (py_etc built first:
+# tst/plamn/simulator/diagnostics_job.py, through pyphare and plamn (py_etc built first:
 # ./mkn.py). MPI: -x res/mkn/mpi; run from the root, e.g. mpirun -n 3 bin/.../test_diagnostics_2d
 # libpython linked (MKN_PYTHON_LIB_EMBED): needs lang.python3 linking libpython3.<minor>, not
 # the stable ABI stub libpython3
