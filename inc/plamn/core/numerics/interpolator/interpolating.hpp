@@ -296,7 +296,7 @@ public:
                     if (particles.sorted() and coef == 1.)
                     {
                         cell_deposit_sorted<mkn::avx::Options::N<double>()>(particles, rhoP, flux,
-                                                                           layout);
+                                                                            layout);
                         return;
                     }
 #endif
