@@ -1133,8 +1133,8 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
         };
 
         using Gather_t = CellGatherV<dim, L>;
-        static constexpr bool per_cell
-            = type == ParticleType::Domain and Interpolator_t::interp_order == 1;
+        // sorted arrays (domain, and level ghosts: on_moved / on_appended sort them too)
+        static constexpr bool per_cell = Interpolator_t::interp_order == 1;
         Gather_t const* const none = nullptr;
         std::array<int, dim> const no_cell{};
 
@@ -1147,6 +1147,12 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
                     auto const [b, size] = particles.cell_range(cell);
                     if (size == 0)
                         return;
+                    if (!isIn(cell, boxing.ghostBox)) // the stencils would leave the fields:
+                    {                                 //  per lane (not accelerated anyway)
+                        for (std::size_t i = b; i < b + size; i += L)
+                            block(i, std::min(L, b + size - i), none, no_cell, nullptr);
+                        return;
+                    }
                     g.load(em, layout, cell);
                     std::array<int, dim> amr;
                     for (std::size_t k = 0; k < dim; ++k)
