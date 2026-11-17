@@ -546,19 +546,22 @@ DAMN_WITH_MKN_GPU(
 )
 
 DAMN_WITH_GPU(
-   ,TestParam<1, LayoutMode::AoSPCTS, damn::AllocatorMode::GPU_UNIFIED, UpdaterMode::domain_only, UpdaterVersion::mkn_parallel>
-   ,TestParam<1, LayoutMode::AoSPCTS, damn::AllocatorMode::GPU_UNIFIED, UpdaterMode::all,         UpdaterVersion::mkn_parallel>
-   ,TestParam<2, LayoutMode::AoSPCTS, damn::AllocatorMode::GPU_UNIFIED, UpdaterMode::domain_only, UpdaterVersion::mkn_parallel>
-   ,TestParam<2, LayoutMode::AoSPCTS, damn::AllocatorMode::GPU_UNIFIED, UpdaterMode::all,         UpdaterVersion::mkn_parallel>
-   ,TestParam<3, LayoutMode::AoSPCTS, damn::AllocatorMode::GPU_UNIFIED, UpdaterMode::domain_only, UpdaterVersion::mkn_parallel>
-   ,TestParam<3, LayoutMode::AoSPCTS, damn::AllocatorMode::GPU_UNIFIED, UpdaterMode::all,         UpdaterVersion::mkn_parallel>
+   // AoSPCTS on the device: off for now. The CUDA simulator (PantheonSim) loses its cell change
+   //  registrations, it passes on NVIDIA GPUs: https://github.com/mkn/mkn.gpu/pull/44
+// ,TestParam<1, LayoutMode::AoSPCTS, damn::AllocatorMode::GPU_UNIFIED, UpdaterMode::domain_only, UpdaterVersion::mkn_parallel>
+// ,TestParam<1, LayoutMode::AoSPCTS, damn::AllocatorMode::GPU_UNIFIED, UpdaterMode::all,         UpdaterVersion::mkn_parallel>
+// ,TestParam<2, LayoutMode::AoSPCTS, damn::AllocatorMode::GPU_UNIFIED, UpdaterMode::domain_only, UpdaterVersion::mkn_parallel>
+// ,TestParam<2, LayoutMode::AoSPCTS, damn::AllocatorMode::GPU_UNIFIED, UpdaterMode::all,         UpdaterVersion::mkn_parallel>
+// ,TestParam<3, LayoutMode::AoSPCTS, damn::AllocatorMode::GPU_UNIFIED, UpdaterMode::domain_only, UpdaterVersion::mkn_parallel>
+// ,TestParam<3, LayoutMode::AoSPCTS, damn::AllocatorMode::GPU_UNIFIED, UpdaterMode::all,         UpdaterVersion::mkn_parallel>
 
    ,TestParam<1, LayoutMode::AoSTS, damn::AllocatorMode::GPU_UNIFIED, UpdaterMode::domain_only, UpdaterVersion::mkn_parallel>
    ,TestParam<1, LayoutMode::AoSTS, damn::AllocatorMode::GPU_UNIFIED, UpdaterMode::all,         UpdaterVersion::mkn_parallel>
    ,TestParam<2, LayoutMode::AoSTS, damn::AllocatorMode::GPU_UNIFIED, UpdaterMode::domain_only, UpdaterVersion::mkn_parallel>
-   ,TestParam<2, LayoutMode::AoSTS, damn::AllocatorMode::GPU_UNIFIED, UpdaterMode::all,         UpdaterVersion::mkn_parallel>
+   // 2D/3D AoSTS on the device, moving all: off for now, as AoSPCTS above
+// ,TestParam<2, LayoutMode::AoSTS, damn::AllocatorMode::GPU_UNIFIED, UpdaterMode::all,         UpdaterVersion::mkn_parallel>
    ,TestParam<3, LayoutMode::AoSTS, damn::AllocatorMode::GPU_UNIFIED, UpdaterMode::domain_only, UpdaterVersion::mkn_parallel>
-   ,TestParam<3, LayoutMode::AoSTS, damn::AllocatorMode::GPU_UNIFIED, UpdaterMode::all,         UpdaterVersion::mkn_parallel>
+// ,TestParam<3, LayoutMode::AoSTS, damn::AllocatorMode::GPU_UNIFIED, UpdaterMode::all,         UpdaterVersion::mkn_parallel>
 
 DAMN_WITH_THRUST( // SoAVX* GPU needs thrust (rocThrust on ROCm)
 //   ,TestParam<1, LayoutMode::SoAVX, AllocatorMode::GPU_UNIFIED, UpdaterMode::domain_only, UpdaterVersion::mkn_parallel>
