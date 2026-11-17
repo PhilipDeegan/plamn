@@ -5,13 +5,14 @@
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 #include "plamn/core/models/quantities/quantity.hpp"
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
-#include <type_traits>
 
-#if defined(MKN_WITH_MKN_AVX)
+#if defined(MKN_WITH_MKN_AVX) // the lane kernels below
 #include "mkn/avx.hpp"
+
+#include <algorithm>
+#include <type_traits>
 #endif
 
 // m2p at interpolation order 1 for the particles of one cell, on lanes: the E and B values

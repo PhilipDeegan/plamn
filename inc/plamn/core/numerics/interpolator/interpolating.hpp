@@ -19,8 +19,11 @@
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/arrays/particles_soavx.hpp"
 
-#include "cell_gather.hpp"
 #include "interpolator.hpp"
+
+#if defined(MKN_WITH_MKN_AVX) // cell_deposit_sorted
+#include "cell_gather.hpp"
+#endif
 
 #include <cassert>
 #include <string>
