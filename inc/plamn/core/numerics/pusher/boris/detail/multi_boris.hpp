@@ -854,12 +854,9 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
 
         auto const bc = [](double const x) { return Vd{mkn::avx::load<double, L>(x)}; };
         auto const store = [](double* p, Vd const& v) { mkn::avx::unaligned_store(p, v); };
-        auto const mask_of = [&](bool const (&b)[L]) {
-            double t[L];
-            for (std::size_t l = 0; l < L; ++l)
-                t[l] = b[l] ? 1. : 0.;
-            return mkn::avx::gt(mkn::avx::unaligned_load<double, L>(t), bc(.5));
-        };
+
+        auto const not_  = [&](Mk const& m) { return mkn::avx::gt(mkn::avx::select(m, bc(0.), bc(1.)), bc(.5)); };
+        Mk const none_m = mkn::avx::lt(bc(1.), bc(0.));
 
         Interpolator_t interp;
         auto& rhoP = pop.particleDensity();
@@ -883,6 +880,63 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
         }
 
         Vd w, d[dim], c[dim], v[3], E[3], B[3];
+
+        // per cell deposit (COPY, sorted domain arrays, order 1): the lanes ending the push in the
+        //  cell accumulate on lanes per node of its primal stencil (the cell and + 1 per
+        //  direction), summed over the lanes and added to the moments once after its blocks.
+        //  The weights from the deposit box's local index, as Interpolator::particleToMesh
+        static constexpr std::size_t nodes = std::size_t{1} << dim;
+        struct Window
+        {
+            Vd rho[nodes], f[3][nodes];
+            std::array<int, dim> lc; // the cell in the moments' local index
+            bool deposits = false;   // the cell is in the non level ghost box
+            bool touched  = false;
+        };
+        auto const dep_box = damn::core::grow(layout.cells, std::decay_t<decltype(layout)>::options.field_ghost_width);
+        auto const reset = [&](Window& win, auto const& cell) {
+            for (std::size_t n = 0; n < nodes; ++n)
+            {
+                win.rho[n] = bc(0.);
+                for (std::size_t k = 0; k < 3; ++k)
+                    win.f[k][n] = bc(0.);
+            }
+            for (std::size_t k = 0; k < dim; ++k)
+                win.lc[k] = cell[k] - dep_box.lower[k];
+            win.deposits = isIn(cell, boxing.nonLevelGhostBox);
+            win.touched  = false;
+        };
+        auto const hsum = [&](Vd const& x) {
+            double t[L];
+            store(t, x);
+            double sum = 0;
+            for (std::size_t l = 0; l < L; ++l)
+                sum += t[l];
+            return sum;
+        };
+        auto const at = [&](auto& field, std::array<int, dim> const& i) -> auto& {
+            if constexpr (dim == 1)
+                return field(i[0]);
+            else if constexpr (dim == 2)
+                return field(i[0], i[1]);
+            else
+                return field(i[0], i[1], i[2]);
+        };
+        auto const flush = [&](Window const& win) {
+            if (!win.touched)
+                return;
+            auto& [fx, fy, fz] = flux();
+            for (std::size_t n = 0; n < nodes; ++n)
+            {
+                auto idx = win.lc;
+                for (std::size_t k = 0; k < dim; ++k)
+                    idx[k] += (n >> (dim - 1 - k)) & 1;
+                at(rhoP, idx) += hsum(win.rho[n]);
+                at(fx, idx) += hsum(win.f[0][n]);
+                at(fy, idx) += hsum(win.f[1][n]);
+                at(fz, idx) += hsum(win.f[2][n]);
+            }
+        };
 
         // boris::advance on the lanes; a lane of m over the limit throws its exception
         auto const advance = [&](Mk const& m) {
@@ -929,7 +983,7 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
         };
 
         auto const block = [&](std::size_t const i0, std::size_t const n, auto const* g,
-                               auto const& cell) {
+                               auto const& cell, Window* win) {
             Mk const first = mkn::avx::lt(lane_idx, bc(static_cast<double>(n)));
             w              = mkn::avx::mask_load(first, W.data() + i0);
             for (std::size_t k = 0; k < dim; ++k)
@@ -946,41 +1000,34 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
 
             advance(live);
 
-            std::array<Particle_t, L> ps;
-            lane_particles(ps); // after the first half step
-            bool live_b[L], accel_b[L], in_cell_b[L];
-            {
-                double t[L];
-                store(t, w);
-                for (std::size_t l = 0; l < L; ++l)
-                {
-                    live_b[l]  = t[l] > 0;
-                    accel_b[l] = live_b[l];
-                    if constexpr (type == ParticleType::LevelGhost)
-                        accel_b[l] = accel_b[l] and isIn(ps[l].iCell(), boxing.ghostBox);
-                    in_cell_b[l] = g != nullptr;
-                    if (g)
-                        for (std::size_t k = 0; k < dim; ++k)
-                            in_cell_b[l] = in_cell_b[l] and ps[l].iCell()[k] == cell[k];
-                }
-            }
-            Mk const accel = mask_of(accel_b);
+            // the lanes' tests on the lanes: of m, those with their cell in [lo, hi]
+            auto const inside = [&](Mk m, auto const& lo, auto const& hi) {
+                for (std::size_t k = 0; k < dim; ++k)
+                    m = m
+                        & not_(mkn::avx::lt(c[k], bc(static_cast<double>(lo[k])))
+                               | mkn::avx::gt(c[k], bc(static_cast<double>(hi[k]))));
+                return m;
+            };
+            Mk accel = live;
+            if constexpr (type == ParticleType::LevelGhost)
+                accel = inside(live, boxing.ghostBox.lower, boxing.ghostBox.upper);
+            Mk const off = g ? accel & not_(inside(accel, cell, cell)) : accel;
 
+            std::array<Particle_t, L> ps; // per lane fallbacks only
             if (g)
                 g->gather(d, E, B);
-            bool any_off = false;
-            for (std::size_t l = 0; l < L; ++l)
-                any_off = any_off or (accel_b[l] and !in_cell_b[l]);
-            if (any_off) // m2p per lane for the lanes off the cell (or all, without g)
+            if (mkn::avx::any(off)) // m2p per lane for the lanes off the cell (or all, without g)
             {
-                double e[3][L], b[3][L];
+                lane_particles(ps);
+                double e[3][L], b[3][L], o[L];
+                store(o, mkn::avx::select(off, bc(1.), bc(0.)));
                 for (std::size_t k = 0; k < 3; ++k)
                 {
                     store(e[k], E[k]);
                     store(b[k], B[k]);
                 }
                 for (std::size_t l = 0; l < L; ++l)
-                    if (accel_b[l] and !in_cell_b[l])
+                    if (o[l] > .5)
                     {
                         auto const [pE, pB] = interp.m2p(ps[l], em, layout);
                         for (std::size_t k = 0; k < 3; ++k)
@@ -1034,20 +1081,50 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
 
             if constexpr (copy)
             {
-                lane_particles(ps);
-                for (std::size_t l = 0; l < L; ++l)
-                    if (accel_b[l] and isIn(ps[l].iCell(), boxing.nonLevelGhostBox))
-                        interp.particleToMesh(ps[l], rhoP, flux, layout);
+                Mk const in_win = (win and win->deposits) ? inside(accel, cell, cell) : none_m;
+                if (win and win->deposits)
+                {
+                    Vd const wt = mkn::avx::select(in_win, w, bc(0.));
+                    Vd Pw[dim][2];
+                    for (std::size_t k = 0; k < dim; ++k)
+                    {
+                        Vd const cv = bc(static_cast<double>(win->lc[k]));
+                        Pw[k][1]    = (cv + d[k]) - cv; // Weighter<1>, primal
+                        Pw[k][0]    = bc(1.) - Pw[k][1];
+                    }
+                    for (std::size_t nd = 0; nd < nodes; ++nd)
+                    {
+                        Vd x = wt * Pw[0][(nd >> (dim - 1)) & 1];
+                        for (std::size_t k = 1; k < dim; ++k)
+                            x = x * Pw[k][(nd >> (dim - 1 - k)) & 1];
+                        win->rho[nd] += x;
+                        for (std::size_t k = 0; k < 3; ++k)
+                            win->f[k][nd] += x * v[k];
+                    }
+                    win->touched = true;
+                }
+                Mk const rest = accel & not_(in_win); // deposited per lane, if in the box
+                if (mkn::avx::any(rest))
+                {
+                    lane_particles(ps);
+                    double r[L];
+                    store(r, mkn::avx::select(rest, bc(1.), bc(0.)));
+                    for (std::size_t l = 0; l < L; ++l)
+                        if (r[l] > .5 and isIn(ps[l].iCell(), boxing.nonLevelGhostBox))
+                            interp.particleToMesh(ps[l], rhoP, flux, layout);
+                }
             }
             else
             {
+                double lv[L];
+                store(lv, mkn::avx::select(live, bc(1.), bc(0.)));
                 for (std::size_t k = 0; k < dim; ++k)
                 {
                     mkn::avx::mask_store(live, D[k].data() + i0, d[k]);
                     double t[L];
                     store(t, c[k]);
                     for (std::size_t l = 0; l < n; ++l)
-                        if (live_b[l])
+                        if (lv[l] > .5)
                             C[k][i0 + l] = static_cast<int>(t[l]);
                 }
                 for (std::size_t k = 0; k < 3; ++k)
@@ -1065,6 +1142,7 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
             if (particles.sorted())
             {
                 Gather_t g;
+                Window win;
                 damn::core::for_each_point(particles.shell(), [&](auto const& cell) {
                     auto const [b, size] = particles.cell_range(cell);
                     if (size == 0)
@@ -1073,14 +1151,18 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
                     std::array<int, dim> amr;
                     for (std::size_t k = 0; k < dim; ++k)
                         amr[k] = cell[k];
+                    if constexpr (copy)
+                        reset(win, cell);
                     for (std::size_t i = b; i < b + size; i += L)
-                        block(i, std::min(L, b + size - i), &g, amr);
+                        block(i, std::min(L, b + size - i), &g, amr, copy ? &win : nullptr);
+                    if constexpr (copy)
+                        flush(win);
                 });
                 return;
             }
 
         for (std::size_t i = 0; i < particles.size(); i += L)
-            block(i, std::min(L, particles.size() - i), none, no_cell);
+            block(i, std::min(L, particles.size() - i), none, no_cell, nullptr);
     }
 #endif // MKN_WITH_MKN_AVX
 
