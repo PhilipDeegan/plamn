@@ -78,7 +78,7 @@ jobs:
         chmod +x mkn && mv mkn /usr/local/bin/mkn
     - name: Build/Test core
       run: |
-        KLOG=3 vgpu run mkn clean build test -dtKOqp test_plamn_core -x res/mkn/clang_cuda_ci
+        KLOG=3 vgpu run mkn clean build test -dKOqp test_plamn_core -x res/mkn/clang_cuda_ci -t 4
 
   # ROCm on a simulated AMD MI300X (gfx942), hipcc and rocThrust from the image's ROCm
   #  (res/mkn/hip_thrust.yaml, thrust is used only if its headers are found)
@@ -123,4 +123,4 @@ jobs:
         chmod +x mkn && mv mkn /usr/local/bin/mkn
     - name: Build/Test core
       run: |
-        KLOG=3 vgpu run mkn clean build test -dtKOqp test_plamn_core -x res/mkn/hip_thrust_ci
+        KLOG=3 vgpu run mkn clean build test -dKOqp test_plamn_core -x res/mkn/hip_thrust_ci -t 4

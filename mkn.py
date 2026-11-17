@@ -60,14 +60,14 @@ def has_name_option():
         return False
 
 
-def mkn(profile, extra, defines=(), out=None, own_dir=False):
+def mkn(profile, extra, jobs, defines=(), out=None, own_dir=False):
     # mkn rebuilds by timestamps, not compile arguments: each permutation builds in its own
     # directory (-N), or, with an mkn without -N, in a cleaned bin/<profile> (ccache keeps it
     # cheap)
     cmd = ["mkn"]
     if own_dir and not has_name_option():
         cmd += ["clean"]
-    cmd += ["build", "-p", profile, "-dKO", "-t", "8"]
+    cmd += ["build", "-p", profile, "-dKO", "-t", str(jobs)]
     if own_dir and has_name_option():
         cmd += ["-N", out]
     if out:
@@ -89,6 +89,7 @@ def main(argv):
     parser.add_argument("--layout", nargs="+", default=["AoSMapped"], choices=LAYOUTS)
     parser.add_argument("--allocator", nargs="+", default=["CPU"], choices=ALLOCATORS)
     parser.add_argument("--no-etc", action="store_true", help="don't build py_etc")
+    parser.add_argument("--jobs", type=int, default=8, help="mkn -t (CI: 4)")
     parser.add_argument(
         "--sync-pools", action="store_true", help="DAMN_THREAD_POOL_SYNC: no pool threads"
     )
@@ -134,7 +135,7 @@ def main(argv):
             return 1
         scoping += [f"-DDAMN_LOG_SCOPE_FLAGS_{level}={keys}"]
 
-    if not args.no_etc and mkn("py_etc", extra):
+    if not args.no_etc and mkn("py_etc", extra, args.jobs):
         return 1
 
     for dim, interp, layout, allocator in itertools.product(
@@ -154,7 +155,7 @@ def main(argv):
             f"-DPLAMN_SIM_ALLOCATOR={allocator}",
             f"-DPLAMN_SIM_MODULE={name}",
         ] + scoping
-        if mkn("py_sim", extra, defines, out=name, own_dir=True):
+        if mkn("py_sim", extra, args.jobs, defines, out=name, own_dir=True):
             return 1
     return 0
 
