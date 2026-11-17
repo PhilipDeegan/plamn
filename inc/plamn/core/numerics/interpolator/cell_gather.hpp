@@ -5,8 +5,10 @@
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 #include "plamn/core/models/quantities/quantity.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
+#include <type_traits>
 
 #if defined(MKN_WITH_MKN_AVX)
 #include "mkn/avx.hpp"
@@ -253,6 +255,140 @@ private:
         return x;
     }
 };
+
+// the deposit of a cell's particles at interpolation order 1, on lanes: per node of the cell's
+//  primal stencil (the cell and + 1 per direction) density and flux accumulate on lanes, summed
+//  over the lanes and added to the moments once (flush). The weights from the moments' local
+//  index of the cell, as Interpolator::particleToMesh (Weighter<1>, primal), its products in its
+//  order (weight, x, y, z); the sums per node differ from its particle by particle order
+template<std::size_t dim, std::size_t L>
+struct CellDepositV
+{
+    using V                            = mkn::avx::Type<double, L>;
+    using M                            = mkn::avx::Mask<double, L>;
+    static constexpr std::size_t nodes = std::size_t{1} << dim;
+
+    static V bc(double const x) { return V{mkn::avx::load<double, L>(x)}; }
+
+    // the cell (AMR) and the moments' ghost grown box (Interpolator::particleToMesh's)
+    void reset(auto const& cell, auto const& moments_box)
+    {
+        for (std::size_t n = 0; n < nodes; ++n)
+        {
+            rho[n] = bc(0.);
+            for (std::size_t k = 0; k < 3; ++k)
+                f[k][n] = bc(0.);
+        }
+        for (std::size_t k = 0; k < dim; ++k)
+            lc[k] = cell[k] - moments_box.lower[k];
+        touched = false;
+    }
+
+    // the lanes of m: their weight w, deltas d in the cell, velocities v
+    void add(M const& m, V const& w, V const (&d)[dim], V const (&v)[3])
+    {
+        V const wt = mkn::avx::select(m, w, bc(0.));
+        V P[dim][2];
+        for (std::size_t k = 0; k < dim; ++k)
+        {
+            V const c = bc(static_cast<double>(lc[k]));
+            P[k][1]   = (c + d[k]) - c;
+            P[k][0]   = bc(1.) - P[k][1];
+        }
+        for (std::size_t n = 0; n < nodes; ++n)
+        {
+            V x = wt * P[0][(n >> (dim - 1)) & 1];
+            for (std::size_t k = 1; k < dim; ++k)
+                x = x * P[k][(n >> (dim - 1 - k)) & 1];
+            rho[n] += x;
+            for (std::size_t k = 0; k < 3; ++k)
+                f[k][n] += x * v[k];
+        }
+        touched = true;
+    }
+
+    void flush(auto& density, auto& flux) const
+    {
+        if (!touched)
+            return;
+        auto& [fx, fy, fz] = flux();
+        for (std::size_t n = 0; n < nodes; ++n)
+        {
+            auto idx = lc;
+            for (std::size_t k = 0; k < dim; ++k)
+                idx[k] += (n >> (dim - 1 - k)) & 1;
+            at_(density, idx) += hsum_(rho[n]);
+            at_(fx, idx) += hsum_(f[0][n]);
+            at_(fy, idx) += hsum_(f[1][n]);
+            at_(fz, idx) += hsum_(f[2][n]);
+        }
+    }
+
+    V rho[nodes], f[3][nodes];
+    std::array<int, dim> lc;
+    bool touched = false;
+
+private:
+    static double hsum_(V const& x)
+    {
+        double t[L];
+        mkn::avx::unaligned_store(t, x);
+        double sum = 0;
+        for (std::size_t l = 0; l < L; ++l)
+            sum += t[l];
+        return sum;
+    }
+    static auto& at_(auto& field, std::array<int, dim> const& i)
+    {
+        if constexpr (dim == 1)
+            return field(i[0]);
+        else if constexpr (dim == 2)
+            return field(i[0], i[1]);
+        else
+            return field(i[0], i[1], i[2]);
+    }
+};
+
+// the deposit of a sorted SoAVXChunked array at order 1: cell by cell, its chunk in blocks of
+//  L slots (masked loads: past the chunk's end weight 0), every particle in its chunk's cell
+template<std::size_t L>
+void cell_deposit_sorted(auto const& particles, auto& density, auto& flux, auto const& layout)
+{
+    using Particles_t = std::decay_t<decltype(particles)>;
+    using Layout_t    = std::decay_t<decltype(layout)>;
+    static constexpr std::size_t dim = Particles_t::dimension;
+    using V                          = mkn::avx::Type<double, L>;
+    auto const moments_box = damn::core::grow(layout.cells, Layout_t::options.field_ghost_width);
+
+    auto const& W = particles.weight();
+    auto const& D = particles.delta();
+    auto const& Vc = particles.v();
+    double idx[L];
+    for (std::size_t l = 0; l < L; ++l)
+        idx[l] = static_cast<double>(l);
+    V const lane = mkn::avx::unaligned_load<double, L>(idx);
+
+    CellDepositV<dim, L> win;
+    damn::core::for_each_point(particles.shell(), [&](auto const& cell) {
+        auto const [b, size] = particles.cell_range(cell);
+        if (size == 0)
+            return;
+        win.reset(cell, moments_box);
+        for (std::size_t i = b; i < b + size; i += L)
+        {
+            auto const n     = std::min(L, b + size - i);
+            auto const first = mkn::avx::lt(lane, CellDepositV<dim, L>::bc(static_cast<double>(n)));
+            V const w        = mkn::avx::mask_load(first, W.data() + i);
+            V d[dim], v[3];
+            for (std::size_t k = 0; k < dim; ++k)
+                d[k] = mkn::avx::mask_load(first, D[k].data() + i);
+            for (std::size_t k = 0; k < 3; ++k)
+                v[k] = mkn::avx::mask_load(first, Vc[k].data() + i);
+            win.add(mkn::avx::gt(w, CellDepositV<dim, L>::bc(0.)), w, d, v);
+        }
+        win.flush(density, flux);
+    });
+}
 
 #endif // MKN_WITH_MKN_AVX
 

@@ -887,63 +887,19 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
 
         Vd w, d[dim], c[dim], v[3], E[3], B[3];
 
-        // per cell deposit (COPY, sorted domain arrays, order 1): the lanes ending the push in the
-        //  cell accumulate on lanes per node of its primal stencil (the cell and + 1 per
-        //  direction), summed over the lanes and added to the moments once after its blocks.
-        //  The weights from the deposit box's local index, as Interpolator::particleToMesh
-        static constexpr std::size_t nodes = std::size_t{1} << dim;
-        struct Window
+        // per cell deposit (COPY, sorted arrays, order 1): the lanes ending the push in the cell
+        //  (CellDepositV), when the cell is in the non level ghost box
+        struct Window : public CellDepositV<dim, L>
         {
-            Vd rho[nodes], f[3][nodes];
-            std::array<int, dim> lc; // the cell in the moments' local index
-            bool deposits = false;   // the cell is in the non level ghost box
-            bool touched  = false;
+            bool deposits = false;
         };
         auto const dep_box = damn::core::grow(
             layout.cells, std::decay_t<decltype(layout)>::options.field_ghost_width);
         auto const reset = [&](Window& win, auto const& cell) {
-            for (std::size_t n = 0; n < nodes; ++n)
-            {
-                win.rho[n] = bc(0.);
-                for (std::size_t k = 0; k < 3; ++k)
-                    win.f[k][n] = bc(0.);
-            }
-            for (std::size_t k = 0; k < dim; ++k)
-                win.lc[k] = cell[k] - dep_box.lower[k];
+            win.reset(cell, dep_box);
             win.deposits = isIn(cell, boxing.nonLevelGhostBox);
-            win.touched  = false;
         };
-        auto const hsum = [&](Vd const& x) {
-            double t[L];
-            store(t, x);
-            double sum = 0;
-            for (std::size_t l = 0; l < L; ++l)
-                sum += t[l];
-            return sum;
-        };
-        auto const at = [&](auto& field, std::array<int, dim> const& i) -> auto& {
-            if constexpr (dim == 1)
-                return field(i[0]);
-            else if constexpr (dim == 2)
-                return field(i[0], i[1]);
-            else
-                return field(i[0], i[1], i[2]);
-        };
-        auto const flush = [&](Window const& win) {
-            if (!win.touched)
-                return;
-            auto& [fx, fy, fz] = flux();
-            for (std::size_t n = 0; n < nodes; ++n)
-            {
-                auto idx = win.lc;
-                for (std::size_t k = 0; k < dim; ++k)
-                    idx[k] += (n >> (dim - 1 - k)) & 1;
-                at(rhoP, idx) += hsum(win.rho[n]);
-                at(fx, idx) += hsum(win.f[0][n]);
-                at(fy, idx) += hsum(win.f[1][n]);
-                at(fz, idx) += hsum(win.f[2][n]);
-            }
-        };
+        auto const flush = [&](Window const& win) { win.flush(rhoP, flux); };
 
         // boris::advance on the lanes; a lane of m over the limit throws its exception
         auto const advance = [&](Mk const& m) {
@@ -1093,26 +1049,7 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
             {
                 Mk const in_win = (win and win->deposits) ? inside(accel, cell, cell) : none_m;
                 if (win and win->deposits)
-                {
-                    Vd const wt = mkn::avx::select(in_win, w, bc(0.));
-                    Vd Pw[dim][2];
-                    for (std::size_t k = 0; k < dim; ++k)
-                    {
-                        Vd const cv = bc(static_cast<double>(win->lc[k]));
-                        Pw[k][1]    = (cv + d[k]) - cv; // Weighter<1>, primal
-                        Pw[k][0]    = bc(1.) - Pw[k][1];
-                    }
-                    for (std::size_t nd = 0; nd < nodes; ++nd)
-                    {
-                        Vd x = wt * Pw[0][(nd >> (dim - 1)) & 1];
-                        for (std::size_t k = 1; k < dim; ++k)
-                            x = x * Pw[k][(nd >> (dim - 1 - k)) & 1];
-                        win->rho[nd] += x;
-                        for (std::size_t k = 0; k < 3; ++k)
-                            win->f[k][nd] += x * v[k];
-                    }
-                    win->touched = true;
-                }
+                    win->add(in_win, w, d, v);
                 Mk const rest = accel & not_(in_win); // deposited per lane, if in the box
                 if (mkn::avx::any(rest))
                 {

@@ -19,6 +19,7 @@
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/arrays/particles_soavx.hpp"
 
+#include "cell_gather.hpp"
 #include "interpolator.hpp"
 
 #include <cassert>
@@ -286,8 +287,19 @@ public:
         {
             if constexpr (is_soavx(Particles::layout_mode))
             {
+#if defined(MKN_WITH_MKN_AVX)
+                if constexpr (Particles::layout_mode == LayoutMode::SoAVXChunked
+                              and alloc_mode == damn::AllocatorMode::CPU and interpOrder == 1)
+                    if (particles.sorted() and coef == 1.)
+                    {
+                        cell_deposit_sorted<mkn::avx::Options::N<double>()>(particles, rhoP, flux,
+                                                                           layout);
+                        return;
+                    }
+#endif
                 for (auto const& it : particles)
-                    interp_.particleToMesh(it, rhoP, flux, layout, coef);
+                    if (it.weight() != 0) // SoAVXChunked's gaps
+                        interp_.particleToMesh(it, rhoP, flux, layout, coef);
             }
             else
                 interp_(particles, rhoP, flux, layout, coef);
