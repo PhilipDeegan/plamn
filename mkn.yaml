@@ -55,6 +55,7 @@ profile:
         tst/plamn/core/numerics/godunov/test_godunov.cpp
         tst/plamn/core/numerics/constrained_transport/test_upwind_ct.cpp
         tst/plamn/core/numerics/finite_volume/test_finite_volume_euler.cpp
+        tst/plamn/core/numerics/time_integrator/test_mhd_time_integrator.cpp
         tst/plamn/core/numerics/ohm/test_tileset_ohm.cpp
         tst/plamn/amr/test_refine_coarsen.cpp
         tst/plamn/amr/test_tagging.cpp
