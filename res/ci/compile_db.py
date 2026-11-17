@@ -35,14 +35,33 @@ def unwrapped(args):
     return compiler[:1] + show("compile") + args[1:]
 
 
+NO_MODULE = "No loadable library found for project: "
+
+
+def dry_run(profile, extra):
+    """mkn build -RD of profile; a dry run compiles nothing, not even the mkn modules it must
+    load (lang.python3 ...: missing on a fresh machine), so each one it stops on is built, then
+    the dry run tried again"""
+    built = set()
+    while True:
+        run = subprocess.run(
+            ["mkn", "build", "-p", profile, "-RD", *extra], capture_output=True, text=True
+        )
+        if run.returncode == 0:
+            return
+        out = run.stdout + run.stderr
+        module = out.split(NO_MODULE)[1].split()[0] if NO_MODULE in out else None
+        if module is None or module in built:
+            sys.stderr.write(out)
+            raise subprocess.CalledProcessError(run.returncode, run.args)
+        built.add(module)
+        subprocess.run(["mkn", "build", "-C", module, *extra], check=True)
+
+
 def main(profiles, extra):
     shutil.rmtree(".mkn/log", ignore_errors=True)  # only this run's commands
     for profile in profiles.split(","):
-        subprocess.run(
-            ["mkn", "build", "-p", profile, "-RD", *extra],
-            check=True,
-            stdout=subprocess.DEVNULL,
-        )
+        dry_run(profile, extra)
     cwd = str(Path.cwd())
     entries = {}
     for txt in sorted(Path(".mkn/log").glob("*/*/cmd/*.txt")):
