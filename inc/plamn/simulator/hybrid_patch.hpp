@@ -14,12 +14,13 @@
 // for_each_resource names what damn's schedules may move:
 //   EM_B_x... EM_E_x..., EMPred_B_x..., EMAvg_E_x...,
 //   <pop>_density, <pop>_charge_density, <pop>_flux_x...,
+//   ions_charge_density, ions_charge_flux_x... (the totals, what a synchronization coarsens),
 //   EM_E_old_x..., EM_B_old_x..., EM_fluxSum_E_x... (AMR),
 //   <pop>_domain, <pop>_patch_ghost, <pop>_level_ghost[_old, _new] (particles)
 
 #include "damn/core/meta/for_N.hpp"
 #include "damn/core/geometry/box.hpp"
-
+#include "damn/core/sys/env.hpp"
 #include "plamn/core/def.hpp"
 #include "plamn/plamn_core.hpp"
 #include "plamn/amr/resources.hpp"
@@ -30,13 +31,13 @@
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 
 #include <array>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
 #include <cstddef>
 #include <limits>
 #include <optional>
-#include <format>
 #include <type_traits>
 #include <utility>
 
@@ -54,13 +55,18 @@ struct HybridPatch
     auto static constexpr field_ghost_width    = Layout_t::ghost_width;
     auto static constexpr particle_ghost_width = Layout_t::options.particle_ghost_width;
 
-    using Electromag_t                 = Types::Electromag_t;
-    using VecField_t                   = Types::VecField_t;
-    using Ions_t                       = Types::Ions_t;
-    using Electrons_t                  = Types::Electrons_t;
-    using ParticlesSynchronisedMover_t = core::ParticlesSynchronisedMover<Particles_t, Layout_t>;
-    using Boxing_t                     = ParticlesSynchronisedMover_t::Boxing_t;
-    using Box_t                        = damn::core::Box<int, dimension>;
+    using Electromag_t = Types::Electromag_t;
+    using VecField_t   = Types::VecField_t;
+    using Ions_t       = Types::Ions_t;
+    using Electrons_t  = Types::Electrons_t;
+    // AoSMapped: the serial per patch mover, else a level's (Simulator::move_ions_)
+    using ParticlesSynchronisedMover_t
+        = core::ParticlesSynchronisedMoverFor_t<Particles_t, Layout_t>;
+    static constexpr bool per_patch_mover
+        = std::is_same_v<ParticlesSynchronisedMover_t,
+                         core::ParticlesSynchronisedMover<Particles_t, Layout_t>>;
+    using Boxing_t = ParticlesSynchronisedMover_t::Boxing_t;
+    using Box_t    = damn::core::Box<int, dimension>;
 
     template<std::size_t N>
     using Grids = std::array<Grid_t, N>;
@@ -102,7 +108,6 @@ struct HybridPatch
             : density{grid(pop.particleDensity(), layout)}
             , charge_density{grid(pop.chargeDensity(), layout)}
             , flux{grids(pop.flux(), layout)}
-            , momentum{grids(pop.momentumTensor(), layout)}
             , domain{core::make_particles<Particles_t>(layout)}
             , patch_ghost{core::make_particles<Particles_t>(layout)}
             , level_ghost{core::make_particles<Particles_t>(layout)}
@@ -112,8 +117,15 @@ struct HybridPatch
                    &level_ghost, &level_ghost_old, &level_ghost_new}
         {
             auto&& [F, M, pd, cd, particles] = pop.getCompileTimeResourcesViewList();
-            bind(F, flux);
-            bind(M, momentum);
+            if constexpr (Particles_t::layout_mode == core::LayoutMode::SoAVXChunked)
+            { // the domain's chunks with gaps between them (particles_soavx_chunked.hpp): changes
+              //  of cell without a sort (PLAMN_CHUNK_SLACK, a fraction of the particles,
+              //  PLAMN_CHUNK_BORDER, the border cells' weight to 1 inside)
+                static double const slack  = damn::core::get_env_as("PLAMN_CHUNK_SLACK", .1);
+                static double const border = damn::core::get_env_as("PLAMN_CHUNK_BORDER", 3.);
+                domain.set_slack(slack, layout.cells, border);
+            }
+            bind(F, flux); // M: over scratch grids when computed (simulator_computed.hpp)
             pd.setBuffer(&density);
             cd.setBuffer(&charge_density);
             particles.setBuffer(&pack);
@@ -124,15 +136,24 @@ struct HybridPatch
 
         Grid_t density, charge_density;
         Grids<3> flux;
-        Grids<6> momentum;
         Particles_t domain, patch_ghost, level_ghost, level_ghost_old, level_ghost_new;
         core::ParticlesPack<Particles_t> pack;
     };
 
-    // dict: the "simulation" node; non_level_ghost: the cells around the patch other
-    // patches of the level cover, periodic images included (damn::amr::covered_by_level)
+    // the patch's particle ghost box and the level's other patches, periodic images included
+    //   non_level_ghost:  the cells other patches cover (damn::amr::covered_by_level)
+    //   owned_elsewhere:  the cells another patch holding them owns (the nearest): their
+    //                     level ghost particles are its alone (Simulator's own_level_ghosts_;
+    //                     damn::amr::owned_elsewhere)
+    struct Surroundings
+    {
+        std::vector<Box_t> non_level_ghost;
+        std::vector<Box_t> owned_elsewhere;
+    };
+
+    // dict: the "simulation" node
     HybridPatch(Layout_t const& layout_, initializer::Dict const& dict,
-                std::vector<Box_t> const& non_level_ghost)
+                Surroundings const& surroundings)
         : layout{layout_}
         , em{dict["electromag"]}
         , emPred{"EMPred"}
@@ -140,7 +161,8 @@ struct HybridPatch
         , J{"J", core::HybridQuantity::Vector::J}
         , Bold{"EM_B_old", core::HybridQuantity::Vector::B}
         , ions{dict["ions"]}
-        , boxing{std::in_place, layout, non_level_ghost}
+        , boxing{std::in_place, layout, surroundings.non_level_ghost}
+        , level_ghost_not_owned{surroundings.owned_elsewhere}
         , emE{grids(em.E, layout)}
         , emB{grids(em.B, layout)}
         , predE{grids(emPred.E, layout)}
@@ -152,7 +174,6 @@ struct HybridPatch
         , chargeDensity{grid(ions.chargeDensity(), layout)}
         , bulkVelocity{grids(ions.velocity(), layout)}
         , chargeFlux{grids(ions.chargeFlux(), layout)}
-        , momentum{grids(ions.momentumTensor(), layout)}
         , oldE{like(emE, "EM_E_old", layout)}
         , oldB{like(emB, "EM_B_old", layout)}
         , fluxSumE{like(emE, "EM_fluxSum_E", layout)}
@@ -167,8 +188,7 @@ struct HybridPatch
         bind(Bold, oldB);
 
         auto&& [bV, M, cd, md, cF] = ions.getCompileTimeResourcesViewList();
-        bind(bV, bulkVelocity);
-        bind(M, momentum);
+        bind(bV, bulkVelocity); // M: over scratch grids when computed
         cd.setBuffer(&chargeDensity);
         md.setBuffer(&massDensity);
         bind(cF, chargeFlux);
@@ -199,8 +219,6 @@ struct HybridPatch
                             &chargeFlux, &oldE, &oldB, &fluxSumE, &*electronVelocity})
             for (auto& g : *grids)
                 fn(g);
-        for (auto& g : momentum)
-            fn(g);
         fn(massDensity);
         fn(chargeDensity);
         fn(*electronPressure);
@@ -209,8 +227,6 @@ struct HybridPatch
             fn(pop->density);
             fn(pop->charge_density);
             for (auto& g : pop->flux)
-                fn(g);
-            for (auto& g : pop->momentum)
                 fn(g);
         }
     }
@@ -230,18 +246,30 @@ struct HybridPatch
     VecField_t Bold; // over oldB
     Ions_t ions;
     std::optional<Boxing_t> boxing; // the mover's: rebox() when the level's patches change
+    // the level ghost cells another patch owns: their level ghosts are its (Surroundings)
+    std::vector<Box_t> level_ghost_not_owned;
 
-    // the cells around the patch other patches of the level cover changed (a regrid)
-    void rebox(std::vector<Box_t> const& non_level_ghost)
+    // the level's other patches changed (a regrid)
+    void rebox(Surroundings const& surroundings)
     {
-        boxing.emplace(layout, non_level_ghost);
+        boxing.emplace(layout, surroundings.non_level_ghost);
+        level_ghost_not_owned = surroundings.owned_elsewhere;
     }
 
     // storage
     Grids<3> emE, emB, predE, predB, avgE, avgB, Jxyz;
     Grid_t massDensity, chargeDensity;
     Grids<3> bulkVelocity, chargeFlux;
-    Grids<6> momentum;
+    // computed quantities' grids (e.g. the momentum tensor), by name, made on first use and kept
+    // with the patch (simulator_computed.hpp)
+    std::map<std::string, Grid_t> scratch;
+    Grid_t& scratch_grid(std::string const& name, core::HybridQuantity::Scalar const qty)
+    {
+        auto it = scratch.find(name);
+        if (it == scratch.end())
+            it = scratch.try_emplace(name, name, layout, qty).first;
+        return it->second;
+    }
     // AMR: E and B at the start of the level's step (prepare_step), for the finer level's time
     // interpolation and the reflux; the time average of E over a coarser step (reflux)
     Grids<3> oldE, oldB, fluxSumE;
@@ -286,6 +314,10 @@ void for_each_resource(HybridPatch<opts>& patch, auto&& fn)
     detail::vector_resources<gw>("EM_B_old", patch.oldB, fn);
     detail::vector_resources<gw>("EM_fluxSum_E", patch.fluxSumE, fn);
 
+    auto charge_density = amr::field_resource<gw>(patch.chargeDensity);
+    fn("ions_charge_density", charge_density);
+    detail::vector_resources<gw>("ions_charge_flux", patch.chargeFlux, fn);
+
     for (auto& pop : patch.populations)
     {
         auto const& name = pop->pack._name;
@@ -295,8 +327,8 @@ void for_each_resource(HybridPatch<opts>& patch, auto&& fn)
         fn(name + "_charge_density", charge);
         detail::vector_resources<gw>(name + "_flux", pop->flux, fn);
 
-        auto domain      = amr::particle_resource<pgw>(pop->domain);
-        auto patch_ghost = amr::particle_resource<pgw>(pop->patch_ghost);
+        auto domain          = amr::particle_resource<pgw>(pop->domain);
+        auto patch_ghost     = amr::particle_resource<pgw>(pop->patch_ghost);
         auto level_ghost     = amr::particle_resource<pgw>(pop->level_ghost);
         auto level_ghost_old = amr::particle_resource<pgw>(pop->level_ghost_old);
         auto level_ghost_new = amr::particle_resource<pgw>(pop->level_ghost_new);
@@ -305,6 +337,11 @@ void for_each_resource(HybridPatch<opts>& patch, auto&& fn)
         fn(name + "_level_ghost", level_ghost);
         fn(name + "_level_ghost_old", level_ghost_old);
         fn(name + "_level_ghost_new", level_ghost_new);
+    }
+    for (auto& [name, grid] : patch.scratch)
+    {
+        auto r = amr::field_resource<gw>(grid);
+        fn(name, r);
     }
 }
 

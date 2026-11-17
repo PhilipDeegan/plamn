@@ -2,9 +2,9 @@
 # what CI runs (build_nix.yml, format.yml), locally: before marking a PR ready, instead of
 # spending Actions minutes. From the repository root; JOBS=8 compile jobs by default;
 # PYPHARE: the PHARE checkout pyphare comes from (default ~/git/phare/mkn).
-#   res/ci/local.sh [base, default origin/master]
+#   res/ci/local.sh [base, default origin/next: PRs target next]
 set -euo pipefail
-BASE=${1:-origin/master}
+BASE=${1:-origin/next}
 J=${JOBS:-8}
 PYPHARE=${PYPHARE:-$HOME/git/phare/mkn}
 mb=$(git merge-base "$BASE" HEAD)
@@ -16,6 +16,12 @@ mkn build test -p test_plamn_core -dKO -t "$J"
 
 step "python modules (1D, 2D)"
 ./mkn.py --dim 1 2
+
+step "C++ diagnostics tests (embedded python): 1 rank (mkn test), then 3"
+mkn build test -p test_plamn_diagnostics -dKO -t "$J" -x res/mkn/mpi
+for t in bin/test_plamn_diagnostics/test/*_test_diagnostics_*d.cpp; do
+  mpirun --oversubscribe -n 3 "$t"
+done
 
 step "python tests: one process each, the 1 and 3 rank cases at the same time (as CI)"
 PYTHONPATH=python:$PYPHARE/pyphare:tst/plamn/python \
@@ -30,7 +36,7 @@ mkn build -dKOqp iwyu_fix -t "$J" -Wx res/mkn/mpi >/dev/null
 git diff --exit-code -- inc src tst
 
 step "clang-tidy (changed lines)"
-python3 res/ci/compile_db.py test_plamn_core -dKO
+python3 res/ci/compile_db.py test_plamn_core,py_etc,py_sim -dKO -x res/mkn/mpi
 git diff -U0 "$mb" -- inc src tst \
   | clang-tidy-diff-22.py -clang-tidy-binary clang-tidy-22 -p1 -path . -j "$J" -quiet \
                           -iregex '.*\.(c|cc|cpp|h|hpp|ipp)' || true

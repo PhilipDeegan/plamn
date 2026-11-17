@@ -22,8 +22,10 @@ from .plamn_etc import (  # noqa: F401
     mpi_max,
     mpi_rank,
     mpi_size,
+    patch_data_ids,
+    restart_path_for_time,
+    serialized_simulation_string,
 )
-
 
 # ---------------------------------------------------------------- mpi
 

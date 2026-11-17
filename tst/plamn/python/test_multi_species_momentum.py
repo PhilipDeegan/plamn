@@ -15,10 +15,9 @@ import numpy as np
 
 import pyplamn
 
-pyplamn.patch()
 
-import pyphare.pharein as ph  # noqa: E402
-from pyphare.simulator.simulator import Simulator  # noqa: E402
+import pyphare.pharein as ph
+from pyphare.simulator.simulator import Simulator
 
 time_step = 0.005
 time_step_nbr = 100
@@ -94,6 +93,10 @@ def level_bulk_velocity(simulator, ilvl):
 
 
 class MultiSpeciesMomentumTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        pyplamn.patch()
+
     def tearDown(self):
         if hasattr(self, "simulator"):
             self.simulator.reset()
@@ -102,7 +105,9 @@ class MultiSpeciesMomentumTest(unittest.TestCase):
         self.simulator = Simulator(config(), log_to_file=False).setup().initialize()
         self.assertEqual(self.simulator.data_wrangler().getNumberOfLevels(), 1)
 
-        initial = level_bulk_velocity(self.simulator, 0)  # this rank's region: uniform plasma
+        initial = level_bulk_velocity(
+            self.simulator, 0
+        )  # this rank's region: uniform plasma
         for _ in range(time_step_nbr):
             self.simulator.advance()
         final = level_bulk_velocity(self.simulator, 0)

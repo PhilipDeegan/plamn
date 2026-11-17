@@ -4,6 +4,7 @@
 // plamn::Simulator: the input: hierarchy, refinement, tagging, load balancing, resources
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
+#include "damn/core/exec/thread_pool.hpp"
 #include "damn/amr/hierarchy.hpp"
 #include "damn/amr/neighbours.hpp"
 #include "damn/amr/topology.hpp"
@@ -28,6 +29,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <cstdlib>
 #include <type_traits>
 #include <vector>
 // plamn::Simulator: the input: hierarchy, refinement, tagging, load balancing, resources
@@ -58,16 +60,31 @@ void Simulator<opts>::setup_()
         timing_ = true;
     }
 
+    // damn's thread pools (process wide): pyphare's threading, PHARE_THREAD_POOLS and
+    //  PHARE_THREADS_PER_POOL first if set (as PHARE). A pool works a patch, its threads the
+    //  patch's tiles; reconfigured only when it differs
+    {
+        auto const setting = [&](char const* env, std::string const& key) {
+            if (auto const* v = std::getenv(env); v and *v)
+                return static_cast<std::size_t>(std::stoul(v));
+            return static_cast<std::size_t>(
+                cppdict::get_value(dict_, "simulation/threading/" + key, 1));
+        };
+        auto const pools   = setting("PHARE_THREAD_POOLS", "pools");
+        auto const threads = setting("PHARE_THREADS_PER_POOL", "threads_per_pool");
+        using Pool         = damn::core::ThreadPool;
+        if (pools != Pool::n_pools or threads != Pool::threads_per_pool)
+            Pool::INSTANCE().configure(pools, threads);
+    }
+
     auto const models = sim["models"].template to<std::vector<std::string>>();
     if (models != std::vector<std::string>{"HybridModel"})
         throw std::runtime_error("plamn Simulator: only HybridModel for now");
 
-    dt_          = cppdict::get_value(dict_, "simulation/time_step/value", 0.);
+    timestepper_ = Timestepper::FROM(dict_);
+    dt_          = timestepper_.dt();
     timeStepNbr_ = cppdict::get_value(dict_, "simulation/time_step_nbr", 0);
-    finalTime_   = sim["final_time"].template to<double>();
-    if (cppdict::get_value(dict_, "simulation/time_step/mode", TimeStepType::constant)
-        != TimeStepType::constant)
-        throw std::runtime_error("plamn Simulator: constant time step only for now");
+    finalTime_   = timestepper_.final_time();
 
     // the hierarchy: level 0 cells from 0, chopped into the largest patch size
     std::array<char const*, 3> constexpr xyz{"x", "y", "z"};
@@ -84,6 +101,14 @@ void Simulator<opts>::setup_()
         cellWidth_.push_back(hierarchy_.dx[i]);
     }
     auto const& amr = sim["AMR"];
+    {
+        auto mode = cppdict::get_value(dict_, "simulation/AMR/regrid_mode", std::string{"normal"});
+        if (auto const* env = std::getenv("PLAMN_REGRID_MODE"))
+            mode = env;
+        if (mode != "normal" and mode != "high")
+            throw std::runtime_error("plamn Simulator: regrid_mode normal or high, not " + mode);
+        regrid_mode_ = mode == "high" ? RegridMode::high : RegridMode::normal;
+    }
     if (amr.contains("largest_patch_size"))
     {
         auto const largest = amr["largest_patch_size"].template to<std::vector<int>>();
@@ -157,6 +182,9 @@ void Simulator<opts>::setup_()
     ohm_info_.emplace(core::OhmInfo::FROM(sim["algo"]["ohm"]));
 
     register_resources_();
+    setup_computed_();
+    setup_restarts_();
+    setup_diagnostics_();
 }
 
 // what moves between patches, named as for_each_resource(HybridPatch) names it
@@ -175,6 +203,11 @@ void Simulator<opts>::register_resources_()
     add("EM_E", components("EM_E"));
     add("EMPred_B", components("EMPred_B"));
     add("EMAvg_E", components("EMAvg_E"));
+
+    // the totals a synchronization coarsens, their ghosts refilled after it (PHARE's
+    //  chargeDensitySynchronizers_, ionChargeFluxSynchronizers_)
+    add("IonMoments", components("ions_charge_flux"));
+    add("IonMoments", damn::amr::same_names({"ions_charge_density"}));
 
     auto const& ions    = dict_["simulation"]["ions"];
     auto const nbr_pops = ions["nbrPopulations"].template to<std::size_t>();

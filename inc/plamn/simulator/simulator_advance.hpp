@@ -10,6 +10,7 @@
 #include "damn/core/logger.hpp"
 
 #include "plamn/simulator/simulator.hpp" // IWYU pragma: keep (the class)
+#include "plamn/simulator/level_accessor.hpp"
 #include "plamn/amr/coarsen.hpp"
 #include "plamn/amr/level_pairs.hpp"
 #include "plamn/amr/refine.hpp"
@@ -19,15 +20,18 @@
 #include "plamn/core/numerics/faraday/faraday_transformer.hpp"
 #include "plamn/core/numerics/ohm/ohm.hpp"
 #include "plamn/core/numerics/ohm/ohm_transformer.hpp"
+#include "plamn/core/numerics/stable_dt/whistler.hpp"
 #include "plamn/core/numerics/particles_synchronised_mover/particles_synchronised_mover_def.hpp"
 
 #include "phlop/timing/scope.hpp"
 
 #include <algorithm>
 #include <cstddef>
+#include <limits>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 // plamn::Simulator: time refined advance, SolverPPC per level, synchronization and reflux
@@ -35,6 +39,27 @@
 
 namespace plamn
 {
+// PHARE's MultiPhysicsIntegrator::computeStableDt: a level's dt as a level 0 one, times the
+//  substeps of each coarser level (the time ratio per level)
+template<auto opts>
+double Simulator<opts>::stable_dt_(Timestepper::CFL const& cfl)
+{
+    double dt0  = std::numeric_limits<double>::max();
+    double to_0 = 1;
+    for (std::size_t ln = 0; ln < levels_.size(); ++ln)
+    {
+        if (ln > 0)
+            to_0 *= time_ratio();
+        double level = std::numeric_limits<double>::max();
+        per_patch_(ln, [&](auto& patch) {
+            level = std::min(
+                level, core::whistler_dt(patch.layout, patch.massDensity, patch.emB, cfl.wave));
+        });
+        dt0 = std::min(dt0, level * to_0);
+    }
+    return n_ranks_ > 1 ? damn::mpi::min(dt0) : dt0;
+}
+
 template<auto opts>
 double Simulator<opts>::advance()
 {
@@ -45,19 +70,51 @@ double Simulator<opts>::advance()
     if (should_rebalance_())
         rebalance_(currentTime_);
 
+    dt_ = timestepper_.next([&](auto const& cfl) { return stable_dt_(cfl); });
     Hooks hooks{*this};
     damn::amr::advance(hierarchy_, hooks, currentTime_, dt_, time_ratio());
-    currentTime_ += dt_;
+    currentTime_ = timestepper_.end_step();
     ++steps_;
-    if (tagging_ and steps_ % regrid_interval_ == 0)
+    if (regrid_mode_ == RegridMode::normal and tagging_ and steps_ % regrid_interval_ == 0)
         regrid_(currentTime_);
     return dt_;
+}
+
+// SAMRAI's TimeRefinementIntegrator::atRegridPoint / coarserLevelRegridsToo: level ln regrids its
+//  finer levels after every regrid_interval_-th of its steps within the coarser level's step
+//  (level 0: its steps), if it can have a finer level, unless that is its last substep and the
+//  coarser level regrids then too (which regrids them all)
+template<auto opts>
+void Simulator<opts>::after_step_(int const ln, double const t, bool const last)
+{
+    if (regrid_mode_ != RegridMode::high)
+        return;
+    auto const steps = [&](int const l) { // level 0: this step not counted yet (advance())
+        return l == 0 ? steps_ + 1 : level_steps_.at(static_cast<std::size_t>(l));
+    };
+    auto const at_regrid_point = [&](int const l) {
+        return l + 1 < hierarchy_.max_levels and steps(l) > 0 and steps(l) % regrid_interval_ == 0;
+    };
+    if (!at_regrid_point(ln) or (ln > 0 and last and at_regrid_point(ln - 1)))
+        return;
+    if (tagging_)
+        regrid_(t, ln, /*always=*/true);
+    else if (steps_ == 0) // refinement boxes: level 0's first step only
+        for (int fine = ln + 1; fine < static_cast<int>(levels_.size()); ++fine)
+        {
+            std::vector<Box_t> boxes;
+            for (auto const& p : hierarchy_.levels[fine].patches)
+                boxes.push_back(p.box);
+            regrid_level_(fine, boxes, t);
+        }
 }
 
 template<auto opts>
 void Simulator<opts>::advance_level_(int const level_number, double const t, double const dt)
 {
     auto const ln = static_cast<std::size_t>(level_number);
+    level_steps_.resize(std::max(level_steps_.size(), ln + 1));
+    ++level_steps_[ln];
     predictor1_(ln, t, dt);
     average_(ln, t, dt);
     move_ions_(ln, t, dt, core::UpdaterMode::domain_only);
@@ -65,6 +122,8 @@ void Simulator<opts>::advance_level_(int const level_number, double const t, dou
     average_(ln, t, dt);
     move_ions_(ln, t, dt, core::UpdaterMode::all);
     corrector_(ln, t, dt);
+    if (ln + 1 == levels_.size()) // the finest; coarser ones after their synchronization
+        fine_dump_(ln, t + dt);
 
     // the finest level's share of the coarser level's reflux, per substep: the time average of
     //  E over them (coarser finer levels accumulate theirs when synchronized)
@@ -92,9 +151,11 @@ void Simulator<opts>::first_step_(int const level_number, double, double const c
                                   double const coarse_dt)
 {
     auto const ln = static_cast<std::size_t>(level_number);
-    auto& l       = levels_[ln];
-    l.coarse_t    = coarse_t;
-    l.coarse_dt   = coarse_dt;
+    level_steps_.resize(std::max(level_steps_.size(), ln + 1));
+    level_steps_[ln] = 0; // SAMRAI counts a level's steps within the coarser level's step
+    auto& l          = levels_[ln];
+    l.coarse_t       = coarse_t;
+    l.coarse_dt      = coarse_dt;
     per_patch_(ln, [](auto& patch) {
         for (auto& pop : patch.ions)
             pop.levelGhostParticlesNew().clear();
@@ -104,6 +165,20 @@ void Simulator<opts>::first_step_(int const level_number, double, double const c
     for (auto const& name : population_names_)
         refine_(ln, amr::ParticleSplitter<Splitter_t>{}, damn::amr::LevelRegion::LevelGhosts,
                 {{name + "_domain", name + "_level_ghost_new", ""}});
+    own_level_ghosts_(ln, /*new_ghosts=*/true);
+}
+
+template<auto opts>
+void Simulator<opts>::own_level_ghosts_(std::size_t const ln, bool const new_ghosts)
+{
+    per_patch_(ln, [&](auto& patch) {
+        if (patch.level_ghost_not_owned.empty())
+            return;
+        for (auto& pop : patch.ions)
+            core::delete_particles_in(new_ghosts ? pop.levelGhostParticlesNew()
+                                                 : pop.levelGhostParticlesOld(),
+                                      patch.level_ghost_not_owned);
+    });
 }
 
 template<auto opts>
@@ -119,8 +194,10 @@ void Simulator<opts>::last_step_(int const ln)
     });
 }
 
-// level ln onto ln - 1, both at t: E and the moments coarsened, then the coarser level's B
-// recomputed from the fine time average of E (reflux), then its ghosts refilled
+// level ln onto ln - 1, both at t: E and the total ion charge density and flux coarsened (as
+// PHARE's synchronize: the populations' moments, the mass density and the bulk velocity stay the
+// coarser level's own), then the coarser level's B recomputed from the fine time average of E
+// (reflux), then its ghosts refilled
 template<auto opts>
 void Simulator<opts>::synchronize_(int const level_number, double const t)
 {
@@ -129,14 +206,8 @@ void Simulator<opts>::synchronize_(int const level_number, double const t)
     auto const coarse = ln - 1;
 
     coarsen_(ln, amr::ElectricFieldCoarsener{}, amr::vector_pairs("EM_E", "EM_E"));
-    std::vector<damn::amr::LevelPair> moments;
-    for (auto const& name : population_names_)
-    {
-        for (auto const& p : amr::vector_pairs(name + "_flux", name + "_flux"))
-            moments.push_back(p);
-        moments.push_back({name + "_density", name + "_density", ""});
-        moments.push_back({name + "_charge_density", name + "_charge_density", ""});
-    }
+    auto moments = amr::vector_pairs("ions_charge_flux", "ions_charge_flux");
+    moments.push_back({"ions_charge_density", "ions_charge_density", ""});
     coarsen_(ln, amr::MomentsCoarsener{}, moments);
 
     // reflux: the coarser Eavg under the fine level is the fine one's time average
@@ -152,8 +223,8 @@ void Simulator<opts>::synchronize_(int const level_number, double const t)
 
     // ghosts after the coarsening
     fill_electric_ghosts_(coarse, "EM_E", t);
-    copy_(coarse, damn::amr::fill_ghosts, "IonPopMoments");
-    compute_moments_(coarse);
+    copy_(coarse, damn::amr::fill_ghosts, "IonMoments");
+    fine_dump_(coarse, t);
 }
 
 template<auto opts>
@@ -188,7 +259,9 @@ void Simulator<opts>::fill_ion_borders_(std::size_t const ln)
 }
 
 // the level border's moments: the level ghost particles split from the coarser level at both
-// ends of its step, weighted linearly in time (PHARE's fillIonPopMomentGhosts)
+// ends of its step, weighted linearly in time (PHARE's fillIonPopMomentGhosts), before the
+// border sums complete every patch's copy: each is held by one patch (own_level_ghosts_),
+// deposited once (PHAREHUB/PHARE#1580)
 template<auto opts>
 void Simulator<opts>::deposit_level_ghosts_(std::size_t const ln, double const t)
 {
@@ -259,22 +332,38 @@ void Simulator<opts>::move_ions_(std::size_t const ln, double const t, double co
     DAMN_LOG_SCOPE(1, "Simulator::move_ions");
     {
         DAMN_LOG_SCOPE(1, "Simulator::move_ions::push"); // and deposit
-        per_patch_(ln, [&](auto& patch) {
-            mover_.updatePopulations(patch.ions, patch.emAvg, *patch.boxing, dt, mode);
-        });
+        if constexpr (Patch_t::per_patch_mover)
+            per_patch_(ln, [&](auto& patch) {
+                mover_.updatePopulations(patch.ions, patch.emAvg, *patch.boxing, dt, mode);
+            });
+        else
+        { // the level's patches at once, each with its boxing by patch id
+            auto& data = levels_[ln].data;
+            simulator::LevelAccessor<LevelData_t, Patch_t, &Patch_t::emAvg> accessor{data};
+            std::unordered_map<std::string, typename Patch_t::Boxing_t> boxings;
+            for (std::size_t i = 0; i < accessor.size(); ++i)
+                boxings.try_emplace(accessor.id(i), *data.data[i]->boxing);
+            mover_.updatePopulations(accessor, boxings, dt, mode);
+        }
     }
-    deposit_level_ghosts_(ln, t + dt);
-    fill_ion_borders_(ln);
-
     if (mode != core::UpdaterMode::domain_only)
     {
-        // particles that left their patch go to the patch owning their cell
+        // as PHAREHUB/PHARE#1441 (and the level initialization): the particles that left their
+        //  patch go to the patch owning their cell first, then each patch deposits its domain
+        //  particles, every particle once (the domain_only predictor deposits its pushed copies
+        //  in the updater)
         copy_(ln, damn::amr::gather_leaving, "IonGhostParticles");
         per_patch_(ln, [](auto& patch) {
             for (auto& pop : patch.ions)
                 pop.patchGhostParticles().clear();
+            core::deposit_domain<dimension, interp_order>(patch.ions, patch.layout);
         });
     }
+
+    // as PHAREHUB/PHARE#1580: each level ghost particle deposited once, by the patch holding it,
+    //  then the border sums: every patch's copy of a node the same
+    deposit_level_ghosts_(ln, t + dt);
+    fill_ion_borders_(ln);
     compute_moments_(ln);
 }
 

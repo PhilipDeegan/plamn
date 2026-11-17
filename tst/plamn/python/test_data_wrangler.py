@@ -11,17 +11,16 @@ import numpy as np
 
 import pyplamn
 
-pyplamn.patch()
 
-import alfven1d  # noqa: E402
-import pyphare.pharein as ph  # noqa: E402
-from pyphare.simulator.simulator import Simulator  # noqa: E402
+import alfven1d
+import pyphare.pharein as ph
+from pyphare.simulator.simulator import Simulator
 
 try:
-    from pyphare.pharesee.hierarchy.fromsim import hierarchy_from_sim  # noqa: E402
+    from pyphare.pharesee.hierarchy.fromsim import hierarchy_from_sim
     from pyphare.pharesee.hierarchy.patchdata import (
         LiveParticleData,
-    )  # noqa: E402, F401
+    )  # noqa: F401
 except ImportError:  # a pyphare without PHARE#1171
     hierarchy_from_sim = None
 
@@ -42,6 +41,10 @@ def domain(hier, qty):
     hierarchy_from_sim is None, "pyphare has no live DataWrangler (PHARE#1171)"
 )
 class DataWranglerTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        pyplamn.patch()
+
     def setUp(self):
         ph.global_vars.sim = None
         ph.clearDict()
@@ -198,6 +201,10 @@ def config_2d():
 )
 class DataWrangler2DTest(unittest.TestCase):
     """the checks of PHARE's test_data_wrangler.py test_hybrid (2D, interp 1), on one level"""
+
+    @classmethod
+    def setUpClass(cls):
+        pyplamn.patch()
 
     def setUp(self):
         self.simulator = Simulator(config_2d(), log_to_file=False).setup().initialize()

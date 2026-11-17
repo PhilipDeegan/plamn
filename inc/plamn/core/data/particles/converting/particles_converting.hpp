@@ -9,6 +9,7 @@
 #include "plamn/core/data/particles/converting/detail/def_converting.hpp"
 #include "plamn/core/data/particles/converting/detail/aos_converting.hpp"
 #include "plamn/core/data/particles/converting/detail/soa_converting.hpp"
+#include "plamn/core/data/particles/converting/detail/soavx_chunked_converting.hpp"
 #include "plamn/core/data/particles/sorting/particles_sorting.hpp"
 
 #include "phlop/timing/scope.hpp"

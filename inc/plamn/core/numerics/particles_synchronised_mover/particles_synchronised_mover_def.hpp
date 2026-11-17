@@ -116,10 +116,15 @@ struct UpdaterCellMapSelectionBoxing : public UpdaterSelectionBoxing<Layout>
                   particleRange, [&](auto const& cell) { return isIn(cell, nonLevelGhostBox); });
           };
 
+    // the level ghost layer: ghost cells no patch of the level covers (a level ghost pushed into
+    //  another patch's cell is that patch's: kept here it would come back as a duplicate,
+    //  PHAREHUB/PHARE#1579)
     Selector_t const inGhostLayer
-        = [ghostBox = Super::ghostBox, domainBox = Super::domainBox](auto& particleRange) {
+        = [ghostBox = Super::ghostBox, domainBox = Super::domainBox,
+           nonLevelGhostBox = Super::nonLevelGhostBox](auto& particleRange) {
               return particleRange.array().partition(particleRange, [&](auto const& cell) {
-                  return isIn(cell, ghostBox) and !isIn(cell, domainBox);
+                  return isIn(cell, ghostBox) and !isIn(cell, domainBox)
+                         and !isIn(damn::core::Point{cell}, nonLevelGhostBox);
               });
           };
 

@@ -25,10 +25,9 @@ import numpy as np
 
 import pyplamn
 
-pyplamn.patch()
 
-import pyphare.pharein as ph  # noqa: E402
-from pyphare.simulator.simulator import Simulator, startMPI  # noqa: E402
+import pyphare.pharein as ph
+from pyphare.simulator.simulator import Simulator, startMPI
 
 PPC = 100
 
@@ -269,6 +268,10 @@ def max_divb(simulator):
 
 
 class HybridRefinementTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        pyplamn.patch()
+
     def test_alfven_reflux_does_not_kick_the_coarse_cells_beside_the_box(self):
         one, two = alfven(False, 1), alfven(True, 1)
         lo, up = 40, 59
@@ -337,8 +340,10 @@ class HybridRefinementTest(unittest.TestCase):
         (start of steps 0, 30, 60) cuts level 0 on blocks and brings them within 0.15, B the same
         as without the step 30 and 60 rebalances"""
         startMPI()
-        if pyplamn.etc.mpi_size() < 2:
-            self.skipTest("one rank: nothing to balance (--tags mpi runs it on 3)")
+        if (
+            pyplamn.etc.mpi_size() != 3
+        ):  # 6 patches split evenly on 2 ranks: nothing to cut
+            self.skipTest("built for 3 ranks (--tags mpi runs it on 3)")
         patch, steps = (20, 30), 61
         no = drift(None, steps, patch)
         lb = drift(dict(every=30, tol=0.05), steps, patch)

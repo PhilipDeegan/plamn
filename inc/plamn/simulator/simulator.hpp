@@ -29,11 +29,15 @@
 #include "damn/amr/level_map.hpp"
 #include "damn/amr/neighbours.hpp"
 #include "damn/amr/topology.hpp"
+#include "damn/hdf5/damn_hdf5.hpp"
+#include "damn/core/vector.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/mpi/copy.hpp"
 #include "damn/mpi/damn_mpi.hpp"
 #include "damn/mpi/inter_level.hpp"
 #include "damn/core/def/constants.hpp"
+#include "plamn/diagnostic/vtkhdf.hpp"
+#include "plamn/simulator/hybrid_patch_view.hpp"
 #include "plamn/amr/load_balancing.hpp"
 #include "plamn/core/def.hpp"
 #include "plamn/core/numerics/interpolator/interpolating.hpp"
@@ -41,13 +45,18 @@
 #include "plamn/initializer/data_provider.hpp"
 #include "plamn/simulator/hybrid_patch.hpp"
 #include "plamn/simulator/simulator_def.hpp"
+#include "plamn/simulator/timestepper.hpp"
 #include "plamn/amr/tagging.hpp"
 #include "plamn/amr/split/split.hpp" // IWYU pragma: keep (the Splitter specializations)
 #include "plamn/amr/split/splitter.hpp"
 
 #include <array>
+#include <type_traits>
+#include <set>
+#include <chrono>
 #include <cstddef>
 #include <format>
+#include <functional>
 #include <map>
 #include <memory>
 #include <numeric>
@@ -60,6 +69,10 @@ namespace plamn::core
 {
 enum class UpdaterMode : std::uint16_t;
 } // namespace plamn::core
+
+#ifndef PLAMN_DIAG_DOUBLES // diagnostics in double precision (PHARE_DIAG_DOUBLES)
+#define PLAMN_DIAG_DOUBLES 0
+#endif
 
 namespace plamn
 {
@@ -74,6 +87,7 @@ public:
     std::size_t static constexpr nbRefinedPart = opts.nbRefinedPart;
 
     using Patch_t      = simulator::HybridPatch<opts>;
+    using Grid_t       = Patch_t::Grid_t;
     using Layout_t     = Patch_t::Layout_t;
     using Hierarchy_t  = damn::amr::Hierarchy<dimension>;
     using LevelData_t  = damn::amr::LevelData<dimension, std::unique_ptr<Patch_t>>;
@@ -110,6 +124,14 @@ public:
 
     void initialize() override;
     double advance() override;
+    bool dump_restarts(double timestamp, double timestep) override;    // simulator_restarts.hpp
+    bool dump_diagnostics(double timestamp, double timestep) override; // simulator_diagnostics
+
+    // computed quantities by key (simulator_computed.hpp): compute is collective when the
+    //  quantity sums borders
+    NO_DISCARD bool is_computed(std::string const& key) const;
+    void compute(std::size_t ln, std::string const& key);
+    NO_DISCARD std::vector<Grid_t*> computed(Patch_t& patch, std::string const& key);
 
     std::vector<int> const& domainBox() const override { return domainBox_; }
     std::vector<double> const& cellWidth() const override { return cellWidth_; }
@@ -132,9 +154,25 @@ public:
         std::size_t n = 0;
         per_patch_(ln, [&](auto& patch) {
             for (auto& pop : patch.ions)
-                n += pop.domainParticles().size();
+                n += real_particles_(pop.domainParticles());
         });
         return n;
+    }
+
+    // an array's particles: SoAVXChunked's without its gaps (weight 0)
+    NO_DISCARD static std::size_t real_particles_(auto const& particles)
+    {
+        if constexpr (requires { particles.nbr_particles(); })
+        {
+            if (particles.sorted())
+                return particles.nbr_particles();
+            std::size_t n = 0;
+            for (std::size_t i = 0; i < particles.size(); ++i)
+                n += particles.weight(i) != 0;
+            return n;
+        }
+        else
+            return particles.size();
     }
 
     NO_DISCARD int rank() const { return rank_; }
@@ -203,9 +241,67 @@ private:
         }
         void last_step(int ln) { self.last_step_(ln); }
         void synchronize(int ln, double t) { self.synchronize_(ln, t); }
+        void after_step(int ln, double t, bool last) { self.after_step_(ln, t, last); }
     };
 
     void setup_();
+
+    // computed quantities, see simulator_computed.hpp
+    struct Computed
+    {
+        std::vector<std::pair<std::string, core::HybridQuantity::Scalar>> grids;
+        std::function<void(Patch_t&, std::vector<Grid_t*> const&)> local;
+        std::string border_sum; // a resources_ key, empty: none
+        std::function<void(Patch_t&, std::vector<Grid_t*> const&)> after;
+    };
+    std::map<std::string, Computed> computed_;
+    void setup_computed_();
+    Computed const& computed_for_(std::string const& key) const;
+
+    // diagnostics, see simulator_diagnostics.hpp
+    void setup_diagnostics_();
+    // only >= 0: that level only, the others written empty (PHARE's dump_level)
+    void dump_vtkhdf_(diagnostic::Diagnostic& diag, double time, int only = -1);
+    // only >= 0: that level only (PHARE's dump_level: the time holds that level)
+    void dump_phareh5_(diagnostic::Diagnostic& diag, double time, int only = -1);
+    void dump_(diagnostic::Diagnostic& diag, double time, int only = -1); // the format's
+    // a particle diagnostic's population index (/ions/pop/<name>/domain or levelGhost)
+    NO_DISCARD std::size_t particle_population_(std::string const& quantity) const;
+    // PHARE's fine_dump_lvl_max: every diagnostic, level ln only, at the end of its substeps
+    //  that are not a level 0 step's end (the finest after advancing, coarser ones after their
+    //  synchronization)
+    void fine_dump_(std::size_t ln, double time);
+    using View_t = decltype(simulator::view(std::declval<Patch_t&>()));
+    struct Diagnostics
+    {
+        using Float = std::conditional_t<PLAMN_DIAG_DOUBLES, double, float>;
+        std::string dir;
+        bool phareh5   = false;    // else pharevtkhdf
+        bool overwrite = false;    // pyphare's mode "overwrite": truncated at the first dump only
+        int fine_dump_lvl_max = 0; // PHARE's: levels 1 to it dumped at their substeps, 0: none
+        std::vector<diagnostic::Diagnostic> list;
+        std::map<std::string, diagnostic::Accessor<View_t>> quantities;
+#if DAMN_HAS_HIGHFIVE
+        std::map<std::string, std::unique_ptr<damn::hdf5::h5::HighFiveFile>> files; // open ones
+#endif
+        std::set<std::string> created;        // the files made (or truncated) so far
+        damn::MinimizingVector<Float> buffer; // a level's rows on this rank
+    } diagnostics_;
+
+    // restarts, see simulator_restarts.hpp
+    void setup_restarts_();
+    NO_DISCARD std::vector<std::string> restart_names_() const;
+    void write_restart_(std::string const& dir);
+    void load_restart_();
+    void rebuild_after_load_();
+    struct Restarts
+    {
+        std::string dir, serialized, load_path;  // load_path: set to restart from it
+        std::vector<double> timestamps, elapsed; // elapsed: seconds of wall time after setup
+        std::size_t next_elapsed = 0;
+        double restart_time      = 0;
+        std::chrono::steady_clock::time_point start;
+    } restarts_;
 
     // one patch's work, for every local patch of level ln
     void per_patch_(std::size_t const ln, auto&& fn)
@@ -265,10 +361,18 @@ private:
     //  size, partitioned along the Hilbert curve by the particles they will hold
     NO_DISCARD damn::amr::Level<dimension> level_of_(int ln, std::vector<Box_t> const& boxes);
     void make_level_(int ln, std::vector<Box_t> const& boxes);
-    void link_level_(int ln); // neighbours, map to the coarser level, level ghost cells
+    void allocate_level_(int ln); // the patch data of hierarchy_'s level ln, linked
+    void link_level_(int ln);     // neighbours, map to the coarser level, level ghost cells
+    // a patch of level ln (its cells): its particle ghost box among the level's other patches
+    typename Patch_t::Surroundings surroundings_(int ln, Box_t const& box) const;
     // the boxes of level ln + 1 from level ln's tagged cells (collective)
     NO_DISCARD std::vector<Box_t> cluster_(int ln);
-    void regrid_(double t);
+    // the levels finer than from re-clustered (tagging) at t; always: re-made even where their
+    //  boxes did not change (SAMRAI's, see RegridMode)
+    void regrid_(double t, int from = 0, bool always = false);
+    // regrid_mode high: the finer levels of ln regridded at SAMRAI's regrid points, after a step
+    //  of ln to t (last: ln's last substep of its coarser level's step)
+    void after_step_(int ln, double t, bool last);
     void regrid_level_(int ln, std::vector<Box_t> const& boxes, double t);
     void initialize_root_();
     void initialize_refined_(std::size_t ln);
@@ -293,6 +397,9 @@ private:
     void compute_moments_(std::size_t ln);
     void fill_ion_borders_(std::size_t ln);
     void deposit_level_ghosts_(std::size_t ln, double t);
+    // a level ghost particle lives in one patch, its cell's owner (Surroundings): the others'
+    //  copies of a split dropped, old (initialization, regrid, restart) or new (coarse step)
+    void own_level_ghosts_(std::size_t ln, bool new_ghosts);
     void move_ions_(std::size_t ln, double t, double dt, core::UpdaterMode mode);
     template<auto electromag>
     void ampere_ohm_(std::size_t ln);
@@ -320,7 +427,20 @@ private:
     damn::amr::ClusteringOptions<dimension> clustering_;
     std::vector<std::vector<Box_t>> clustered_; // per level: the boxes it was clustered to
     int regrid_interval_ = 2;                   // SAMRAI's for ratio 2 with time refinement
-    int steps_           = 0;
+    // when levels are regridded (simulation/AMR/regrid_mode, or PLAMN_REGRID_MODE):
+    //   normal  tagging: every regrid_interval_ level 0 steps, a level only where its boxes
+    //           changed; refinement boxes: never
+    //   high    PHARE's (SAMRAI's TimeRefinementIntegrator and GriddingAlgorithm): after every
+    //           regrid_interval_-th substep of a level within its coarser level's step, its finer
+    //           levels re-made (unless the coarser level regrids then too); tagging: re-clustered,
+    //           re-made even with unchanged boxes; refinement boxes: re-made with the same boxes,
+    //           during level 0's first step only (SAMRAI marks the user's boxes changed for its
+    //           first cycle). For comparisons with PHARE: a regrid is not a no-op (the level
+    //           ghost fields are refilled after the synchronization)
+    enum class RegridMode : std::uint8_t { normal, high };
+    RegridMode regrid_mode_ = RegridMode::normal;
+    std::vector<int> level_steps_; // per level > 0: its substeps in the coarser level's step
+    int steps_ = 0;
     // simulation/AMR/loadbalancing (pyphare's LoadBalancer), with refinement="tagging"
     struct LoadBalancing
     {
@@ -343,7 +463,10 @@ private:
     static constexpr int rebalance_block = 8;
     std::vector<int> domainBox_;
     std::vector<double> cellWidth_;
-    double dt_          = 0;
+    Timestepper timestepper_; // each step's dt, the time after it
+    // the adaptive dt: every level's whistler bound as a level 0 dt, the smallest (all ranks)
+    double stable_dt_(Timestepper::CFL const& cfl);
+    double dt_          = 0; // this step's
     int timeStepNbr_    = 0;
     double startTime_   = 0;
     double finalTime_   = 0;
@@ -355,11 +478,14 @@ private:
 } // namespace plamn
 
 // the definitions, by concern
-#include "plamn/simulator/simulator_access.hpp"  // IWYU pragma: export
-#include "plamn/simulator/simulator_advance.hpp" // IWYU pragma: export
-#include "plamn/simulator/simulator_ghosts.hpp"  // IWYU pragma: export
-#include "plamn/simulator/simulator_levels.hpp"  // IWYU pragma: export
-#include "plamn/simulator/simulator_regrid.hpp"  // IWYU pragma: export
-#include "plamn/simulator/simulator_setup.hpp"   // IWYU pragma: export
+#include "plamn/simulator/simulator_access.hpp"      // IWYU pragma: export
+#include "plamn/simulator/simulator_advance.hpp"     // IWYU pragma: export
+#include "plamn/simulator/simulator_ghosts.hpp"      // IWYU pragma: export
+#include "plamn/simulator/simulator_levels.hpp"      // IWYU pragma: export
+#include "plamn/simulator/simulator_regrid.hpp"      // IWYU pragma: export
+#include "plamn/simulator/simulator_restarts.hpp"    // IWYU pragma: export
+#include "plamn/simulator/simulator_computed.hpp"    // IWYU pragma: export
+#include "plamn/simulator/simulator_diagnostics.hpp" // IWYU pragma: export
+#include "plamn/simulator/simulator_setup.hpp"       // IWYU pragma: export
 
 #endif // PLAMN_SIMULATOR_SIMULATOR_HPP

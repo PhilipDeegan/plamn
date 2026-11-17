@@ -70,19 +70,31 @@ template<auto opts>
 void Simulator<opts>::make_level_(int const ln, std::vector<Box_t> const& boxes)
 {
     damn::amr::set_level(hierarchy_, level_of_(ln, boxes));
-    auto const& sim   = dict_["simulation"];
-    auto const pgw    = Patch_t::particle_ghost_width;
-    auto constexpr gw = Patch_t::field_ghost_width;
+    allocate_level_(ln);
+}
+
+template<auto opts>
+void Simulator<opts>::allocate_level_(int const ln)
+{
+    auto const& sim = dict_["simulation"];
     levels_.resize(static_cast<std::size_t>(ln) + 1);
     auto& l = levels_[ln];
     l.data  = damn::amr::allocate(hierarchy_.levels[ln], rank_, [&](auto const& p) {
         Layout_t const layout{p.box, damn::amr::mesh_size(hierarchy_, ln),
                               damn::amr::position(hierarchy_, ln, p.box.lower), ln};
-        auto const ghost = damn::core::grow(p.box, damn::core::ConstArray<int, dimension>(pgw));
-        return std::make_unique<Patch_t>(layout, sim,
-                                         damn::amr::covered_by_level(hierarchy_, ln, ghost));
+        return std::make_unique<Patch_t>(layout, sim, surroundings_(ln, p.box));
     });
     link_level_(ln);
+}
+
+template<auto opts>
+typename Simulator<opts>::Patch_t::Surroundings
+Simulator<opts>::surroundings_(int const ln, Box_t const& box) const
+{
+    auto constexpr pgw = static_cast<int>(Patch_t::particle_ghost_width);
+    return {damn::amr::covered_by_level(
+                hierarchy_, ln, damn::core::grow(box, damn::core::ConstArray<int, dimension>(pgw))),
+            damn::amr::owned_elsewhere(hierarchy_, ln, box, pgw)};
 }
 
 template<auto opts>
@@ -126,6 +138,21 @@ void Simulator<opts>::initialize()
     if (isInitialized_)
         throw std::runtime_error("plamn Simulator already initialized");
 
+    // the steps from the start (or the restart's time), the first dt (adaptive: from the
+    //  initialized levels, as PHARE's for its first dump)
+    auto const start_steps = [&]() {
+        timestepper_.start_at(startTime_);
+        dt_ = timestepper_.next([&](auto const& cfl) { return stable_dt_(cfl); });
+    };
+
+    if (!restarts_.load_path.empty()) // pyphare's restart_time: every level from the file
+    {
+        load_restart_();
+        start_steps();
+        isInitialized_ = true;
+        return;
+    }
+
     make_level_(0, {hierarchy_.domain});
     initialize_root_();
     for (std::size_t ln = 1; ln <= refinement_boxes_.size(); ++ln)
@@ -149,7 +176,8 @@ void Simulator<opts>::initialize()
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
         prepare_step_(static_cast<int>(ln), startTime_);
 
-    currentTime_   = startTime_;
+    currentTime_ = startTime_;
+    start_steps();
     isInitialized_ = true;
 }
 
@@ -216,6 +244,7 @@ void Simulator<opts>::initialize_refined_(std::size_t const ln)
         refine_(ln, amr::ParticleSplitter<Splitter_t>{}, LevelRegion::LevelGhosts,
                 {{name + "_domain", name + "_level_ghost_old", ""}});
     }
+    own_level_ghosts_(ln, /*new_ghosts=*/false);
     per_patch_(ln, [](auto& patch) {
         for (auto& pop : patch.ions)
             pop.levelGhostParticles() = pop.levelGhostParticlesOld();
@@ -227,9 +256,10 @@ void Simulator<opts>::initialize_refined_(std::size_t const ln)
 template<auto opts>
 void Simulator<opts>::refined_moments_(std::size_t const ln)
 {
+    // as move_ions_: the domain particles, the level ghosts (each held by one patch), then the
+    //  border sums
     per_patch_(ln, [&](auto& patch) {
-        core::resetMoments(patch.ions);
-        core::depositParticles(patch.ions, patch.layout, Interpolator{}, core::DomainDeposit{});
+        core::deposit_domain<dimension, interp_order>(patch.ions, patch.layout);
         core::depositParticles(patch.ions, patch.layout, Interpolator{}, core::LevelGhostDeposit{});
     });
     fill_ion_borders_(ln);

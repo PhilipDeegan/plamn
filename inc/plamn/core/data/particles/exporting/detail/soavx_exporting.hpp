@@ -8,12 +8,13 @@
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/vector.hpp"
 #include "damn/core/meta/for_N.hpp"
+#include "damn/core/meta/type_meta.hpp"
 #include "damn/core/memory/memory.hpp"
 
 #include "plamn/core/data/particles/particles_def.hpp"
 
 #include <cstddef>
-#include <stdexcept>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 
@@ -51,9 +52,10 @@ struct ParticlesExporter<LayoutMode::SoAVX, alloc_mde>
     template<typename Src, typename Boxes>
     void delete_particles_in(Src& src, Boxes const& boxes)
     {
-        auto const list  = box_list_(boxes);
-        auto const view  = list.view();
-        src.resize(partition_(src, [=] DAMN_ALL(auto const& cell) { return !view.contains(cell); }));
+        auto const list = box_list_(boxes);
+        auto const view = list.view();
+        src.resize(
+            partition_(src, [=] DAMN_ALL(auto const& cell) { return !view.contains(cell); }));
     }
 
     template<typename Src, std::size_t dim>
@@ -73,8 +75,8 @@ struct ParticlesExporter<LayoutMode::SoAVX, alloc_mde>
     template<typename Dst, typename Src, std::size_t dim>
     void move_in_domain(Dst& dst, Src& src, damn::core::Box<int, dim> const& domain_box)
     {
-        auto const kept = partition_(
-            src, [=] DAMN_ALL(auto const& cell) { return !isIn(cell, domain_box); });
+        auto const kept
+            = partition_(src, [=] DAMN_ALL(auto const& cell) { return !isIn(cell, domain_box); });
         move_tail_(dst, src, kept);
     }
 
@@ -84,8 +86,8 @@ struct ParticlesExporter<LayoutMode::SoAVX, alloc_mde>
     {
         auto const list = box_list_(ghost_box.remove(domain_box));
         auto const view = list.view();
-        auto const kept = partition_(
-            src, [=] DAMN_ALL(auto const& cell) { return !view.contains(cell); });
+        auto const kept
+            = partition_(src, [=] DAMN_ALL(auto const& cell) { return !view.contains(cell); });
         move_tail_(dst, src, kept);
     }
 
@@ -147,7 +149,9 @@ private:
         }();
         return static_cast<std::size_t>(std::distance(it, pivot));
 #else
-        throw std::runtime_error("SoAVX partitioning needs thrust");
+        static_assert(damn::core::dependent_false_v<decltype(src)>,
+                      "SoAVX partitioning needs thrust (on the host too: damn's tpp/cccl)");
+        return 0;
 #endif
     }
 

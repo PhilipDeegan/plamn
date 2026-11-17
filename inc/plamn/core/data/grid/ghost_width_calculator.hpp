@@ -26,8 +26,22 @@ constexpr inline std::uint32_t roundUpToEven(std::uint32_t n)
  *
  * A domain particle moving further throws (PHAREHUB/PHARE#1565); level ghost particles leaving the
  * particle ghost box are dropped. The particle and field ghost widths below follow from it.
+ * PLAMN_PARTICLE_ALLOWED_CELL_JUMP=1: PHARE master's widths (fields 2, 4, 4 and particles 1, 2, 2
+ * for interp 1, 2, 3), e.g. to compare with PHARE
  */
-inline constexpr std::uint32_t particle_allowed_cell_jump = 2;
+#ifndef PLAMN_PARTICLE_ALLOWED_CELL_JUMP
+#define PLAMN_PARTICLE_ALLOWED_CELL_JUMP 2
+#endif
+inline constexpr std::uint32_t particle_allowed_cell_jump = PLAMN_PARTICLE_ALLOWED_CELL_JUMP;
+
+/**
+ * @brief How far past its cell's start a particle may be after a half push (|delta|) before the
+ * Boris pusher throws: PHARE's 2 (core/numerics/pusher/boris.hpp), or the allowed cell jump if
+ * larger. The same as the jump by default; a narrower jump (PHARE's ghost widths) keeps PHARE's
+ * limit.
+ */
+inline constexpr std::uint32_t particle_half_push_limit
+    = particle_allowed_cell_jump > 2 ? particle_allowed_cell_jump : 2;
 
 /**
  * @brief Cells the interpolation stencil reaches outside a particle's cell, the worst of primal

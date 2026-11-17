@@ -12,6 +12,7 @@
 #include "damn/core/meta/type_meta.hpp"
 #include "damn/core/sys/env.hpp"
 
+#include "plamn/core/data/electromag/electromag.hpp" // IWYU pragma: keep (basic::Electromag: GPU builds)
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/data/tensorfield/tensorfield.hpp"
 #include "plamn/core/data/particles/particles.hpp"
@@ -160,7 +161,8 @@ public:
     template<auto type = ParticleType::Domain, typename Particles>
     void particleToMesh(Particles const& particles, auto const& layout, auto& rhoP, auto& flux,
                         double coef = 1.)
-        requires(damn::core::any_in(Particles::layout_mode, LayoutMode::AoSPCTS, LayoutMode::AoSCMTS))
+        requires(damn::core::any_in(Particles::layout_mode, LayoutMode::AoSPCTS,
+                                    LayoutMode::AoSCMTS))
     DAMN_ALL
     {
         for (std::size_t tidx = 0; tidx < particles().size(); ++tidx)
@@ -173,8 +175,8 @@ public:
     template<auto type = ParticleType::Domain, typename Particles>
     void particleToMesh_tile(std::size_t const tidx, Particles const& particles, auto& rhoP,
                              auto& flux, double coef = 1.)
-        requires(damn::core::any_in(Particles::layout_mode, LayoutMode::AoSPCTS, LayoutMode::AoSCMTS,
-                        LayoutMode::AoSTS))
+        requires(damn::core::any_in(Particles::layout_mode, LayoutMode::AoSPCTS,
+                                    LayoutMode::AoSCMTS, LayoutMode::AoSTS))
     {
         static_assert(damn::core::any_in(type, ParticleType::Domain, ParticleType::LevelGhost));
 
@@ -186,11 +188,12 @@ public:
         };
 
         auto& tile_particles = particles()[tidx]();
-        if constexpr (damn::core::any_in(Particles::layout_mode, LayoutMode::AoSCMTS, LayoutMode::AoSTS))
+        if constexpr (damn::core::any_in(Particles::layout_mode, LayoutMode::AoSCMTS,
+                                         LayoutMode::AoSTS))
             deposit(tile_particles);
         else
             damn::core::for_each_point(tile_particles.local_box(),
-                           [&](auto const& bix) { deposit(tile_particles(bix)); });
+                                       [&](auto const& bix) { deposit(tile_particles(bix)); });
     }
 
     template<auto type = ParticleType::Domain, typename Particles>
@@ -260,9 +263,8 @@ public:
                 using lobox_t  = Particles::lobox_t;
                 using Launcher = damn::core::gpu::BoxCellNLauncher<lobox_t>;
                 auto lobox     = particles.local_box();
-                Launcher{lobox, particles.max_size()}([=] DAMN_ALL() mutable {
-                    box_kernel(particles, layout, flux, rhoP, coef);
-                });
+                Launcher{lobox, particles.max_size()}(
+                    [=] DAMN_ALL() mutable { box_kernel(particles, layout, flux, rhoP, coef); });
             })
         }
         else
@@ -274,7 +276,7 @@ public:
     void particleToMesh(Particles const& particles, auto const& layout, auto& rhoP, auto& flux,
                         double coef = 1., auto&... stream)
         requires(damn::core::any_in(Particles::layout_mode, LayoutMode::AoS, LayoutMode::SoA,
-                        LayoutMode::SoAVX, LayoutMode::SoAVXChunked))
+                                    LayoutMode::SoAVX, LayoutMode::SoAVXChunked))
     DAMN_ALL
     {
         auto constexpr static alloc_mode = Particles::alloc_mode;
@@ -300,21 +302,23 @@ public:
                     SoAVXConstSpanParticles<Particles::dimension, alloc_mode> const ps{
                         particles}; //
                     damn::kernel::launch(stream..., ps.size(),
-                                   [=] DAMN_ALL() mutable {
-                                       Interpolator_t{}.particleToMesh(ps.copy(damn::kernel::idx()),
-                                                                       rhoP, flux, layout, coef);
-                                   }); //
+                                         [=] DAMN_ALL() mutable {
+                                             Interpolator_t{}.particleToMesh(
+                                                 ps.copy(damn::kernel::idx()), rhoP, flux, layout,
+                                                 coef);
+                                         }); //
                 )
             }
             else
             {
                 DAMN_WITH_MKN_GPU( //
-                    damn::kernel::launch(particles.size(),
-                                   [=] DAMN_ALL() mutable {
-                                       auto particle = particles.begin() + damn::kernel::idx();
-                                       Interpolator_t{}.particleToMesh(damn::core::deref(particle), rhoP, flux,
-                                                                       layout, coef);
-                                   }); //
+                    damn::kernel::launch(
+                        particles.size(),
+                        [=] DAMN_ALL() mutable {
+                            auto particle = particles.begin() + damn::kernel::idx();
+                            Interpolator_t{}.particleToMesh(damn::core::deref(particle), rhoP, flux,
+                                                            layout, coef);
+                        }); //
                 )
             }
         }
@@ -530,8 +534,8 @@ public:
         using TensorField_t = basic::TensorField<typename Field_t::value_type, 1>;
 
         auto& rhop_tile = Rhop[blockIdx.x];
-        auto const ft = Flux.template as<TensorField_t>([&](auto& c) { return c[blockIdx.x](); });
-        auto& parts   = particles()[blockIdx.x]();
+        auto const ft   = Flux.template as<TensorField_t>([&](auto& c) { return c[blockIdx.x](); });
+        auto& parts     = particles()[blockIdx.x]();
 
         tile_deposit<deposit_v>(rhop_tile(), ft, rhop_tile.ghost_box(), coef, [&](auto&& dep) {
             for (std::size_t i = threadIdx.x; i < parts.size(); i += blockDim.x)
@@ -589,14 +593,14 @@ public:
         auto const ws   = blockDim.x;
 
         // block buffer and atomic counter after the staged fields
-        auto* const part_buf = reinterpret_cast<Particle_t*>(
-            reinterpret_cast<char*>(&data[0])
-            + tile_deposit_fields(deposit_v) * ziz * sizeof(double));
-        auto& buf_count = *reinterpret_cast<int*>(reinterpret_cast<char*>(part_buf)
-                                                  + 2 * ws * sizeof(Particle_t));
+        auto* const part_buf = reinterpret_cast<Particle_t*>(reinterpret_cast<char*>(&data[0])
+                                                             + tile_deposit_fields(deposit_v) * ziz
+                                                                   * sizeof(double));
+        auto& buf_count      = *reinterpret_cast<int*>(reinterpret_cast<char*>(part_buf)
+                                                       + 2 * ws * sizeof(Particle_t));
 
         // Per-tile EM view and layout
-        auto const em = electromag.template as<Electromag_vt>([=] DAMN_ALL(auto const& vf) {
+        auto const em      = electromag.template as<Electromag_vt>([=] DAMN_ALL(auto const& vf) {
             return damn::core::for_N_make_array<3>(
                 [&vf] DAMN_ALL(auto i) { return vf[i][blockIdx.x](); });
         });
@@ -831,8 +835,7 @@ public:
         requires(is_soavx(Particles_t::layout_mode))
     {
         static constexpr std::size_t batch = 1024;
-        using Buffer_t                     = Particles<ParticlesOptions{
-                                Particles_t::dimension, LayoutMode::AoS}>;
+        using Buffer_t = Particles<ParticlesOptions{Particles_t::dimension, LayoutMode::AoS}>;
 
         Buffer_t buffer;
         buffer.reserve(std::min(batch, particles.size()));
@@ -868,7 +871,8 @@ public:
             else
             {
                 auto& cps = particles()[tidx]();
-                damn::core::for_each_point(cps.local_box(), [&](auto const& bix) { deposit(cps(bix)); });
+                damn::core::for_each_point(cps.local_box(),
+                                           [&](auto const& bix) { deposit(cps(bix)); });
             }
         }
     }

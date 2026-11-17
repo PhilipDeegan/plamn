@@ -11,11 +11,10 @@ import numpy as np
 
 import pyplamn
 
-pyplamn.patch()
 
-import alfven1d  # noqa: E402
-import pyphare.pharein as ph  # noqa: E402
-from pyphare.simulator.simulator import Simulator  # noqa: E402
+import alfven1d
+import pyphare.pharein as ph
+from pyphare.simulator.simulator import Simulator
 
 CELLS = 100
 STEPS = 150
@@ -38,7 +37,12 @@ def run(largest_patch_size):
         s = (by * np.sin(k * x)).sum() * 2 / CELLS
         return np.hypot(c, s), np.arctan2(-s, c)
 
-    result = {"particles": [cpp.total_particle_count()], "amplitude": [], "time": [], "phase": []}
+    result = {
+        "particles": [cpp.total_particle_count()],
+        "amplitude": [],
+        "time": [],
+        "phase": [],
+    }
     for step in range(STEPS + 1):
         if step % (STEPS // 5) == 0:
             amplitude, phase = fit()
@@ -50,7 +54,9 @@ def run(largest_patch_size):
     result["particles"].append(cpp.total_particle_count())
     result["patches"] = cpp.all_patch_count()
     result["finite"] = all(
-        np.isfinite(cpp.all_domain_values(f"EM_{q}_{c}")).all() for q in "BE" for c in "xyz"
+        np.isfinite(cpp.all_domain_values(f"EM_{q}_{c}")).all()
+        for q in "BE"
+        for c in "xyz"
     )
     # By = a cos(k (x + v t)): travels in -x for this polarisation (V in phase with B)
     result["speed"] = np.polyfit(result["time"], np.unwrap(result["phase"]), 1)[0] / k
@@ -58,6 +64,10 @@ def run(largest_patch_size):
 
 
 class HybridAlfven1DTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        pyplamn.patch()
+
     def check(self, result, patches):
         self.assertEqual(result["patches"], patches)
         self.assertTrue(result["finite"])

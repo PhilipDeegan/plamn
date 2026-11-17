@@ -17,6 +17,7 @@ profile:
 # python module: pyphare's dict and enums, installed into python/pyplamn
 - name: py_etc
   parent: base
+  self: damn_hdf5
   dep: lang.nanobind
   mod: lang.python3 python3.module
   src: src/python3/plamn_etc.cpp
@@ -28,6 +29,7 @@ profile:
 # AoSMapped, CPU)
 - name: py_sim
   parent: base
+  self: damn_hdf5
   dep: lang.nanobind
   mod: lang.python3 python3.module
   src: src/python3/plamn_sim.cpp
@@ -42,13 +44,35 @@ profile:
   mode: none
   test: tst/plamn/core/data/grid/test_layout.cpp
         tst/plamn/core/data/particles/test_particle_components.cpp
+        tst/plamn/core/data/particles/test_particle_synchronisation.cpp
+        tst/plamn/core/data/particles/test_soavx_chunked_gaps.cpp
         tst/plamn/core/numerics/particles_synchronised_mover/test_updater.cpp
         tst/plamn/core/numerics/particles_synchronised_mover/test_multi_updater.cpp
+        tst/plamn/core/numerics/particles_synchronised_mover/test_level_updater.cpp
         tst/plamn/core/numerics/faraday/test_tileset_faraday.cpp
         tst/plamn/core/numerics/ampere/test_tileset_ampere.cpp
         tst/plamn/core/numerics/ohm/test_tileset_ohm.cpp
         tst/plamn/amr/test_refine_coarsen.cpp
         tst/plamn/amr/test_tagging.cpp
+
+# C++ diagnostics tests embedding python (PHARE's tests/diagnostic): the simulation from
+# tst/plamn/simulator/diagnostics_job.py, through pyphare and pyplamn (py_etc built first:
+# ./mkn.py). MPI: -x res/mkn/mpi; run from the root, e.g. mpirun -n 3 bin/.../test_diagnostics_2d
+# libpython linked (MKN_PYTHON_LIB_EMBED): needs lang.python3 linking libpython3.<minor>, not
+# the stable ABI stub libpython3
+- name: test_plamn_diagnostics
+  inc: . tpp/damn
+  self: base damn_hdf5
+  dep: google.test
+  env:
+  - name: MKN_PYTHON_LIB_EMBED
+    mode: replace
+    value: 1
+  mod: lang.python3
+  mode: none
+  test: tst/plamn/simulator/test_diagnostics_1d.cpp
+        tst/plamn/simulator/test_diagnostics_2d.cpp
+        tst/plamn/simulator/test_diagnostics_3d.cpp
 
 - name: test_plamn_core_slow # ~17M particles, >10 min unoptimised
   parent: test_plamn_core
@@ -57,6 +81,10 @@ profile:
 # tpp/damn may be a symlink to a local damn checkout, otherwise it is cloned
 - name: damn
   dep: damn&tpp/damn(https://github.com/PhilipDeegan/damn)[damn_core]
+
+# damn's HDF5 (HighFive, parallel HDF5): restarts, for the python modules (MPI: -x res/mkn/mpi)
+- name: damn_hdf5
+  dep: damn&tpp/damn(https://github.com/PhilipDeegan/damn)[damn_hdf5]
 
 # clang-tidy report (.clang-tidy) over the core tests and the plamn headers they include, needs
 # clang-tidy on PATH
@@ -75,7 +103,8 @@ profile:
       paths: inc
       headers: -x c++-header
       # namespace a::b in forward declarations, plamn's include mappings
-      args: -Xiwyu --cxx17ns -Xiwyu --mapping_file=res/iwyu.imp
+      # without thrust, as before host thrust: iwyu would map thrust's and libcudacxx's internals
+      args: -DDAMN_HAVE_THRUST=0 -Xiwyu --cxx17ns -Xiwyu --mapping_file=res/iwyu.imp
 
 # iwyu's suggestions applied (fix_include): CI builds this and fails on any resulting diff
 # mpicxx adds MPI's include directories itself, iwyu needs them given (Debian/Ubuntu openmpi)
@@ -91,6 +120,7 @@ profile:
       inc: /usr/lib/x86_64-linux-gnu/openmpi/include /usr/lib/x86_64-linux-gnu/openmpi/include/openmpi
       headers: -x c++-header
       # namespace a::b in forward declarations, plamn's include mappings
-      args: -Xiwyu --cxx17ns -Xiwyu --mapping_file=res/iwyu.imp
+      # without thrust, as before host thrust: iwyu would map thrust's and libcudacxx's internals
+      args: -DDAMN_HAVE_THRUST=0 -Xiwyu --cxx17ns -Xiwyu --mapping_file=res/iwyu.imp
       fix: --nocomments --noreorder --nosafe_headers # keeps the include order: damn, plamn, other, system
       system_last: true

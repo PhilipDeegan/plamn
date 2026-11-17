@@ -337,7 +337,7 @@ void MultiBorisBackend<layout, ModelAccessor, Interpolator>::move_pooled(MultiBo
 }
 
 
-// every patch's boxings as managed span sets on in (gpu_nlgb, gpu_domain, gpu_non_owned), read by
+// every patch's boxings as managed span sets on in (gpu_nlgb, gpu_non_owned), read by
 //  the GPU COPY kernels per patch index: shared by the tiled and flat backends
 void prepare_gpu_copy_boxes(auto& in, auto const& boxings)
 {
@@ -362,7 +362,6 @@ void prepare_gpu_copy_boxes(auto& in, auto const& boxings)
     };
 
     in.gpu_nlgb      = to_gpu([](auto const& b) -> auto& { return b.nonLevelGhostBox; });
-    in.gpu_domain    = to_gpu([](auto const& b) { return std::vector{b.domainBox}; });
     in.gpu_non_owned = to_gpu([](auto const& b) -> auto& { return b.nonOwnedBoxes; });
 }
 
@@ -396,8 +395,7 @@ void MultiBorisBackend<layout, ModelAccessor, Interpolator>::move_gpu_copy(
         auto const coef1     = pop.charge() * (0.5 * in.dt / pop.mass());
         auto const halfdt    = in.mesh(view.layout.dx, in.dt);
         auto const nlgb      = in.gpu_nlgb[i];
-        auto const domain    = in.gpu_domain[i];
-        auto const non_owned = in.gpu_non_owned[i];
+        auto const non_owned = in.gpu_non_owned[i]; // its type: no excluded boxes
         auto rhop            = pop.particleDensity();
         auto flux            = *pop.flux();
         auto const n_points  = rhop.max_tile_size(); // largest tile field, incl. ghosts
@@ -435,8 +433,9 @@ void MultiBorisBackend<layout, ModelAccessor, Interpolator>::move_gpu_copy(
             });
         };
 
+        // level ghosts as domain particles: each is held by one patch only
         launch(*pop.domainParticles(), nlgb, decltype(non_owned){});
-        launch(*pop.levelGhostParticles(), domain, non_owned);
+        launch(*pop.levelGhostParticles(), nlgb, decltype(non_owned){});
     }
 #else
     throw std::runtime_error("NEEDS GPU IMPL!");
@@ -512,6 +511,8 @@ struct MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>
         if constexpr (is_soavx(Particles_t::layout_mode))
             for (std::size_t i = 0; i < particles.size(); ++i)
             {
+                if (particles.weight(i) == 0) // SoAVXChunked's gaps
+                    continue;
                 auto particle = particles.copy(i);
                 fn(particle);
                 if constexpr (store)
@@ -663,7 +664,7 @@ void MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>::move_rest(
 
 // COPY of one patch on the device: a thread per particle pushes a copy loaded from the columns,
 //  and deposits it (global atomics) if it stays in this patch's deposit boxes, as
-//  push_copies_and_deposit: domain in the non level ghost boxes, level ghosts if owned
+//  push_copies_and_deposit: domain particles and level ghosts in the non level ghost boxes
 template<typename ModelAccessor, typename Interpolator>
 template<MultiBorisMode mode>
 void MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>::move_gpu_copy(
@@ -675,14 +676,12 @@ void MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>::move_gpu_c
     static_assert(has_gpu_copy);
     using Deposit_t = core::Interpolator<dim, Layout_t::options.interp_order, /*atomic=*/true>;
 
-    auto view            = in.accessor[i];
-    auto [ions, em]      = view.args;
-    auto const layout    = view.layout;
-    auto const halfdt    = in.mesh(layout.dx, in.dt);
-    auto const ghostBox  = damn::core::grow(layout.cells, Layout_t::options.particle_ghost_width);
-    auto const nlgb      = in.gpu_nlgb[i];
-    auto const domain    = in.gpu_domain[i];
-    auto const non_owned = in.gpu_non_owned[i];
+    auto view           = in.accessor[i];
+    auto [ions, em]     = view.args;
+    auto const layout   = view.layout;
+    auto const halfdt   = in.mesh(layout.dx, in.dt);
+    auto const ghostBox = damn::core::grow(layout.cells, Layout_t::options.particle_ghost_width);
+    auto const nlgb     = in.gpu_nlgb[i];
 
     for (auto& pop : ions)
     {
@@ -700,14 +699,8 @@ void MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>::move_gpu_c
                 if (!push_particle<type>(particle, em, layout, ghostBox, halfdt, coef1))
                     return;
 
-                auto const& cell    = particle.iCell();
-                bool const deposits = [&]() {
-                    if constexpr (type == ParticleType::Domain)
-                        return isIn(cell, nlgb);
-                    else
-                        return isIn(cell, domain[0]) and !isIn(cell, non_owned);
-                }();
-                if (deposits)
+                // level ghosts as domain particles: each is held by one patch only
+                if (isIn(particle.iCell(), nlgb))
                     Deposit_t{}.particleToMesh(particle, rhop, flux, layout);
             });
         };
@@ -744,12 +737,8 @@ void MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>::push_copie
         if (!push<type>(particle, args...))
             return;
 
-        bool const deposits = [&]() {
-            if constexpr (type == ParticleType::Domain)
-                return isIn(particle.iCell(), boxing.nonLevelGhostBox);
-            else
-                return boxing.isOwned(particle.iCell());
-        }();
+        // level ghosts as domain particles: each is held by one patch only
+        bool const deposits = isIn(particle.iCell(), boxing.nonLevelGhostBox);
 
         if (deposits)
             interp.particleToMesh(particle, rhoP, flux, layout);
@@ -1046,14 +1035,11 @@ struct MultiBorisFunctors
         auto F               = tile_at(pop.flux(), tile_idx);
         Interpolator_t interp;
 
+        // level ghosts as domain particles (each is held by one patch, and lives only in its
+        //  clamp-owner tile: seen once), the tile reduction folds halo contributions into the
+        //  neighbours
         auto const deposits = [&](auto const& p) {
-            if constexpr (particle_type == ParticleType::Domain)
-                return !is_border || isIn(p.iCell(), patch_boxings.nonLevelGhostBox);
-            else
-                // level ghosts live only in their clamp-owner tile, so each is seen
-                // once: deposit any entering the patch domain into this tile's fields,
-                // the tile reduction folds halo contributions into the neighbours
-                return patch_boxings.isOwned(p.iCell());
+            return !is_border || isIn(p.iCell(), patch_boxings.nonLevelGhostBox);
         };
 
         // batched in phases (copy + half step, m2p + accelerate + half step, deposit) as
@@ -1205,7 +1191,6 @@ struct MultiBoris : core::MultiBoris<ModelAccessor, Interpolator>
 
     StreamLauncher streamer{this->accessor, synchronous ? 0u : 1u};
     GpuBoxSpanSet_t gpu_nlgb;
-    GpuBoxSpanSet_t gpu_domain;
     GpuBoxSpanSet_t gpu_non_owned;
 };
 

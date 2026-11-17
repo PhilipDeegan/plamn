@@ -66,9 +66,8 @@ template<>
 class Weighter<1>
 {
 public:
-    DAMN_ALWAYS_INLINE void
-    computeWeight(double normalizedPos, int startIndex,
-                  std::array<double, nbrPointsSupport(1)>& weights) DAMN_ALL
+    DAMN_ALWAYS_INLINE void computeWeight(double normalizedPos, int startIndex,
+                                          std::array<double, nbrPointsSupport(1)>& weights) DAMN_ALL
     {
         weights[1] = normalizedPos - static_cast<double>(startIndex);
         weights[0] = 1. - weights[1];
@@ -95,9 +94,8 @@ template<>
 class Weighter<2>
 {
 public:
-    DAMN_ALWAYS_INLINE void
-    computeWeight(double normalizedPos, int startIndex,
-                  std::array<double, nbrPointsSupport(2)>& weights) DAMN_ALL
+    DAMN_ALWAYS_INLINE void computeWeight(double normalizedPos, int startIndex,
+                                          std::array<double, nbrPointsSupport(2)>& weights) DAMN_ALL
     {
         auto index = startIndex + 1;
         auto delta = static_cast<double>(index) - normalizedPos;
@@ -1012,6 +1010,8 @@ public:
 
         DAMN_LOG_START(3, "ParticleToMesh::operator()");
 
+        // the SoA family's iterators are thrust's zip iterators (thrust on the host too, see
+        //  damn/core/def/detail/thrust.hpp)
         auto begin = particles.begin();
         auto end   = particles.end();
 

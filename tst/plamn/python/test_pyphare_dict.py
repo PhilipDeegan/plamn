@@ -10,13 +10,16 @@ import numpy as np
 
 import pyplamn
 
-pyplamn.patch()
 
-import alfven1d  # noqa: E402
-import pyphare.pharein as ph  # noqa: E402
+import alfven1d
+import pyphare.pharein as ph
 
 
 class PyphareDictTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        pyplamn.patch()
+
     def setUp(self):
         ph.global_vars.sim = None
         ph.clearDict()
@@ -48,15 +51,19 @@ class PyphareDictTest(unittest.TestCase):
 
     def test_enums_are_plamns(self):
         d = self.dict
-        if d.has("simulation/model_layout"):  # tiling_gpu's pyphare writes it, PHARE master's not
+        if d.has(
+            "simulation/model_layout"
+        ):  # tiling_gpu's pyphare writes it, PHARE master's not
             self.assertEqual(
-                d.get_int("simulation/model_layout"), pyplamn.etc.LayoutMode.AoSMapped.value
+                d.get_int("simulation/model_layout"),
+                pyplamn.etc.LayoutMode.AoSMapped.value,
             )
             self.assertEqual(
                 d.get_int("simulation/allocator"), pyplamn.etc.AllocatorMode.CPU.value
             )
         self.assertEqual(
-            d.get_int("simulation/time_step/mode"), pyplamn.etc.TimeStepType.constant.value
+            d.get_int("simulation/time_step/mode"),
+            pyplamn.etc.TimeStepType.constant.value,
         )
 
     def test_init_functions_are_called_from_cpp(self):
@@ -64,7 +71,9 @@ class PyphareDictTest(unittest.TestCase):
         L = self.sim.simulation_domain()[0]
         x = np.linspace(0, L, 7)
 
-        by = d.eval_init_function_1d("simulation/electromag/magnetic/initializer/y_component", x)
+        by = d.eval_init_function_1d(
+            "simulation/electromag/magnetic/initializer/y_component", x
+        )
         np.testing.assert_allclose(by, 0.01 * np.cos(2 * np.pi * x / L))
 
         # a user function returning a scalar comes back one value per point
