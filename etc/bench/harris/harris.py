@@ -5,8 +5,11 @@ timers (PHARE_SCOPE_TIMING=1, .phare/timings/rank.<r>.txt in each code's directo
 
   etc/bench/harris/harris.py [--codes master next pr_1601 plamn] [--ndim 2] [--levels 3]
                              [--steps 1] [--ppc N] [--out DIR] [--tiling-gpu DIR]
+                             [--plamn-layouts AoSMapped SoAVXChunked]
 
-One permutation: the AoSMapped layout, one rank, the pyphare threading defaults. The input is
+One rank, the pyphare threading defaults. PHARE codes: the AoSMapped layout. plamn: once per
+--plamn-layouts layout (default AoSMapped), as the code plamn_<layout> (needs that layout's
+module of the dimension, ./mkn.py --dim 2 --layout SoAVXChunked). The input is
 tiling_gpu's config() itself, loaded from its file: its module settings (time_step, ppc) are kept
 but final_time (steps), max_nbr_levels (levels) and nppc (--ppc) are overridden and there are no
 diagnostics. Keywords a code's pyphare does not know (model_layout, threading on PHARE master)
@@ -36,8 +39,12 @@ TILING_GPU = PHARES / "tiling_gpu"
 CODES = ["master", "next", "pr_1601", "plamn"]
 
 
+def is_plamn(code):
+    return code.startswith("plamn")
+
+
 def pythonpath(code):
-    if code == "plamn":
+    if is_plamn(code):
         return [PLAMN / "python", PHARES / "master" / "pyphare"]
     root = PHARES / code
     if not (root / "build" / "pybindlibs").is_dir():
@@ -100,7 +107,7 @@ def particles_per_level(simulator, pop="protons"):
 
 def child(args):
     """runs in the code's own process and cwd: one coarse step, timed"""
-    if args.code == "plamn":
+    if is_plamn(args.code):
         import pyplamn
 
         pyplamn.patch()
@@ -124,7 +131,12 @@ def child(args):
     )
     module.ph = proxy
     ph.global_vars.sim = None
-    sim = module.config("AoSMapped")[0]
+    layout = args.code.split("_", 1)[1] if is_plamn(args.code) else "AoSMapped"
+    sim = module.config(layout)[0]
+    if is_plamn(args.code):
+        # PHARE master's pyphare (plamn's) rejects model_layout, dropped above: pyplamn picks its
+        #  module from the attribute
+        sim.model_layout = layout
 
     t0 = time.perf_counter()
     simulator = Simulator(sim, log_to_file=False).setup().initialize()
@@ -136,9 +148,11 @@ def child(args):
     steps_s = time.perf_counter() - t0
     final = particles_per_level(simulator)
     levels = simulator.data_wrangler().getNumberOfLevels()
+    loaded = type(simulator.cpp_sim).__module__ if is_plamn(args.code) else "-"
     simulator.reset()
     result = {
         "code": args.code,
+        "module": loaded,
         "init_s": init_s,
         "steps_s": steps_s,
         "steps": args.steps,
@@ -156,7 +170,12 @@ def child(args):
 def parent(args):
     out = Path(args.out).resolve()
     rows = []
-    for code in args.codes:
+    codes = [
+        c
+        for code in args.codes
+        for c in ([f"plamn_{lay}" for lay in args.plamn_layouts] if code == "plamn" else [code])
+    ]
+    for code in codes:
         cwd = out / code
         cwd.mkdir(parents=True, exist_ok=True)
         env = dict(os.environ, PHARE_SCOPE_TIMING="1")
@@ -175,16 +194,16 @@ def parent(args):
         rows.append(json.loads((cwd / "result.json").read_text()))
 
     print(
-        f"\nharris {args.ndim}D, {args.steps} coarse step(s), max {args.levels} levels, AoSMapped, 1 rank"
+        f"\nharris {args.ndim}D, {args.steps} coarse step(s), max {args.levels} levels, 1 rank"
     )
-    print(f"{'code':10} {'levels':>6} {'ppc':>4} {'init s':>9} {'step(s) s':>10}  dropped keywords")
+    print(f"{'code':20} {'levels':>6} {'ppc':>4} {'init s':>9} {'step(s) s':>10}  dropped keywords")
     for r in rows:
         print(
-            f"{r['code']:10} particles per level, initial {r['particles_initial']} final {r['particles_final']}"
+            f"{r['code']:20} module {r.get('module', '-')}, particles per level, initial {r['particles_initial']} final {r['particles_final']}"
         )
     for r in rows:
         print(
-            f"{r['code']:10} {r['levels']:>6} {r['ppc']:>4} {r['init_s']:>9.3f} {r['steps_s']:>10.3f}  "
+            f"{r['code']:20} {r['levels']:>6} {r['ppc']:>4} {r['init_s']:>9.3f} {r['steps_s']:>10.3f}  "
             f"{' '.join(r['dropped']) or '-'}"
         )
     phlop = f"PYTHONPATH={PLAMN / 'tpp/damn/tpp/phlop'} python3 -m phlop.timing"
@@ -194,10 +213,10 @@ def parent(args):
         print(f"  {phlop}.scope_timer times {path}")
     # scope_compare matches scopes by path: PHARE codes against each other only (plamn's scopes
     #  have other names below the roots)
-    phare = [code for code in timers if code != "plamn"]
+    phare = [code for code in timers if not is_plamn(code)]
     for code in phare[1:]:
         print(f"  {phlop}.scope_compare {timers[phare[0]]} {timers[code]}")
-    return 0 if len(rows) == len(args.codes) else 1
+    return 0 if len(rows) == len(codes) else 1
 
 
 def main(argv):
@@ -208,6 +227,9 @@ def main(argv):
     p.add_argument("--ndim", type=int, default=2, choices=[2, 3])
     p.add_argument("--levels", type=int, default=3, help="max_nbr_levels")
     p.add_argument("--steps", type=int, default=1, help="coarse steps")
+    p.add_argument(
+        "--plamn-layouts", nargs="+", default=["AoSMapped"], help="plamn runs once per layout"
+    )
     p.add_argument("--ppc", type=int, default=None, help="particles per cell (default: the test's)")
     p.add_argument("--out", default="bench_out/harris", help="one directory per code below it")
     p.add_argument(

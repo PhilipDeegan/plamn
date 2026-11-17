@@ -536,10 +536,254 @@ struct MultiBorisBackend<LayoutMode::SoAVX, ModelAccessor, Interpolator>
 };
 
 // SoAVXChunked: as SoAVX, the offsets are rebuilt after the post push sync (on_moved)
+//  CPU: its own patch loop, batched in phases (load + half step; m2p + accelerate + half step;
+//  deposit or store back) rather than the flat backend's per particle load, push, deposit (built
+//  for a GPU thread per particle). Same particles in the same order: the same results. GPU: the
+//  flat backend's
 template<typename ModelAccessor, typename Interpolator>
 struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
     : public MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>
 {
+    using Super               = MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>;
+    using MultiBoris_t        = Super::MultiBoris_t;
+    using Particles_t         = Super::Particles_t;
+    using Interpolator_t      = Super::Interpolator_t;
+    static constexpr auto dim = Super::dim;
+    static constexpr bool cpu = Super::alloc_mode == damn::AllocatorMode::CPU;
+    using Particle_t          = Particle<dim>;
+
+    template<MultiBorisMode mode>
+    static void move_pooled(MultiBoris_t& in, auto const& boxings)
+    {
+        if constexpr (cpu)
+            damn::core::ThreadPool::INSTANCE().patch_exec(
+                in.accessor.size(), [&](auto const i) { return in.accessor[i]; },
+                [&](auto& view) { move_patch<mode>(in, view, boxings); });
+        else
+            Super::template move_pooled<mode>(in, boxings);
+    }
+
+    template<MultiBorisMode mode>
+    static void move_cpu_copy(auto& in, auto const& boxings, auto const i)
+    {
+        if constexpr (cpu)
+        {
+            auto view = in.accessor[i];
+            move_patch<mode>(in, view, boxings);
+        }
+        else
+            Super::template move_cpu_copy<mode>(in, boxings, i);
+    }
+
+    template<MultiBorisMode mode>
+    static void move_rest(auto& in, auto const& boxings, auto const i)
+    {
+        if constexpr (cpu)
+        {
+            auto view = in.accessor[i];
+            move_patch<mode>(in, view, boxings);
+        }
+        else
+            Super::template move_rest<mode>(in, boxings, i);
+    }
+
+    template<MultiBorisMode mode>
+    static void move_patch(auto& in, auto& view, auto const& boxings)
+    {
+        DAMN_LOG_SCOPE(3, "MultiBoris::chunked::move_patch");
+
+        auto [ions, em]    = view.args;
+        auto const& layout = view.layout;
+        auto const& boxing = boxings.at(view.patchID());
+        auto const halfdt  = in.mesh(layout.dx, in.dt);
+
+        for (auto& pop : ions)
+        {
+            double const coef1 = pop.charge() * (0.5 * in.dt / pop.mass());
+            batched<ParticleType::Domain, mode>(pop.domainParticles(), pop, em, layout, boxing,
+                                                halfdt, coef1);
+            batched<ParticleType::LevelGhost, mode>(pop.levelGhostParticles(), pop, em, layout,
+                                                    boxing, halfdt, coef1);
+        }
+    }
+
+    // the push on lanes of the columns: blocks of `lanes` consecutive slots, each component a
+    //  [lane] array loaded from (and stored back to) its column, the arithmetic in lane loops
+    //  REF: pushed in place (a level ghost leaving the ghost box on the first half step is stored
+    //  half pushed, not accelerated, as push_particle: post_move_sync drops it). COPY: copies
+    //  pushed, deposited if they end in the non level ghost box, in slot order. Gap slots
+    //  (weight 0) are computed with the others and neither stored nor deposited
+    static constexpr std::size_t lanes = 8;
+
+    template<auto type, MultiBorisMode mode>
+    static void batched(auto& particles, auto& pop, auto const& em, auto const& layout,
+                        auto const& boxing, auto const& halfdt, double const coef1)
+    {
+        static constexpr bool copy  = mode == MultiBorisMode::COPY;
+        static constexpr auto limit = static_cast<double>(particle_half_push_limit);
+
+        Interpolator_t interp;
+        auto& rhoP = pop.particleDensity();
+        auto& flux = pop.flux();
+
+        auto& W = particles.weight();
+        auto& C = particles.iCell();
+        auto& D = particles.delta();
+        auto& V = particles.v();
+
+        double w[lanes], d[dim][lanes], v[3][lanes], E[3][lanes], B[3][lanes];
+        int c[dim][lanes];
+        bool live[lanes], accel[lanes];
+
+        // delta += halfdt v, the cell crossed into c (boris::advance on the lanes); a lane of
+        //  mask moving more than the limit throws boris::advance's exception
+        auto const advance = [&](std::size_t const n, bool const* mask) {
+            bool over    = false;
+            double bad_x = 0, bad_v = 0; // a lane over the limit, for the exception
+            for (std::size_t k = 0; k < dim; ++k)
+                for (std::size_t l = 0; l < n; ++l)
+                {
+                    double const x = d[k][l] + halfdt[k] * v[k][l];
+                    bool const b   = mask[l] and std::abs(x) > limit;
+                    over           = over or b;
+                    bad_x          = b ? x : bad_x;
+                    bad_v          = b ? v[k][l] : bad_v;
+                    double const f = std::floor(x);
+                    d[k][l]        = x - f;
+                    c[k][l]        = static_cast<int>(f + c[k][l]);
+                }
+            if (over) [[unlikely]]
+                damn::throw_exception<boris::MoveTwoCellException>(bad_x, bad_v);
+        };
+        auto const lane_particle = [&](std::size_t const l) {
+            Particle_t p;
+            p.weight() = w[l];
+            for (std::size_t k = 0; k < dim; ++k)
+            {
+                p.iCell()[k] = c[k][l];
+                p.delta()[k] = d[k][l];
+            }
+            for (std::size_t k = 0; k < 3; ++k)
+                p.v()[k] = v[k][l];
+            return p;
+        };
+
+        auto const block = [&](std::size_t const i0, std::size_t const n) {
+            for (std::size_t l = 0; l < n; ++l)
+                w[l] = W[i0 + l];
+            for (std::size_t k = 0; k < dim; ++k)
+                for (std::size_t l = 0; l < n; ++l)
+                {
+                    c[k][l] = C[k][i0 + l];
+                    d[k][l] = D[k][i0 + l];
+                }
+            for (std::size_t k = 0; k < 3; ++k)
+                for (std::size_t l = 0; l < n; ++l)
+                    v[k][l] = V[k][i0 + l];
+            for (std::size_t l = 0; l < n; ++l)
+                live[l] = w[l] != 0;
+
+            advance(n, live);
+
+            for (std::size_t l = 0; l < n; ++l)
+            {
+                accel[l] = live[l];
+                if constexpr (type == ParticleType::LevelGhost)
+                    accel[l] = accel[l] and isIn(lane_particle(l).iCell(), boxing.ghostBox);
+            }
+
+            // m2p per lane, the stencils differ
+            for (std::size_t l = 0; l < n; ++l)
+            {
+                if (!accel[l])
+                {
+                    for (std::size_t k = 0; k < 3; ++k)
+                        E[k][l] = B[k][l] = 0;
+                    continue;
+                }
+                auto const [pE, pB] = interp.m2p(lane_particle(l), em, layout);
+                for (std::size_t k = 0; k < 3; ++k)
+                {
+                    E[k][l] = pE[k];
+                    B[k][l] = pB[k];
+                }
+            }
+
+            // boris::accelerate on the lanes
+            double v1[3][lanes];
+            for (std::size_t l = 0; l < n; ++l)
+            {
+                double const vx1 = v[0][l] + coef1 * E[0][l];
+                double const vy1 = v[1][l] + coef1 * E[1][l];
+                double const vz1 = v[2][l] + coef1 * E[2][l];
+                double const rx = coef1 * B[0][l], ry = coef1 * B[1][l], rz = coef1 * B[2][l];
+                double const rx2 = rx * rx, ry2 = ry * ry, rz2 = rz * rz;
+                double const rxry = rx * ry, rxrz = rx * rz, ryrz = ry * rz;
+                double const invDet = 1. / (1. + rx2 + ry2 + rz2);
+                double const mxx = 1. + rx2 - ry2 - rz2, mxy = 2. * (rxry + rz),
+                             mxz = 2. * (rxrz - ry);
+                double const myx = 2. * (rxry - rz), myy = 1. + ry2 - rx2 - rz2,
+                             myz = 2. * (ryrz + rx);
+                double const mzx = 2. * (rxrz + ry), mzy = 2. * (ryrz - rx),
+                             mzz = 1. + rz2 - rx2 - ry2;
+                v1[0][l]         = (mxx * vx1 + mxy * vy1 + mxz * vz1) * invDet + coef1 * E[0][l];
+                v1[1][l]         = (myx * vx1 + myy * vy1 + myz * vz1) * invDet + coef1 * E[1][l];
+                v1[2][l]         = (mzx * vx1 + mzy * vy1 + mzz * vz1) * invDet + coef1 * E[2][l];
+            }
+            for (std::size_t k = 0; k < 3; ++k)
+                for (std::size_t l = 0; l < n; ++l)
+                    v[k][l] = accel[l] ? v1[k][l] : v[k][l];
+
+            // second half step, the lanes not accelerated stay where the first left them
+            int c1[dim][lanes];
+            double d1[dim][lanes];
+            for (std::size_t k = 0; k < dim; ++k)
+                for (std::size_t l = 0; l < n; ++l)
+                {
+                    c1[k][l] = c[k][l];
+                    d1[k][l] = d[k][l];
+                }
+            advance(n, accel);
+            for (std::size_t k = 0; k < dim; ++k)
+                for (std::size_t l = 0; l < n; ++l)
+                {
+                    c[k][l] = accel[l] ? c[k][l] : c1[k][l];
+                    d[k][l] = accel[l] ? d[k][l] : d1[k][l];
+                }
+
+            if constexpr (copy)
+            {
+                for (std::size_t l = 0; l < n; ++l)
+                    if (accel[l])
+                    {
+                        auto const p = lane_particle(l);
+                        if (isIn(p.iCell(), boxing.nonLevelGhostBox))
+                            interp.particleToMesh(p, rhoP, flux, layout);
+                    }
+            }
+            else
+            {
+                for (std::size_t k = 0; k < dim; ++k)
+                    for (std::size_t l = 0; l < n; ++l)
+                        if (live[l])
+                        {
+                            C[k][i0 + l] = c[k][l];
+                            D[k][i0 + l] = d[k][l];
+                        }
+                for (std::size_t k = 0; k < 3; ++k)
+                    for (std::size_t l = 0; l < n; ++l)
+                        if (live[l])
+                            V[k][i0 + l] = v[k][l];
+            }
+        };
+
+        auto const size = particles.size();
+        std::size_t i   = 0;
+        for (; i + lanes <= size; i += lanes)
+            block(i, lanes);
+        if (i < size)
+            block(i, size - i);
+    }
 };
 
 
@@ -1200,7 +1444,6 @@ template<MultiBorisMode mode>
 void MultiBoris<ModelAccessor, Interpolator>::move(auto const& boxings)
 {
     static constexpr auto copy     = mode == MultiBorisMode::COPY;
-    static constexpr auto is_cpu   = Particles_t::alloc_mode == damn::AllocatorMode::CPU;
     static constexpr auto is_gpu   = Particles_t::alloc_mode == damn::AllocatorMode::GPU_UNIFIED;
     static constexpr auto gpu_copy = copy and is_gpu and Backend::has_gpu_copy;
 

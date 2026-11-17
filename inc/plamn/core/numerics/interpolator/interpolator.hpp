@@ -746,15 +746,16 @@ protected:
 
 
     template<auto centering>
-    auto indexAndWeights_(damn::core::Box<int, dim> const& amrbox, auto const& iCell_,
-                          auto const& delta) DAMN_ALL
+    DAMN_ALWAYS_INLINE auto indexAndWeights_(damn::core::Box<int, dim> const& amrbox,
+                                             auto const& iCell_, auto const& delta) DAMN_ALL
     {
         indexAndWeights__<centering>(
             [&] DAMN_ALL(auto const& point) { return point - amrbox.lower; }, iCell_, delta);
     }
 
     template<auto centering>
-    auto indexAndWeights_(auto const& layout, auto const& iCell_, auto const& delta) DAMN_ALL
+    DAMN_ALWAYS_INLINE auto indexAndWeights_(auto const& layout, auto const& iCell_,
+                                             auto const& delta) DAMN_ALL
     {
         return indexAndWeights__<centering>(
             [&] DAMN_ALL(auto const& point) { return to_local(layout, point); }, iCell_, delta);
@@ -1082,9 +1083,11 @@ protected:
     Weights primal_weights_;
 
 private:
+    // always inlined: six per m2p, out of line (gcc merges the identical instantiations) they
+    //  cost a call each per particle
     template<auto quantity, typename Layout>
-    NO_DISCARD auto meshToParticle(auto const& field, Layout const&,
-                                   auto const& indexWeights) DAMN_ALL
+    NO_DISCARD DAMN_ALWAYS_INLINE auto meshToParticle(auto const& field, Layout const&,
+                                                      auto const& indexWeights) DAMN_ALL
     {
         return meshToParticle_.template op<Layout, quantity>(field, indexWeights);
     }

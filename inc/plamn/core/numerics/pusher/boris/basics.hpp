@@ -32,8 +32,11 @@ struct MoveTwoCellException : std::exception
 };
 
 
+// always inlined: called per particle twice per push, out of line it costs a call and the
+//  particle's fields are reloaded through memory (gcc's LTO kept it out of line)
 template<auto alloc, typename Particle_t, typename Float, std::size_t dim>
-auto static advance(Particle_t& p, std::array<Float, dim> const& halfDtOverDl) DAMN_ALL
+[[gnu::always_inline]] inline auto static advance(
+    Particle_t& p, std::array<Float, dim> const& halfDtOverDl) DAMN_ALL
 {
     auto newCell = p.iCell();
     for (std::size_t iDim = 0; iDim < dim; ++iDim)
@@ -53,7 +56,8 @@ auto static advance(Particle_t& p, std::array<Float, dim> const& halfDtOverDl) D
 
 
 template<typename Particle, typename ParticleEB, typename Float>
-void accelerate(Particle& p, ParticleEB const& eb, Float const coef1) DAMN_ALL
+[[gnu::always_inline]] inline void accelerate(Particle& p, ParticleEB const& eb,
+                                              Float const coef1) DAMN_ALL
 {
     static constexpr Float one = 1;
     static constexpr Float two = 2;
