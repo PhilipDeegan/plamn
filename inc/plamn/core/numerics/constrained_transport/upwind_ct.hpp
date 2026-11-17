@@ -1,6 +1,7 @@
 #ifndef PLAMN_CORE_NUMERICS_CONSTRAINED_TRANSPORT_UPWIND_CT_HPP
 #define PLAMN_CORE_NUMERICS_CONSTRAINED_TRANSPORT_UPWIND_CT_HPP
 
+#include "damn/core/def.hpp"
 #include "damn/core/def/damn_config.hpp"
 
 #include <cstddef>
