@@ -85,12 +85,20 @@ def alfven(refined, steps):
     return out
 
 
-def harris(steps, tagging=False, measure=None, load_balancer=None):
+def harris(
+    steps,
+    tagging=False,
+    measure=None,
+    load_balancer=None,
+    levels=2,
+    cells=(100, 100),
+    patch=(25, 25),
+):
     ph.global_vars.sim = None
     ph.clearDict()
     L = 0.5
     refinement = (
-        dict(refinement="tagging", max_nbr_levels=2)
+        dict(refinement="tagging", max_nbr_levels=levels)
         if tagging
         else dict(
             refinement="boxes", refinement_boxes={"L0": {"B0": [(30, 22), (69, 37)]}}
@@ -99,9 +107,9 @@ def harris(steps, tagging=False, measure=None, load_balancer=None):
     sim = ph.Simulation(
         time_step=0.005,
         time_step_nbr=steps,
-        cells=(100, 100),
+        cells=cells,
         dl=(0.4, 0.4),
-        largest_patch_size=(25, 25),
+        largest_patch_size=patch,
         hyper_resistivity=0.002,
         resistivity=0.001,
         **refinement,  # boxes: around the lower sheet
@@ -353,6 +361,29 @@ class HybridRefinementTest(unittest.TestCase):
         self.assertLess(lb["imbalance"][61], no["imbalance"][61])
         self.assertLess(np.abs(lb["B"] - no["B"]).max(), 1e-12)
 
+    def test_load_balancing_keeps_the_finer_levels(self):
+        """three levels from the start (the sheets are tagged at initialization): a rebalance
+        moves every level onto its new owners, coarser to finer, none dropped (a dropped level
+        would come back at the next regrid, split anew from its coarser level: other physics).
+        The same levels at every step and B as without load balancing"""
+        startMPI()
+        if plamn.etc.mpi_size() < 2:
+            self.skipTest("one rank: nothing to balance (--tags mpi runs it on 3)")
+        steps = 4
+        run = lambda lb: harris(
+            steps,
+            tagging=True,
+            measure=lambda sim: sim.cpp_sim.n_levels(),
+            load_balancer=lb,
+            levels=3,
+            cells=(40, 100),  # y as harris()'s default: its sheets periodic to round off
+            patch=(10, 10),
+        )
+        no, lb = run(None), run(dict(every=2, tol=0.05))
+        self.assertEqual(no["measured"], [3] * (steps + 1))  # three levels throughout
+        self.assertEqual(lb["measured"], no["measured"])
+        for b_lb, b_no in zip(lb["B"], no["B"]):
+            self.assertLess(np.abs(b_lb - b_no).max(), 1e-12)
 
 if __name__ == "__main__":
     unittest.main()

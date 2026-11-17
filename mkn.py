@@ -91,6 +91,11 @@ def main(argv):
     parser.add_argument("--no-etc", action="store_true", help="don't build py_etc")
     parser.add_argument("--jobs", type=int, default=8, help="mkn -t (CI: 4)")
     parser.add_argument(
+        "--scope-print",
+        action="store_true",
+        help="DAMN_LOG_SCOPE_PRINT: scopes print their names (debug builds; PHARE_LOG=RANK_FILES: a file per rank)",
+    )
+    parser.add_argument(
         "--sync-pools", action="store_true", help="DAMN_THREAD_POOL_SYNC: no pool threads"
     )
     parser.add_argument("--log-level", type=int, choices=[0, 1, 2, 3], help="DAMN_LOG_LEVEL")
@@ -121,6 +126,8 @@ def main(argv):
         extra += ["-x", "res/mkn/mpi"]
 
     scoping = [] if args.log_level is None else [f"-DDAMN_LOG_LEVEL={args.log_level}"]
+    if args.scope_print:
+        scoping += ["-DDAMN_LOG_SCOPE_PRINT"]
     if args.sync_pools:
         scoping += ["-DDAMN_THREAD_POOL_SYNC=1"]
     if args.diag_doubles:

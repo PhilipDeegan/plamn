@@ -105,7 +105,7 @@ void Simulator<opts>::after_step_(int const ln, double const t, bool const last)
             std::vector<Box_t> boxes;
             for (auto const& p : hierarchy_.levels[fine].patches)
                 boxes.push_back(p.box);
-            regrid_level_(fine, boxes, t);
+            regrid_level_(fine, boxes, t, /*keep_finer=*/true);
         }
 }
 

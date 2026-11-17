@@ -51,6 +51,9 @@
 #include "plamn/amr/split/splitter.hpp"
 
 #include <array>
+#include <stdexcept>
+#include <cstdlib>
+#include <fstream>
 #include <type_traits>
 #include <set>
 #include <chrono>
@@ -76,6 +79,27 @@ enum class UpdaterMode : std::uint16_t;
 
 namespace plamn
 {
+// std::cout to a file per rank, as PHARE's simulator: by PHARE_LOG, which pyphare sets to
+//  RANK_FILES (log_to_file, its default) after making .log/: .log/<rank>.out; NULL: discarded,
+//  CLI or unset: the terminal. Eg with -DDAMN_LOG_SCOPE_PRINT (mkn.py --scope-print, a build
+//  without NDEBUG): every scope's name, a rank stuck in a collective is the one whose file stops
+NO_DISCARD inline std::unique_ptr<std::ofstream> rank_log_file()
+{
+    auto const* const env  = std::getenv("PHARE_LOG");
+    std::string const mode = env ? env : "CLI";
+    if (mode == "CLI")
+        return nullptr;
+    if (mode == "NULL")
+        return std::make_unique<std::ofstream>("/dev/null");
+    int initialized = 0, rank = 0;
+    MPI_Initialized(&initialized);
+    if (initialized)
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    if (mode == "RANK_FILES")
+        return std::make_unique<std::ofstream>(".log/" + std::to_string(rank) + ".out");
+    throw std::runtime_error("PHARE_LOG: RANK_FILES, NULL or CLI, not " + mode);
+}
+
 template<auto opts>
 class Simulator : public ISimulator
 {
@@ -373,11 +397,13 @@ private:
     // regrid_mode high: the finer levels of ln regridded at SAMRAI's regrid points, after a step
     //  of ln to t (last: ln's last substep of its coarser level's step)
     void after_step_(int ln, double t, bool last);
-    void regrid_level_(int ln, std::vector<Box_t> const& boxes, double t);
+    // keep_finer: the finer levels stay (each to be regridded onto its own boxes in turn)
+    void regrid_level_(int ln, std::vector<Box_t> const& boxes, double t, bool keep_finer = false);
     void initialize_root_();
     void initialize_refined_(std::size_t ln);
     void refined_moments_(std::size_t ln); // a refined level's moments and J from its particles
     void sort_refined_particles_(std::size_t ln); // SoAVXChunked: chunks before the first push
+    void moved_moments_(std::size_t ln);          // a level moved (rebalance): its moments kept
 
     // level ghost fills (patch ghosts, then level ghosts from the coarser level at time t)
     void fill_magnetic_ghosts_(std::size_t ln, std::string const& key, double t);
@@ -417,6 +443,7 @@ private:
     void synchronize_(int ln, double t);
     void accumulate_flux_sum_(std::size_t ln, double coef);
 
+    damn::CoutRedirect cout_redirect_{rank_log_file()}; // first: for the whole lifetime
     initializer::Dict dict_;
     Hierarchy_t hierarchy_;
     std::vector<Level> levels_;

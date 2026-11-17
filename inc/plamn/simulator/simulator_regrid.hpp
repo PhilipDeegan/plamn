@@ -263,8 +263,16 @@ void Simulator<opts>::rebalance_(double const t)
         prepare_step_(0, t);
     }
 
+    // every finer level, coarser to finer, each onto its own boxes, the finer kept: moved if its
+    //  owners changed, else only linked to its coarser level again (which may have moved)
     for (std::size_t ln = 1; ln < levels_.size(); ++ln)
-        regrid_level_(static_cast<int>(ln), clustered_[ln], t);
+    {
+        auto const l = static_cast<int>(ln);
+        if (damn::amr::same_decomposition(hierarchy_.levels[ln], level_of_(l, clustered_[ln])))
+            link_level_(l);
+        else
+            regrid_level_(l, clustered_[ln], t, /*keep_finer=*/true);
+    }
 }
 
 
@@ -303,9 +311,13 @@ void Simulator<opts>::regrid_(double const t, int const from, bool const always)
 
 // level ln onto new boxes, at t (every level synchronized): its data moved where the old level
 // was (damn::amr::regrid), refined from the coarser level elsewhere, as PHARE's
-// HybridHybridMessengerStrategy::regrid; finer levels go, the caller makes them again
+// HybridHybridMessengerStrategy::regrid; finer levels go, the caller makes them again, unless
+// keep_finer (a rebalance, or a regrid onto the same boxes: the caller regrids each finer level
+// onto its own boxes after this one, coarser to finer, which also links them to their new
+// coarser level)
 template<auto opts>
-void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxes, double const t)
+void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxes, double const t,
+                                    bool const keep_finer)
 {
     DAMN_LOG_SCOPE(1, "Simulator::regrid_level_");
     using damn::amr::LevelRegion;
@@ -322,8 +334,13 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
                 old_cells.push_back(damn::core::shift(p.box, shift));
     }
     auto const old_level = hierarchy_.levels[ln];
-    levels_.resize(fine + 1);
-    damn::amr::set_level(hierarchy_, level_of_(ln, boxes));
+    auto const finer = keep_finer ? std::vector<damn::amr::Level<dimension>>(
+                                        hierarchy_.levels.begin() + ln + 1, hierarchy_.levels.end())
+                                  : std::vector<damn::amr::Level<dimension>>{};
+    levels_.resize(keep_finer ? std::max(levels_.size(), fine + 1) : fine + 1);
+    damn::amr::set_level(hierarchy_, level_of_(ln, boxes)); // drops the finer: put back below
+    for (auto const& level : finer)
+        damn::amr::set_level(hierarchy_, level);
     auto const map = damn::amr::make_regrid_map(old_level, hierarchy_.levels[ln], rank_,
                                                 damn::amr::periodic_shifts(hierarchy_, ln));
 
@@ -385,8 +402,52 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
     });
     sort_refined_particles_(fine);
 
-    refined_moments_(fine);
+    if (!keep_finer)
+        refined_moments_(fine);
+    else
+        moved_moments_(fine);
     prepare_step_(ln, t);
+}
+
+
+// a level moved onto new owners (keep_finer: the same boxes, a rebalance): the moments moved
+//  with it are kept on the domain (under a finer level they are the finer level's, coarsened at
+//  the last synchronization: a deposit would replace them), the deposit of its particles only
+//  gives the ghost nodes the move does not bring (outside the level: level ghost deposits),
+//  then the patch borders from the neighbours, as level 0's rebalance
+template<auto opts>
+void Simulator<opts>::moved_moments_(std::size_t const ln)
+{
+    auto const each_moment = [](auto& patch, auto&& fn) {
+        for (auto& pop : patch.populations)
+        {
+            fn(pop->density);
+            fn(pop->charge_density);
+            for (auto& f : pop->flux)
+                fn(f);
+        }
+    };
+    std::vector<std::vector<std::vector<double>>> kept; // per patch, per moment: its values
+    per_patch_(ln, [&](auto& patch) {
+        auto& mine = kept.emplace_back();
+        each_moment(patch,
+                    [&](auto const& f) { mine.emplace_back(f.data(), f.data() + f.size()); });
+    });
+    refined_moments_(ln); // the ghost nodes; the domain put back below
+    std::size_t i = 0;
+    per_patch_(ln, [&](auto& patch) {
+        std::size_t m = 0;
+        each_moment(patch, [&](auto& f) {
+            auto const& values = kept[i][m++];
+            damn::core::for_each_point(domain_box(patch.layout, f), [&](auto const& ijk) {
+                auto& v = f(ijk);
+                v       = values[static_cast<std::size_t>(&v - f.data())];
+            });
+        });
+        ++i;
+    });
+    copy_(ln, damn::amr::fill_ghosts, "IonPopMoments");
+    compute_moments_(ln);
 }
 
 } // namespace plamn
