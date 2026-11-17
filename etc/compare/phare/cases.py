@@ -59,7 +59,7 @@ CASES = {
 def _diag_options(out, fmt, fine_dump):
     """the regular dumps; with fine_dump, also each fine level at the end of its substeps
     (fine_dump_lvl_max: phareh5, PHARE master's pharevtkhdf writes them with level tables
-    shorter than the steps, PHAREHUB/PHARE#1379 fixes it)."""
+    shorter than the steps, fixed in a later PHARE)."""
     options = {"dir": out, "mode": "overwrite"}
     if fine_dump:
         options["fine_dump_lvl_max"] = 10

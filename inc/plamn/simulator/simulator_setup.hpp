@@ -216,7 +216,7 @@ void Simulator<opts>::register_resources_()
         auto const name = ions["pop" + std::to_string(i)]["name"].template to<std::string>();
         population_names_.push_back(name);
 
-        // every population's moments in one exchange, PHAREHUB/PHARE#1079
+        // every population's moments in one exchange, as PHARE
         add("IonPopBorderSum", components(name + "_flux"));
         add("IonPopBorderSum",
             damn::amr::same_names({name + "_density", name + "_charge_density"}));

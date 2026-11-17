@@ -118,7 +118,7 @@ struct UpdaterCellMapSelectionBoxing : public UpdaterSelectionBoxing<Layout>
 
     // the level ghost layer: ghost cells no patch of the level covers (a level ghost pushed into
     //  another patch's cell is that patch's: kept here it would come back as a duplicate,
-    //  PHAREHUB/PHARE#1579)
+    //  the level ghost duplicate fix)
     Selector_t const inGhostLayer
         = [ghostBox = Super::ghostBox, domainBox = Super::domainBox,
            nonLevelGhostBox = Super::nonLevelGhostBox](auto& particleRange) {

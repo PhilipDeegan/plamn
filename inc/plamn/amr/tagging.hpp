@@ -1,7 +1,7 @@
 #ifndef PLAMN_AMR_TAGGING_HPP
 #define PLAMN_AMR_TAGGING_HPP
 
-// the cells of a level to refine, from its fields, after PHARE (PHAREHUB/PHARE#1469):
+// the cells of a level to refine, from its fields, after PHARE's tagging:
 //
 //   a quantity (B, or one component of it) is read at cell centres (cell_centred: each primal
 //   direction averaged over the cell's two nodes), a criterion gives one indicator per cell

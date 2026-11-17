@@ -8,13 +8,13 @@
 //   level 0  periodic, no level border
 //   level 1  a box inside a periodic level 1 domain, its level ghost particles in the ring
 //            around it (patches meeting on the level border hold cells of it in common:
-//            PHAREHUB/PHARE#1579's corner case)
+//            the level ghost duplicate fix's corner case)
 //
 // level ghosts as the simulator: each held by one patch, its cell's owner (the nearest,
 // damn::amr::owned_elsewhere), handed over as a patch ghost when it enters another patch's
 // domain, split again every 2 pushes (a coarse step).
 //
-// moments as PHAREHUB/PHARE#1441 (and the simulator): after the exchange each patch deposits its
+// moments as PHARE's deposit after the exchange (and the simulator): after the exchange each patch deposits its
 // domain particles (depositDomain), the level's moments are then every patch's sum on each node
 // (the border sums, periodic images included): the same as the level as one patch, within the
 // summation order.

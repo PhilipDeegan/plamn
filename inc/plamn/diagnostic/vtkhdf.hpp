@@ -10,7 +10,7 @@
 //   due(diagnostic, t, dt)               PHARE's schedule: a timestamp within dt of t (as
 //                                        floats), past ones caught up
 //   file_name(quantity)                  /ions/pop/protons/flux -> ions_pop_protons_flux.vtkhdf
-//   hybrid_quantities(population_names)  quantity -> its fields on a patch (PHAREHUB/PHARE#1476's
+//   hybrid_quantities(population_names)  quantity -> its fields on a patch (PHARE's VTKHDF diagnostics'
 //                                        accessors), components in file order; an unknown
 //                                        quantity throws (quantity_for)
 //   primal_into(PrimalInto{field, cells, out, n_components, component})

@@ -71,7 +71,7 @@ jobs:
         PYTHONPATH=.:phare/pyphare:tst/plamn/python \
           python3 -m phlop.run.test_cases -i tst -c 4 --tags mpi
 
-    # again with the pyphare of PHAREHUB/PHARE#1171 (live DataWrangler, PHARE master based)
+    # again with a pyphare with the live DataWrangler (PHARE master based)
     - uses: actions/checkout@v4
       with:
         repository: PhilipDeegan/PHARE

@@ -1,4 +1,4 @@
-"""PHARE's tests/simulator/test_restarts.py (PHAREHUB/PHARE#1410's), in memory: a simulation
+"""PHARE's tests/simulator/test_restarts.py, in memory: a simulation
 writes a restart at step 4 and keeps running; a second one, restart_time at step 4, loads it.
 Both live in the same process (plamn has no process wide state), so they are compared directly,
 without diagnostics: at the restart time and after every step after it, the same levels and
