@@ -17,8 +17,9 @@ The modules use MPI: built with res/mkn/mpi's settings (mpicxx) unless -x is giv
 
 Scopes (DAMN_LOG_SCOPE(level, "name")) up to --log-level (default 2) are phlop scopes; what each
 level records is chosen at build time with --scope-flags <level>=<any of time,mem,perf_light,
-perf_all> (default: time), and at run time: PHARE_SCOPE_TIMING=1 writes .phare/timings/rank.<r>.txt,
-PHLOP_SCOPE_MEM=1 adds memory, PHLOP_PERF_LIGHT / PHLOP_PERF_ALL hardware counters (see
+perf_all,io> (default: time), and at run time: PHARE_SCOPE_TIMING=1 writes .phare/timings/rank.<r>.txt,
+PHLOP_SCOPE_MEM=1 adds memory, PHLOP_SCOPE_IO=1 the thread's I/O (/proc/thread-self/io),
+PHLOP_PERF_LIGHT / PHLOP_PERF_ALL hardware counters (see
 damn/core/def/phlop.hpp); python3 -m phlop.timing.scope_timer times|perf|variance reads them.
 Hardware counters count the calling thread: --sync-pools (DAMN_THREAD_POOL_SYNC) for serial
 numbers that include the pools' work.
@@ -107,7 +108,7 @@ def main(argv):
         nargs="+",
         default=[],
         metavar="LEVEL=FLAGS",
-        help="phlop scope flags per log level, e.g. 1=time,mem,perf_all",
+        help="phlop scope flags per log level, e.g. 1=time,mem,perf_all,io",
     )
     if "--" in argv:
         at = argv.index("--")
@@ -127,7 +128,7 @@ def main(argv):
         scoping += [f"-DPLAMN_PARTICLE_ALLOWED_CELL_JUMP={args.cell_jump}"]
     for flags in args.scope_flags:
         level, _, keys = flags.partition("=")
-        valid = {"time", "mem", "perf_light", "perf_all"}
+        valid = {"time", "mem", "perf_light", "perf_all", "io"}
         if level not in ("1", "2", "3") or not keys or not set(keys.split(",")) <= valid:
             print(f"--scope-flags {flags}: <1|2|3>=<any of {','.join(sorted(valid))}>")
             return 1
