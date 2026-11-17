@@ -268,7 +268,8 @@ DAMN_WITH_GPU(
 // clang-format on
 TYPED_TEST_SUITE(GodunovTileTest, Tiled_t, );
 
-// tiled (per tile pool tasks, or one GPU launch) == untiled, bit for bit, every direction
+// tiled (per tile pool tasks, or one GPU launch) == untiled within ~ulps (FMA contraction, see
+// tol), every direction
 TYPED_TEST(GodunovTileTest, tiled_matches_untiled)
 {
     using Ref_t = FacePatch<TypeParam::dim>;
@@ -288,7 +289,9 @@ TYPED_TEST(GodunovTileTest, tiled_matches_untiled)
         };
         auto const& r = ref.faces[dir];
         auto const& c = cmp.faces[dir];
-        double const tol = TypeParam::alloc_mode == damn::AllocatorMode::GPU_UNIFIED ? 1e-14 : 0; // ~2 ulp seen
+        // tiles and patch are separate instantiations: with FMA contraction (gcc -ffp-contract=fast
+        //  by default, device compilers) each fuses its own way, ~ulps apart; exact with it off
+        double const tol = 1e-14;
         EXPECT_EQ(tile_mismatches(ref_layout, r.F_rho, c.F_rho, box_of, tol), 0u) << "F_rho " << dir;
         EXPECT_EQ(tile_mismatches(ref_layout, r.F_Etot, c.F_Etot, box_of, tol), 0u) << "F_Etot " << dir;
         EXPECT_EQ(tile_mismatches(ref_layout, r.dL, c.dL, box_of, tol), 0u) << "dL " << dir;
