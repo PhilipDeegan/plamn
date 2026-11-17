@@ -1,4 +1,4 @@
-#! clean build test -p test_plamn_core -dKO -t 8
+#! clean build test -p test_plamn_core -dKO -t 8 -x res/mkn/thrust
 
 name: plamn
 

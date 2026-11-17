@@ -20,16 +20,18 @@ permissions:
   contents: read
 
 jobs:
-  # CUDA on a simulated NVIDIA H100, clang (the image's nvcc is not used). The simulator needs a
+  # CUDA on a simulated NVIDIA RTX 5090, clang (the image's nvcc is not used). The simulator needs a
   #  shared cudart, the profiles link -lcudart (the .so) from its shim.
-  #  sm_90 (H100): res/mkn/clang_cuda.yaml targets sm_120.
+  #  sm_120 (RTX 5090, Blackwell), as res/mkn/clang_cuda.yaml and a local RTX 50xx: VGPU_GPU
+  #  picks the simulated card (the image's default is nvidia/h100, sm_90)
   cuda:
-    name: cuda (clang 22, CUDA 13.5, simulated H100)
+    name: cuda (clang 22, CUDA 13.5, simulated RTX 5090)
     runs-on: ubuntu-24.04
     container: ghcr.io/0xz/hpc-containers:cuda
     timeout-minutes: 120
     env:
-      CUDA_ARCH: sm_90
+      CUDA_ARCH: sm_120
+      VGPU_GPU: nvidia/rtx5090
     steps:
     - uses: actions/checkout@v6
     - name: Install
