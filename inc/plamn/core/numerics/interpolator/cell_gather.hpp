@@ -1,10 +1,9 @@
 #ifndef PLAMN_CORE_NUMERICS_INTERPOLATOR_CELL_GATHER_HPP
 #define PLAMN_CORE_NUMERICS_INTERPOLATOR_CELL_GATHER_HPP
 
-#include "damn/core/def.hpp"
-
 #include "plamn/core/data/grid/patch_layout.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
+#include "plamn/core/models/quantities/quantity.hpp"
 
 #include <array>
 #include <cstddef>

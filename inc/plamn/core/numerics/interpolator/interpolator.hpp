@@ -4,10 +4,8 @@
 #include "damn/core/logger.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/operators.hpp"
-#include "damn/core/meta/for_N.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/geometry/box.hpp"
-
 #include "plamn/core/def.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
@@ -19,8 +17,6 @@
 #include <cstddef>
 #include <type_traits>
 #include <cstdint>
-#include <optional>
-#include <utility>
 #include <variant>
 
 namespace plamn::core

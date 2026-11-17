@@ -2,8 +2,6 @@
 #define PLAMN_CORE_PUSHER_BORIS_BASICS_HPP
 
 #include "damn/core/def/damn_config.hpp"
-#include "damn/core/def/detail/mkn_avx.hpp"
-
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/ghost_width_calculator.hpp"
 

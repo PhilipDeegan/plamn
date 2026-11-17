@@ -37,12 +37,10 @@
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/logger.hpp"
 #include "damn/core/meta/for_N.hpp"
-
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/arrays/particles_soavx.hpp"
 #include "plamn/core/data/particles/particle.hpp"
-
 #include "phlop/timing/scope.hpp"
 
 #include <tuple>
@@ -56,6 +54,8 @@
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
+#include <format>
+#include <iterator>
 
 #if DAMN_HAVE_THRUST
 #include <thrust/scan.h>
