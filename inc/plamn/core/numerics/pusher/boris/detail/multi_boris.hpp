@@ -851,6 +851,10 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
         using Vd                       = mkn::avx::Type<double, L>;
         using Mk                       = mkn::avx::Mask<double, L>;
         static constexpr bool copy     = mode == MultiBorisMode::COPY;
+        // the REF push of a domain array records its crossings (SoAVXChunked::resettle)
+        static constexpr bool record = !copy and type == ParticleType::Domain;
+        if constexpr (record)
+            particles.begin_crossers();
 
         auto const bc = [](double const x) { return Vd{mkn::avx::load<double, L>(x)}; };
         auto const store = [](double* p, Vd const& v) { mkn::avx::unaligned_store(p, v); };
@@ -997,6 +1001,9 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
             for (std::size_t k = 0; k < 3; ++k)
                 v[k] = mkn::avx::mask_load(first, V[k].data() + i0);
             Mk const live = mkn::avx::gt(w, bc(0.)); // past n and gaps: weight 0
+            Vd c_loaded[dim];                        // REF domain: crossings recorded
+            for (std::size_t k = 0; k < dim; ++k)
+                c_loaded[k] = c[k];
 
             advance(live);
 
@@ -1116,6 +1123,29 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
             }
             else
             {
+                if constexpr (record)
+                { // the live lanes whose cell changed
+                    Mk crossed = none_m;
+                    for (std::size_t k = 0; k < dim; ++k)
+                        crossed = crossed | mkn::avx::lt(c[k], c_loaded[k])
+                                  | mkn::avx::gt(c[k], c_loaded[k]);
+                    crossed = crossed & live;
+                    if (mkn::avx::any(crossed))
+                    {
+                        double x[L], from[dim][L];
+                        store(x, mkn::avx::select(crossed, bc(1.), bc(0.)));
+                        for (std::size_t k = 0; k < dim; ++k)
+                            store(from[k], c_loaded[k]);
+                        for (std::size_t l = 0; l < L; ++l)
+                            if (x[l] > .5)
+                            {
+                                std::array<int, dim> cell;
+                                for (std::size_t k = 0; k < dim; ++k)
+                                    cell[k] = static_cast<int>(from[k][l]);
+                                particles.add_crosser(i0 + l, cell);
+                            }
+                    }
+                }
                 double lv[L];
                 store(lv, mkn::avx::select(live, bc(1.), bc(0.)));
                 for (std::size_t k = 0; k < dim; ++k)

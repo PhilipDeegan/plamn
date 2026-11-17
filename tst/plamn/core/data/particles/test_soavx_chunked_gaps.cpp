@@ -114,6 +114,27 @@ struct GapsTest : public ::testing::Test
         }
     }
 
+    // as move_some, the moves recorded as the push records them: distinct slots, ascending
+    //  (chunk order), each with the cell it left
+    void move_some_recorded(Chunked_t& ps, std::size_t const n)
+    {
+        std::uniform_int_distribution<std::size_t> any(0, ps.size() - 1);
+        std::uniform_int_distribution<int> step(0, 1);
+        std::set<std::size_t> slots;
+        while (slots.size() < n)
+            if (auto const i = any(rng); ps.weight(i) != 0)
+                slots.insert(i);
+        ps.begin_crossers();
+        for (auto const i : slots)
+        {
+            auto const from = ps.iCell(i);
+            auto const d    = std::uniform_int_distribution<std::size_t>(0, dim - 1)(rng);
+            components(ps).iCell[d][i] += step(rng) ? 1 : -1;
+            where[ps.weight(i)] = ps.iCell(i);
+            ps.add_crosser(i, from);
+        }
+    }
+
     // n particles of random cells (in box) moved by +-1 cell, as a push: their new cells
     void move_some(Chunked_t& ps, std::size_t const n)
     {
@@ -131,6 +152,27 @@ struct GapsTest : public ::testing::Test
         }
     }
 };
+
+// a recorded resettle (SoAVXChunked::resettle from the push's crossings): the same particles
+//  in the same chunks as the scan, rounds of moves with the slots recorded as the push does
+template<typename Test>
+void recorded_rounds(Test& t, std::size_t const rounds, std::size_t const moves)
+{
+    auto ps           = t.make(.1);
+    std::size_t sorts = 0, left = 0;
+    for (std::size_t round = 0; round < rounds; ++round)
+    {
+        t.move_some_recorded(ps, moves);
+        std::vector<Particle<Test::dim>> out;
+        sorts += ps.resettle(t.box, [&](auto const& p) { out.push_back(p); });
+        for (auto const& p : out)
+            t.where.erase(p.weight());
+        left += out.size();
+        t.expect_consistent(ps, "recorded round " + std::to_string(round));
+    }
+    std::cout << Test::dim << "D recorded: " << sorts << " sorts in " << rounds
+              << " resettles of " << moves << " moves, " << left << " left" << std::endl;
+}
 
 using Gaps1D = GapsTest<1>;
 
@@ -513,6 +555,19 @@ TEST_P(Gaps3DMotion, bulkMotion)
 INSTANTIATE_TEST_SUITE_P(Gaps, Gaps3DMotion,
                          ::testing::Combine(::testing::Values(1., 3.),
                                             ::testing::Values(std::size_t{0}, std::size_t{2})));
+
+TEST_F(Gaps1D, resettleFromTheRecordedCrossings)
+{
+    recorded_rounds(*this, 50, 15);
+}
+TEST_F(Gaps2D, resettleFromTheRecordedCrossings)
+{
+    recorded_rounds(*this, 50, 60);
+}
+TEST_F(Gaps3D, resettleFromTheRecordedCrossings)
+{
+    recorded_rounds(*this, 20, 600);
+}
 
 } // namespace plamn::core
 
