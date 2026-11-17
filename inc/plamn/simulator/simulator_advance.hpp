@@ -352,7 +352,11 @@ void Simulator<opts>::move_ions_(std::size_t const ln, double const t, double co
         //  patch go to the patch owning their cell first, then each patch deposits its domain
         //  particles, every particle once (the domain_only predictor deposits its pushed copies
         //  in the updater)
-        copy_(ln, damn::amr::gather_leaving, "IonGhostParticles");
+        {
+            DAMN_LOG_SCOPE(2, "Simulator::move_ions::gather_leaving");
+            copy_(ln, damn::amr::gather_leaving, "IonGhostParticles");
+        }
+        DAMN_LOG_SCOPE(2, "Simulator::move_ions::deposit_domain");
         per_patch_(ln, [](auto& patch) {
             for (auto& pop : patch.ions)
                 pop.patchGhostParticles().clear();
@@ -362,7 +366,10 @@ void Simulator<opts>::move_ions_(std::size_t const ln, double const t, double co
 
     // as PHAREHUB/PHARE#1580: each level ghost particle deposited once, by the patch holding it,
     //  then the border sums: every patch's copy of a node the same
-    deposit_level_ghosts_(ln, t + dt);
+    {
+        DAMN_LOG_SCOPE(2, "Simulator::move_ions::deposit_level_ghosts");
+        deposit_level_ghosts_(ln, t + dt);
+    }
     fill_ion_borders_(ln);
     compute_moments_(ln);
 }

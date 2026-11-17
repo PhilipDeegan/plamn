@@ -383,6 +383,7 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
         for (auto& pop : patch.ions)
             pop.levelGhostParticles() = pop.levelGhostParticlesOld();
     });
+    sort_refined_particles_(fine);
 
     refined_moments_(fine);
     prepare_step_(ln, t);
