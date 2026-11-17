@@ -851,6 +851,22 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
         using Vd                       = mkn::avx::Type<double, L>;
         using Mk                       = mkn::avx::Mask<double, L>;
         static constexpr bool copy     = mode == MultiBorisMode::COPY;
+        static constexpr bool int_lanes = L >= 4; // mkn::avx's int32 lanes: 4, 8
+        // a column of cells as lanes: int32 lanes for a full block (a partial one could read past
+        //  the array), else per lane
+        auto const load_cells = [](int const* const p, std::size_t const n) {
+            if constexpr (int_lanes)
+                if (n == L)
+                    return mkn::avx::to_double(mkn::avx::unaligned_load<std::int32_t, L>(p));
+            double t[L];
+            for (std::size_t l = 0; l < L; ++l)
+                t[l] = l < n ? static_cast<double>(p[l]) : 0.;
+            return mkn::avx::unaligned_load<double, L>(t);
+        };
+        auto const store_cells = [](int* const p, auto const& c) { // full blocks only
+            if constexpr (int_lanes)
+                mkn::avx::unaligned_store(p, mkn::avx::to_int32(c));
+        };
         // the REF push of a domain array records its crossings (SoAVXChunked::resettle)
         static constexpr bool record = !copy and type == ParticleType::Domain;
         if constexpr (record)
@@ -952,10 +968,7 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
             for (std::size_t k = 0; k < dim; ++k)
             {
                 d[k] = mkn::avx::mask_load(first, D[k].data() + i0);
-                double t[L];
-                for (std::size_t l = 0; l < L; ++l)
-                    t[l] = l < n ? static_cast<double>(C[k][i0 + l]) : 0.;
-                c[k] = mkn::avx::unaligned_load<double, L>(t);
+                c[k] = load_cells(C[k].data() + i0, n);
             }
             for (std::size_t k = 0; k < 3; ++k)
                 v[k] = mkn::avx::mask_load(first, V[k].data() + i0);
@@ -1086,16 +1099,25 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
                             }
                     }
                 }
+                // a full block of live lanes (a chunk's inside: nearly all) stores its cells as
+                //  int32 lanes, else per lane (no masked int32 store)
+                bool const all_live = int_lanes and n == L and !mkn::avx::any(not_(live));
                 double lv[L];
-                store(lv, mkn::avx::select(live, bc(1.), bc(0.)));
+                if (!all_live)
+                    store(lv, mkn::avx::select(live, bc(1.), bc(0.)));
                 for (std::size_t k = 0; k < dim; ++k)
                 {
                     mkn::avx::mask_store(live, D[k].data() + i0, d[k]);
-                    double t[L];
-                    store(t, c[k]);
-                    for (std::size_t l = 0; l < n; ++l)
-                        if (lv[l] > .5)
-                            C[k][i0 + l] = static_cast<int>(t[l]);
+                    if (all_live)
+                        store_cells(C[k].data() + i0, c[k]);
+                    else
+                    {
+                        double t[L];
+                        store(t, c[k]);
+                        for (std::size_t l = 0; l < n; ++l)
+                            if (lv[l] > .5)
+                                C[k][i0 + l] = static_cast<int>(t[l]);
+                    }
                 }
                 for (std::size_t k = 0; k < 3; ++k)
                     mkn::avx::mask_store(live, V[k].data() + i0, v[k]);
