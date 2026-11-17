@@ -717,8 +717,6 @@ public:
 
 
 
-
-
     inline auto m2p(auto const& particles, auto const& Em, auto const& layout,
                     std::size_t idx) DAMN_ALL
     {

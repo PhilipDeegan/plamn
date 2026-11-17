@@ -623,24 +623,24 @@ bool SoAVXChunkedParticles<Super_>::resettle(auto const& keep, auto&& leave)
         take_crossers_(moved);
     else
         for (std::size_t c = 0; c < this->sizes_.size(); ++c)
-    {
-        auto const cell = cell_of_(c);
-        for (std::size_t i = this->starts_[c]; i < this->starts_[c] + this->sizes_[c];)
         {
-            bool stays = true;
-            for (std::size_t d = 0; d < dimension; ++d)
-                stays = stays and this->iCell_[d][i] == cell[d];
-            if (stays)
+            auto const cell = cell_of_(c);
+            for (std::size_t i = this->starts_[c]; i < this->starts_[c] + this->sizes_[c];)
             {
-                ++i;
-                continue;
+                bool stays = true;
+                for (std::size_t d = 0; d < dimension; ++d)
+                    stays = stays and this->iCell_[d][i] == cell[d];
+                if (stays)
+                {
+                    ++i;
+                    continue;
+                }
+                moved.push_back(this->copy(i));
+                remove(c, i); // slot i holds another particle of the chunk now, or is its head gap
+                if (i < this->starts_[c])
+                    i = this->starts_[c];
             }
-            moved.push_back(this->copy(i));
-            remove(c, i); // slot i holds another particle of the chunk now, or is its head gap
-            if (i < this->starts_[c])
-                i = this->starts_[c];
         }
-    }
     std::vector<Particle_t> overflow; // no room in their chunk
     for (auto const& p : moved)
     {
@@ -663,7 +663,7 @@ void SoAVXChunkedParticles<Super_>::sort()
     requires(storage_mode == StorageMode::VECTOR)
 {
     DAMN_LOG_SCOPE(2, "SoAVXChunked::sort");
-    crossers_valid_ = false; // the slots change
+    crossers_valid_            = false; // the slots change
     auto static constexpr gpu  = alloc_mode == damn::AllocatorMode::GPU_UNIFIED;
     using Op                   = damn::core::Operators<chunk_offset_t, /*atomic=*/gpu, /*GPU=*/gpu>;
     auto static constexpr none = std::numeric_limits<chunk_offset_t>::max(); // a gap's slot

@@ -603,10 +603,10 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
         {
             double const coef1 = pop.charge() * (0.5 * in.dt / pop.mass());
 #if defined(MKN_WITH_MKN_AVX)
-            batched_avx<ParticleType::Domain, mode>(pop.domainParticles(), pop, em, layout,
-                                                    boxing, halfdt, coef1);
-            batched_avx<ParticleType::LevelGhost, mode>(pop.levelGhostParticles(), pop, em,
-                                                        layout, boxing, halfdt, coef1);
+            batched_avx<ParticleType::Domain, mode>(pop.domainParticles(), pop, em, layout, boxing,
+                                                    halfdt, coef1);
+            batched_avx<ParticleType::LevelGhost, mode>(pop.levelGhostParticles(), pop, em, layout,
+                                                        boxing, halfdt, coef1);
             continue;
 #endif
             batched<ParticleType::Domain, mode>(pop.domainParticles(), pop, em, layout, boxing,
@@ -856,10 +856,12 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
         if constexpr (record)
             particles.begin_crossers();
 
-        auto const bc = [](double const x) { return Vd{mkn::avx::load<double, L>(x)}; };
+        auto const bc    = [](double const x) { return Vd{mkn::avx::load<double, L>(x)}; };
         auto const store = [](double* p, Vd const& v) { mkn::avx::unaligned_store(p, v); };
 
-        auto const not_  = [&](Mk const& m) { return mkn::avx::gt(mkn::avx::select(m, bc(0.), bc(1.)), bc(.5)); };
+        auto const not_ = [&](Mk const& m) {
+            return mkn::avx::gt(mkn::avx::select(m, bc(0.), bc(1.)), bc(.5));
+        };
         Mk const none_m = mkn::avx::lt(bc(1.), bc(0.));
 
         Interpolator_t interp;
@@ -897,7 +899,8 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
             bool deposits = false;   // the cell is in the non level ghost box
             bool touched  = false;
         };
-        auto const dep_box = damn::core::grow(layout.cells, std::decay_t<decltype(layout)>::options.field_ghost_width);
+        auto const dep_box = damn::core::grow(
+            layout.cells, std::decay_t<decltype(layout)>::options.field_ghost_width);
         auto const reset = [&](Window& win, auto const& cell) {
             for (std::size_t n = 0; n < nodes; ++n)
             {
@@ -1063,12 +1066,12 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
                          myz = two * (ryrz + rx);
                 Vd const mzx = two * (rxrz + ry), mzy = two * (ryrz - rx),
                          mzz = one + rz2 - rx2 - ry2;
-                Vd const v0 = (mxx * vx1 + mxy * vy1 + mxz * vz1) * invDet + k1 * E[0];
-                Vd const v1 = (myx * vx1 + myy * vy1 + myz * vz1) * invDet + k1 * E[1];
-                Vd const v2 = (mzx * vx1 + mzy * vy1 + mzz * vz1) * invDet + k1 * E[2];
-                v[0]        = mkn::avx::select(accel, v0, v[0]);
-                v[1]        = mkn::avx::select(accel, v1, v[1]);
-                v[2]        = mkn::avx::select(accel, v2, v[2]);
+                Vd const v0  = (mxx * vx1 + mxy * vy1 + mxz * vz1) * invDet + k1 * E[0];
+                Vd const v1  = (myx * vx1 + myy * vy1 + myz * vz1) * invDet + k1 * E[1];
+                Vd const v2  = (mzx * vx1 + mzy * vy1 + mzz * vz1) * invDet + k1 * E[2];
+                v[0]         = mkn::avx::select(accel, v0, v[0]);
+                v[1]         = mkn::avx::select(accel, v1, v[1]);
+                v[2]         = mkn::avx::select(accel, v2, v[2]);
             }
 
             { // second half step: the lanes not accelerated stay
@@ -1165,7 +1168,7 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
         using Gather_t = CellGatherV<dim, L>;
         // sorted arrays (domain, and level ghosts: on_moved / on_appended sort them too)
         static constexpr bool per_cell = Interpolator_t::interp_order == 1;
-        Gather_t const* const none = nullptr;
+        Gather_t const* const none     = nullptr;
         std::array<int, dim> const no_cell{};
 
         if constexpr (per_cell)
@@ -1201,7 +1204,6 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
             block(i, std::min(L, particles.size() - i), none, no_cell, nullptr);
     }
 #endif // MKN_WITH_MKN_AVX
-
 };
 
 

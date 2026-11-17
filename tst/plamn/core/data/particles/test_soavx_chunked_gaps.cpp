@@ -170,8 +170,8 @@ void recorded_rounds(Test& t, std::size_t const rounds, std::size_t const moves)
         left += out.size();
         t.expect_consistent(ps, "recorded round " + std::to_string(round));
     }
-    std::cout << Test::dim << "D recorded: " << sorts << " sorts in " << rounds
-              << " resettles of " << moves << " moves, " << left << " left" << std::endl;
+    std::cout << Test::dim << "D recorded: " << sorts << " sorts in " << rounds << " resettles of "
+              << moves << " moves, " << left << " left" << std::endl;
 }
 
 using Gaps1D = GapsTest<1>;

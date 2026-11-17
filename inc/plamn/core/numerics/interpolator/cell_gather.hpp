@@ -87,7 +87,10 @@ struct CellGather1
     std::array<std::array<double, size>, 6> S; // [component][x][y][z] over the union, 3 a side
 
 private:
-    static constexpr std::size_t nodes(QtyCentering const c) { return c == QtyCentering::dual ? 3 : 2; }
+    static constexpr std::size_t nodes(QtyCentering const c)
+    {
+        return c == QtyCentering::dual ? 3 : 2;
+    }
 
     template<std::size_t q>
     void load_(auto const& field)
@@ -118,7 +121,7 @@ private:
     {
         constexpr auto c = cen<q>;
         auto const& s    = S[q];
-        auto const w = [&](std::size_t const k, std::size_t const i, std::size_t const l) {
+        auto const w     = [&](std::size_t const k, std::size_t const i, std::size_t const l) {
             return c[k] == QtyCentering::dual ? D[k][i][l] : P[k][i][l];
         };
         // the lane loops innermost (vectorised), each lane's sums in MeshToParticle's order
