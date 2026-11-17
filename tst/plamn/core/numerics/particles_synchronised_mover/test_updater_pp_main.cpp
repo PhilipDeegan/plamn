@@ -477,11 +477,5 @@ int main(int argc, char** argv)
     ::testing::InitGoogleTest(&argc, argv);
     auto r = RUN_ALL_TESTS();
     DAMN_WITH_PHLOP(phlop::threaded::ScopeTimerMan::reset());
-    DAMN_WITH_MKN_AVX({
-        for (auto const& [k, v] : mkn::avx::Counter::I().cnts)
-        {
-            DAMN_LOG_LINE_SS(k << " " << v);
-        }
-    })
     return r;
 }
