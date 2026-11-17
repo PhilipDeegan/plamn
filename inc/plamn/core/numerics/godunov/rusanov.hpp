@@ -2,13 +2,13 @@
 #define PLAMN_CORE_NUMERICS_GODUNOV_RUSANOV_HPP
 
 #include "damn/core/def/damn_config.hpp"
-
 #include "plamn/core/numerics/godunov/mhd_equations.hpp"
 #include "plamn/core/numerics/godunov/mhd_point_state.hpp"
+#include "damn/core/def.hpp"
 
 #include <array>
 #include <cmath>
-#include <cstddef>
+#include <cstdlib>
 
 // Rusanov (local Lax-Friedrichs) flux at one face, PHARE's core/numerics/riemann_solvers/
 //  rusanov.hpp and mhd_speeds.hpp, ideal MHD (Hall: not yet). PHARE's solver keeps the upwind

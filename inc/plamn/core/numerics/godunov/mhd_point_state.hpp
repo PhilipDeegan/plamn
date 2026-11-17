@@ -2,8 +2,8 @@
 #define PLAMN_CORE_NUMERICS_GODUNOV_MHD_POINT_STATE_HPP
 
 #include "damn/core/def/damn_config.hpp"
-
 #include "plamn/core/numerics/primitive_conservative/primitive_conservative.hpp"
+#include "damn/core/def.hpp"
 
 #include <array>
 

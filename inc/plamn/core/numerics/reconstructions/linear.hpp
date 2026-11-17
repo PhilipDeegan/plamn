@@ -2,8 +2,8 @@
 #define PLAMN_CORE_NUMERICS_RECONSTRUCTIONS_LINEAR_HPP
 
 #include "damn/core/def/damn_config.hpp"
-
 #include "plamn/core/data/grid/patch_layout.hpp"
+#include "damn/core/def.hpp"
 
 #include <array>
 #include <cstddef>

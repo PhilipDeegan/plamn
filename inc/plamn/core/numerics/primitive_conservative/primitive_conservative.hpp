@@ -2,9 +2,9 @@
 #define PLAMN_CORE_NUMERICS_PRIMITIVE_CONSERVATIVE_PRIMITIVE_CONSERVATIVE_HPP
 
 #include "damn/core/def/damn_config.hpp"
-
 #include "plamn/core/data/grid/patch_layout.hpp"
 #include "plamn/core/models/quantities/mhd_quantities.hpp"
+#include "damn/core/def.hpp"
 
 #include <array>
 

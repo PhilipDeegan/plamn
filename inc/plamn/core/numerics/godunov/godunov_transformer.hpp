@@ -4,7 +4,6 @@
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/exec/kernels.hpp" // IWYU pragma: keep (gpu::Vec_t, gpu::TileLauncher: GPU builds)
 #include "damn/core/geometry/box.hpp"
-
 #include "plamn/core/data/grid/detail/detail.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
@@ -12,8 +11,8 @@
 
 #include <array>
 #include <cstddef>
-#include <cstdint>
 #include <stdexcept>
+#include <type_traits>
 
 namespace plamn::core
 {

@@ -2,11 +2,12 @@
 #define PLAMN_CORE_NUMERICS_GODUNOV_MHD_EQUATIONS_HPP
 
 #include "damn/core/def/damn_config.hpp"
-
 #include "plamn/core/numerics/godunov/mhd_point_state.hpp"
 #include "plamn/core/numerics/primitive_conservative/primitive_conservative.hpp"
+#include "damn/core/def.hpp"
 
 #include <cstddef>
+#include <array>
 
 // ideal MHD physical flux of a primitive state along direction dir, PHARE's
 //  core/numerics/MHD_equations (Hall: not yet)

@@ -2,10 +2,10 @@
 #define PLAMN_CORE_NUMERICS_GODUNOV_GODUNOV_FACE_HPP
 
 #include "damn/core/def/damn_config.hpp"
-
 #include "plamn/core/models/quantities/mhd_quantities.hpp"
 #include "plamn/core/numerics/godunov/mhd_point_state.hpp"
 #include "plamn/core/numerics/godunov/rusanov.hpp"
+#include "damn/core/def.hpp"
 
 #include <array>
 #include <cstddef>

@@ -2,7 +2,6 @@
 #define PLAMN_CORE_NUMERICS_TIME_INTEGRATOR_MHD_TIME_INTEGRATOR_HPP
 
 #include "damn/core/meta/for_N.hpp"
-
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
 #include "plamn/core/numerics/constrained_transport/upwind_ct_transformer.hpp"
@@ -10,11 +9,13 @@
 #include "plamn/core/numerics/finite_volume/finite_volume_euler_transformer.hpp"
 #include "plamn/core/numerics/godunov/godunov_transformer.hpp"
 #include "plamn/core/numerics/primitive_conservative/primitive_conservative_transformer.hpp"
+#include "damn/core/geometry/box_spans.hpp"
 
-#include <array>
 #include <cstddef>
 #include <type_traits>
 #include <utility>
+#include <concepts>
+#include <iterator>
 
 // MHD time integration on one level, PHARE's amr/solvers/time_integrator (Euler, TVDRK2, TVDRK3,
 //  SSPRK4_5) in its operation order, so results can match its own bit for bit (in the same
