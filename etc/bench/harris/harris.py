@@ -167,9 +167,29 @@ def child(args):
     return 0
 
 
+def perf_env():
+    """phlop's per scope hardware counters (PHLOP_PERF_LIGHT, PHLOP_PERF_CTX): exact counts per
+    scope, no sampling. The codes' perf_light scopes count with them (plamn: mkn.py --scope-flags
+    <lvl>=time,perf_light; a PHARE build with per level scope flags: -DPHARE_LOG_SCOPE_FLAGS_<lvl>=...)"""
+    out = subprocess.run(
+        [sys.executable, "-m", "phlop.app.pfm.stat", "--env", "perf_light=light"],
+        env=dict(os.environ, PYTHONPATH=str(PLAMN / "tpp/damn/tpp/phlop")),
+        capture_output=True,
+        text=True,
+    ).stdout
+    env = {}
+    for line in out.splitlines():
+        if line.startswith("export ") and "=" in line:
+            key, value = line[len("export ") :].split("=", 1)
+            env[key] = value.strip("'\"")
+    return env
+
+
 def parent(args):
     out = Path(args.out).resolve()
     rows = []
+    counters = perf_env()
+    print("hardware counters per scope:", counters.get("PHLOP_PERF_LIGHT", "none"))
     codes = [
         c
         for code in args.codes
@@ -178,7 +198,7 @@ def parent(args):
     for code in codes:
         cwd = out / code
         cwd.mkdir(parents=True, exist_ok=True)
-        env = dict(os.environ, PHARE_SCOPE_TIMING="1")
+        env = dict(os.environ, PHARE_SCOPE_TIMING="1", **counters)
         env["PYTHONPATH"] = os.pathsep.join(str(p) for p in pythonpath(code))
         cmd = [sys.executable, str(Path(__file__).resolve()), "--child", code]
         cmd += ["--ndim", str(args.ndim), "--levels", str(args.levels), "--steps", str(args.steps)]
@@ -208,9 +228,10 @@ def parent(args):
         )
     phlop = f"PYTHONPATH={PLAMN / 'tpp/damn/tpp/phlop'} python3 -m phlop.timing"
     timers = {r["code"]: out / r["code"] / ".phare/timings/rank.0.txt" for r in rows}
-    print("\nscope timers (phlop):")
+    print("\nscope timers (phlop, perf -v: the counts per scope):")
     for code, path in timers.items():
         print(f"  {phlop}.scope_timer times {path}")
+        print(f"  {phlop}.scope_timer perf -v {path}")
     # scope_compare matches scopes by path: PHARE codes against each other only (plamn's scopes
     #  have other names below the roots)
     phare = [code for code in timers if not is_plamn(code)]
