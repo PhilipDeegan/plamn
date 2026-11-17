@@ -68,8 +68,9 @@ FieldView<dim> field_view(auto& field)
     return FieldView<dim>(field.data(), dim, shape.data(), nb::handle());
 }
 
+// hidden as the module is (-fvisibility=hidden): its member templates take the bindings' lambdas
 template<typename Simulator>
-class HybridPatchLevel
+class [[gnu::visibility("hidden")]] HybridPatchLevel
 {
     auto static constexpr dim = Simulator::dimension;
     using Patch_t             = Simulator::Patch_t;

@@ -683,7 +683,9 @@ struct CrossingTest : public ::testing::Test
                 handed_over += patch_ghost.size();
             }
             if (n < cells or !Param::refined) // a periodic level's patch is its own neighbour
+            {
                 EXPECT_GT(handed_over, 0u);
+            }
         }
     }
 

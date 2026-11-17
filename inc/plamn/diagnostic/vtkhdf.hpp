@@ -72,7 +72,7 @@ NO_DISCARD inline std::vector<Diagnostic> diagnostics_from(initializer::Dict con
             if (!diags[type].contains(key))
                 break;
             auto const& d = diags[type][key];
-            Diagnostic diag{type, d["quantity"].template to<std::string>()};
+            Diagnostic diag{.type = type, .quantity = d["quantity"].template to<std::string>()};
             if (d.contains("write_timestamps"))
                 diag.timestamps = d["write_timestamps"].template to<std::vector<double>>();
             if (d.contains("flush_every"))

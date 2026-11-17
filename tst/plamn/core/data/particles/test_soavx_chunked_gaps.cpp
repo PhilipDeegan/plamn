@@ -106,8 +106,12 @@ struct GapsTest : public ::testing::Test
         });
         EXPECT_EQ(particles, where.size()) << when;
         for (std::size_t i = 0; i < ps.size(); ++i)
+        {
             if (!in_chunk[i])
+            {
                 EXPECT_EQ(ps.weight(i), 0) << when << ": a particle outside the chunks, slot " << i;
+            }
+        }
     }
 
     // n particles of random cells (in box) moved by +-1 cell, as a push: their new cells

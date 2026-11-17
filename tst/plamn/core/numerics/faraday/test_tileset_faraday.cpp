@@ -73,12 +73,6 @@ void compare(auto const& layout, auto& ref, auto& cmp)
     using enum damn::AllocatorMode;
     auto constexpr static n_components = 3;
 
-    double diff = 1e-15;
-
-    // if constexpr (alloc_mode == GPU_UNIFIED)
-    //     diff *= 1e3; // atomic no order guaranteed
-
-    auto const& patch_box = layout.cells;
 
     for (std::size_t c = 0; c < n_components; ++c)
     {

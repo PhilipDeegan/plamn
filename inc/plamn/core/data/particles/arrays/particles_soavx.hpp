@@ -114,11 +114,16 @@ struct SoAVXSpan
 
     SoAVXSpan() = default;
 
+    // particles [beg, beg + siz) of array (as SoASpan)
     template<typename Particles>
     SoAVXSpan(Particles&& array, std::size_t const& beg, std::size_t const& siz)
-        : size_{siz}
     {
         reset(array);
+        this->weight_ += beg;
+        damn::core::for_N<dim>([&](auto vi) { this->iCell_[vi] += beg; });
+        damn::core::for_N<dim>([&](auto vi) { this->delta_[vi] += beg; });
+        damn::core::for_N<3>([&](auto vi) { this->v_[vi] += beg; });
+        size_ = siz;
     }
 
     template<typename Particles>

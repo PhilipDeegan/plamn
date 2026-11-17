@@ -159,8 +159,8 @@ public:
     // particles each tile deposits only its own, the reduction completes the tile seams
     // GPU_UNIFIED falls back to the CPU path until there's an optimized GPU version
     template<auto type = ParticleType::Domain, typename Particles>
-    void particleToMesh(Particles const& particles, auto const& layout, auto& rhoP, auto& flux,
-                        double coef = 1.)
+    void particleToMesh(Particles const& particles, auto const& /*layout: the tiles'*/, auto& rhoP,
+                        auto& flux, double coef = 1.)
         requires(damn::core::any_in(Particles::layout_mode, LayoutMode::AoSPCTS,
                                     LayoutMode::AoSCMTS))
     DAMN_ALL
@@ -206,8 +206,8 @@ public:
     }
 
     template<auto type = ParticleType::Domain, typename Particles>
-    void particleToMesh(Particles const& particles, auto const& layout, auto& rhoP, auto& flux,
-                        double coef = 1.)
+    void particleToMesh(Particles const& particles, auto const& /*layout: the tiles'*/, auto& rhoP,
+                        auto& flux, double coef = 1.)
         requires(Particles::layout_mode == LayoutMode::AoSTS)
     DAMN_ALL
     {

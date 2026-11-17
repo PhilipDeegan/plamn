@@ -407,7 +407,7 @@ void ParticlesExporter<AoSTS, CPU>::delete_particles_not_in(Src& src, damn::core
             auto const range = partition_particles(tile(), box);
             auto const resiz = range.size();
 
-            assert(resiz <= tile().size());
+            assert(static_cast<std::size_t>(resiz) <= tile().size());
             tile().resize(resiz);
         }
     }
@@ -431,7 +431,7 @@ void ParticlesExporter<AoSTS, CPU>::delete_particles_not_in(Src& src, Boxes cons
             auto const ranges = partition_particles(tile(), boxes); // what
             auto const resiz  = damn::core::sum_from(ranges, [](auto const& r) { return r.size(); });
 
-            assert(resiz <= tile().size());
+            assert(static_cast<std::size_t>(resiz) <= tile().size());
             tile().resize(resiz);
         }
     }

@@ -193,8 +193,6 @@ struct SoAVXIteratorAdaptor
     template<typename Particles>
     auto static make(Particles& particles, std::size_t const idx = 0) DAMN_ALL
     {
-        auto static constexpr dim = Particles::dimension;
-
         return thrust::make_zip_iterator(soaxv_tuple_as_thrust_tuple(particles, idx));
     }
 
