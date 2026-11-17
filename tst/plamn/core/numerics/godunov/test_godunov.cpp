@@ -20,6 +20,8 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <algorithm>
+#include <iostream>
 
 namespace plamn::core
 {
@@ -227,8 +229,12 @@ TYPED_TEST(GodunovTest, transformer_matches_face)
 }
 
 
-// every point of every tile's face box against the untiled field at the same AMR index
-std::size_t tile_mismatches(auto const& ref_layout, auto const& ref, auto const& cmp, auto&& box_of)
+// every point of every tile's face box against the untiled field at the same AMR index: equal, or
+//  within rel_tol of max(|ref|, 1) (GPU: the device compiler fuses multiply-adds where the host's
+//  does not; near zero fluxes, cancellations, make a plain relative difference meaningless)
+double static max_rel_diff = 0;
+std::size_t tile_mismatches(auto const& ref_layout, auto const& ref, auto const& cmp, auto&& box_of,
+                            double const rel_tol = 0)
 {
     std::size_t n = 0, bad = 0;
     for (auto const& tile : cmp())
@@ -236,7 +242,10 @@ std::size_t tile_mismatches(auto const& ref_layout, auto const& ref, auto const&
         auto const& layout = tile.layout();
         damn::core::for_each_point(box_of(layout, tile), [&](auto const& ijk) {
             ++n;
-            bad += tile(ijk) != ref(to_local(ref_layout, to_amr(layout, ijk)));
+            double const t = tile(ijk), r = ref(to_local(ref_layout, to_amr(layout, ijk)));
+            double const rel = t == r ? 0 : std::abs(t - r) / std::max(std::abs(r), 1.0);
+            max_rel_diff     = std::max(max_rel_diff, rel);
+            bad += rel > rel_tol;
         });
     }
     EXPECT_GT(n, 0u);
@@ -279,17 +288,19 @@ TYPED_TEST(GodunovTileTest, tiled_matches_untiled)
         };
         auto const& r = ref.faces[dir];
         auto const& c = cmp.faces[dir];
-        EXPECT_EQ(tile_mismatches(ref_layout, r.F_rho, c.F_rho, box_of), 0u) << "F_rho " << dir;
-        EXPECT_EQ(tile_mismatches(ref_layout, r.F_Etot, c.F_Etot, box_of), 0u) << "F_Etot " << dir;
-        EXPECT_EQ(tile_mismatches(ref_layout, r.dL, c.dL, box_of), 0u) << "dL " << dir;
+        double const tol = TypeParam::alloc_mode == damn::AllocatorMode::GPU_UNIFIED ? 1e-14 : 0; // ~2 ulp seen
+        EXPECT_EQ(tile_mismatches(ref_layout, r.F_rho, c.F_rho, box_of, tol), 0u) << "F_rho " << dir;
+        EXPECT_EQ(tile_mismatches(ref_layout, r.F_Etot, c.F_Etot, box_of, tol), 0u) << "F_Etot " << dir;
+        EXPECT_EQ(tile_mismatches(ref_layout, r.dL, c.dL, box_of, tol), 0u) << "dL " << dir;
         for (std::size_t k = 0; k < 3; ++k)
         {
-            EXPECT_EQ(tile_mismatches(ref_layout, r.F_rhoV[k], c.F_rhoV[k], box_of), 0u)
+            EXPECT_EQ(tile_mismatches(ref_layout, r.F_rhoV[k], c.F_rhoV[k], box_of, tol), 0u)
                 << "F_rhoV";
-            EXPECT_EQ(tile_mismatches(ref_layout, r.F_B[k], c.F_B[k], box_of), 0u) << "F_B";
-            EXPECT_EQ(tile_mismatches(ref_layout, r.vt[k], c.vt[k], box_of), 0u) << "vt";
+            EXPECT_EQ(tile_mismatches(ref_layout, r.F_B[k], c.F_B[k], box_of, tol), 0u) << "F_B";
+            EXPECT_EQ(tile_mismatches(ref_layout, r.vt[k], c.vt[k], box_of, tol), 0u) << "vt";
         }
     });
+    std::cout << "max relative difference tiled vs untiled: " << max_rel_diff << std::endl;
 }
 
 } // namespace plamn::core
