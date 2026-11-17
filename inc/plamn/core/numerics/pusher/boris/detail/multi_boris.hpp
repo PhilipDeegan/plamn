@@ -678,127 +678,128 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
         };
 
         // cell: the chunk's cell (AMR) with its stencils in g, for the per cell gather, or null
-        auto const block = [&](std::size_t const i0, std::size_t const n, auto const* g,
-                               auto const& cell) {
-            // always `lanes` lanes (fixed trip counts, the loops vectorise alike): a partial
-            //  block's extra lanes copy its last slot, not live
-            std::size_t slot[lanes];
-            for (std::size_t l = 0; l < lanes; ++l)
-                slot[l] = i0 + (l < n ? l : n - 1);
-            for (std::size_t l = 0; l < lanes; ++l)
-                w[l] = W[slot[l]];
-            for (std::size_t k = 0; k < dim; ++k)
-                for (std::size_t l = 0; l < lanes; ++l)
-                {
-                    c[k][l] = C[k][slot[l]];
-                    d[k][l] = D[k][slot[l]];
-                }
-            for (std::size_t k = 0; k < 3; ++k)
-                for (std::size_t l = 0; l < lanes; ++l)
-                    v[k][l] = V[k][slot[l]];
-            for (std::size_t l = 0; l < lanes; ++l)
-                live[l] = l < n and w[l] != 0;
+        auto const block
+            = [&](std::size_t const i0, std::size_t const n, auto const* g, auto const& cell) {
+                  // always `lanes` lanes (fixed trip counts, the loops vectorise alike): a partial
+                  //  block's extra lanes copy its last slot, not live
+                  std::size_t slot[lanes];
+                  for (std::size_t l = 0; l < lanes; ++l)
+                      slot[l] = i0 + (l < n ? l : n - 1);
+                  for (std::size_t l = 0; l < lanes; ++l)
+                      w[l] = W[slot[l]];
+                  for (std::size_t k = 0; k < dim; ++k)
+                      for (std::size_t l = 0; l < lanes; ++l)
+                      {
+                          c[k][l] = C[k][slot[l]];
+                          d[k][l] = D[k][slot[l]];
+                      }
+                  for (std::size_t k = 0; k < 3; ++k)
+                      for (std::size_t l = 0; l < lanes; ++l)
+                          v[k][l] = V[k][slot[l]];
+                  for (std::size_t l = 0; l < lanes; ++l)
+                      live[l] = l < n and w[l] != 0;
 
-            advance(live);
+                  advance(live);
 
-            for (std::size_t l = 0; l < lanes; ++l)
-            {
-                accel[l] = live[l];
-                if constexpr (type == ParticleType::LevelGhost)
-                    accel[l] = accel[l] and isIn(lane_particle(l).iCell(), boxing.ghostBox);
-            }
+                  for (std::size_t l = 0; l < lanes; ++l)
+                  {
+                      accel[l] = live[l];
+                      if constexpr (type == ParticleType::LevelGhost)
+                          accel[l] = accel[l] and isIn(lane_particle(l).iCell(), boxing.ghostBox);
+                  }
 
-            // m2p: from the cell's stencils on the lanes still in the cell at mid step, else per
-            //  lane (the stencils differ)
-            bool in_cell[lanes];
-            for (std::size_t l = 0; l < lanes; ++l)
-            {
-                in_cell[l] = g != nullptr;
-                if (g)
-                    for (std::size_t k = 0; k < dim; ++k)
-                        in_cell[l] = in_cell[l] and c[k][l] == cell[k];
-            }
-            if (g)
-                g->gather(d, E, B);
-            for (std::size_t l = 0; l < lanes; ++l)
-            {
-                if (!accel[l] or in_cell[l])
-                    continue;
-                auto const [pE, pB] = interp.m2p(lane_particle(l), em, layout);
-                for (std::size_t k = 0; k < 3; ++k)
-                {
-                    E[k][l] = pE[k];
-                    B[k][l] = pB[k];
-                }
-            }
+                  // m2p: from the cell's stencils on the lanes still in the cell at mid step, else
+                  // per
+                  //  lane (the stencils differ)
+                  bool in_cell[lanes];
+                  for (std::size_t l = 0; l < lanes; ++l)
+                  {
+                      in_cell[l] = g != nullptr;
+                      if (g)
+                          for (std::size_t k = 0; k < dim; ++k)
+                              in_cell[l] = in_cell[l] and c[k][l] == cell[k];
+                  }
+                  if (g)
+                      g->gather(d, E, B);
+                  for (std::size_t l = 0; l < lanes; ++l)
+                  {
+                      if (!accel[l] or in_cell[l])
+                          continue;
+                      auto const [pE, pB] = interp.m2p(lane_particle(l), em, layout);
+                      for (std::size_t k = 0; k < 3; ++k)
+                      {
+                          E[k][l] = pE[k];
+                          B[k][l] = pB[k];
+                      }
+                  }
 
-            // boris::accelerate on the lanes
-            double v1[3][lanes];
-            for (std::size_t l = 0; l < lanes; ++l)
-            {
-                double const vx1 = v[0][l] + coef1 * E[0][l];
-                double const vy1 = v[1][l] + coef1 * E[1][l];
-                double const vz1 = v[2][l] + coef1 * E[2][l];
-                double const rx = coef1 * B[0][l], ry = coef1 * B[1][l], rz = coef1 * B[2][l];
-                double const rx2 = rx * rx, ry2 = ry * ry, rz2 = rz * rz;
-                double const rxry = rx * ry, rxrz = rx * rz, ryrz = ry * rz;
-                double const invDet = 1. / (1. + rx2 + ry2 + rz2);
-                double const mxx = 1. + rx2 - ry2 - rz2, mxy = 2. * (rxry + rz),
-                             mxz = 2. * (rxrz - ry);
-                double const myx = 2. * (rxry - rz), myy = 1. + ry2 - rx2 - rz2,
-                             myz = 2. * (ryrz + rx);
-                double const mzx = 2. * (rxrz + ry), mzy = 2. * (ryrz - rx),
-                             mzz = 1. + rz2 - rx2 - ry2;
-                v1[0][l]         = (mxx * vx1 + mxy * vy1 + mxz * vz1) * invDet + coef1 * E[0][l];
-                v1[1][l]         = (myx * vx1 + myy * vy1 + myz * vz1) * invDet + coef1 * E[1][l];
-                v1[2][l]         = (mzx * vx1 + mzy * vy1 + mzz * vz1) * invDet + coef1 * E[2][l];
-            }
-            for (std::size_t k = 0; k < 3; ++k)
-                for (std::size_t l = 0; l < lanes; ++l)
-                    v[k][l] = accel[l] ? v1[k][l] : v[k][l];
+                  // boris::accelerate on the lanes
+                  double v1[3][lanes];
+                  for (std::size_t l = 0; l < lanes; ++l)
+                  {
+                      double const vx1 = v[0][l] + coef1 * E[0][l];
+                      double const vy1 = v[1][l] + coef1 * E[1][l];
+                      double const vz1 = v[2][l] + coef1 * E[2][l];
+                      double const rx = coef1 * B[0][l], ry = coef1 * B[1][l], rz = coef1 * B[2][l];
+                      double const rx2 = rx * rx, ry2 = ry * ry, rz2 = rz * rz;
+                      double const rxry = rx * ry, rxrz = rx * rz, ryrz = ry * rz;
+                      double const invDet = 1. / (1. + rx2 + ry2 + rz2);
+                      double const mxx = 1. + rx2 - ry2 - rz2, mxy = 2. * (rxry + rz),
+                                   mxz = 2. * (rxrz - ry);
+                      double const myx = 2. * (rxry - rz), myy = 1. + ry2 - rx2 - rz2,
+                                   myz = 2. * (ryrz + rx);
+                      double const mzx = 2. * (rxrz + ry), mzy = 2. * (ryrz - rx),
+                                   mzz = 1. + rz2 - rx2 - ry2;
+                      v1[0][l] = (mxx * vx1 + mxy * vy1 + mxz * vz1) * invDet + coef1 * E[0][l];
+                      v1[1][l] = (myx * vx1 + myy * vy1 + myz * vz1) * invDet + coef1 * E[1][l];
+                      v1[2][l] = (mzx * vx1 + mzy * vy1 + mzz * vz1) * invDet + coef1 * E[2][l];
+                  }
+                  for (std::size_t k = 0; k < 3; ++k)
+                      for (std::size_t l = 0; l < lanes; ++l)
+                          v[k][l] = accel[l] ? v1[k][l] : v[k][l];
 
-            // second half step, the lanes not accelerated stay where the first left them
-            int c1[dim][lanes];
-            double d1[dim][lanes];
-            for (std::size_t k = 0; k < dim; ++k)
-                for (std::size_t l = 0; l < lanes; ++l)
-                {
-                    c1[k][l] = c[k][l];
-                    d1[k][l] = d[k][l];
-                }
-            advance(accel);
-            for (std::size_t k = 0; k < dim; ++k)
-                for (std::size_t l = 0; l < lanes; ++l)
-                {
-                    c[k][l] = accel[l] ? c[k][l] : c1[k][l];
-                    d[k][l] = accel[l] ? d[k][l] : d1[k][l];
-                }
+                  // second half step, the lanes not accelerated stay where the first left them
+                  int c1[dim][lanes];
+                  double d1[dim][lanes];
+                  for (std::size_t k = 0; k < dim; ++k)
+                      for (std::size_t l = 0; l < lanes; ++l)
+                      {
+                          c1[k][l] = c[k][l];
+                          d1[k][l] = d[k][l];
+                      }
+                  advance(accel);
+                  for (std::size_t k = 0; k < dim; ++k)
+                      for (std::size_t l = 0; l < lanes; ++l)
+                      {
+                          c[k][l] = accel[l] ? c[k][l] : c1[k][l];
+                          d[k][l] = accel[l] ? d[k][l] : d1[k][l];
+                      }
 
-            if constexpr (copy)
-            {
-                for (std::size_t l = 0; l < lanes; ++l)
-                    if (accel[l])
-                    {
-                        auto const p = lane_particle(l);
-                        if (isIn(p.iCell(), boxing.nonLevelGhostBox))
-                            interp.particleToMesh(p, rhoP, flux, layout);
-                    }
-            }
-            else
-            {
-                for (std::size_t k = 0; k < dim; ++k)
-                    for (std::size_t l = 0; l < n; ++l)
-                        if (live[l])
-                        {
-                            C[k][i0 + l] = c[k][l];
-                            D[k][i0 + l] = d[k][l];
-                        }
-                for (std::size_t k = 0; k < 3; ++k)
-                    for (std::size_t l = 0; l < n; ++l)
-                        if (live[l])
-                            V[k][i0 + l] = v[k][l];
-            }
-        };
+                  if constexpr (copy)
+                  {
+                      for (std::size_t l = 0; l < lanes; ++l)
+                          if (accel[l])
+                          {
+                              auto const p = lane_particle(l);
+                              if (isIn(p.iCell(), boxing.nonLevelGhostBox))
+                                  interp.particleToMesh(p, rhoP, flux, layout);
+                          }
+                  }
+                  else
+                  {
+                      for (std::size_t k = 0; k < dim; ++k)
+                          for (std::size_t l = 0; l < n; ++l)
+                              if (live[l])
+                              {
+                                  C[k][i0 + l] = c[k][l];
+                                  D[k][i0 + l] = d[k][l];
+                              }
+                      for (std::size_t k = 0; k < 3; ++k)
+                          for (std::size_t l = 0; l < n; ++l)
+                              if (live[l])
+                                  V[k][i0 + l] = v[k][l];
+                  }
+              };
 
         using Gather_t = CellGather1<dim, lanes>;
         static constexpr bool per_cell
@@ -847,10 +848,10 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
     static void batched_avx(auto& particles, auto& pop, auto const& em, auto const& layout,
                             auto const& boxing, auto const& halfdt, double const coef1)
     {
-        static constexpr std::size_t L = avx_lanes;
-        using Vd                       = mkn::avx::Type<double, L>;
-        using Mk                       = mkn::avx::Mask<double, L>;
-        static constexpr bool copy     = mode == MultiBorisMode::COPY;
+        static constexpr std::size_t L  = avx_lanes;
+        using Vd                        = mkn::avx::Type<double, L>;
+        using Mk                        = mkn::avx::Mask<double, L>;
+        static constexpr bool copy      = mode == MultiBorisMode::COPY;
         static constexpr bool int_lanes = L >= 4; // mkn::avx's int32 lanes: 4, 8
         // a column of cells as lanes: int32 lanes for a full block (a partial one could read past
         //  the array), else per lane
@@ -872,13 +873,11 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
         if constexpr (record)
             particles.begin_crossers();
 
-        auto const bc = [](double const x) DAMN_LAMBDA_ALWAYS_INLINE {
-            return Vd{mkn::avx::load<double, L>(x)};
-        };
-        auto const store = [](double* p, Vd const& v) DAMN_LAMBDA_ALWAYS_INLINE {
-            mkn::avx::unaligned_store(p, v);
-        };
-        auto const not_ = [&](Mk const& m) DAMN_LAMBDA_ALWAYS_INLINE {
+        auto const bc = [](double const x)
+                            DAMN_LAMBDA_ALWAYS_INLINE { return Vd{mkn::avx::load<double, L>(x)}; };
+        auto const store = [](double* p, Vd const& v)
+                               DAMN_LAMBDA_ALWAYS_INLINE { mkn::avx::unaligned_store(p, v); };
+        auto const not_  = [&](Mk const& m) DAMN_LAMBDA_ALWAYS_INLINE {
             return mkn::avx::gt(mkn::avx::select(m, bc(0.), bc(1.)), bc(.5));
         };
 

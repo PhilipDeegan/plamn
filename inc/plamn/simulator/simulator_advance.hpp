@@ -348,7 +348,8 @@ void Simulator<opts>::move_ions_(std::size_t const ln, double const t, double co
     }
     if (mode != core::UpdaterMode::domain_only)
     {
-        // as PHARE's deposit after the exchange (and the level initialization): the particles that left their
+        // as PHARE's deposit after the exchange (and the level initialization): the particles that
+        // left their
         //  patch go to the patch owning their cell first, then each patch deposits its domain
         //  particles, every particle once (the domain_only predictor deposits its pushed copies
         //  in the updater)

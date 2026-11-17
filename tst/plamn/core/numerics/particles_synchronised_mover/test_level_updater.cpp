@@ -14,10 +14,10 @@
 // damn::amr::owned_elsewhere), handed over as a patch ghost when it enters another patch's
 // domain, split again every 2 pushes (a coarse step).
 //
-// moments as PHARE's deposit after the exchange (and the simulator): after the exchange each patch deposits its
-// domain particles (depositDomain), the level's moments are then every patch's sum on each node
-// (the border sums, periodic images included): the same as the level as one patch, within the
-// summation order.
+// moments as PHARE's deposit after the exchange (and the simulator): after the exchange each patch
+// deposits its domain particles (depositDomain), the level's moments are then every patch's sum on
+// each node (the border sums, periodic images included): the same as the level as one patch, within
+// the summation order.
 //
 // uniform E and B: the push is the same whichever patch holds a particle, within rounding (the
 // interpolation weights come from patch local indexes). Every layout picks its updater

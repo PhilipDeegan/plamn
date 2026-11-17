@@ -205,9 +205,9 @@ auto it_dist(I0&& i0, I1&& i1)
 // that): level ghosts are selected after each half push, up to 2 cells past the ghost box;
 // domain particles after both, up to 4 cells past the domain, which is the ghost box shrunk by
 // the particle ghost width.
-// the cell jump limit makes this irrelevant: domain particles throw before leaving the ghost box, level ghosts
-// out of it are dropped by a predicate before interpolation, not through the cell map. Then
-// remove this and the margin in make_particles below (grep "cell-jump-limit").
+// the cell jump limit makes this irrelevant: domain particles throw before leaving the ghost box,
+// level ghosts out of it are dropped by a predicate before interpolation, not through the cell map.
+// Then remove this and the margin in make_particles below (grep "cell-jump-limit").
 NO_DISCARD int constexpr particleMapMargin(int const particleGhostWidth)
 {
     return std::max(2, 4 - particleGhostWidth);

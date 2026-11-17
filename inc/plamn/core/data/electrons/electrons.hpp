@@ -87,7 +87,8 @@ public:
     void static Vxyz(auto const& layout, auto const& Ne, auto&&... args)
     {
         // Ve = (sum_s q_s F_s - J) / Ne, with Ne the total ion charge density.
-        // The ion bulk velocity is mass weighted and cannot be used here (the multi species momentum fix)
+        // The ion bulk velocity is mass weighted and cannot be used here (the multi species
+        // momentum fix)
         auto&& [J, F, Ve] = std::forward_as_tuple(args...);
         auto const& Jx    = J(Component::X);
         auto const& Jy    = J(Component::Y);

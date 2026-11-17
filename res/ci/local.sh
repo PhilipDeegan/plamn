@@ -4,7 +4,7 @@
 # PYPHARE: the PHARE checkout pyphare comes from (default ~/git/phare/mkn).
 #   res/ci/local.sh [base, default origin/next: PRs target next]
 set -euo pipefail
-BASE=${1:-origin/next}
+BASE=${1:-origin/master} # as CI: the PR base (next -> master)
 J=${JOBS:-8}
 PYPHARE=${PYPHARE:-$HOME/git/phare/mkn}
 mb=$(git merge-base "$BASE" HEAD)
