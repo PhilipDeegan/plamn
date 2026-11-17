@@ -355,14 +355,14 @@ private:
 template<std::size_t L>
 void cell_deposit_sorted(auto const& particles, auto& density, auto& flux, auto const& layout)
 {
-    using Particles_t = std::decay_t<decltype(particles)>;
-    using Layout_t    = std::decay_t<decltype(layout)>;
+    using Particles_t                = std::decay_t<decltype(particles)>;
+    using Layout_t                   = std::decay_t<decltype(layout)>;
     static constexpr std::size_t dim = Particles_t::dimension;
     using V                          = mkn::avx::Type<double, L>;
     auto const moments_box = damn::core::grow(layout.cells, Layout_t::options.field_ghost_width);
 
-    auto const& W = particles.weight();
-    auto const& D = particles.delta();
+    auto const& W  = particles.weight();
+    auto const& D  = particles.delta();
     auto const& Vc = particles.v();
     double idx[L];
     for (std::size_t l = 0; l < L; ++l)
