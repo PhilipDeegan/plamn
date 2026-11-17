@@ -1,7 +1,7 @@
 """live, zero-copy access to plamn's simulation data through pyphare's hierarchy_from_sim
 (PHAREHUB/PHARE#1400): needs a pyphare with the DataWrangler of PHAREHUB/PHARE#1171
 
-    PYTHONPATH=python:$PHARE_WRANGLER/pyphare:tst/plamn/python \
+    PYTHONPATH=.:$PHARE_WRANGLER/pyphare:tst/plamn/python \
         python3 -m phlop.run.test_cases -i tst/plamn/python/test_data_wrangler.py
 """
 
@@ -9,7 +9,7 @@ import unittest
 
 import numpy as np
 
-import pyplamn
+import plamn
 
 
 import alfven1d
@@ -43,7 +43,7 @@ def domain(hier, qty):
 class DataWranglerTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        pyplamn.patch()
+        plamn.patch()
 
     def setUp(self):
         ph.global_vars.sim = None
@@ -204,7 +204,7 @@ class DataWrangler2DTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        pyplamn.patch()
+        plamn.patch()
 
     def setUp(self):
         self.simulator = Simulator(config_2d(), log_to_file=False).setup().initialize()

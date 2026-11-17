@@ -18,7 +18,7 @@ from pathlib import Path
 
 import numpy as np
 
-import pyplamn
+import plamn
 
 
 import pyphare.pharein as ph
@@ -140,25 +140,25 @@ def state(simulator):
 class RestartsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        pyplamn.patch()
+        plamn.patch()
 
     def setUp(self):
         startMPI()
         # the same on every rank of a run, its own per test and rank count: phlop runs a test
         #  on 1 and on 3 ranks at the same time
-        name = f"{self.id().split('.')[-1]}_np{pyplamn.etc.mpi_size()}"
+        name = f"{self.id().split('.')[-1]}_np{plamn.etc.mpi_size()}"
         self.dir = str(Path("phare_outputs/plamn_test_restarts") / name)
         self.simulators = []
 
     def tearDown(self):
         for s in self.simulators:
             s.reset()
-        pyplamn.etc.mpi_barrier()
+        plamn.etc.mpi_barrier()
         if self.rank0():
             shutil.rmtree(self.dir, ignore_errors=True)
 
     def rank0(self):
-        return pyplamn.etc.mpi_rank() == 0
+        return plamn.etc.mpi_rank() == 0
 
     def assertSameState(self, a, b, when):
         self.assertEqual(sorted(a), sorted(b), when)
@@ -174,7 +174,7 @@ class RestartsTest(unittest.TestCase):
         for _ in range(restart_step):
             first.advance()  # the restart is written after step 4
         restart_time = timestep * restart_step
-        written = Path(pyplamn.etc.restart_path_for_time(self.dir, restart_time))
+        written = Path(plamn.etc.restart_path_for_time(self.dir, restart_time))
         self.assertTrue((written / "restart.h5").exists(), written)
 
         second = simulation(self.dir, restart_time=restart_time, **kwargs)
@@ -203,7 +203,7 @@ class RestartsTest(unittest.TestCase):
     def chunked(self):
         import importlib.util
 
-        if importlib.util.find_spec("pyplamn.plamn_cpp_1_1_2_SoAVXChunked_CPU") is None:
+        if importlib.util.find_spec("plamn.plamn_cpp_1_1_2_SoAVXChunked_CPU") is None:
             self.skipTest("no 1D SoAVXChunked module (./mkn.py --layout SoAVXChunked)")
         return dict(model_layout="SoAVXChunked")
 
@@ -253,7 +253,7 @@ class RestartsTest(unittest.TestCase):
         s = simulation(self.dir, restart_options=opts, refinement_boxes={})
         self.simulators.append(s)
         s.advance()
-        written = pyplamn.etc.restart_path_for_time(self.dir + "//", timestep)
+        written = plamn.etc.restart_path_for_time(self.dir + "//", timestep)
         self.assertTrue((Path(written) / "restart.h5").exists(), written)
 
     def test_advanced_restarts_options(self):
@@ -285,7 +285,7 @@ class RestartsTest(unittest.TestCase):
         run(7, timestep * np.arange(8))
         opts = run(3, timestep * np.arange(7, 11))
         self.assertEqual(restarts.restart_time(dict(opts, restart_time="auto")), 0.01)
-        if pyplamn.etc.mpi_rank() == 0:
+        if plamn.etc.mpi_rank() == 0:
             times = sorted(
                 float(d.name) for d in Path(self.dir).iterdir() if d.is_dir()
             )
@@ -293,7 +293,7 @@ class RestartsTest(unittest.TestCase):
 
     def test_directory_names(self):
         """10 digits each side of the point: steps far below pyphare's 5 decimals apart"""
-        etc = pyplamn.etc
+        etc = plamn.etc
         self.assertEqual(
             Path(etc.restart_path_for_time("d", 0.004)).name, "0000000000.0040000000"
         )

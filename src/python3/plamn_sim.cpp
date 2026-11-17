@@ -1,7 +1,7 @@
 // plamn_cpp_<id>: one simulator build permutation, as pyphare's cpp_<id> modules
 //
 //   make_simulator(dict) -> Simulator, dict: the plamn_etc.Dict pyphare filled, handed over
-//   by pyphare as the "hierarchy" (pyplamn.etc.make_hierarchy returns it)
+//   by pyphare as the "hierarchy" (plamn.etc.make_hierarchy returns it)
 //
 // the permutation comes from PLAMN_SIM_DIM, PLAMN_SIM_INTERP, PLAMN_SIM_REFINED,
 // PLAMN_SIM_LAYOUT and PLAMN_SIM_ALLOCATOR (defaults 1, 1, pyphare's default refined particle

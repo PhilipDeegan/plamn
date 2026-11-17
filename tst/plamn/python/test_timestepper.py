@@ -20,7 +20,7 @@ from pathlib import Path
 
 import numpy as np
 
-import pyplamn
+import plamn
 
 import pyphare.pharein as ph
 from pyphare.simulator.simulator import Simulator, startMPI
@@ -86,19 +86,19 @@ def stable_dt(cpp):
 class TimestepperTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        pyplamn.patch()
+        plamn.patch()
 
     def setUp(self):
         startMPI()
-        name = f"{self.id().split('.')[-1]}_np{pyplamn.etc.mpi_size()}"
+        name = f"{self.id().split('.')[-1]}_np{plamn.etc.mpi_size()}"
         self.dir = str(Path("phare_outputs/plamn_test_timestepper") / name)
         self.simulators = []
 
     def tearDown(self):
         for s in self.simulators:
             s.reset()
-        pyplamn.etc.mpi_barrier()
-        if pyplamn.etc.mpi_rank() == 0:
+        plamn.etc.mpi_barrier()
+        if plamn.etc.mpi_rank() == 0:
             shutil.rmtree(self.dir, ignore_errors=True)
 
     def keep(self, simulator):

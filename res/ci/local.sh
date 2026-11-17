@@ -24,7 +24,7 @@ for t in bin/test_plamn_diagnostics/test/*_test_diagnostics_*d.cpp; do
 done
 
 step "python tests: one process each, the 1 and 3 rank cases at the same time (as CI)"
-PYTHONPATH=python:$PYPHARE/pyphare:tst/plamn/python \
+PYTHONPATH=.:$PYPHARE/pyphare:tst/plamn/python \
   python3 -m phlop.run.test_cases -i tst -c 4 --tags mpi
 
 step "clang-format (changed lines)"

@@ -1,7 +1,7 @@
 // plamn_etc: the C++ side pyphare needs before a simulator exists
 //
 //   Dict:  the simulation input, owned by a python object. pyphare's DictPopulator calls
-//          its add_* methods (pyplamn makes dict_populator.dictator() return it)
+//          its add_* methods (plamn makes dict_populator.dictator() return it)
 //   enums: the integer values pyphare writes with add_enum_int
 //
 // user init functions are python callables kept in C++ (InitFunction<dim>): called with

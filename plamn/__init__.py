@@ -1,15 +1,15 @@
-"""pyplamn: run pyphare's python with plamn's C++
+"""plamn: run pyphare's python with plamn's C++
 
-    import pyplamn
-    pyplamn.patch()  # before using pyphare
+    import plamn
+    plamn.patch()  # before using pyphare
 
 patch() points pyphare at plamn:
   - pharein.initialize.dict_populator.dictator() returns the current simulation's
     plamn Dict, a python owned object, instead of the global pybindlibs.dictator module
   - pharein.clearDict() drops it, so the next simulation starts from an empty Dict
-  - pyphare.cpp.cpp_etc_lib() returns pyplamn.etc
-  - pyphare.cpp.cpp_lib(sim) returns pyplamn's simulator module for sim's permutation,
-    built from the Dict (pyplamn.etc.make_hierarchy() hands it to make_simulator)
+  - pyphare.cpp.cpp_etc_lib() returns plamn.etc
+  - pyphare.cpp.cpp_lib(sim) returns plamn's simulator module for sim's permutation,
+    built from the Dict (plamn.etc.make_hierarchy() hands it to make_simulator)
   - MPI started by pyphare's startMPI() (plamn_etc's MpiLifeCycle), no SAMRAI, no pybindlibs
     build checks
 """
@@ -48,7 +48,7 @@ def cpp_lib(sim):
     sim_id = (
         f"{sim.ndim}_{sim.interp_order}_{sim.refined_particle_nbr}_{layout}_{allocator}"
     )
-    name = f"pyplamn.plamn_cpp_{sim_id}"
+    name = f"plamn.plamn_cpp_{sim_id}"
     try:
         return importlib.import_module(name)
     except ModuleNotFoundError as e:
@@ -63,7 +63,7 @@ def _patch_layout_for():
     and particles 1, 2, 2 for interp 1, 2, 3, in HybridGridLayoutFor): use the width each patch
     data carries (nGhosts, from plamn's allowed particle cell jump) instead. Both the tiling_gpu
     (no model argument) and PHARE master signatures."""
-    try:  # pharesee needs matplotlib, not every pyplamn user has it
+    try:  # pharesee needs matplotlib, not every plamn user has it
         import pyphare.pharesee.hierarchy.fromsim as fromsim
     except ImportError:
         return
@@ -71,7 +71,7 @@ def _patch_layout_for():
     from pyphare.core.box import Box
 
     original = getattr(
-        fromsim.make_layout_for, "_pyplamn_original", fromsim.make_layout_for
+        fromsim.make_layout_for, "_plamn_original", fromsim.make_layout_for
     )
 
     def make_layout_for(simulator, patch_data, qty, dl, *model):
@@ -87,7 +87,7 @@ def _patch_layout_for():
             is_particle_layout=(qty == "particles"),
         )
 
-    make_layout_for._pyplamn_original = original
+    make_layout_for._plamn_original = original
     fromsim.make_layout_for = make_layout_for
 
 

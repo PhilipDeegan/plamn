@@ -23,7 +23,7 @@ import unittest
 
 import numpy as np
 
-import pyplamn
+import plamn
 
 
 import pyphare.pharein as ph
@@ -263,14 +263,14 @@ def max_divb(simulator):
             by = py.patch_datas["EM_B_y"][py.box]
             div = (bx[1:, :] - bx[:-1, :]) / dx + (by[:, 1:] - by[:, :-1]) / dx
             m = max(m, float(np.abs(div).max()))
-        out.append(pyplamn.etc.mpi_max(m))
+        out.append(plamn.etc.mpi_max(m))
     return out
 
 
 class HybridRefinementTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        pyplamn.patch()
+        plamn.patch()
 
     def test_alfven_reflux_does_not_kick_the_coarse_cells_beside_the_box(self):
         one, two = alfven(False, 1), alfven(True, 1)
@@ -325,7 +325,7 @@ class HybridRefinementTest(unittest.TestCase):
         load balancing the ranks' particles drift apart, every 30 steps it brings them back.
         The physics is the same: B at the end as without it, to round off"""
         startMPI()  # before asking how many ranks: pyphare starts it with the first simulator
-        if pyplamn.etc.mpi_size() < 2:
+        if plamn.etc.mpi_size() < 2:
             self.skipTest("one rank: nothing to balance (--tags mpi runs it on 3)")
         no, lb = drift(None), drift(dict(every=30, tol=0.05))
         for step in (40, 100):  # after a rebalance (at the start of steps 30, 60, 90)
@@ -341,7 +341,7 @@ class HybridRefinementTest(unittest.TestCase):
         as without the step 30 and 60 rebalances"""
         startMPI()
         if (
-            pyplamn.etc.mpi_size() != 3
+            plamn.etc.mpi_size() != 3
         ):  # 6 patches split evenly on 2 ranks: nothing to cut
             self.skipTest("built for 3 ranks (--tags mpi runs it on 3)")
         patch, steps = (20, 30), 61

@@ -66,7 +66,7 @@ def phare_dir(code):
 def environment(code):
     """PYTHONPATH of a run_case.py process for ``code`` (plamn, or a PHARE name / path)."""
     if code == "plamn":
-        paths = [PLAMN / "python", Path(setting("PHARE_DIR", PHARES["master"])) / "pyphare"]
+        paths = [PLAMN, Path(setting("PHARE_DIR", PHARES["master"])) / "pyphare"]
     else:
         phare = phare_dir(code)
         if not (phare / "build" / "pybindlibs").is_dir():

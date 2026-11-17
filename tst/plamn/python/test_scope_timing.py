@@ -12,7 +12,7 @@ import re
 import unittest
 from pathlib import Path
 
-import pyplamn
+import plamn
 
 
 import alfven1d
@@ -49,7 +49,7 @@ def config():
 class ScopeTimingTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        pyplamn.patch()
+        plamn.patch()
 
     def test_a_file_per_rank_and_summary(self):
         cwd = Path.cwd()

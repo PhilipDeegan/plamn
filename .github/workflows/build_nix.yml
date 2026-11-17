@@ -56,7 +56,7 @@ jobs:
         chmod +x mkn
         KLOG=3 ./mkn clean build test -dKOqp test_plamn_core -Wx res/mkn/mpi -t 4
 
-    # pyplamn runs pyphare's python against plamn's modules: pyphare from a PHARE checkout
+    # plamn runs pyphare's python against plamn's modules: pyphare from a PHARE checkout
     - uses: actions/checkout@v4
       with:
         repository: PhilipDeegan/PHARE
@@ -68,7 +68,7 @@ jobs:
     # the tests run serially, without MPI_Init
     - run: |
         PATH=$PWD:$PATH KLOG=3 ./mkn.py --dim 1 2 --jobs 4 -- -qW -x res/mkn/mpi
-        PYTHONPATH=python:phare/pyphare:tst/plamn/python \
+        PYTHONPATH=.:phare/pyphare:tst/plamn/python \
           python3 -m phlop.run.test_cases -i tst -c 4 --tags mpi
 
     # again with the pyphare of PHAREHUB/PHARE#1171 (live DataWrangler, PHARE master based)
@@ -80,5 +80,5 @@ jobs:
         sparse-checkout: pyphare
 
     - run: |
-        PYTHONPATH=python:phare_wrangler/pyphare:tst/plamn/python \
+        PYTHONPATH=.:phare_wrangler/pyphare:tst/plamn/python \
           python3 -m phlop.run.test_cases -i tst -c 4 --tags mpi

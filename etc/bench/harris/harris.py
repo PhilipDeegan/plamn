@@ -14,7 +14,7 @@ tiling_gpu's config() itself, loaded from its file: its module settings (time_st
 but final_time (steps), max_nbr_levels (levels) and nppc (--ppc) are overridden and there are no
 diagnostics. Keywords a code's pyphare does not know (model_layout, threading on PHARE master)
 are dropped, and said so. One process per code: each has its own pyphare on PYTHONPATH (a PHARE
-checkout's build/ and pyphare/; plamn: its python/ and PHARE master's pyphare, patched).
+checkout's build/ and pyphare/; plamn: its root (the plamn package) and PHARE master's pyphare, patched).
 
 The timers are read with phlop's own command line, from damn's phlop (tpp/phlop, phlop's next:
 it reads damn's #clock lines, PHARE's pinned phlop does not), as printed at the end, e.g.
@@ -45,7 +45,7 @@ def is_plamn(code):
 
 def pythonpath(code):
     if is_plamn(code):
-        return [PLAMN / "python", PHARES / "master" / "pyphare"]
+        return [PLAMN, PHARES / "master" / "pyphare"]
     root = PHARES / code
     if not (root / "build" / "pybindlibs").is_dir():
         raise RuntimeError(f"{code}: no CMake build in {root / 'build'}")
@@ -108,9 +108,9 @@ def particles_per_level(simulator, pop="protons"):
 def child(args):
     """runs in the code's own process and cwd: one coarse step, timed"""
     if is_plamn(args.code):
-        import pyplamn
+        import plamn
 
-        pyplamn.patch()
+        plamn.patch()
     import pyphare.pharein as ph
     from pyphare.simulator.simulator import Simulator, startMPI
 
@@ -134,7 +134,7 @@ def child(args):
     layout = args.code.split("_", 1)[1] if is_plamn(args.code) else "AoSMapped"
     sim = module.config(layout)[0]
     if is_plamn(args.code):
-        # PHARE master's pyphare (plamn's) rejects model_layout, dropped above: pyplamn picks its
+        # PHARE master's pyphare (plamn's) rejects model_layout, dropped above: plamn picks its
         #  module from the attribute
         sim.model_layout = layout
 

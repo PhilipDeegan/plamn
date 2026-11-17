@@ -1,14 +1,14 @@
-"""pyphare's populateDict, through pyplamn.patch(), fills plamn's C++ Dict
+"""pyphare's populateDict, through plamn.patch(), fills plamn's C++ Dict
 
 run from the plamn root:
-    PYTHONPATH=python:$PHARE/pyphare:tst/plamn/python python3 -m phlop.run.test_cases -i tst
+    PYTHONPATH=.:$PHARE/pyphare:tst/plamn/python python3 -m phlop.run.test_cases -i tst
 """
 
 import unittest
 
 import numpy as np
 
-import pyplamn
+import plamn
 
 
 import alfven1d
@@ -18,14 +18,14 @@ import pyphare.pharein as ph
 class PyphareDictTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        pyplamn.patch()
+        plamn.patch()
 
     def setUp(self):
         ph.global_vars.sim = None
         ph.clearDict()
         self.sim = alfven1d.config(cells=50, time_step_nbr=10, final_time=0.1)
         ph.populateDict()
-        self.dict = pyplamn.current_dict()
+        self.dict = plamn.current_dict()
 
     def tearDown(self):
         ph.clearDict()
@@ -33,7 +33,7 @@ class PyphareDictTest(unittest.TestCase):
     def test_dictator_is_the_python_owned_plamn_dict(self):
         from pyphare.pharein.initialize import dict_populator
 
-        self.assertIsInstance(self.dict, pyplamn.etc.Dict)
+        self.assertIsInstance(self.dict, plamn.etc.Dict)
         self.assertIs(dict_populator.dictator(), self.dict)
         self.assertIs(dict_populator.DictPopulator().pp, self.dict)
 
@@ -56,14 +56,14 @@ class PyphareDictTest(unittest.TestCase):
         ):  # tiling_gpu's pyphare writes it, PHARE master's not
             self.assertEqual(
                 d.get_int("simulation/model_layout"),
-                pyplamn.etc.LayoutMode.AoSMapped.value,
+                plamn.etc.LayoutMode.AoSMapped.value,
             )
             self.assertEqual(
-                d.get_int("simulation/allocator"), pyplamn.etc.AllocatorMode.CPU.value
+                d.get_int("simulation/allocator"), plamn.etc.AllocatorMode.CPU.value
             )
         self.assertEqual(
             d.get_int("simulation/time_step/mode"),
-            pyplamn.etc.TimeStepType.constant.value,
+            plamn.etc.TimeStepType.constant.value,
         )
 
     def test_init_functions_are_called_from_cpp(self):
@@ -85,8 +85,8 @@ class PyphareDictTest(unittest.TestCase):
     def test_clear_dict_starts_a_new_dict(self):
         old = self.dict
         ph.clearDict()
-        self.assertIsNot(pyplamn.current_dict(), old)
-        self.assertEqual(pyplamn.current_dict().paths(), [])
+        self.assertIsNot(plamn.current_dict(), old)
+        self.assertEqual(plamn.current_dict().paths(), [])
 
 
 if __name__ == "__main__":

@@ -42,7 +42,7 @@ void Simulator<opts>::setup_()
 {
     auto const& sim = dict_["simulation"];
 
-    // the ranks, if MPI is running (pyplamn starts it with pyphare's startMPI)
+    // the ranks, if MPI is running (plamn starts it with pyphare's startMPI)
     int mpi_on = 0, mpi_done = 0;
     MPI_Initialized(&mpi_on);
     MPI_Finalized(&mpi_done);

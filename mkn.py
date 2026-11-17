@@ -11,7 +11,7 @@
     ./mkn.py --dim 2 --cell-jump 1        # PHARE's ghost widths (particles may move 1 cell a step)
 
 The permutation is set with compile definitions (PLAMN_SIM_*, see src/python3/plamn_sim.cpp)
-and the module named as pyplamn looks for it: plamn_cpp_<dim>_<interp>_<refined>_<layout>_<alloc>,
+and the module named as plamn looks for it: plamn_cpp_<dim>_<interp>_<refined>_<layout>_<alloc>,
 pyphare's simulator id. Run from the plamn root; py_etc is built once first unless --no-etc.
 The modules use MPI: built with res/mkn/mpi's settings (mpicxx) unless -x is given after --.
 

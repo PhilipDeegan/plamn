@@ -13,7 +13,7 @@ import unittest
 
 import numpy as np
 
-import pyplamn
+import plamn
 
 
 import pyphare.pharein as ph
@@ -95,7 +95,7 @@ def level_bulk_velocity(simulator, ilvl):
 class MultiSpeciesMomentumTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        pyplamn.patch()
+        plamn.patch()
 
     def tearDown(self):
         if hasattr(self, "simulator"):

@@ -17,7 +17,7 @@ from pathlib import Path
 
 import numpy as np
 
-import pyplamn
+import plamn
 
 
 import pyphare.pharein as ph
@@ -214,11 +214,11 @@ def assert_vtkhdf_layout(test, path):
 class VtkDiagnosticsTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        pyplamn.patch()
+        plamn.patch()
 
     def setUp(self):
         startMPI()
-        np_ = pyplamn.etc.mpi_size()
+        np_ = plamn.etc.mpi_size()
         self.out = str(
             Path("phare_outputs/plamn_vtk") / f"{self.id().split('.')[-1]}_np{np_}"
         )
@@ -227,15 +227,15 @@ class VtkDiagnosticsTest(unittest.TestCase):
     def tearDown(self):
         if self.simulator is not None:
             self.simulator.reset()
-        pyplamn.etc.mpi_barrier()
-        if pyplamn.etc.mpi_rank() == 0:
+        plamn.etc.mpi_barrier()
+        if plamn.etc.mpi_rank() == 0:
             shutil.rmtree(self.out, ignore_errors=True)
 
     def run_it(self, **kwargs):
         sim = simulation(self.out, **kwargs)
         self.simulator = Simulator(sim, log_to_file=False).setup().initialize()
         self.simulator.advance()  # dumps at t0 (initialize) and after the step
-        pyplamn.etc.mpi_barrier()
+        plamn.etc.mpi_barrier()
         return self.simulator
 
     def test_dump_diags(self):
@@ -331,8 +331,8 @@ class VtkDiagnosticsTest(unittest.TestCase):
         assert_vtkhdf_layout(self, path)
         with h5py.File(path, "r") as f:
             n_boxes = f["VTKHDF/Steps/Level1/NumberOfAMRBox"][:]
-            if pyplamn.etc.mpi_size() > 1:
-                self.assertLess(int(n_boxes.max()), pyplamn.etc.mpi_size())
+            if plamn.etc.mpi_size() > 1:
+                self.assertLess(int(n_boxes.max()), plamn.etc.mpi_size())
 
     def test_unsupported_quantity_raises(self):
         """pyphare accepts no quantity plamn does not write: one set past its checks"""
