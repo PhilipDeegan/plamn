@@ -3,7 +3,7 @@
 on each code, timed: wall clock of the setup + initialization and of the step, and the scope
 timers (PHARE_SCOPE_TIMING=1, .phare/timings/rank.<r>.txt in each code's directory).
 
-  etc/bench/harris/harris.py [--codes master next pr_1601 plamn] [--ndim 2] [--levels 3]
+  etc/bench/harris/harris.py [--codes master pr_1601 plamn] [--ndim 2] [--levels 3]
                              [--steps 1] [--ppc N] [--out DIR] [--tiling-gpu DIR]
                              [--plamn-layouts AoSMapped SoAVXChunked] [--np N]
 
@@ -37,7 +37,7 @@ HERE = Path(__file__).resolve().parent
 PLAMN = HERE.parents[2]
 PHARES = Path("/mkn/git/phare")
 TILING_GPU = PHARES / "tiling_gpu"
-CODES = ["master", "next", "pr_1601", "plamn"]
+CODES = ["master", "pr_1601", "plamn"]
 
 
 def is_plamn(code):
