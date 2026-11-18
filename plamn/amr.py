@@ -75,6 +75,28 @@ class NoDataHierarchy:
             self.weights,
         )
 
+    def total_work_imbalance(self):
+        """the busiest rank's work over all levels (each level's weight times r^l) over the mean:
+        the step time's bound when a rank's levels overlap perfectly (level 0's work far from
+        the finer levels filling the waits), where critical_path is the bound without overlap"""
+        per_rank = np.zeros(self.ranks)
+        for ln, (patches, weights) in enumerate(zip(self.levels, self.weights)):
+            for (_, _, rank), w in zip(patches, weights):
+                per_rank[rank] += self.ratio**ln * w
+        return per_rank.max() / per_rank.mean() if per_rank.mean() else 1.0
+
+    def critical_path(self):
+        """sum over levels of r^l (substeps) times the busiest rank's weight, over the same with
+        the mean: 1 when every level is balanced (levels advance one after another)"""
+        busiest = ideal = 0.0
+        for ln, (patches, weights) in enumerate(zip(self.levels, self.weights)):
+            per_rank = np.zeros(self.ranks)
+            for (_, _, rank), w in zip(patches, weights):
+                per_rank[rank] += w
+            busiest += self.ratio**ln * per_rank.max()
+            ideal += self.ratio**ln * per_rank.mean()
+        return busiest / ideal if ideal else 1.0
+
     def summary(self, reach=None):
         lines = []
         for m in self.metrics(reach):
@@ -120,12 +142,66 @@ class NoDataHierarchy:
         return PatchHierarchy({0.0: levels}, Box(np.asarray(lower), np.asarray(upper)))
 
 
+def _union(a, b):
+    """the box a and b make together, if they make one: (lower, upper) lists, else None"""
+    (al, au), (bl, bu) = a, b
+    differ = [d for d in range(len(al)) if al[d] != bl[d] or au[d] != bu[d]]
+    if not differ:
+        return a
+    if len(differ) > 1:
+        return None
+    d = differ[0]
+    if au[d] + 1 != bl[d] and bu[d] + 1 != al[d]:
+        return None
+    return [min(x, y) for x, y in zip(al, bl)], [max(x, y) for x, y in zip(au, bu)]
+
+
+def coalesce(boxes):
+    """(lower, upper) boxes merged two by two while their union is a box, in lower corner order
+    (as damn::amr::coalesce)"""
+    boxes = [(list(lo), list(up)) for lo, up in boxes]
+    merged = True
+    while merged:
+        merged = False
+        boxes.sort()
+        for i in range(len(boxes)):
+            for j in range(i + 1, len(boxes)):
+                u = _union(boxes[i], boxes[j])
+                if u is not None:
+                    boxes[i] = u
+                    del boxes[j]
+                    merged = True
+                    break
+            if merged:
+                break
+    return boxes
+
+
+def _intersect(a, b):
+    lower = [max(x, y) for x, y in zip(a[0], b[0])]
+    upper = [min(x, y) for x, y in zip(a[1], b[1])]
+    return (lower, upper) if all(lo <= up for lo, up in zip(lower, upper)) else None
+
+
 @dataclass
 class Chopper:
+    """partition "levels": each level cut on its own along the Hilbert curve (the simulator's);
+    "curve": the same, every level ordered on level 0's curve (its patches' boxes coarsened to
+    level 0): balanced per level, fine patches near the ranks of the coarse cells under them;
+    "columns": level 0 cut in blocks of `block` cells, each weighed by the work of every level
+    over it (a level l cell: cell_weight(l) times its r^l substeps), the blocks partitioned along
+    the curve (per node, then over its ranks), every finer level split along its owner's blocks:
+    a rank owns all the levels over its level 0 region. cell_weight(l): a level l cell's work
+    (default the particles per cell: uniform densities above the cut-off; the simulator weighs
+    from the densities, see box_weights_)"""
+
     sim: object
     ranks: int = 1
     ranks_per_node: int = None  # default: all on one node
     mode: str = "even"
+    partition: str = "levels"
+    block: int = 8
+    cell_weight: object = None
 
     def __post_init__(self):
         sim = self.sim
@@ -164,11 +240,67 @@ class Chopper:
             out += chop(lower, upper, size, gran, self.mode)
         return out
 
+    def _cell_weight(self, ln):
+        return float(self.cell_weight(ln) if self.cell_weight else self.ppc)
+
     def _weight(self, ln, lower, upper, work):
         if ln == 0 and work is not None:
             sl = tuple(slice(lo, up + 1) for lo, up in zip(lower, upper))
             return float(np.sum(work[sl]))
-        return float(np.prod(np.asarray(upper) - np.asarray(lower) + 1) * self.ppc)
+        cells = np.prod(np.asarray(upper) - np.asarray(lower) + 1)
+        return float(cells * self._cell_weight(ln))
+
+    def _chop_owned(self, ln, pieces):
+        """pieces [(lower, upper, rank)]: each rank's coalesced, then chopped as the level's"""
+        by_rank = {}
+        for lo, up, r in pieces:
+            by_rank.setdefault(r, []).append((lo, up))
+        out = []
+        for r in sorted(by_rank):
+            for lo, up in self._patch_boxes(ln, coalesce(by_rank[r])):
+                out.append((lo, up, r))
+        return out
+
+    def _columns(self, tag_boxes):
+        """every level's (lower, upper, rank), ranks from level 0 blocks weighed by the work
+        over them"""
+        r = self.ratio
+        chop = getattr(plamn_etc, f"chop_{self.ndim}")
+        partition = getattr(plamn_etc, f"partition_{self.ndim}")
+        domain = ([0] * self.ndim, [c - 1 for c in self.cells])
+        blocks = chop(*domain, [self.block] * self.ndim, 1, "chop")
+
+        work = np.zeros(self.cells)  # per level 0 cell: every level's work over it
+        for ln, boxes in tag_boxes.items():
+            scale = self._cell_weight(ln) * r**ln
+            for b in boxes:
+                lower, upper = _box(b)
+                counts = [
+                    np.bincount(np.arange(lo, up + 1) // r**ln, minlength=n)[:n]
+                    for lo, up, n in zip(lower, upper, self.cells)
+                ]
+                per_cell = counts[0]
+                for c in counts[1:]:
+                    per_cell = np.multiply.outer(per_cell, c)
+                work += scale * per_cell
+        weights = [
+            float(np.sum(work[tuple(slice(l, u + 1) for l, u in zip(lo, up))]))
+            for lo, up in blocks
+        ]
+        owners = partition(blocks, weights, self.node_of_rank)
+
+        levels = {}
+        for ln in sorted(tag_boxes):
+            f = r**ln
+            pieces = []
+            for b in tag_boxes[ln]:
+                box = _box(b)
+                for (lo, up), owner in zip(blocks, owners):
+                    fine = ([x * f for x in lo], [(x + 1) * f - 1 for x in up])
+                    if (piece := _intersect(box, fine)) is not None:
+                        pieces.append((*piece, owner))
+            levels[ln] = self._chop_owned(ln, pieces)
+        return levels
 
     def chop(self, tag_boxes, work=None):
         """a NoDataHierarchy of tag_boxes ({level: boxes}, level 0 the domain if missing);
@@ -183,6 +315,11 @@ class Chopper:
         tag_boxes = dict(tag_boxes)
         tag_boxes.setdefault(0, [domain])
         partition = getattr(plamn_etc, f"partition_{self.ndim}")
+        if self.partition not in ("levels", "curve", "columns"):
+            raise ValueError(
+                f"Chopper: partition {self.partition}: levels, curve or columns"
+            )
+        columns = self._columns(tag_boxes) if self.partition == "columns" else None
 
         h = NoDataHierarchy(
             self.ndim,
@@ -199,9 +336,27 @@ class Chopper:
                 raise ValueError(
                     f"Chopper: levels must be 0..n, got {sorted(tag_boxes)}"
                 )
+            if columns is not None:
+                patches = columns[ln]
+                weights = [self._weight(ln, lo, up, None) for lo, up, _ in patches]
+                h.levels.append(patches)
+                h.weights.append(weights)
+                continue
             boxes = self._patch_boxes(ln, tag_boxes[ln])
             weights = [self._weight(ln, lo, up, work) for lo, up in boxes]
-            ranks = partition(boxes, weights, self.node_of_rank)
+            if self.partition == "curve":
+                # every level on level 0's curve: boxes coarsened to level 0, and a weightless
+                #  box over the domain so every level's curve has the domain's frame
+                #  (damn::amr::curve_order fits the curve to the boxes given)
+                f = self.ratio**ln
+                ordered = [
+                    ([x // f for x in lo], [x // f for x in up]) for lo, up in boxes
+                ]
+                ranks = partition(
+                    [*ordered, domain], [*weights, 0.0], self.node_of_rank
+                )[:-1]
+            else:
+                ranks = partition(boxes, weights, self.node_of_rank)
             h.levels.append([(lo, up, r) for (lo, up), r in zip(boxes, ranks)])
             h.weights.append(weights)
         return h

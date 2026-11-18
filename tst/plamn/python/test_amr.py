@@ -48,6 +48,37 @@ def simulation(cells=(40, 20), largest_patch_size=10, ppc=10):
     return sim
 
 
+def simulation_1d(cells=40, largest_patch_size=10, ppc=10):
+    """a 1D input, never run: one population, all its density a background above the cut-off,
+    so every cell of a level weighs the same (ppc)"""
+    ph.global_vars.sim = None
+    sim = ph.Simulation(
+        cells=cells,
+        dl=0.2,
+        time_step=0.001,
+        time_step_nbr=1,
+        largest_patch_size=largest_patch_size,
+        hyper_resistivity=0.001,
+    )
+
+    def const(v):
+        return lambda x: v + 0 * x
+
+    ph.MaxwellianFluidModel(
+        protons={
+            "charge": 1,
+            "density": const(0.0),
+            "density_background": 1.0,
+            "vthx": const(0.1),
+            "vthy": const(0.1),
+            "vthz": const(0.1),
+            "nbr_part_per_cell": ppc,
+        },
+    )
+    ph.ElectronModel(closure="isothermal", Te=0.1)
+    return sim
+
+
 class AmrTest(unittest.TestCase):
     def tearDown(self):
         ph.global_vars.sim = None
@@ -98,6 +129,26 @@ class AmrTest(unittest.TestCase):
         # pharesee's view: one patch a box, a "rank" field
         ph_h = h.hierarchy()
         self.assertEqual(len(ph_h.level(1).patches), 8)
+
+    def test_columns_own_every_level_over_their_cells(self):
+        # 40 periodic cells, level 1 over the coarse cells 10..29 (fine 20..59), 2 ranks, blocks
+        # of 10: block works (ppc x cells, a level 1 cell twice for its 2 substeps) 10 50 50 10
+        # times ppc: each rank 60, blocks 0 1 on one, 2 3 on the other
+        sim = simulation_1d()
+        refined = {1: [([20], [59])]}
+        h = Chopper(sim, ranks=2, partition="columns", block=10).chop(refined)
+        self.assertEqual(h.total_work_imbalance(), 1.0)
+
+        owner = {}  # level 0 cell -> rank
+        for (lo,), (up,), rank in h.levels[0]:
+            for c in range(lo, up + 1):
+                owner[c] = rank
+        self.assertEqual(len({owner[c] for c in range(20)}), 1)
+        self.assertNotEqual(owner[0], owner[39])
+        for (lo,), (up,), rank in h.levels[
+            1
+        ]:  # each level 1 patch over its owner's cells
+            self.assertEqual({owner[c // 2] for c in range(lo, up + 1)}, {rank})
 
 
 if __name__ == "__main__":
