@@ -11,6 +11,8 @@ previous one, so the first case that differs says where (as tiling_gpu's tests/s
   advance_L2   + a third level, several syncs                         two boxes, 4 steps
   advance_L2_nested  the same, 4 cells inside
   harris_2d    + tagging, regrids, load balancing                     3 levels, 2 steps
+  ion_ion_beam_1d  PHARE's tests/functional/ionIonBeam/ion_ion_beam1d.py to t=0.001 (1 step):
+               two populations, its refinement boxes (3 levels), hyper resistivity
 
 The model is PHARE's tests/simulator/advance/test_advance_hybrid.py (getHierarchy), the sizes,
 seeds and boxes those of tiling_gpu's tests/simulator/layouts (10 particles per cell); harris_2d is
@@ -51,6 +53,7 @@ CASES = {
     "advance_L2": dict(boxes=((1, 12), (4, 21)), steps=4),
     "advance_L2_nested": dict(boxes=((1, 12), (6, 19)), steps=4),
     "harris_2d": dict(harris=True, steps=2),
+    "ion_ion_beam_1d": dict(ion_ion_beam=True, steps=1, pops=["main", "beam"]),
     # compare_physics.py's (not a ladder step): 3 levels, tagging, final B composites
     "harris_3d": dict(harris3d=True, steps=2),
 }
@@ -133,6 +136,48 @@ def _advance_hybrid(ph, out, case, ndim, largest_patch_size, fmt, fine_dump):
     )
     ph.ElectronModel(closure="isothermal", Te=0.12)
     _diagnostics(ph, TIME_STEP * np.arange(case["steps"] + 1), POPULATIONS, fmt)
+    return sim
+
+
+def populations(name):
+    return CASES[name].get("pops", POPULATIONS)
+
+
+def _ion_ion_beam_1d(ph, out, case, largest_patch_size, fmt, fine_dump):
+    """PHARE's tests/functional/ionIonBeam/ion_ion_beam1d.py, its time step to t=steps * 0.001
+    (its diagnostics every 0.1: here every step), the populations seeded, 500 particles per cell
+    (100 there)"""
+    sim = ph.Simulation(
+        smallest_patch_size=20,
+        largest_patch_size=largest_patch_size or 60,
+        time_step_nbr=case["steps"],
+        time_step=0.001,
+        cells=165,
+        dl=0.2,
+        hyper_resistivity=0.01,
+        # the script's commented boxes: its uniform plasma tags nothing, one level otherwise
+        refinement_boxes={"L0": {"B0": [(50,), (110,)]}, "L1": {"B0": [(140,), (180,)]}},
+        diag_options=_diag_options(out, fmt, fine_dump),
+    )
+    def const(v):
+        return lambda x: v + np.zeros_like(x)
+
+    vth = const(np.sqrt(0.1))
+    ppc = int(os.environ.get("LADDER_PPC", "500"))  # many: the deposits' sums differ if anything does
+    v = {"vbulky": const(0.0), "vbulkz": const(0.0), "vthx": vth, "vthy": vth, "vthz": vth,
+         "nbr_part_per_cell": ppc}
+    ph.MaxwellianFluidModel(
+        bx=const(1.0),
+        by=const(0.0),
+        bz=const(0.0),
+        main={"charge": 1, "density": const(1.0), "vbulkx": const(0.0), **v,
+              "init": {"seed": SEED}},
+        beam={"charge": 1, "density": const(0.01), "vbulkx": const(5.0), **v,
+              "init": {"seed": SEED + 1}},
+    )
+    ph.ElectronModel(closure="isothermal", Te=0.0)
+    # no LoadBalancer (the script's auto nppc): PHARE refuses one with refinement boxes
+    _diagnostics(ph, 0.001 * np.arange(case["steps"] + 1), case["pops"], fmt)
     return sim
 
 
@@ -290,6 +335,8 @@ def simulation(name, out, ndim=NDIM, largest_patch_size=None, fmt="pharevtkhdf",
     case = CASES[name]
     if case.get("harris"):
         return _harris_2d(ph, out, case, largest_patch_size, fmt, fine_dump)
+    if case.get("ion_ion_beam"):
+        return _ion_ion_beam_1d(ph, out, case, largest_patch_size, fmt, fine_dump)
     if case.get("harris3d"):
         return _harris_3d(ph, out, case, largest_patch_size, fmt, fine_dump)
     return _advance_hybrid(ph, out, case, ndim, largest_patch_size, fmt, fine_dump)
