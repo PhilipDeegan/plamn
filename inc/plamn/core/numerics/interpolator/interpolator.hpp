@@ -632,7 +632,7 @@ protected:
                                               auto const& delta) DAMN_ALL
     {
         // dual weights require -.5 to take the correct position weight
-        auto constexpr dual_offset = .5;
+        auto constexpr offset = centering == QtyCentering::dual ? .5 : 0.;
 
         auto const& [startIndex_, weights_] = centered_index_and_weights<centering>();
 
@@ -646,9 +646,7 @@ protected:
             // the position relative to the start index, from delta alone: (iCell + delta) -
             // startIndex would round at the magnitude of the local index, so the weights of a
             // particle would depend on where its patch starts
-            double relativePos = delta[iDim] + shift;
-            if constexpr (centering == QtyCentering::dual)
-                relativePos = delta[iDim] + (shift - dual_offset); // shift - .5 is exact
+            double const relativePos = delta[iDim] + (shift - offset); // shift - offset is exact
 
             weightComputer_.computeWeight(relativePos, 0, weights_[iDim]);
         }
