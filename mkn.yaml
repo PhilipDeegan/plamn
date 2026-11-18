@@ -48,8 +48,18 @@ profile:
         tst/plamn/core/data/particles/test_soavx_chunked_gaps.cpp
         tst/plamn/core/numerics/interpolator/test_interpolator.cpp
         tst/plamn/core/numerics/boundary_condition/test_field_boundary_condition.cpp
+        tst/plamn/core/numerics/boundary_condition/test_field_conditions_none.cpp
+        tst/plamn/core/numerics/boundary_condition/test_field_conditions_neumann.cpp
+        tst/plamn/core/numerics/boundary_condition/test_field_conditions_dirichlet.cpp
+        tst/plamn/core/numerics/boundary_condition/test_field_conditions_symmetric.cpp
+        tst/plamn/core/numerics/boundary_condition/test_field_conditions_antisymmetric.cpp
+        tst/plamn/core/numerics/boundary_condition/test_field_conditions_div_free_transverse_neumann.cpp
+        tst/plamn/core/numerics/boundary_condition/test_field_conditions_div_free_transverse_dirichlet.cpp
+        tst/plamn/core/numerics/boundary_condition/test_field_conditions_boundary_factory.cpp
         tst/plamn/core/boundary/test_boundary.cpp
         tst/plamn/core/boundary/test_physical_boundaries.cpp
+        tst/plamn/core/boundary/test_boundary_defs.cpp
+        tst/plamn/core/boundary/test_boundary_manager.cpp
         tst/plamn/core/numerics/particles_synchronised_mover/test_updater.cpp
         tst/plamn/core/numerics/particles_synchronised_mover/test_multi_updater.cpp
         tst/plamn/core/numerics/particles_synchronised_mover/test_level_updater.cpp

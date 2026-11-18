@@ -204,14 +204,11 @@ TYPED_TEST(FieldConditionTest, divergence_free_transverse_conditions)
             p.fill(p.B[1]);
             p.fill(p.B[2]);
             auto const box = p.ghost_cells(side);
-            // the cells the transverse derivatives of the condition reach: not the last ones
-            //  along the transverse directions (their upper faces past the allocation)
-            auto cells = box;
-            for (std::size_t t = 1; t < d; ++t)
-                cells.upper[t] -= 1;
             apply_vector(FieldCondition{.type = type, .value = {0., .25, -.5}}, p.B, loc, box,
                          p.layout);
-            damn::core::for_each_point(cells, [&](auto const& cell) {
+            // every ghost cell: a transverse component is primal along its direction, its
+            //  upper face at the last cell is still allocated
+            damn::core::for_each_point(box, [&](auto const& cell) {
                 double scale = 1.;
                 for (std::size_t t = 0; t < d; ++t)
                     scale = std::max(scale, std::abs(p.B[t](cell)) / p.layout.dx[t]);
