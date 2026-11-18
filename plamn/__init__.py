@@ -89,6 +89,38 @@ def _patch_density_background():
     hybrid._populate_populations = populate_with_background
 
 
+def set_tag_boxes(sim, tag_boxes):
+    """levels made at initialization from tag_boxes ({level: boxes}, levels from 1, each in its
+    own level's cells: pyphare Boxes or (lower, upper) pairs, e.g. Tagger(sim).tag()) instead of
+    from their coarser level's tags (refinement="tagging"); each must be nested in its coarser
+    level (the simulator checks)"""
+    if sim.refinement != "tagging":
+        raise ValueError('tag boxes need refinement="tagging"')
+    from plamn.amr import _box
+
+    sim._plamn_tag_boxes = {
+        int(ln): [_box(b) for b in boxes] for ln, boxes in tag_boxes.items() if int(ln) > 0
+    }
+
+
+def _patch_tag_boxes():
+    from pyphare.pharein.initialize import general
+
+    populate_amr = general.populate_amr
+
+    def populate_amr_with_tag_boxes(dp, sim):
+        populate_amr(dp, sim)
+        for ln, boxes in sorted((getattr(sim, "_plamn_tag_boxes", None) or {}).items()):
+            path = f"simulation/AMR/refinement/tagging/tag_boxes/L{ln}/"
+            dp.add_int(path + "nbr_boxes", len(boxes))
+            for i, (lower, upper) in enumerate(boxes):
+                for d, k in enumerate("xyz"[: len(lower)]):
+                    dp.add_int(path + f"B{i}/lower/{k}", lower[d])
+                    dp.add_int(path + f"B{i}/upper/{k}", upper[d])
+
+    general.populate_amr = populate_amr_with_tag_boxes
+
+
 def _patch_layout_for():
     """pharesee's hierarchy_from_sim builds hybrid layouts with PHARE's ghost widths (field 2, 4, 4
     and particles 1, 2, 2 for interp 1, 2, 3, in HybridGridLayoutFor): use the width each patch
@@ -154,6 +186,7 @@ def patch():
 
     _patch_layout_for()
     _patch_density_background()
+    _patch_tag_boxes()
 
     # restart directories: 10 digits each side of the point, as the C++ restart_path_for_time
     #  (pyphare's 5 decimals cannot tell small steps apart); keep_last deletes by this name

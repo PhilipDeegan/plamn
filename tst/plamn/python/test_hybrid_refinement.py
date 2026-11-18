@@ -91,6 +91,7 @@ def harris(
     levels=2,
     cells=(100, 100),
     patch=(25, 25),
+    tag_boxes=None,
 ):
     ph.global_vars.sim = None
     ph.clearDict()
@@ -164,6 +165,8 @@ def harris(
     ph.ElectronModel(closure="isothermal", Te=0.0)
     if load_balancer:
         ph.LoadBalancer(**load_balancer)
+    if tag_boxes:
+        plamn.set_tag_boxes(sim, tag_boxes)
     simulator = ph.Simulator(sim, log_to_file=False).setup().initialize()
     cpp = simulator.cpp_sim
     initial = [cpp.total_particle_count(ln) for ln in range(cpp.n_levels())]
@@ -183,6 +186,9 @@ def harris(
             for ln in range(cpp.n_levels())
         ],
         "measured": measured,
+        "boxes": {
+            ln: cpp.all_patch_boxes(ln) for ln in range(1, cpp.n_levels())
+        },
     }
     simulator.reset()
     return out
@@ -257,6 +263,17 @@ def init_fields(simulator):
     names = [f"EM_{v}_{q}" for v in "EB" for q in "xyz"] + ["protons_density"]
     return [
         np.concatenate([np.asarray(cpp.all_domain_values(n, ln)) for n in names])
+        for ln in range(cpp.n_levels())
+    ]
+
+
+def level_fields(simulator):
+    """every level's E, B and protons density at each of its points once, in point order: the
+    same for any patches"""
+    cpp = simulator.cpp_sim
+    names = [f"EM_{v}_{q}" for v in "EB" for q in "xyz"] + ["protons_density"]
+    return [
+        np.concatenate([np.asarray(cpp.level_values(n, ln)) for n in names])
         for ln in range(cpp.n_levels())
     ]
 
@@ -383,6 +400,29 @@ class HybridRefinementTest(unittest.TestCase):
         for ln, (a, b) in enumerate(zip(off["measured"][0], on["measured"][0])):
             self.assertEqual(a.shape, b.shape, f"level {ln}")
             np.testing.assert_array_equal(a, b, f"level {ln}")
+
+    def test_supplied_tag_boxes_make_the_same_levels(self):
+        # the levels of a tagged initialization, supplied as tag boxes (as from Tagger(sim).tag()):
+        # the same values at every point of every level, the levels made before any particle
+        tagged = harris(0, tagging=True, levels=3, measure=level_fields)
+        supplied = harris(
+            0, tagging=True, levels=3, measure=level_fields, tag_boxes=tagged["boxes"]
+        )
+        self.assertEqual(supplied["levels"], 3)
+        self.assertEqual(supplied["initial"], tagged["initial"])
+        for ln, (a, b) in enumerate(zip(tagged["measured"][0], supplied["measured"][0])):
+            np.testing.assert_array_equal(a, b, f"level {ln}")
+
+    def test_supplied_tag_boxes_must_nest(self):
+        # pyphare's setup raises a ValueError from the simulator's error
+        with self.assertRaises(ValueError) as raised:
+            harris(
+                0,
+                tagging=True,
+                levels=3,
+                tag_boxes={1: [((0, 0), (9, 9))], 2: [((100, 100), (109, 109))]},
+            )
+        self.assertIn("not nested", str(raised.exception.__context__))
 
     def test_load_balancing_keeps_the_finer_levels(self):
         """three levels from the start (the sheets are tagged at initialization): a rebalance

@@ -161,6 +161,50 @@ void Simulator<opts>::setup_()
         }
     }
 
+    // tag boxes supplied (e.g. pyphare's Tagger(sim).tag()): each level's boxes (L1, L2..., in
+    //  their own level's cells), the levels made from them at initialization instead of from
+    //  their coarser level's tags; each nested in its coarser level
+    if (tagging_ and amr["refinement"]["tagging"].contains("tag_boxes"))
+    {
+        auto const& levels = amr["refinement"]["tagging"]["tag_boxes"];
+        for (int ln = 1; ln < hierarchy_.max_levels; ++ln)
+        {
+            auto const key = "L" + std::to_string(ln);
+            if (!levels.contains(key))
+                break;
+            auto const& level = levels[key];
+            auto& boxes       = supplied_tag_boxes_.emplace_back();
+            for (int b = 0, n = level["nbr_boxes"].template to<int>(); b < n; ++b)
+            {
+                auto const& box = level["B" + std::to_string(b)];
+                Box_t& fine     = boxes.emplace_back();
+                for (std::size_t i = 0; i < dimension; ++i)
+                {
+                    fine.lower[i] = box["lower"][xyz[i]].template to<int>();
+                    fine.upper[i] = box["upper"][xyz[i]].template to<int>();
+                }
+            }
+            auto const& coarser
+                = ln == 1 ? std::vector<Box_t>{hierarchy_.domain} : supplied_tag_boxes_[ln - 2];
+            for (auto const& fine : boxes)
+            {
+                std::vector<Box_t> outside{damn::core::coarsen(fine, hierarchy_.ratio)};
+                for (auto const& c : coarser)
+                {
+                    std::vector<Box_t> rest;
+                    for (auto const& o : outside)
+                        for (auto const& r : o.remove(c))
+                            rest.push_back(r);
+                    outside = std::move(rest);
+                }
+                if (!outside.empty())
+                    throw std::runtime_error("plamn Simulator: a supplied tag box of level "
+                                             + std::to_string(ln)
+                                             + " is not nested in its coarser level");
+            }
+        }
+    }
+
     if (tagging_ and amr.contains("loadbalancing"))
     {
         auto const& lb = amr["loadbalancing"];

@@ -515,6 +515,8 @@ private:
     // refinement="tagging": every level's boxes found from B alone before any particle is made
     //  (simulation/AMR/refinement/tagging/pretag, or PLAMN_PRETAG=1), see pretag_
     bool pretag_enabled_ = false;
+    // simulation/AMR/refinement/tagging/tag_boxes: levels 1... made from these at initialization
+    std::vector<std::vector<Box_t>> supplied_tag_boxes_{};
     std::vector<int> level_steps_; // per level > 0: its substeps in the coarser level's step
     int steps_ = 0;
     // simulation/AMR/loadbalancing (pyphare's LoadBalancer), with refinement="tagging"

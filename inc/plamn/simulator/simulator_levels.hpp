@@ -156,7 +156,9 @@ void Simulator<opts>::initialize()
     }
 
     std::optional<std::vector<std::vector<Box_t>>> pretag_boxes;
-    if (tagging_ and pretag_enabled_)
+    if (tagging_ and !supplied_tag_boxes_.empty())
+        pretag_boxes = supplied_tag_boxes_;
+    else if (tagging_ and pretag_enabled_)
         pretag_boxes = pretag_();
 
     make_level_(0, {hierarchy_.domain});

@@ -12,6 +12,7 @@
 #include "plamn_dict.hpp"
 #include "plamn_data_wrangler.hpp"
 
+#include <nanobind/stl/pair.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/unique_ptr.h>
@@ -78,6 +79,16 @@ NB_MODULE(PLAMN_SIM_MODULE, m)
             "all_patch_count",
             [](Simulator& self, std::size_t const level) {
                 return self.hierarchy().levels.at(level).patches.size();
+            },
+            nb::arg("level") = 0)
+        .def(
+            "all_patch_boxes", // every patch of the level, (lower, upper) in its cells
+            [](Simulator& self, std::size_t const level) {
+                std::vector<std::pair<std::vector<int>, std::vector<int>>> boxes;
+                for (auto const& p : self.hierarchy().levels.at(level).patches)
+                    boxes.emplace_back(std::vector<int>(p.box.lower.begin(), p.box.lower.end()),
+                                       std::vector<int>(p.box.upper.begin(), p.box.upper.end()));
+                return boxes;
             },
             nb::arg("level") = 0)
         .def("ranks", &Simulator::ranks)
