@@ -321,7 +321,7 @@ struct ParticlesSynchronisedMoverTest : public ::testing::Test
                 EXPECT_EQ(pop.domainParticles().size(), 100 * nbrPartPerCell);
                 EXPECT_EQ(levelGhostPartOld.size(),
                           Layout::options.particle_ghost_width * nbrPartPerCell);
-                EXPECT_EQ(patchGhostPart.size(), 0);
+                EXPECT_EQ(patchGhostPart.size(), 0u);
 
 
             } // end 1D
@@ -555,8 +555,9 @@ TYPED_TEST(ParticlesSynchronisedMoverTest, ionUpdaterTakesPusherParamsFromDictAt
 TYPED_TEST(ParticlesSynchronisedMoverTest, loadsDomainPatchAndLevelGhostParticles)
 {
     auto check = [this](std::size_t nbrGhostCells, auto& pop) {
-        EXPECT_EQ(cell_count(this->layout)[0] * nbrPartPerCell, pop.domainParticles().size());
-        EXPECT_EQ(0, pop.patchGhostParticles().size());
+        EXPECT_EQ(static_cast<std::size_t>(cell_count(this->layout)[0]) * nbrPartPerCell,
+                  pop.domainParticles().size());
+        EXPECT_EQ(0u, pop.patchGhostParticles().size());
         EXPECT_EQ(nbrGhostCells * nbrPartPerCell, pop.levelGhostParticlesOld().size());
         EXPECT_EQ(nbrGhostCells * nbrPartPerCell, pop.levelGhostParticlesNew().size());
         EXPECT_EQ(nbrGhostCells * nbrPartPerCell, pop.levelGhostParticles().size());
@@ -590,12 +591,13 @@ TYPED_TEST(ParticlesSynchronisedMoverTest, loadsLevelGhostParticlesOnLeftGhostAr
             auto constexpr pgw
                 = static_cast<int>(TestFixture::Layout::options.particle_ghost_width);
             for (int c = 1; c <= pgw; ++c)
-                EXPECT_EQ(nbrPartPerCell, std::count_if(std::begin(ghost), std::end(ghost),
-                                                        [&](auto const& particle) {
-                                                            return particle.iCell()[0]
-                                                                   == firstAMRCell[0] - c;
-                                                        }));
-            EXPECT_EQ(pgw * nbrPartPerCell, std::distance(std::begin(ghost), std::end(ghost)));
+                EXPECT_EQ(
+                    static_cast<std::ptrdiff_t>(nbrPartPerCell),
+                    std::count_if(std::begin(ghost), std::end(ghost), [&](auto const& particle) {
+                        return particle.iCell()[0] == firstAMRCell[0] - c;
+                    }));
+            EXPECT_EQ(static_cast<std::ptrdiff_t>(pgw * nbrPartPerCell),
+                      std::distance(std::begin(ghost), std::end(ghost)));
         }
     }
 }

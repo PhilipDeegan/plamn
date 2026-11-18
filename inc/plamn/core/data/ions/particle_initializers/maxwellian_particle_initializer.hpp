@@ -132,15 +132,15 @@ private:
     std::array<InputFunction, 3> magneticField_;
 
     double densityCutOff_ = 1e-5;
-    // the constant part of the density, added to the density function (which then holds what
-    //  varies, never taking the density below the cutoff where the background is above it): a
-    //  background at least the cutoff populates every cell
-    double densityBackground_ = 0.;
     std::uint32_t nbrParticlePerCell_;
     Basis basis_;
     std::optional<std::size_t> rngSeed_;
     std::uint64_t populationKey_;
     double over_alloc_factor_ = .05;
+    // the constant part of the density, added to the density function (which then holds what
+    //  varies, never taking the density below the cutoff where the background is above it): a
+    //  background at least the cutoff populates every cell (declared last: initialized last)
+    double densityBackground_ = 0.;
 };
 
 
@@ -237,7 +237,7 @@ void MaxwellianParticleInitializer<Particles_t, Layout>::loadParticles(Particles
     //  column (append_columns), instead of a host write into managed memory per particle
     bool constexpr static staged = Particles_t::layout_mode == LayoutMode::SoAVXChunked
                                    and Particles_t::alloc_mode == damn::AllocatorMode::GPU_UNIFIED;
-    using Staging_t = std::conditional_t<
+    using Staging_t              = std::conditional_t<
         staged, Particles<Particles_t::options.with_alloc(damn::AllocatorMode::CPU)>, Particles_t>;
     auto staging = [&]() {
         if constexpr (staged)

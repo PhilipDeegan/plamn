@@ -72,8 +72,15 @@ def mkn(profile, extra, jobs, defines=(), out=None, own_dir=False):
         cmd += ["-N", out]
     if out:
         cmd += ["-o", out]
-    if defines:
-        cmd += ["-a", " ".join(defines)]
+    # mkn takes one -a: extra's (e.g. warning flags after --) merged into the defines'
+    extra, args = list(extra), list(defines)
+    for flag in ("-a", "--arg"):
+        while flag in extra:
+            at = extra.index(flag)
+            args.append(extra[at + 1])
+            del extra[at : at + 2]
+    if args:
+        cmd += ["-a", " ".join(args)]
     cmd += extra
     print("+", shlex.join(cmd), flush=True)
     return subprocess.call(cmd)

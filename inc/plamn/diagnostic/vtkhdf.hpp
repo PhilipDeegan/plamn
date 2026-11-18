@@ -51,9 +51,9 @@ namespace plamn::diagnostic
 struct Diagnostic
 {
     std::string type, quantity;
-    std::vector<double> timestamps;
+    std::vector<double> timestamps{};
     std::size_t flush_every = 1, next = 0, dumps = 0;
-    std::vector<std::pair<std::string, std::string>> attributes; // phareh5's /py_attrs
+    std::vector<std::pair<std::string, std::string>> attributes{}; // phareh5's /py_attrs
 };
 
 // pyphare's diagnostics plamn writes: electromag and fluid, particle (phareh5 only)
