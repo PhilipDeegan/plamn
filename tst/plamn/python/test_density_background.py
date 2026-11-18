@@ -9,10 +9,8 @@ background above the density cut-off populates every cell (counted without sampl
 import unittest
 
 import numpy as np
-import pyphare.pharein as ph
-from pyphare.simulator.simulator import Simulator
 
-import plamn
+import plamn.backend.phare as ph
 
 cells = 100
 dl = 0.3
@@ -57,14 +55,10 @@ def initialized(background):
         },
     )
     ph.ElectronModel(closure="isothermal", Te=0.12)
-    return Simulator(sim, log_to_file=False).setup().initialize()
+    return ph.Simulator(sim, log_to_file=False).setup().initialize()
 
 
 class DensityBackgroundTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        plamn.patch()
-
     def test_background_is_added_to_the_density(self):
         out = {}
         for background in (False, True):

@@ -21,9 +21,7 @@ from pathlib import Path
 import numpy as np
 
 import plamn
-
-import pyphare.pharein as ph
-from pyphare.simulator.simulator import Simulator, startMPI
+import plamn.backend.phare as ph
 
 dl = 0.3
 cfl_wave = 0.5
@@ -65,7 +63,7 @@ def simulation(**kwargs):
     args.update(kwargs)
     sim = ph.Simulation(**args)
     setup_model()
-    return Simulator(sim, log_to_file=False).setup().initialize()
+    return ph.Simulator(sim, log_to_file=False).setup().initialize()
 
 
 def whistler_dt(cpp, ln):
@@ -84,12 +82,8 @@ def stable_dt(cpp):
 
 
 class TimestepperTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        plamn.patch()
-
     def setUp(self):
-        startMPI()
+        ph.startMPI()
         name = f"{self.id().split('.')[-1]}_np{plamn.etc.mpi_size()}"
         self.dir = str(Path("phare_outputs/plamn_test_timestepper") / name)
         self.simulators = []
@@ -119,7 +113,9 @@ class TimestepperTest(unittest.TestCase):
             simulation(
                 time_step=dt,
                 time_step_nbr=10,
-                restart_options=dict(dir=self.dir, mode="overwrite", timestamps=[at * dt]),
+                restart_options=dict(
+                    dir=self.dir, mode="overwrite", timestamps=[at * dt]
+                ),
             )
         )
         for _ in range(at):
@@ -157,7 +153,9 @@ class TimestepperTest(unittest.TestCase):
         )
         cpp = s.cpp_sim
         self.assertEqual(cpp.endTime(), final_time)
-        self.assertEqual(cpp.timeStep(), stable_dt(cpp))  # the first, for the first dump
+        self.assertEqual(
+            cpp.timeStep(), stable_dt(cpp)
+        )  # the first, for the first dump
 
         steps, total, compensation = 0, 0.0, 0.0
         while cpp.currentTime() < final_time:
@@ -170,7 +168,9 @@ class TimestepperTest(unittest.TestCase):
                 self.assertEqual(dt, expected)
             else:
                 self.assertLessEqual(dt, left)
-                self.assertAlmostEqual(dt, expected, delta=1e-2 * expected, msg=f"step {steps}")
+                self.assertAlmostEqual(
+                    dt, expected, delta=1e-2 * expected, msg=f"step {steps}"
+                )
             y = dt - compensation  # Kahan, as the Timestepper
             t = total + y
             compensation = (t - total) - y

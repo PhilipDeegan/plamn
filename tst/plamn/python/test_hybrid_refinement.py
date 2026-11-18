@@ -23,10 +23,9 @@ import os
 import unittest
 
 import numpy as np
-import pyphare.pharein as ph
-from pyphare.simulator.simulator import Simulator, startMPI
 
 import plamn
+import plamn.backend.phare as ph
 
 PPC = 100
 
@@ -70,7 +69,7 @@ def alfven(refined, steps):
         },
     )
     ph.ElectronModel(closure="isothermal", Te=0.0)
-    simulator = Simulator(sim, log_to_file=False).setup().initialize()
+    simulator = ph.Simulator(sim, log_to_file=False).setup().initialize()
     for _ in range(
         steps
     ):  # not run(): newer pyphares reset the simulator once it is done
@@ -165,7 +164,7 @@ def harris(
     ph.ElectronModel(closure="isothermal", Te=0.0)
     if load_balancer:
         ph.LoadBalancer(**load_balancer)
-    simulator = Simulator(sim, log_to_file=False).setup().initialize()
+    simulator = ph.Simulator(sim, log_to_file=False).setup().initialize()
     cpp = simulator.cpp_sim
     initial = [cpp.total_particle_count(ln) for ln in range(cpp.n_levels())]
     measured = [measure(simulator)] if measure else []
@@ -239,7 +238,7 @@ def drift(load_balancer, steps=120, patch=(10, 10)):
     ph.ElectronModel(closure="isothermal", Te=0.0)
     if load_balancer:
         ph.LoadBalancer(**load_balancer)
-    simulator = Simulator(sim, log_to_file=False).setup().initialize()
+    simulator = ph.Simulator(sim, log_to_file=False).setup().initialize()
     cpp = simulator.cpp_sim
     imbalance = []
     for k in range(steps + 1):
@@ -285,10 +284,6 @@ def max_divb(simulator):
 
 
 class HybridRefinementTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        plamn.patch()
-
     def test_alfven_reflux_does_not_kick_the_coarse_cells_beside_the_box(self):
         one, two = alfven(False, 1), alfven(True, 1)
         lo, up = 40, 59
@@ -341,7 +336,7 @@ class HybridRefinementTest(unittest.TestCase):
         """a beam population, only in a blob, drifting along B across the patches: without
         load balancing the ranks' particles drift apart, every 30 steps it brings them back.
         The physics is the same: B at the end as without it, to round off"""
-        startMPI()  # before asking how many ranks: pyphare starts it with the first simulator
+        ph.startMPI()  # before asking how many ranks: pyphare starts it with the first simulator
         if plamn.etc.mpi_size() < 2:
             self.skipTest("one rank: nothing to balance (--tags mpi runs it on 3)")
         no, lb = drift(None), drift(dict(every=30, tol=0.05))
@@ -356,7 +351,7 @@ class HybridRefinementTest(unittest.TestCase):
         initialization the ranks are 0.25+ apart (a patch is too coarse a unit); each rebalance
         (start of steps 0, 30, 60) cuts level 0 on blocks and brings them within 0.15, B the same
         as without the step 30 and 60 rebalances"""
-        startMPI()
+        ph.startMPI()
         if (
             plamn.etc.mpi_size() != 3
         ):  # 6 patches split evenly on 2 ranks: nothing to cut
@@ -394,7 +389,7 @@ class HybridRefinementTest(unittest.TestCase):
         moves every level onto its new owners, coarser to finer, none dropped (a dropped level
         would come back at the next regrid, split anew from its coarser level: other physics).
         The same levels at every step and B as without load balancing"""
-        startMPI()
+        ph.startMPI()
         if plamn.etc.mpi_size() < 2:
             self.skipTest("one rank: nothing to balance (--tags mpi runs it on 3)")
         steps = 4

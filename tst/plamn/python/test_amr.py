@@ -7,8 +7,8 @@ chop_<dim>, partition_<dim>, metrics_<dim> on damn's data free hierarchy code).
 import unittest
 
 import numpy as np
-import pyphare.pharein as ph
 
+import plamn.backend.phare as ph
 from plamn import plamn_etc
 from plamn.amr import Chopper
 

@@ -17,7 +17,6 @@ npz; a layout whose module is not built is skipped.
 """
 
 import importlib.util
-import itertools
 import shutil
 import subprocess
 import sys
@@ -39,7 +38,9 @@ L0_BOX = (1, 12)
 L1_BOX = (4, 21)
 
 CASES = {
-    "init_L0": dict(steps=0, boxes=[], atol=dict(b=0, e=1e-14, moments=1e-14, particles=0)),
+    "init_L0": dict(
+        steps=0, boxes=[], atol=dict(b=0, e=1e-14, moments=1e-14, particles=0)
+    ),
     "init_L1": dict(
         steps=0, boxes=[L0_BOX], atol=dict(b=0, e=1e-14, moments=1e-14, particles=0)
     ),
@@ -47,7 +48,9 @@ CASES = {
         steps=1, boxes=[], atol=dict(b=1e-14, e=1e-12, moments=1e-14, particles=1e-14)
     ),
     "advance_L1": dict(
-        steps=1, boxes=[L0_BOX], atol=dict(b=1e-15, e=1e-14, moments=1e-14, particles=1e-15)
+        steps=1,
+        boxes=[L0_BOX],
+        atol=dict(b=1e-15, e=1e-14, moments=1e-14, particles=1e-15),
     ),
     "advance_L2": dict(
         steps=4,
@@ -141,7 +144,9 @@ def state(simulator, np):
             for c in PARTICLE_COLUMNS:
                 columns[c].append(np.array(components[c], dtype=float))
         rows = np.stack([np.concatenate(columns[c]) for c in PARTICLE_COLUMNS], axis=1)
-        rows = rows[rows[:, PARTICLE_COLUMNS.index("weight")] != 0]  # SoAVXChunked's gaps
+        rows = rows[
+            rows[:, PARTICLE_COLUMNS.index("weight")] != 0
+        ]  # SoAVXChunked's gaps
         out[f"particles@{ln}"] = rows[np.lexsort(rows.T[::-1])]
     out["levels"] = np.array([cpp.n_levels()])
     return out
@@ -149,15 +154,11 @@ def state(simulator, np):
 
 def run(case, layout, allocator, out):
     import numpy as np
-
-    import plamn
-
-    plamn.patch()
-    import pyphare.pharein as ph
     from pyphare.core.box import nDBox
-    from pyphare.simulator.simulator import Simulator, startMPI
 
-    startMPI()
+    import plamn.backend.phare as ph
+
+    ph.startMPI()
     c = CASES[case]
     ph.global_vars.sim = None
     ph.clearDict()
@@ -175,7 +176,7 @@ def run(case, layout, allocator, out):
         hyper_resistivity=0.001,
     )
     setup_model(ph, sim)
-    simulator = Simulator(sim, log_to_file=False).setup().initialize()
+    simulator = ph.Simulator(sim, log_to_file=False).setup().initialize()
     arrays = {f"0:{k}": v for k, v in state(simulator, np).items()}
     for step in range(1, c["steps"] + 1):
         simulator.advance()
@@ -217,7 +218,9 @@ class Layouts3dTest(unittest.TestCase):
             self.skipTest(f"no {REF} module (./mkn.py --dim {NDIM} --layout {REF[0]})")
         layouts = [l for l in LAYOUTS if module_built(*l)]
         if not layouts:
-            self.skipTest("no module to compare (./mkn.py --dim 3 --layout AoSCMTS ...)")
+            self.skipTest(
+                "no module to compare (./mkn.py --dim 3 --layout AoSCMTS ...)"
+            )
         import numpy as np
 
         atol = CASES[case]["atol"]
