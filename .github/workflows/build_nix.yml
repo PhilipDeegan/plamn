@@ -9,8 +9,9 @@ on:
     #  marked ready for review runs everything once; test locally meanwhile
     types: [opened, synchronize, reopened, ready_for_review]
 
-# three jobs, the C++ tests beside the python modules then their tests (one job per pyphare):
-#  the modules are built once and passed on as an artifact (they link system libraries only)
+# the C++ tests beside the python ones (a job per pyphare), in parallel; each python job builds
+#  its own modules: mkn's -O builds for the build machine (-march=native), so modules built on
+#  one runner can hold instructions another runner's CPU lacks (Illegal instruction)
 jobs:
   core:
     if: ${{ !github.event.pull_request.draft }}
@@ -26,31 +27,10 @@ jobs:
         KLOG=3 mkn clean build test -dKOqp test_plamn_core -t 4 -x res/mkn/mpi
         -W 9 -a "-Wno-unused-parameter -Wno-unused-variable -Wno-error=strict-aliasing"
 
-  # the python modules, with the same settings as above (C++20, also for mkn's own modules)
-  modules:
-    if: ${{ !github.event.pull_request.draft }}
-    runs-on: ubuntu-24.04
-    container: ghcr.io/pharchive/phare_dep/ubuntu:26.04
-    steps:
-    - uses: actions/checkout@v4
-    - uses: ./.github/actions/setup
-      with:
-        damn-key: ${{ secrets.DAMN_DEPLOY_KEY }}
-        mkn: "true"
-    - run: >-
-        KLOG=3 ./mkn.py --dim 1 2 --jobs 4 -- -q -x res/mkn/mpi
-        -W 9 -a "-Wno-unused-parameter -Wno-unused-variable -Wno-error=strict-aliasing"
-    - uses: actions/upload-artifact@v4
-      with:
-        name: modules
-        path: plamn/*.so
-        retention-days: 1
-
   # plamn runs pyphare's python against plamn's modules: pyphare from a PHARE checkout, tiling_gpu's
   #  and wrangler's (the live DataWrangler, PHARE master based)
   python:
     if: ${{ !github.event.pull_request.draft }}
-    needs: modules
     runs-on: ubuntu-24.04
     container: ghcr.io/pharchive/phare_dep/ubuntu:26.04
     strategy:
@@ -60,16 +40,19 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: ./.github/actions/setup
+      with:
+        damn-key: ${{ secrets.DAMN_DEPLOY_KEY }}
+        mkn: "true"
+    # the python modules, with the same settings as above (C++20, also for mkn's own modules)
+    - run: >-
+        KLOG=3 ./mkn.py --dim 1 2 --jobs 4 -- -q -x res/mkn/mpi
+        -W 9 -a "-Wno-unused-parameter -Wno-unused-variable -Wno-error=strict-aliasing"
     - uses: actions/checkout@v4
       with:
         repository: PhilipDeegan/PHARE
         ref: ${{ matrix.pyphare }}
         path: phare
         sparse-checkout: pyphare
-    - uses: actions/download-artifact@v4
-      with:
-        name: modules
-        path: plamn
     - run: |
         PYTHONPATH=.:phare/pyphare:tst/plamn/python \
           python3 -m phlop.run.test_cases -i tst -c 4 --tags mpi
