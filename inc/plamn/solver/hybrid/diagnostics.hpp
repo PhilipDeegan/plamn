@@ -7,12 +7,13 @@
 
 #include "damn/core/def.hpp"
 
-#include "plamn/diagnostic/vtkhdf.hpp"
+#include "plamn/diagnostic/quantities.hpp"
 #include "plamn/solver/hybrid/model.hpp"
 
 #include <cstddef>
 #include <stdexcept>
 #include <string>
+#include <initializer_list>
 
 namespace plamn::solver::hybrid
 {
