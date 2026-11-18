@@ -11,7 +11,9 @@
 #include "plamn/amr/split/split.hpp" // IWYU pragma: keep (the Splitter specializations)
 #include "plamn/amr/split/splitter.hpp"
 #include "plamn/core/numerics/ohm/ohm.hpp"
+#include "plamn/core/models/quantities/hybrid_quantities.hpp"
 #include "plamn/simulator/hybrid_patch.hpp"
+#include "plamn/solver/computed.hpp"
 #include "plamn/solver/model_def.hpp"
 
 #include <cstddef>
@@ -41,6 +43,9 @@ struct HybridModel<opts, true>
     std::map<int, LevelData_t> levels;
     std::optional<core::OhmInfo> ohm; // from the input, at setup
     std::vector<std::string> population_names{};
+    using Grid_t     = Patch_t::Grid_t;
+    using Computed_t = Computed<Patch_t, Grid_t, core::HybridQuantity::Scalar>;
+    std::map<std::string, Computed_t> computed{}; // by key (solver/hybrid/computed.hpp)
     Mover_t mover{};
 
     // the levels from n on gone

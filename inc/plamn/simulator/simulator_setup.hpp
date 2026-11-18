@@ -230,7 +230,9 @@ void Simulator<opts>::setup_()
     hybrid_.ohm.emplace(core::OhmInfo::FROM(sim["algo"]["ohm"]));
 
     register_resources_();
-    setup_computed_();
+    solver::hybrid::setup_computed(hybrid_, [&](std::string const& key, auto const& names) {
+        resources_[key] = damn::amr::same_names(names);
+    });
     setup_restarts_();
     setup_diagnostics_();
 }

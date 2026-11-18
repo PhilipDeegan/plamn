@@ -39,6 +39,7 @@
 #include "plamn/diagnostic/vtkhdf.hpp"
 #include "plamn/simulator/hybrid_patch_view.hpp"
 #include "plamn/solver/hybrid/advance.hpp"
+#include "plamn/solver/hybrid/computed.hpp"
 #include "plamn/solver/hybrid/initialize.hpp"
 #include "plamn/solver/hybrid/level_steps.hpp"
 #include "plamn/solver/hybrid/model.hpp"
@@ -275,17 +276,9 @@ private:
 
     void setup_();
 
-    // computed quantities, see simulator_computed.hpp
-    struct Computed
-    {
-        std::vector<std::pair<std::string, core::HybridQuantity::Scalar>> grids;
-        std::function<void(Patch_t&, std::vector<Grid_t*> const&)> local;
-        std::string border_sum; // a resources_ key, empty: none
-        std::function<void(Patch_t&, std::vector<Grid_t*> const&)> after;
-    };
-    std::map<std::string, Computed> computed_;
-    void setup_computed_();
-    Computed const& computed_for_(std::string const& key) const;
+    // computed quantities, the models' (simulator_computed.hpp)
+    using Computed_t = solver::HybridModel<opts>::Computed_t;
+    Computed_t const& computed_for_(std::string const& key) const;
 
     // diagnostics, see simulator_diagnostics.hpp
     void setup_diagnostics_();
