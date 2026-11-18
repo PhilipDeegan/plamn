@@ -37,7 +37,8 @@ void setup_computed(HybridModel<opts>& model, auto&& resource)
     auto const qtys   = core::HybridQuantity::componentsQuantities(core::HybridQuantity::Tensor::M);
     auto const tensor = [&](std::string const& name) {
         std::vector<std::pair<std::string, Qty>> out;
-        for (std::size_t c = 0; c < 6; ++c)
+        out.reserve(ijk.size());
+        for (std::size_t c = 0; c < ijk.size(); ++c)
             out.emplace_back(name + ijk[c], qtys[c]);
         return out;
     };
