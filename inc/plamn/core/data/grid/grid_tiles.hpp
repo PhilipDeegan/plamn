@@ -6,9 +6,6 @@
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "mkn/kul/math.hpp"
-#include "mkn/kul/float.hpp"
-#include "mkn/kul/int.hpp"
-
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 

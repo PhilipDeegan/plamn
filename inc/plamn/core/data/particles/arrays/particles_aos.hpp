@@ -8,18 +8,11 @@
 #include "damn/core/sys/monitoring.hpp"
 #include "damn/core/def/detail/mkn_gpu.hpp"
 #include "damn/core/logger.hpp"
-#include "mkn/kul/for.hpp"
 #include "mkn/kul/assert.hpp"
 #include "mkn/kul/meta.hpp"
-
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/cellmap.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
-
-// #include "damn/core/geometry/point.hpp"
-// #include "damn/core/geometry/range.hpp"
-// #include "plamn/core/data/particles/particle.hpp"
-#include "mkn/gpu.hpp"
 
 #include <vector>
 #include <cstddef>
@@ -30,6 +23,10 @@
 #include <iterator>
 #include <stdexcept>
 #include <type_traits>
+// #include "damn/core/geometry/point.hpp"
+// #include "damn/core/geometry/range.hpp"
+// #include "plamn/core/data/particles/particle.hpp"
+#include "mkn/gpu.hpp"
 
 namespace plamn::core
 {

@@ -2,11 +2,8 @@
 #define PLAMN_CORE_DATA_PARTICLES_COMPARING_DETAIL_SOA_COMPARING
 
 #include "damn/core/def/damn_config.hpp"
-#include "mkn/kul/math.hpp"
 #include "mkn/kul/float.hpp"
-#include "mkn/kul/int.hpp"
 #include "mkn/kul/equality.hpp"
-
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/comparing/detail/def_comparing.hpp"
 

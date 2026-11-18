@@ -4,7 +4,6 @@
 #include "mkn/kul/std/array.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/def/damn_config.hpp"
-
 #include "plamn/core/def.hpp"
 
 #include <array>
@@ -14,12 +13,6 @@
 #include <limits>
 #include <sstream>
 #include <string>
-
-namespace damn::core
-{
-template<typename D>
-struct PlusEquals;
-} // namespace damn::core
 
 namespace plamn::core
 {

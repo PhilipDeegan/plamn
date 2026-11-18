@@ -9,10 +9,10 @@ namespace damn
 {
 enum class AllocatorMode : std::uint16_t;
 } // namespace damn
-namespace damn::core
+namespace mkn::kul
 {
 struct EqualityReport;
-} // namespace damn::core
+} // namespace mkn::kul
 
 namespace plamn::core
 {

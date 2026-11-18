@@ -3,7 +3,6 @@
 
 #include "damn/core/def/damn_config.hpp"
 #include "mkn/kul/throw.hpp"
-#include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/ghost_width_calculator.hpp"
 
 // #include "plamn/core/data/particles/particle.hpp"

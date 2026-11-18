@@ -5,17 +5,16 @@
 #include "mkn/kul/std/array.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "mkn/kul/constexprifier.hpp"
-#include "damn/core/data/ndarray/ndarray_vector.hpp"
 #include "damn/core/data/ndarray/ndarray_view.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/exec/kernels.hpp" // IWYU pragma: keep (gpu::Vec_t, gpu::TileLauncher: GPU builds)
-
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/field/field.hpp"
 #include "plamn/core/data/field/recentered_field.hpp"
 #include "plamn/core/data/tensorfield/tensorfield.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/models/quantities/quantity.hpp"
+#include "mkn/kul/for.hpp"
 
 #include <cassert>
 #include <array>

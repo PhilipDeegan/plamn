@@ -6,13 +6,9 @@
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/logger.hpp"
 #include "mkn/kul/std/array.hpp"
-#include "mkn/kul/math.hpp"
-#include "mkn/kul/float.hpp"
-#include "mkn/kul/int.hpp"
 #include "mkn/kul/meta.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/box_spans.hpp"
-
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/data/grid/grid.hpp"
 #include "plamn/core/data/field/field.hpp"

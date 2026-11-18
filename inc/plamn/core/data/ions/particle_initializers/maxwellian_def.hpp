@@ -2,9 +2,6 @@
 #define PLAMN_CORE_DATA_IONS_PARTICLE_INITIALIZERS_MAXWELLIAN_DEF_HPP
 
 #include "mkn/kul/math.hpp"
-#include "mkn/kul/float.hpp"
-#include "mkn/kul/int.hpp"
-
 #include "plamn/core/def.hpp"
 
 #include <array>

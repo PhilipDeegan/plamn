@@ -10,7 +10,6 @@
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/memory/span.hpp"
-
 #include "plamn/core/def.hpp"
 
 #include <tuple>
@@ -27,12 +26,6 @@
 #include <iosfwd>
 #include <iterator>
 #include <version>
-
-namespace damn::core
-{
-template<typename D>
-struct SetEqual;
-} // namespace damn::core
 
 // defined in tensorfield.hpp, which includes this file
 namespace plamn::core::basic

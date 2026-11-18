@@ -18,17 +18,12 @@
 #include "damn/core/logger.hpp"
 #include "mkn/kul/std/array.hpp"
 #include "mkn/kul/math.hpp"
-#include "mkn/kul/float.hpp"
-#include "mkn/kul/int.hpp"
 #include "mkn/kul/for.hpp"
 #include "mkn/kul/tuple.hpp"
-#include "mkn/kul/zip.hpp"
 #include "mkn/kul/meta.hpp"
 #include "damn/core/vector.hpp"
-
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
-
 #include "mkn/gpu.hpp"
 
 #include <cassert>

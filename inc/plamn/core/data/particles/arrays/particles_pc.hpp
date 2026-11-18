@@ -8,8 +8,6 @@
 #include "damn/core/logger.hpp"
 #include "mkn/kul/std/array.hpp"
 #include "mkn/kul/math.hpp"
-#include "mkn/kul/float.hpp"
-#include "mkn/kul/int.hpp"
 #include "mkn/kul/for.hpp"
 #include "damn/core/vector.hpp"
 #include "damn/core/operators.hpp"
@@ -18,13 +16,10 @@
 #include "damn/core/exec/kernels.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "mkn/kul/tuple.hpp"
-#include "mkn/kul/zip.hpp"
 #include "damn/core/sys/monitoring.hpp"
 #include "damn/core/data/ndarray/ndarray_vector.hpp"
-
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/particle_translation_tracking.hpp"
-
 #include "mkn/gpu.hpp"
 #include "phlop/timing/scope.hpp"
 
