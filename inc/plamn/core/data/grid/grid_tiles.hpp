@@ -5,7 +5,9 @@
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/box_spans.hpp"
-#include "damn/core/math/numeric.hpp"
+#include "mkn/kul/math.hpp"
+#include "mkn/kul/float.hpp"
+#include "mkn/kul/int.hpp"
 
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
@@ -205,7 +207,8 @@ private:
     {
         std::uint32_t size = 0;
         for (auto const& tile : super()())
-            if (std::uint32_t tile_size = damn::core::product(tile.ghost_box().shape()); tile_size > size)
+            if (std::uint32_t tile_size = mkn::kul::math::product(tile.ghost_box().shape());
+                tile_size > size)
                 size = tile_size;
         return size;
     }
@@ -233,13 +236,13 @@ inline std::ostream& operator<<(std::ostream& out,
 template<typename Layout_t, typename Grid_t, typename Field_t>
 inline auto sum_field(FieldTileSet<Layout_t, Grid_t, Field_t> const& ts)
 {
-    return damn::core::sum_from(ts(), [](auto const& tile) { return sum(tile()); });
+    return mkn::kul::math::sum_from(ts(), [](auto const& tile) { return sum(tile()); });
 }
 
 template<typename Layout_t, typename Grid_t, typename Field_t>
 inline auto sum_not_nan(FieldTileSet<Layout_t, Grid_t, Field_t> const& ts)
 {
-    return damn::core::sum_from(ts(), [](auto const& tile) {
+    return mkn::kul::math::sum_from(ts(), [](auto const& tile) {
         typename Grid_t::value_type s = 0;
         for (auto const& v : tile())
             if (!std::isnan(v))

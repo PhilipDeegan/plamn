@@ -13,7 +13,7 @@
 #include "damn/amr/topology.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/logger.hpp"
-#include "damn/core/math/array.hpp"
+#include "mkn/kul/array.hpp"
 
 #include "plamn/simulator/simulator.hpp" // IWYU pragma: keep (the class)
 #include "plamn/amr/level_pairs.hpp"
@@ -93,7 +93,7 @@ Simulator<opts>::surroundings_(int const ln, Box_t const& box) const
 {
     auto constexpr pgw = static_cast<int>(Patch_t::particle_ghost_width);
     return {damn::amr::covered_by_level(
-                hierarchy_, ln, damn::core::grow(box, damn::core::ConstArray<int, dimension>(pgw))),
+                hierarchy_, ln, damn::core::grow(box, mkn::kul::ConstArray<int, dimension>(pgw))),
             damn::amr::owned_elsewhere(hierarchy_, ln, box, pgw)};
 }
 
@@ -119,7 +119,7 @@ void Simulator<opts>::link_level_(int const ln)
     for (auto const& p : l.data.patches)
     {
         auto& cells = l.level_ghost_cells.emplace_back();
-        cells.push_back(damn::core::grow(p.box, damn::core::ConstArray<int, dimension>(gw)));
+        cells.push_back(damn::core::grow(p.box, mkn::kul::ConstArray<int, dimension>(gw)));
         for (auto const& covered : damn::amr::covered_by_level(hierarchy_, ln, cells.front()))
         {
             std::vector<Box_t> rest;

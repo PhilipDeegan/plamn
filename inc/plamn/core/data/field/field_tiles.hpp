@@ -5,7 +5,7 @@
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/data/tiles/tile_set.hpp"
 #include "damn/core/data/tiles/tile_set_traversal.hpp"
-#include "damn/core/math/array.hpp"
+#include "mkn/kul/array.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/geometry/point.hpp"
@@ -65,7 +65,7 @@ void operate_on_spans(Dst& dst, damn::core::Box<std::uint32_t, dim> const& dst_l
     auto const on_span = [](auto* d, auto const* s, std::uint32_t const size) {
         if constexpr (requires { Operator::span(d, s, size); }) // the operator does whole spans
             Operator::span(d, s, size);
-        else if constexpr (std::is_same_v<Operator, damn::core::SetEqual<value_type>>)
+        else if constexpr (std::is_same_v<Operator, mkn::kul::SetEqual<value_type>>)
             std::copy_n(s, size, d);
         else
             for (std::uint32_t i = 0; i < size; ++i)
@@ -189,7 +189,7 @@ private:
     Field_t field_;
     Layout_t layout_;
     damn::core::Box<int, dimension> ghost_box_ = qty_ghost_box(layout_, physicalQuantity());
-    std::array<FieldTile*, 7> _links = damn::core::ConstArray<FieldTile*, 7>(nullptr);
+    std::array<FieldTile*, 7> _links           = mkn::kul::ConstArray<FieldTile*, 7>(nullptr);
 };
 
 template<typename Layout_t, typename Grid_t, typename Field_t>
@@ -329,10 +329,11 @@ public:
     // tiles can be synced concurrently
     void sync_inner_ghosts(std::size_t const tile_idx)
     {
-        for_each_inner_ghost_overlap(tile_idx, [](auto& t0, auto const& t1, auto const& dst,
-                                                  auto const& src) {
-            operate_on_spans<damn::core::SetEqual<typename Field_t::value_type>>(t0(), dst, t1(), src);
-        });
+        for_each_inner_ghost_overlap(
+            tile_idx, [](auto& t0, auto const& t1, auto const& dst, auto const& src) {
+                operate_on_spans<mkn::kul::SetEqual<typename Field_t::value_type>>(t0(), dst, t1(),
+                                                                                   src);
+            });
     }
 
     // fn(t0, t1, dst, src) for each neighbour t1 of tile `tile_idx` (t0) whose field box t0's
@@ -376,8 +377,8 @@ private:
     static void sync_ghosts_from_(auto& t0, auto const& t1)
     {
         if (auto const boxes = inner_ghost_overlap_(t0, t1))
-            operate_on_spans<damn::core::SetEqual<typename Field_t::value_type>>(t0(), boxes->first, t1(),
-                                                                     boxes->second);
+            operate_on_spans<mkn::kul::SetEqual<typename Field_t::value_type>>(t0(), boxes->first,
+                                                                               t1(), boxes->second);
     }
 
     // the ghosts of tile t0 that neighbour t1's field box, as local boxes of t0 (dst) and t1

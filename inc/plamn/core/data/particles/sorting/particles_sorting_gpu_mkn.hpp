@@ -114,12 +114,12 @@ public:
 
         using enum LayoutMode;
 
-        if constexpr (damn::core::any_in(Particles::layout_mode, AoSPC))
+        if constexpr (mkn::kul::any_in(Particles::layout_mode, AoSPC))
             damn::core::for_each_point(particles.local_box(), [&](auto const& bix) {
                 auto& ps = particles(bix);
                 thrust::sort(thrust::device, ps.data(), ps.data() + ps.size(), by_deltas());
             });
-        else if constexpr (damn::core::any_in(Particles::layout_mode, SoAPC))
+        else if constexpr (mkn::kul::any_in(Particles::layout_mode, SoAPC))
             damn::core::for_each_point(particles.local_box(), [&](auto const& bix) {
                 auto& ps = particles(bix);
                 auto it  = SoAIteratorAdaptor::make(ps);

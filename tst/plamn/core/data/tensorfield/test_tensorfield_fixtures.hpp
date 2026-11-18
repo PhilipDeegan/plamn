@@ -6,9 +6,9 @@
 #include "plamn/plamn_core.hpp"
 #include "damn/core/def/damn_config.hpp"
 
-#include "damn/core/math/array.hpp"
-#include "damn/core/meta/for_N.hpp"
-#include "damn/core/math/equality.hpp"
+#include "mkn/kul/array.hpp"
+#include "mkn/kul/for.hpp"
+#include "mkn/kul/equality.hpp"
 #include "plamn/core/data/tensorfield/tensorfield.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 
@@ -143,14 +143,14 @@ public:
     template<auto o>
     bool isclose(UsableTensorField<o> const& that, double diff = 1e-15) const
     {
-        return damn::core::for_N_all<N_elements>(
+        return mkn::kul::for_N_all<N_elements>(
             [&](auto i) { return (*this)[i].isclose(that[i], diff); });
     }
 
     template<auto o>
     bool operator==(UsableTensorField<o> const& that) const
     {
-        return damn::core::for_N_all<N_elements>([&](auto i) { return (*this)[i] == that[i]; });
+        return mkn::kul::for_N_all<N_elements>([&](auto i) { return (*this)[i] == that[i]; });
     }
 
     void fill(double const v)
@@ -166,7 +166,7 @@ protected:
     auto static make_grids(auto const& compNames, auto const& layout, tensor_t qty)
     {
         auto qts = Impl_t::Quantity::componentsQuantities(qty);
-        return damn::core::for_N<N_elements, damn::core::for_N_R_mode::make_array>(
+        return mkn::kul::for_N<N_elements, mkn::kul::for_N_R_mode::make_array>(
             [&](auto i) { return Grid_t{compNames[i], layout, qts[i], 0}; });
     }
 
@@ -177,8 +177,9 @@ protected:
 
 
 template<auto o0, auto o1>
-damn::core::EqualityReport compare_reduced_tensor_fields(UsableTensorField<o0> const& ref,
-                                             UsableTensorField<o1> const& cmp, double const diff)
+mkn::kul::EqualityReport compare_reduced_tensor_fields(UsableTensorField<o0> const& ref,
+                                                       UsableTensorField<o1> const& cmp,
+                                                       double const diff)
 {
     static_assert(o0.rank == o1.rank);
     auto constexpr static N_elements = detail::tensor_field_dim_from_rank<o0.rank>();
@@ -191,28 +192,29 @@ damn::core::EqualityReport compare_reduced_tensor_fields(UsableTensorField<o0> c
         else
             log << eqr.what() << std::endl;
 
-    return damn::core::EqualityReport{true, log.str()};
+    return mkn::kul::EqualityReport{true, log.str()};
 }
 
 
 
 
 template<typename F0, typename F1, typename PhysicalQuantity, std::size_t rank>
-damn::core::EqualityReport compare_reduced_tensor_fields(TensorField<F0, PhysicalQuantity, rank> const& ref,
-                                             TensorField<F1, PhysicalQuantity, rank> const& cmp,
-                                             double const diff)
+mkn::kul::EqualityReport
+compare_reduced_tensor_fields(TensorField<F0, PhysicalQuantity, rank> const& ref,
+                              TensorField<F1, PhysicalQuantity, rank> const& cmp, double const diff)
 {
     auto constexpr static N_elements = detail::tensor_field_dim_from_rank<rank>();
 
     if (ref.componentNames() != cmp.componentNames())
-        return damn::core::EqualityReport{false, "Tensorfield component mismatch"};
+        return mkn::kul::EqualityReport{false, "Tensorfield component mismatch"};
 
     auto const same_sizes = [&]() {
-        return damn::core::for_N_all<N_elements>([&](auto i) { return ref[i].size() == cmp[i].size(); });
+        return mkn::kul::for_N_all<N_elements>(
+            [&](auto i) { return ref[i].size() == cmp[i].size(); });
     }();
 
     if (!same_sizes)
-        return damn::core::EqualityReport{false, "Tensorfield shape/size mismatch"};
+        return mkn::kul::EqualityReport{false, "Tensorfield shape/size mismatch"};
 
     std::stringstream log;
     log << std::endl;
@@ -222,15 +224,15 @@ damn::core::EqualityReport compare_reduced_tensor_fields(TensorField<F0, Physica
         else
             log << eqr.what() << std::endl;
 
-    return damn::core::EqualityReport{true, log.str()};
+    return mkn::kul::EqualityReport{true, log.str()};
 }
 
 
 
 
 template<auto o0, auto o1>
-damn::core::EqualityReport compare_tensor_fields(UsableTensorField<o0> const& ref,
-                                     UsableTensorField<o1> const& cmp, double const diff)
+mkn::kul::EqualityReport compare_tensor_fields(UsableTensorField<o0> const& ref,
+                                               UsableTensorField<o1> const& cmp, double const diff)
 {
     static_assert(o0.rank == o1.rank);
     auto constexpr static N_elements = detail::tensor_field_dim_from_rank<o0.rank>();
@@ -243,28 +245,29 @@ damn::core::EqualityReport compare_tensor_fields(UsableTensorField<o0> const& re
         else
             log << eqr.what() << std::endl;
 
-    return damn::core::EqualityReport{true, log.str()};
+    return mkn::kul::EqualityReport{true, log.str()};
 }
 
 
 
 
 template<typename F0, typename F1, typename PhysicalQuantity, std::size_t rank>
-damn::core::EqualityReport compare_tensor_fields(TensorField<F0, PhysicalQuantity, rank> const& ref,
-                                     TensorField<F1, PhysicalQuantity, rank> const& cmp,
-                                     double const diff)
+mkn::kul::EqualityReport compare_tensor_fields(TensorField<F0, PhysicalQuantity, rank> const& ref,
+                                               TensorField<F1, PhysicalQuantity, rank> const& cmp,
+                                               double const diff)
 {
     auto constexpr static N_elements = detail::tensor_field_dim_from_rank<rank>();
 
     if (ref.componentNames() != cmp.componentNames())
-        return damn::core::EqualityReport{false, "Tensorfield component mismatch"};
+        return mkn::kul::EqualityReport{false, "Tensorfield component mismatch"};
 
     auto const same_sizes = [&]() {
-        return damn::core::for_N_all<N_elements>([&](auto i) { return ref[i].size() == cmp[i].size(); });
+        return mkn::kul::for_N_all<N_elements>(
+            [&](auto i) { return ref[i].size() == cmp[i].size(); });
     }();
 
     if (!same_sizes)
-        return damn::core::EqualityReport{false, "Tensorfield shape/size mismatch"};
+        return mkn::kul::EqualityReport{false, "Tensorfield shape/size mismatch"};
 
     std::stringstream log;
     log << std::endl;
@@ -274,7 +277,7 @@ damn::core::EqualityReport compare_tensor_fields(TensorField<F0, PhysicalQuantit
         else
             log << eqr.what() << std::endl;
 
-    return damn::core::EqualityReport{true, log.str()};
+    return mkn::kul::EqualityReport{true, log.str()};
 }
 
 

@@ -6,16 +6,19 @@
 #include "damn/core/def/detail/mkn_gpu.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/logger.hpp"
-#include "damn/core/math/array.hpp"
-#include "damn/core/math/numeric.hpp"
-#include "damn/core/meta/logic.hpp"
+#include "mkn/kul/array.hpp"
+#include "mkn/kul/math.hpp"
+#include "mkn/kul/float.hpp"
+#include "mkn/kul/int.hpp"
+#include "mkn/kul/for.hpp"
 #include "damn/core/vector.hpp"
 #include "damn/core/operators.hpp"
 #include "damn/core/math/sort.hpp"
 #include "damn/core/memory/span.hpp"
 #include "damn/core/exec/kernels.hpp"
 #include "damn/core/geometry/box_spans.hpp"
-#include "damn/core/meta/tuple.hpp"
+#include "mkn/kul/tuple.hpp"
+#include "mkn/kul/zip.hpp"
 #include "damn/core/sys/monitoring.hpp"
 #include "damn/core/data/ndarray/ndarray_vector.hpp"
 
@@ -93,7 +96,8 @@ public:
     template<std::uint8_t PHASE = 0, auto type = ParticleType::Domain, typename... Args>
     void sync(Args&&... args);
 
-    // per-thread entry points for the GPU kernels launched by sync() - cell from damn::kernel::idx()
+    // per-thread entry points for the GPU kernels launched by sync() - cell from
+    // damn::kernel::idx()
     template<std::uint8_t PHASE = 0, auto type = ParticleType::Domain>
     void sync_add_new() DAMN_ALL;
 
@@ -316,8 +320,8 @@ public:
 
     void static resize(Particles& ps, std::size_t const& s, bool const& copy = true)
     {
-        if constexpr (damn::core::any_in(layout_mode, LayoutMode::SoA))
-            damn::core::apply(ps.as_tuple(), [&](auto& v) { resize(v, s, copy); });
+        if constexpr (mkn::kul::any_in(layout_mode, LayoutMode::SoA))
+            mkn::kul::apply(ps.as_tuple(), [&](auto& v) { resize(v, s, copy); });
         else
             resize(ps.particles_, s, copy);
     }
@@ -334,8 +338,8 @@ public:
 
     void static reserve(Particles& ps, std::size_t const& s, bool const& copy = true)
     {
-        if constexpr (damn::core::any_in(layout_mode, LayoutMode::SoA))
-            damn::core::apply(ps.as_tuple(), [&](auto& v) { reserve(v, s, copy); });
+        if constexpr (mkn::kul::any_in(layout_mode, LayoutMode::SoA))
+            mkn::kul::apply(ps.as_tuple(), [&](auto& v) { reserve(v, s, copy); });
         else
             reserve(ps.particles_, s, copy);
     }
@@ -596,8 +600,8 @@ struct PerCellParticles : public Super_
 
     auto max_size() const
     {
-        return damn::core::max_from(this->particles_,
-                        [](auto const& v, auto const& i) { return v.data()[i].size(); });
+        return mkn::kul::math::max_from(
+            this->particles_, [](auto const& v, auto const& i) { return v.data()[i].size(); });
     }
 }; // PerCellParticles<Super>
 
@@ -609,13 +613,13 @@ template<auto particle_type>
 auto& PerCellParticles<Super_>::move_check(auto const& pt, std::size_t const& idx,
                                            auto& particle) DAMN_ALL
 {
-    static_assert(damn::core::any_in(particle_type, ParticleType::Domain, ParticleType::LevelGhost));
+    static_assert(mkn::kul::any_in(particle_type, ParticleType::Domain, ParticleType::LevelGhost));
     bool constexpr static ATOMIC = true;
     bool constexpr static GPU    = alloc_mode == damn::AllocatorMode::GPU_UNIFIED;
     using Op                     = damn::core::Operators<typename Super::SIZE_T, ATOMIC, GPU>;
 
     auto const& newcell = particle.iCell();
-    if (damn::core::array_equals(newcell, pt.icell))
+    if (mkn::kul::array_equals(newcell, pt.icell))
         return *this; // old cell == new cell, no change required
 
     auto const old_lcl_cell = Super::local_cell(pt.icell);

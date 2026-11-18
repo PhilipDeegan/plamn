@@ -36,8 +36,8 @@
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/logger.hpp"
-#include "damn/core/meta/type_meta.hpp"
-#include "damn/core/sys/env.hpp"
+#include "mkn/kul/meta.hpp"
+#include "mkn/kul/env.hpp"
 
 #include "plamn/amr/resources.hpp"
 #include "plamn/core/data/field/field_box.hpp"
@@ -71,12 +71,12 @@
 
 namespace plamn::core
 {
-auto static const cells  = damn::core::get_env_as("PLAMN_CELLS", int{16});
-auto static const ppc    = damn::core::get_env_as("PLAMN_PPC", std::size_t{10});
-auto static const pushes = damn::core::get_env_as("PLAMN_PUSHES", std::size_t{4});
+auto static const cells  = mkn::kul::env::get_as("PLAMN_CELLS", int{16});
+auto static const ppc    = mkn::kul::env::get_as("PLAMN_PPC", std::size_t{10});
+auto static const pushes = mkn::kul::env::get_as("PLAMN_PUSHES", std::size_t{4});
 auto static const dt
-    = damn::core::get_env_as("PLAMN_TIMESTEP", double{.015}); // dl .1, |v| <= 6: < 1 cell
-auto static const seed = damn::core::get_env_as("PLAMN_SEED", std::size_t{1067});
+    = mkn::kul::env::get_as("PLAMN_TIMESTEP", double{.015}); // dl .1, |v| <= 6: < 1 cell
+auto static const seed = mkn::kul::env::get_as("PLAMN_SEED", std::size_t{1067});
 
 enum class Updater : std::uint8_t { serial = 0, parallel };
 
@@ -119,18 +119,18 @@ struct LevelRun
     int const ln = refined ? 1 : 0;
 
     // level 0 cells; level 1: the domain twice as fine, the level box in its middle
-    Box_t const level_box = refined ? Box_t{damn::core::ConstArray<int, dim>(cells / 2),
-                                            damn::core::ConstArray<int, dim>(cells / 2 + cells - 1)}
-                                    : Box_t{damn::core::ConstArray<int, dim>(0),
-                                            damn::core::ConstArray<int, dim>(cells - 1)};
+    Box_t const level_box = refined ? Box_t{mkn::kul::ConstArray<int, dim>(cells / 2),
+                                            mkn::kul::ConstArray<int, dim>(cells / 2 + cells - 1)}
+                                    : Box_t{mkn::kul::ConstArray<int, dim>(0),
+                                            mkn::kul::ConstArray<int, dim>(cells - 1)};
 
     NO_DISCARD damn::amr::Hierarchy<dim> hierarchy(std::vector<Box_t> const& patch_boxes) const
     {
         damn::amr::Hierarchy<dim> h;
-        h.domain     = Box_t{damn::core::ConstArray<int, dim>(0),
-                             damn::core::ConstArray<int, dim>(cells - 1)};
-        h.dx         = damn::core::ConstArray<double, dim>(.1);
-        h.periodic   = damn::core::ConstArray<bool, dim>(true);
+        h.domain
+            = Box_t{mkn::kul::ConstArray<int, dim>(0), mkn::kul::ConstArray<int, dim>(cells - 1)};
+        h.dx         = mkn::kul::ConstArray<double, dim>(.1);
+        h.periodic   = mkn::kul::ConstArray<bool, dim>(true);
         h.max_levels = 2;
         damn::amr::set_level(
             h, damn::amr::make_level(0, refined ? std::vector{h.domain} : patch_boxes));
@@ -177,7 +177,7 @@ struct LevelRun
     // the level ghost cells: the ring of width pgw around the level box
     NO_DISCARD std::vector<Box_t> ring() const
     {
-        return grow(level_box, damn::core::ConstArray<int, dim>(pgw)).remove(level_box);
+        return grow(level_box, mkn::kul::ConstArray<int, dim>(pgw)).remove(level_box);
     }
 
     // a particle's direction: its velocity's sign per direction (crossing particles)
@@ -196,8 +196,7 @@ struct LevelRun
         for (auto const& box : boxes)
             damn::core::for_each_point(box, [&](auto const& cell) {
                 damn::core::for_each_point(
-                    Box_t{damn::core::ConstArray<int, dim>(-1),
-                          damn::core::ConstArray<int, dim>(1)},
+                    Box_t{mkn::kul::ConstArray<int, dim>(-1), mkn::kul::ConstArray<int, dim>(1)},
                     [&](auto const& d) {
                         if (Point_t{d} == Point_t{})
                             return;
@@ -205,7 +204,7 @@ struct LevelRun
                         for (std::size_t i = 0; i < dim; ++i)
                             v[i] = d[i] * vel;
                         ps.emplace_back(Particle<dim>{1., Point_t{cell}.toArray(),
-                                                      damn::core::ConstArray<double, dim>(.5), v});
+                                                      mkn::kul::ConstArray<double, dim>(.5), v});
                     });
             });
         return ps;
@@ -275,7 +274,7 @@ struct LevelRun
     struct Level
     {
         damn::amr::Hierarchy<dim> h;
-        std::vector<damn::core::aggregate_adapter<Patch_t>> patches;
+        std::vector<mkn::kul::aggregate_adapter<Patch_t>> patches;
         std::unordered_map<std::string, Boxing_t> boxings;
     };
 
@@ -645,7 +644,7 @@ struct CrossingTest : public ::testing::Test
                 auto& patch        = l.patches[i];
                 auto const& boxing = l.boxings.at(patch.id);
                 auto const ghostBox
-                    = grow(patch.layout.cells, damn::core::ConstArray<int, dim>(Run_t::pgw));
+                    = grow(patch.layout.cells, mkn::kul::ConstArray<int, dim>(Run_t::pgw));
                 auto& [domain, patch_ghost, level_ghost] = expected[i];
                 auto const go = [&](auto const& particles, bool const is_level_ghost) {
                     for (auto const& p : convert_particles<AoS_t>(particles, patch.layout))
@@ -708,8 +707,8 @@ struct CrossingTest : public ::testing::Test
                 {
                     std::vector<Key> expected;
                     damn::core::for_each_point(patch.layout.cells, [&](auto const& cell) {
-                        damn::core::for_each_point(Box_t{damn::core::ConstArray<int, dim>(-1),
-                                                         damn::core::ConstArray<int, dim>(1)},
+                        damn::core::for_each_point(Box_t{mkn::kul::ConstArray<int, dim>(-1),
+                                                         mkn::kul::ConstArray<int, dim>(1)},
                                                    [&](auto const& d) {
                                                        if (Point_t{d} != Point_t{})
                                                            expected.push_back(

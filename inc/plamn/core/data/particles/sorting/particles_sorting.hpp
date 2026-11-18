@@ -4,8 +4,8 @@
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/def/detail/mkn_gpu.hpp"
 #include "damn/core/logger.hpp"
-#include "damn/core/meta/logic.hpp"
-#include "damn/core/sys/strings.hpp"
+#include "mkn/kul/for.hpp"
+#include "mkn/kul/string.hpp"
 
 #include "plamn/core/data/particles/arrays/particles_soa_thrust.hpp" // IWYU pragma: keep
 #include "plamn/core/data/particles/particles_def.hpp"
@@ -58,7 +58,7 @@ struct ParticlesSorter
 
     bool constexpr static is_cell_sortable()
     {
-        return !damn::core::any_in(Particles::layout_mode, LM::AoSPC, LM::SoAPC, LM::AoSPCTS);
+        return !mkn::kul::any_in(Particles::layout_mode, LM::AoSPC, LM::SoAPC, LM::AoSPCTS);
     }
 
     auto constexpr static sortable      = is_sortable();
@@ -100,7 +100,7 @@ auto& sort_particles(Particles_t&& ps, Box_t const& box)
 {
     using Particles                         = std::decay_t<Particles_t>;
     std::string_view constexpr static FN_ID = "sort,";
-    auto constexpr function_id              = damn::core::join_string_views_v<FN_ID, Particles::type_id>;
+    auto constexpr function_id = mkn::kul::join_string_views_v<FN_ID, Particles::type_id>;
     DAMN_LOG_SCOPE(1, function_id);
 
     if (ps.size() == 0)
@@ -112,7 +112,7 @@ auto& sort_particles(Particles_t&& ps, Box_t const& box)
         sorter.by_delta();
 
     using enum LayoutMode;
-    if constexpr (damn::core::any_in(Particles::layout_mode, AoSPC, SoAPC))
+    if constexpr (mkn::kul::any_in(Particles::layout_mode, AoSPC, SoAPC))
         ps.reset_index_wrapper_map();
 
     return ps;

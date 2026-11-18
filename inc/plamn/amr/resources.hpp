@@ -14,7 +14,7 @@
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/memory/box_span.hpp"
 #include "damn/core/geometry/point.hpp"
-#include "damn/core/math/array.hpp"
+#include "mkn/kul/array.hpp"
 
 #include "plamn/core/data/particles/particle_components.hpp"
 #include "plamn/core/def.hpp"
@@ -123,7 +123,7 @@ template<typename Particles, std::uint32_t gw>
 NO_DISCARD auto ghost_box(ParticleResource<Particles, gw> const&,
                           damn::core::Box<int, Particles::dimension> const& cells)
 {
-    return damn::core::grow(cells, damn::core::ConstArray<int, Particles::dimension>(gw));
+    return damn::core::grow(cells, mkn::kul::ConstArray<int, Particles::dimension>(gw));
 }
 
 template<typename Particles, std::uint32_t gw>

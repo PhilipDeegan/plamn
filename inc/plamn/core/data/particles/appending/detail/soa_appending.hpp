@@ -2,7 +2,7 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_APPENDING_DETAIL_SOA_APPENDING
 #define PLAMN_CORE_DATA_PARTICLES_APPENDING_DETAIL_SOA_APPENDING
 
-#include "damn/core/meta/for_N.hpp"
+#include "mkn/kul/for.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/memory/memory.hpp"
 #include "damn/core/geometry/box_spans.hpp"
@@ -59,7 +59,7 @@ void ParticlesAppender<LM::AoSMapped, AM::CPU, LM::SoAPC, AM::GPU_UNIFIED>::oper
         auto const& [particles, tmp, i, S] = std::forward_as_tuple(args...);
         auto dst_tuple                     = particles.as_tuple();
         auto tmp_tuple                     = tmp.as_tuple();
-        damn::core::for_N<std::tuple_size_v<decltype(tmp_tuple)>>([&](auto vi) {
+        mkn::kul::for_N<std::tuple_size_v<decltype(tmp_tuple)>>([&](auto vi) {
             auto& a = std::get<vi>(dst_tuple);
             auto& b = std::get<vi>(tmp_tuple);
             damn::core::mem::copy<dst_alloc_mode>(a.data() + particles.size(), b.data(), S);
@@ -117,7 +117,7 @@ void ParticlesAppender<LM::AoSMapped, AM::CPU, LM::SoATS, AM::GPU_UNIFIED>::oper
         auto const& [particles, tmp, i, S] = std::forward_as_tuple(args...);
         auto dst_tuple                     = particles.as_tuple();
         auto tmp_tuple                     = tmp.as_tuple();
-        damn::core::for_N<std::tuple_size_v<decltype(tmp_tuple)>>([&](auto vi) {
+        mkn::kul::for_N<std::tuple_size_v<decltype(tmp_tuple)>>([&](auto vi) {
             auto& a = std::get<vi>(dst_tuple);
             auto& b = std::get<vi>(tmp_tuple);
             damn::core::mem::copy<dst_alloc_mode>(a.data() + particles.size(), b.data(), S);
@@ -233,7 +233,7 @@ void ParticlesAppender<LM::AoSMapped, AM::CPU, LM::SoAVXTS, AM::CPU>::operator()
         auto const& [particles, tmp, i, S] = std::forward_as_tuple(args...);
         auto dst_tuple                     = particles.as_tuple();
         auto tmp_tuple                     = tmp.as_tuple();
-        damn::core::for_N<std::tuple_size_v<decltype(tmp_tuple)>>([&](auto vi) {
+        mkn::kul::for_N<std::tuple_size_v<decltype(tmp_tuple)>>([&](auto vi) {
             auto& a = std::get<vi>(dst_tuple);
             auto& b = std::get<vi>(tmp_tuple);
             damn::core::mem::copy<dst_alloc_mode>(a.data() + particles.size(), b.data(), S);

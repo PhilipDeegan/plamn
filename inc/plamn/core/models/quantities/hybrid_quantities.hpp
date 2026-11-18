@@ -1,7 +1,8 @@
 #ifndef PLAMN_CORE_HYBRID_HYBRID_QUANTITIES_HPP
 #define PLAMN_CORE_HYBRID_HYBRID_QUANTITIES_HPP
 
-#include "damn/core/def/enum_table.hpp"
+#include "mkn/kul/enum.hpp"
+#include "mkn/kul/throw.hpp"
 #include "damn/core/def/damn_config.hpp"
 
 #include "plamn/core/def.hpp"
@@ -46,12 +47,13 @@ public:
     enum class Vector : std::uint16_t { B = 0, E, J, V, count, INVALID };
     enum class Tensor : std::uint16_t { M = 0, count, INVALID };
 
-    static constexpr auto vector_components = damn::core::make_enum_table<Vector, std::array<Scalar, 3>>({
-        {Vector::B, {Scalar::Bx, Scalar::By, Scalar::Bz}},
-        {Vector::E, {Scalar::Ex, Scalar::Ey, Scalar::Ez}},
-        {Vector::J, {Scalar::Jx, Scalar::Jy, Scalar::Jz}},
-        {Vector::V, {Scalar::Vx, Scalar::Vy, Scalar::Vz}},
-    });
+    static constexpr auto vector_components
+        = mkn::kul::make_enum_table<Vector, std::array<Scalar, 3>>({
+            {Vector::B, {Scalar::Bx, Scalar::By, Scalar::Bz}},
+            {Vector::E, {Scalar::Ex, Scalar::Ey, Scalar::Ez}},
+            {Vector::J, {Scalar::Jx, Scalar::Jy, Scalar::Jz}},
+            {Vector::V, {Scalar::Vx, Scalar::Vy, Scalar::Vz}},
+        });
 
     static constexpr auto all_primal_field = Scalar::rho;
 
@@ -97,17 +99,17 @@ namespace hybrid
     using S = HybridQuantity::Scalar;
 
     // Yee: B on faces, E and J on edges, moments on primal nodes
-    auto constexpr static quantities = damn::core::make_enum_table<S, Quantity>({
-        {S::Bx, {Phys::B, Comp::x, pdd}},    {S::By, {Phys::B, Comp::y, dpd}},
-        {S::Bz, {Phys::B, Comp::z, ddp}},    {S::Ex, {Phys::E, Comp::x, dpp}},
-        {S::Ey, {Phys::E, Comp::y, pdp}},    {S::Ez, {Phys::E, Comp::z, ppd}},
-        {S::Jx, {Phys::J, Comp::x, dpp}},    {S::Jy, {Phys::J, Comp::y, pdp}},
-        {S::Jz, {Phys::J, Comp::z, ppd}},    {S::rho, {Phys::Rho, Comp::scalar, ppp}},
-        {S::Vx, {Phys::V, Comp::x, ppp}},    {S::Vy, {Phys::V, Comp::y, ppp}},
-        {S::Vz, {Phys::V, Comp::z, ppp}},    {S::P, {Phys::P, Comp::scalar, ppp}},
-        {S::Mxx, {Phys::M, Comp::xx, ppp}},  {S::Mxy, {Phys::M, Comp::xy, ppp}},
-        {S::Mxz, {Phys::M, Comp::xz, ppp}},  {S::Myy, {Phys::M, Comp::yy, ppp}},
-        {S::Myz, {Phys::M, Comp::yz, ppp}},  {S::Mzz, {Phys::M, Comp::zz, ppp}},
+    auto constexpr static quantities = mkn::kul::make_enum_table<S, Quantity>({
+        {S::Bx, {Phys::B, Comp::x, pdd}},   {S::By, {Phys::B, Comp::y, dpd}},
+        {S::Bz, {Phys::B, Comp::z, ddp}},   {S::Ex, {Phys::E, Comp::x, dpp}},
+        {S::Ey, {Phys::E, Comp::y, pdp}},   {S::Ez, {Phys::E, Comp::z, ppd}},
+        {S::Jx, {Phys::J, Comp::x, dpp}},   {S::Jy, {Phys::J, Comp::y, pdp}},
+        {S::Jz, {Phys::J, Comp::z, ppd}},   {S::rho, {Phys::Rho, Comp::scalar, ppp}},
+        {S::Vx, {Phys::V, Comp::x, ppp}},   {S::Vy, {Phys::V, Comp::y, ppp}},
+        {S::Vz, {Phys::V, Comp::z, ppp}},   {S::P, {Phys::P, Comp::scalar, ppp}},
+        {S::Mxx, {Phys::M, Comp::xx, ppp}}, {S::Mxy, {Phys::M, Comp::xy, ppp}},
+        {S::Mxz, {Phys::M, Comp::xz, ppp}}, {S::Myy, {Phys::M, Comp::yy, ppp}},
+        {S::Myz, {Phys::M, Comp::yz, ppp}}, {S::Mzz, {Phys::M, Comp::zz, ppp}},
     });
 } // namespace hybrid
 
@@ -115,7 +117,7 @@ NO_DISCARD constexpr Quantity quantity(HybridQuantity::Scalar const qty) DAMN_AL
 {
     auto const idx = static_cast<std::size_t>(qty);
     if (idx >= hybrid::quantities.size())
-        damn::throw_runtime_error("Wrong hybridQuantity");
+        mkn::kul::throw_runtime_error("Wrong hybridQuantity");
     return hybrid::quantities[idx < hybrid::quantities.size() ? idx : 0];
 }
 

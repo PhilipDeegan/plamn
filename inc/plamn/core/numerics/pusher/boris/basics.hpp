@@ -2,6 +2,7 @@
 #define PLAMN_CORE_PUSHER_BORIS_BASICS_HPP
 
 #include "damn/core/def/damn_config.hpp"
+#include "mkn/kul/throw.hpp"
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/ghost_width_calculator.hpp"
 
@@ -42,7 +43,7 @@ template<auto alloc, typename Particle_t, typename Float, std::size_t dim>
         Float delta = p.delta()[iDim] + static_cast<Float>(halfDtOverDl[iDim] * p.v()[iDim]);
         if constexpr (alloc == damn::AllocatorMode::CPU)
             if (std::abs(delta) > particle_half_push_limit)
-                damn::throw_exception<MoveTwoCellException>(delta, p.v()[iDim]);
+                mkn::kul::throw_exception<MoveTwoCellException>(delta, p.v()[iDim]);
 
         Float iCell     = std::floor(delta);
         p.delta()[iDim] = delta - iCell;
@@ -125,8 +126,8 @@ auto advance_noavx(Particles_t& ps, Args const&... args) DAMN_ALL
         auto const delta = deldim + static_cast<Float>(halfDtOverDl[iDim] * ps.v()[iDim][pidx]);
         if constexpr (Particles_t::alloc_mode == damn::AllocatorMode::CPU)
             if (std::abs(delta) > particle_half_push_limit)
-                damn::throw_runtime_error("Error, particle moves more than "
-                                          "particle_half_push_limit cells in a half push");
+                mkn::kul::throw_runtime_error("Error, particle moves more than "
+                                              "particle_half_push_limit cells in a half push");
 
         auto iCell = std::floor(delta);
         deldim     = delta - iCell;

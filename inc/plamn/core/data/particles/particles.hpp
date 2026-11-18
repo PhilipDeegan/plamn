@@ -4,12 +4,14 @@
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/logger.hpp"
-#include "damn/core/math/array.hpp"
-#include "damn/core/math/numeric.hpp"
-#include "damn/core/meta/logic.hpp"
-#include "damn/core/meta/type_meta.hpp"
+#include "mkn/kul/array.hpp"
+#include "mkn/kul/math.hpp"
+#include "mkn/kul/float.hpp"
+#include "mkn/kul/int.hpp"
+#include "mkn/kul/for.hpp"
+#include "mkn/kul/meta.hpp"
 #include "damn/core/geometry/box_spans.hpp"
-#include "damn/core/math/equality.hpp"
+#include "mkn/kul/equality.hpp"
 #include "damn/core/sys/monitoring.hpp"
 
 #include "plamn/core/def.hpp"
@@ -110,28 +112,32 @@ public:
         if constexpr (requires { super().begin(); })
             return super().begin();
         else
-            static_assert(damn::core::dependent_false_v<This>, "iteration not supported for this layout");
+            static_assert(mkn::kul::dependent_false_v<This>,
+                          "iteration not supported for this layout");
     }
     auto begin() const
     {
         if constexpr (requires { super().begin(); })
             return super().begin();
         else
-            static_assert(damn::core::dependent_false_v<This>, "iteration not supported for this layout");
+            static_assert(mkn::kul::dependent_false_v<This>,
+                          "iteration not supported for this layout");
     }
     auto end()
     {
         if constexpr (requires { super().end(); })
             return super().end();
         else
-            static_assert(damn::core::dependent_false_v<This>, "iteration not supported for this layout");
+            static_assert(mkn::kul::dependent_false_v<This>,
+                          "iteration not supported for this layout");
     }
     auto end() const
     {
         if constexpr (requires { super().end(); })
             return super().end();
         else
-            static_assert(damn::core::dependent_false_v<This>, "iteration not supported for this layout");
+            static_assert(mkn::kul::dependent_false_v<This>,
+                          "iteration not supported for this layout");
     }
 
     Super& super() DAMN_ALL { return *this; }
@@ -181,29 +187,29 @@ void swap(Particles<opts>& array1, Particles<opts>& array2)
 }
 
 template<typename P0, typename P1>
-damn::core::EqualityReport particle_compare(P0 const& p0, P1 const& p1, std::size_t const i = 0,
-                                double const atol = 1e-15)
+mkn::kul::EqualityReport particle_compare(P0 const& p0, P1 const& p1, std::size_t const i = 0,
+                                          double const atol = 1e-15)
 {
     std::string idx = std::to_string(i);
     if (p0.iCell() != p1.iCell())
-        return damn::core::EqualityReport{false, "icell mismatch at index: " + idx, i};
+        return mkn::kul::EqualityReport{false, "icell mismatch at index: " + idx, i};
 
-    if (!damn::core::float_equals(p0.v(), p1.v(), atol))
-        return damn::core::EqualityReport{false, "v mismatch at index: " + idx, i};
-    if (!damn::core::float_equals(p0.delta(), p1.delta(), atol))
-        return damn::core::EqualityReport{false, "delta mismatch at index: " + idx, i};
+    if (!mkn::kul::float_equals(p0.v(), p1.v(), atol))
+        return mkn::kul::EqualityReport{false, "v mismatch at index: " + idx, i};
+    if (!mkn::kul::float_equals(p0.delta(), p1.delta(), atol))
+        return mkn::kul::EqualityReport{false, "delta mismatch at index: " + idx, i};
 
 
-    return damn::core::EqualityReport{true};
+    return mkn::kul::EqualityReport{true};
 }
 
 
 template<typename P0, typename P1>
-damn::core::EqualityReport particles_equals(P0 const& ref, P1 const& cmp, double const atol = 1e-15)
+mkn::kul::EqualityReport particles_equals(P0 const& ref, P1 const& cmp, double const atol = 1e-15)
 {
     if (ref.size() != cmp.size())
-        return damn::core::EqualityReport{false, "different sizes: " + std::to_string(ref.size()) + " vs "
-                                         + std::to_string(cmp.size())};
+        return mkn::kul::EqualityReport{false, "different sizes: " + std::to_string(ref.size())
+                                                   + " vs " + std::to_string(cmp.size())};
 
     auto rit      = ref.begin();
     auto cit      = cmp.begin();
@@ -213,11 +219,11 @@ damn::core::EqualityReport particles_equals(P0 const& ref, P1 const& cmp, double
         if (auto const eq = particle_compare(*rit, *cit, i, atol); !eq)
             return eq;
 
-    return damn::core::EqualityReport{true};
+    return mkn::kul::EqualityReport{true};
 }
 
 template<auto o>
-damn::core::EqualityReport operator==(Particles<o> const& p0, Particles<o> const& p1)
+mkn::kul::EqualityReport operator==(Particles<o> const& p0, Particles<o> const& p1)
 {
     auto report = particles_equals(p0, p1);
     if (!report)
@@ -229,7 +235,7 @@ damn::core::EqualityReport operator==(Particles<o> const& p0, Particles<o> const
 }
 
 template<auto o>
-damn::core::EqualityReport operator==(Particles<o> const& p0, std::vector<Particle<o>> const& p1)
+mkn::kul::EqualityReport operator==(Particles<o> const& p0, std::vector<Particle<o>> const& p1)
 {
     return particles_equals(p0, p1);
 }
@@ -242,8 +248,8 @@ auto constexpr base_layout_type()
     using enum LayoutMode;
     auto constexpr layout_mode = Particles_t::layout_mode;
     // SoAVX: AoS staging (pack buffers, refine buffers), SoA has no ARRAY storage
-    if constexpr (damn::core::any_in(layout_mode, AoS, AoSMapped, AoSPC, AoSTS, AoSCMTS, AoSPCTS, SoAVX,
-                         SoAVXChunked))
+    if constexpr (mkn::kul::any_in(layout_mode, AoS, AoSMapped, AoSPC, AoSTS, AoSCMTS, AoSPCTS,
+                                   SoAVX, SoAVXChunked))
         return AoS;
     return SoA;
 }
@@ -299,7 +305,7 @@ void particles_domain_is_valid(Particles<o> const& particles, auto const& domain
                             << " local=" << damn::core::Point{local} << " iCell=" << damn::core::Point{p.iCell()};
                         throw std::runtime_error(oss.str());
                     }
-                    if (not damn::core::array_equals(pc.local_cell(p.iCell()), local))
+                    if (not mkn::kul::array_equals(pc.local_cell(p.iCell()), local))
                     {
                         std::ostringstream oss;
                         oss << "particles_domain is not valid: particle iCell does not "
@@ -379,7 +385,7 @@ void particles_ghost_is_valid(Particles<o> const& particles, auto const& domain_
                             << " local=" << damn::core::Point{local} << " iCell=" << damn::core::Point{p.iCell()};
                         throw std::runtime_error(oss.str());
                     }
-                    if (not damn::core::array_equals(pc.local_cell(p.iCell()), local))
+                    if (not mkn::kul::array_equals(pc.local_cell(p.iCell()), local))
                     {
                         std::ostringstream oss;
                         oss << "particles_ghost is not valid: particle iCell does not "

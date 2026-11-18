@@ -210,7 +210,7 @@ struct SoAVXIteratorAdaptor
         // 1 + 2 * dim + 3 columns
         auto constexpr dim = (thrust::tuple_size<std::decay_t<T>>::value - 4) / 2;
         using Cell_t       = std::array<int, dim> const;
-        return Cell_t{damn::core::for_N<dim, damn::core::for_N_R_mode::make_array>(
+        return Cell_t{mkn::kul::for_N<dim, mkn::kul::for_N_R_mode::make_array>(
             [&](auto d) -> int { return thrust::get<1 + d>(it); })};
     }
     template<std::uint8_t dim, std::uint8_t idx = 0, typename T>
@@ -222,7 +222,7 @@ struct SoAVXIteratorAdaptor
     template<std::uint8_t dim, typename T>
     static auto fdelta(T&& it) DAMN_ALL
     {
-        return damn::core::for_N<dim, damn::core::for_N_R_mode::make_array>(
+        return mkn::kul::for_N<dim, mkn::kul::for_N_R_mode::make_array>(
             [&](auto d) { return SoAVXIteratorAdaptor::template delta<dim, d>(it); });
     }
 
@@ -238,7 +238,7 @@ struct SoAVXIteratorAdaptor
     template<std::uint8_t dim, typename T>
     static auto fv(T&& it) DAMN_ALL
     {
-        return damn::core::for_N<3, damn::core::for_N_R_mode::make_array>(
+        return mkn::kul::for_N<3, mkn::kul::for_N_R_mode::make_array>(
             [&](auto d) { return SoAVXIteratorAdaptor::template v<dim, d>(it); });
     }
 };
@@ -296,13 +296,12 @@ struct SoAVXZipConstParticle
 
     auto copy() const DAMN_ALL
     {
-        return Particle<dim>{weight(), iCell(),
-                             damn::core::for_N<dim, damn::core::for_N_R_mode::make_array>([&](auto d) {
-                                 return SoAVXIteratorAdaptor::template delta<dim, d>(*it);
-                             }),
-                             damn::core::for_N<3, damn::core::for_N_R_mode::make_array>([&](auto d) -> auto& {
-                                 return SoAVXIteratorAdaptor::template v<dim, d>(*it);
-                             })};
+        return Particle<dim>{
+            weight(), iCell(),
+            mkn::kul::for_N<dim, mkn::kul::for_N_R_mode::make_array>(
+                [&](auto d) { return SoAVXIteratorAdaptor::template delta<dim, d>(*it); }),
+            mkn::kul::for_N<3, mkn::kul::for_N_R_mode::make_array>(
+                [&](auto d) -> auto& { return SoAVXIteratorAdaptor::template v<dim, d>(*it); })};
     }
 
     Iterator it;
@@ -336,9 +335,9 @@ template<typename Particles>
 auto particle_zip_iterator(Particles& ps, std::size_t const i)
 {
     using enum LayoutMode;
-    if constexpr (damn::core::any_in(Particles::layout_mode, SoA))
+    if constexpr (mkn::kul::any_in(Particles::layout_mode, SoA))
         return typename SoAZipParticle_t<Particles>::value_type{ps, i};
-    else if constexpr (damn::core::any_in(Particles::layout_mode, SoAVX, SoAVXChunked))
+    else if constexpr (mkn::kul::any_in(Particles::layout_mode, SoAVX, SoAVXChunked))
         return typename SoAVXZipParticle_t<Particles>::value_type{ps, i};
     else
         throw std::runtime_error("no impl");

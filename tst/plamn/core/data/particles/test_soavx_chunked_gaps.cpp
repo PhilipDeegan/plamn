@@ -10,7 +10,7 @@
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/geometry/point.hpp"
-#include "damn/core/sys/env.hpp"
+#include "mkn/kul/env.hpp"
 #include "plamn/plamn_core.hpp"
 #include "plamn/core/data/particles/particles.hpp"
 #include "plamn/core/data/particles/particle_components.hpp"
@@ -436,8 +436,8 @@ INSTANTIATE_TEST_SUITE_P(Gaps, Gaps2DWeights, ::testing::Values(1., 3.));
 
 TEST_F(Gaps2D, resettleSortsOnlyWhenAChunkHasNoRoom)
 {
-    auto ps           = make(damn::core::get_env_as("PLAMN_GAPS_SLACK", .1),
-                             damn::core::get_env_as("PLAMN_GAPS_BORDER", 3.));
+    auto ps           = make(mkn::kul::env::get_as("PLAMN_GAPS_SLACK", .1),
+                             mkn::kul::env::get_as("PLAMN_GAPS_BORDER", 3.));
     std::size_t sorts = 0, left = 0;
     for (std::size_t round = 0; round < 50; ++round)
     {

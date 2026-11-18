@@ -25,7 +25,7 @@ public:
     {
         auto constexpr static layout_mode = Particles::layout_mode;
         using enum LayoutMode;
-        if constexpr (damn::core::any_in(layout_mode, SoA, SoAVX, SoAVXChunked))
+        if constexpr (mkn::kul::any_in(layout_mode, SoA, SoAVX, SoAVXChunked))
         {
             DAMN_WITH_THRUST_ELSE_THROW(
                 using Iterator_t = std::conditional_t < layout_mode == SoA, SoAIteratorAdaptor,
@@ -38,16 +38,16 @@ public:
                                array.begin() + std::distance(it, pivot)}; //
             )
         }
-        else if constexpr (damn::core::any_in(layout_mode, SoAVXTS))
+        else if constexpr (mkn::kul::any_in(layout_mode, SoAVXTS))
             throw std::runtime_error("no impl");
-        else if constexpr (damn::core::any_in(layout_mode, AoSMapped))
+        else if constexpr (mkn::kul::any_in(layout_mode, AoSMapped))
         {
             return array.partition(
                 [&](auto& part) { return isIn(cellAsPoint(part.iCell()), box); });
         }
         else
         {
-            static_assert(!damn::core::any_in(layout_mode, AoSPC, SoAPC, AoSPCTS),
+            static_assert(!mkn::kul::any_in(layout_mode, AoSPC, SoAPC, AoSPCTS),
                           "partitioning not implemented for this layout (no flat iteration)");
             return partitionner(array.begin() + start, array.begin() + end, box);
         }
@@ -58,7 +58,7 @@ public:
     {
         auto constexpr static layout_mode = Particles::layout_mode;
         using enum LayoutMode;
-        if constexpr (damn::core::any_in(layout_mode, SoA, SoAVX, SoAVXChunked))
+        if constexpr (mkn::kul::any_in(layout_mode, SoA, SoAVX, SoAVXChunked))
         {
             DAMN_WITH_THRUST_ELSE_THROW( //
                 using Iterator_t = std::conditional_t < layout_mode == SoA, SoAIteratorAdaptor,
@@ -71,16 +71,16 @@ public:
                                array.begin() + std::distance(it, pivot)}; //
             )
         }
-        else if constexpr (damn::core::any_in(layout_mode, SoAVXTS))
+        else if constexpr (mkn::kul::any_in(layout_mode, SoAVXTS))
             throw std::runtime_error("no impl");
-        else if constexpr (damn::core::any_in(layout_mode, AoSMapped))
+        else if constexpr (mkn::kul::any_in(layout_mode, AoSMapped))
         {
             return array.partition(
                 [&](auto& part) { return !isIn(cellAsPoint(part.iCell()), box); });
         }
         else
         {
-            static_assert(!damn::core::any_in(layout_mode, AoSPC, SoAPC, AoSPCTS),
+            static_assert(!mkn::kul::any_in(layout_mode, AoSPC, SoAPC, AoSPCTS),
                           "partitioning not implemented for this layout (no flat iteration)");
             return partitionner(array.begin() + start, array.begin() + end, box,
                                 [=](auto& part) { return !isIn(cellAsPoint(part.iCell()), box); });
@@ -92,7 +92,7 @@ public:
     {
         using enum LayoutMode;
         static_assert(S > 0);
-        auto iterators = damn::core::generate_from(
+        auto iterators = mkn::kul::generate_from(
             [&](auto const& box) { return range_t{box, array.begin(), array.begin()}; }, boxes);
         for (std::size_t i = 0; i < boxes.size(); ++i)
             start += (iterators[i] = (*this)(boxes[i])).size();

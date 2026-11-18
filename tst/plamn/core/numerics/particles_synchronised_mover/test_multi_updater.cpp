@@ -37,25 +37,25 @@ namespace plamn::core
 {
 // RUNTIME ENV VAR OVERRIDES
 auto static const bytes
-    = damn::core::get_env_as("PLAMN_GPU_BYTES", std::uint64_t{500000000}); // .5GB
-auto static const cells     = damn::core::get_env_as("PLAMN_CELLS", std::uint32_t{20});
-auto static const ppc       = damn::core::get_env_as("PLAMN_PPC", std::size_t{33});
-auto static const seed      = damn::core::get_env_as("PLAMN_SEED", std::size_t{1067});
-auto static const n_patches = damn::core::get_env_as("PLAMN_PATCHES", std::size_t{1});
-auto static const dt        = damn::core::get_env_as("PLAMN_TIMESTEP", double{.001});
-auto static const shufle    = damn::core::get_env_as("PLAMN_UNSORTED", std::size_t{0});
-auto static const do_cmp    = damn::core::get_env_as("PLAMN_COMPARE", std::size_t{1});
-auto static const n_threads = damn::core::get_env_as("PLAMN_THREADS", std::size_t{1});
-auto static const n_push    = damn::core::get_env_as("PLAMN_PUSHES", std::size_t{1});
-auto static const cmp_only  = damn::core::get_env_as("PLAMN_CMP_ONLY", std::size_t{0});
-auto static const ref_only  = damn::core::get_env_as("PLAMN_REF_ONLY", std::size_t{0});
+    = mkn::kul::env::get_as("PLAMN_GPU_BYTES", std::uint64_t{500000000}); // .5GB
+auto static const cells     = mkn::kul::env::get_as("PLAMN_CELLS", std::uint32_t{20});
+auto static const ppc       = mkn::kul::env::get_as("PLAMN_PPC", std::size_t{33});
+auto static const seed      = mkn::kul::env::get_as("PLAMN_SEED", std::size_t{1067});
+auto static const n_patches = mkn::kul::env::get_as("PLAMN_PATCHES", std::size_t{1});
+auto static const dt        = mkn::kul::env::get_as("PLAMN_TIMESTEP", double{.001});
+auto static const shufle    = mkn::kul::env::get_as("PLAMN_UNSORTED", std::size_t{0});
+auto static const do_cmp    = mkn::kul::env::get_as("PLAMN_COMPARE", std::size_t{1});
+auto static const n_threads = mkn::kul::env::get_as("PLAMN_THREADS", std::size_t{1});
+auto static const n_push    = mkn::kul::env::get_as("PLAMN_PUSHES", std::size_t{1});
+auto static const cmp_only  = mkn::kul::env::get_as("PLAMN_CMP_ONLY", std::size_t{0});
+auto static const ref_only  = mkn::kul::env::get_as("PLAMN_REF_ONLY", std::size_t{0});
 
 bool static const premain = []() {
     assert(!(cmp_only and ref_only) && "Cant have both only");
     DAMN_WITH_MKN_GPU({ //
         mkn::gpu::setLimitMallocHeapSize(bytes);
         // per-thread device stack (default ~1KB) overflows in the MultiBoris push kernel
-        mkn::gpu::setLimitStackSize(damn::core::get_env_as("PLAMN_GPU_STACK", std::size_t{16384}));
+        mkn::gpu::setLimitStackSize(mkn::kul::env::get_as("PLAMN_GPU_STACK", std::size_t{16384}));
     })
 
     DAMN_WITH_PHLOP({
@@ -181,8 +181,8 @@ void update(UpdaterMode mode, Patches& patches)
     using Particles                    = Patches::value_type::Model_t::particles_type;
     using ParticlesSynchronisedMover_t = Updater_t<version, Particles, Layout_t>;
     auto constexpr function_id
-        = damn::core::join_string_views_v<detail::strings::update, Particles::type_id,
-                                          detail::strings::cma>;
+        = mkn::kul::join_string_views_v<detail::strings::update, Particles::type_id,
+                                        detail::strings::cma>;
     DAMN_LOG_LINE_STR(function_id);
     DAMN_LOG_SCOPE(1, function_id);
 
@@ -351,8 +351,8 @@ void compare(auto const& layout, auto& ref, C& cmp)
 {
     using Particles_t = C::Particles_t;
     auto constexpr function_id
-        = damn::core::join_string_views_v<detail::strings::compare, Particles_t::type_id,
-                                          detail::strings::cma>;
+        = mkn::kul::join_string_views_v<detail::strings::compare, Particles_t::type_id,
+                                        detail::strings::cma>;
     DAMN_LOG_SCOPE(1, function_id);
 
     using enum LayoutMode;
@@ -486,8 +486,8 @@ struct MultiPatchParticlesSynchronisedMoverTest : public ::testing::Test
     using RefPatch = test::HybridPatch<RefIons_t, RefEM_t>;
     using CmpPatch = test::HybridPatch<CmpIons_t, CmpEM_t>;
 
-    std::vector<damn::core::aggregate_adapter<RefPatch>> ref_patches{};
-    std::vector<damn::core::aggregate_adapter<CmpPatch>> cmp_patches{};
+    std::vector<mkn::kul::aggregate_adapter<RefPatch>> ref_patches{};
+    std::vector<mkn::kul::aggregate_adapter<CmpPatch>> cmp_patches{};
 };
 
 // clang-format off

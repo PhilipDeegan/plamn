@@ -18,9 +18,9 @@
 //   EM_E_old_x..., EM_B_old_x..., EM_fluxSum_E_x... (AMR),
 //   <pop>_domain, <pop>_patch_ghost, <pop>_level_ghost[_old, _new] (particles)
 
-#include "damn/core/meta/for_N.hpp"
+#include "mkn/kul/for.hpp"
 #include "damn/core/geometry/box.hpp"
-#include "damn/core/sys/env.hpp"
+#include "mkn/kul/env.hpp"
 #include "plamn/core/def.hpp"
 #include "plamn/plamn_core.hpp"
 #include "plamn/amr/resources.hpp"
@@ -82,7 +82,7 @@ struct HybridPatch
     static auto grids(TensorField const& tf, Layout_t const& layout)
     {
         auto constexpr N = std::tuple_size_v<std::decay_t<decltype(tf.components())>>;
-        return damn::core::for_N<N, damn::core::for_N_R_mode::make_array>(
+        return mkn::kul::for_N<N, mkn::kul::for_N_R_mode::make_array>(
             [&](auto i) { return grid(tf[i], layout); });
     }
 
@@ -90,7 +90,7 @@ struct HybridPatch
     static Grids<3> like(Grids<3> const& vector, std::string const& name, Layout_t const& layout)
     {
         std::array<char const*, 3> constexpr xyz{"_x", "_y", "_z"};
-        return damn::core::for_N<3, damn::core::for_N_R_mode::make_array>(
+        return mkn::kul::for_N<3, mkn::kul::for_N_R_mode::make_array>(
             [&](auto i) { return Grid_t{name + xyz[i], layout, vector[i].physicalQuantity()}; });
     }
 
@@ -121,8 +121,8 @@ struct HybridPatch
             { // the domain's chunks with gaps between them (particles_soavx_chunked.hpp): changes
               //  of cell without a sort (PLAMN_CHUNK_SLACK, a fraction of the particles,
               //  PLAMN_CHUNK_BORDER, the border cells' weight to 1 inside)
-                static double const slack  = damn::core::get_env_as("PLAMN_CHUNK_SLACK", .1);
-                static double const border = damn::core::get_env_as("PLAMN_CHUNK_BORDER", 3.);
+                static double const slack  = mkn::kul::env::get_as("PLAMN_CHUNK_SLACK", .1);
+                static double const border = mkn::kul::env::get_as("PLAMN_CHUNK_BORDER", 3.);
                 domain.set_slack(slack, layout.cells, border);
             }
             bind(F, flux); // M: over scratch grids when computed (simulator_computed.hpp)

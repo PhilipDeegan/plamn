@@ -4,8 +4,9 @@
 #include "damn/core/logger.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/data/ndarray/ndarray_view.hpp"
-#include "damn/core/math/array.hpp"
-#include "damn/core/meta/type_meta.hpp"
+#include "mkn/kul/array.hpp"
+#include "mkn/kul/meta.hpp"
+#include "mkn/kul/math.hpp"
 
 #include "plamn/core/def.hpp"
 
@@ -63,14 +64,14 @@ public:
 
     // a null view: not usable, e.g. a part of a view that is absent at runtime
     Field()
-        : Super{nullptr, damn::core::ConstArray<std::uint32_t, opts.dimension>()}
+        : Super{nullptr, mkn::kul::ConstArray<std::uint32_t, opts.dimension>()}
         , qty_{}
     {
     }
 
     Field(physical_quantity_type qty, value_type* data = nullptr,
           std::array<std::uint32_t, opts.dimension> const& dims
-          = damn::core::ConstArray<std::uint32_t, opts.dimension>())
+          = mkn::kul::ConstArray<std::uint32_t, opts.dimension>())
         : Super{data, dims}
         , qty_{qty}
     {
@@ -120,7 +121,7 @@ public:
 
 
     Field(std::string const& name, PhysicalQuantity qty, value_type* data = nullptr,
-          std::array<std::uint32_t, dim> const& dims = damn::core::ConstArray<std::uint32_t, dim>())
+          std::array<std::uint32_t, dim> const& dims = mkn::kul::ConstArray<std::uint32_t, dim>())
         : Super{qty, data, dims}
         , name_{name}
     {
@@ -277,7 +278,7 @@ inline std::ostream& operator<<(std::ostream& out, basic::Field<opts> const& f)
 template<auto opts>
 inline auto sum_field(basic::Field<opts> const& f)
 {
-    return sum(f);
+    return mkn::kul::math::sum(f);
 }
 
 template<auto opts>
@@ -319,7 +320,7 @@ void check_field(std::vector<Field_t> const& vec)
 {
 #if DAMN_DEBUG
     for (auto const& f : vec)
-        check_field(damn::core::deref(f));
+        check_field(mkn::kul::deref(f));
 #endif // DAMN_DEBUG
 }
 

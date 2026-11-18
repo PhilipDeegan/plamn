@@ -2,7 +2,7 @@
 #define PLAMN_CORE_DATA_PARTICLES_APPENDING_PARTICLES_APPENDING
 
 #include "damn/core/logger.hpp"
-#include "damn/core/sys/strings.hpp"
+#include "mkn/kul/string.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 
 #include "plamn/core/def.hpp"
@@ -90,8 +90,9 @@ void append_particles(Src const& src, Dst& dst)
 
     DAMN_DEBUG_DO(int const old_size = dst.size();)
 
-    std::string_view constexpr static FN_ID     = "append_particles,";
-    [[maybe_unused]] auto constexpr function_id = damn::core::join_string_views_v<FN_ID, Dst::type_id>;
+    std::string_view constexpr static FN_ID = "append_particles,";
+    [[maybe_unused]] auto constexpr function_id
+        = mkn::kul::join_string_views_v<FN_ID, Dst::type_id>;
     DAMN_LOG_SCOPE(3, function_id);
 
     Appending{0, src.size()}.template operator()<type>(src, dst);

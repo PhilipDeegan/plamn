@@ -88,8 +88,8 @@ TYPED_TEST(ParticleComponentsTest, readsAndWritesTheArraysOwnStorage)
     auto constexpr dim = TypeParam::dim;
     using Reference_t  = Particles<ParticlesOptions{dim, LayoutMode::AoS}>;
 
-    damn::core::Box<int, dim> const box{damn::core::ConstArray<int, dim>(0),
-                                        damn::core::ConstArray<int, dim>(3)};
+    damn::core::Box<int, dim> const box{mkn::kul::ConstArray<int, dim>(0),
+                                        mkn::kul::ConstArray<int, dim>(3)};
     auto particles = [&] { // SoAVXChunked's offsets cover a box
         if constexpr (std::is_constructible_v<Particles_t, decltype(box)>)
             return Particles_t{box};

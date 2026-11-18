@@ -4,7 +4,7 @@
 
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"
-#include "damn/core/math/array.hpp"
+#include "mkn/kul/array.hpp"
 
 #include <cstdint>
 
@@ -27,9 +27,9 @@ public:
     }
 
     TestLayout(double dl, std::uint32_t cells)
-        : Super{damn::core::Box<int, dim>{damn::core::ConstArray<int, dim>(0),
-                                          damn::core::ConstArray<int, dim>(cells - 1)},
-                damn::core::ConstArray<double, dim>(dl)}
+        : Super{damn::core::Box<int, dim>{mkn::kul::ConstArray<int, dim>(0),
+                                          mkn::kul::ConstArray<int, dim>(cells - 1)},
+                mkn::kul::ConstArray<double, dim>(dl)}
     {
     }
 
@@ -39,7 +39,7 @@ public:
     }
 
     TestLayout(damn::core::Box<int, dim> const& amrbox)
-        : Super{amrbox, damn::core::ConstArray<double, dim>(.1)}
+        : Super{amrbox, mkn::kul::ConstArray<double, dim>(.1)}
     {
     }
 

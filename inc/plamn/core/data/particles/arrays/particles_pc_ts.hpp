@@ -14,8 +14,8 @@
 #include "damn/core/def/detail/mkn_gpu.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/logger.hpp"
-#include "damn/core/math/array.hpp"
-#include "damn/core/meta/logic.hpp"
+#include "mkn/kul/array.hpp"
+#include "mkn/kul/for.hpp"
 
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
@@ -91,7 +91,7 @@ public:
     PerCellParticles particles;
 
 private:
-    std::array<This*, 7> _links = damn::core::ConstArray<This*, 7>(nullptr);
+    std::array<This*, 7> _links = mkn::kul::ConstArray<This*, 7>(nullptr);
 };
 
 
@@ -482,11 +482,11 @@ auto& PCTileSetSpan<Particles>::move_check(auto const& pt, std::size_t const idx
                                            auto& particle) DAMN_ALL
 {
     using enum ParticleType;
-    static_assert(damn::core::any_in(particle_type, Domain, LevelGhost));
+    static_assert(mkn::kul::any_in(particle_type, Domain, LevelGhost));
 
     auto const& newcell = particle.iCell();
 
-    if (damn::core::array_equals(newcell, pt.icell))
+    if (mkn::kul::array_equals(newcell, pt.icell))
         return *this; // old cell == new cell, no change required
 
     bool constexpr static ATOMIC = true;

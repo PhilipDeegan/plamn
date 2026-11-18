@@ -3,7 +3,7 @@
 
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/logger.hpp"
-#include "damn/core/sys/strings.hpp"
+#include "mkn/kul/string.hpp"
 
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/converting/detail/def_converting.hpp"
@@ -61,7 +61,7 @@ auto static convert_particles_from(Src const& src, Layout const& layout)
         = ParticlesConverter<Src::layout_mode, Src::alloc_mode, Dst::layout_mode, Dst::alloc_mode>;
 
     std::string_view constexpr static FN_ID = "convert_particles,";
-    auto constexpr function_id              = damn::core::join_string_views_v<FN_ID, Dst::type_id>;
+    auto constexpr function_id              = mkn::kul::join_string_views_v<FN_ID, Dst::type_id>;
     DAMN_LOG_SCOPE(1, function_id);
 
     return Converter{}.template operator()<Dst>(src, layout);
@@ -80,7 +80,7 @@ template<typename Dst, typename Src, typename Layout>
 auto static convert_particles_and_sort(Src const& src, Layout const& layout)
 {
     std::string_view constexpr static FN_ID = "convert_particles_and_sort,";
-    auto constexpr function_id              = damn::core::join_string_views_v<FN_ID, Dst::type_id>;
+    auto constexpr function_id              = mkn::kul::join_string_views_v<FN_ID, Dst::type_id>;
     DAMN_LOG_SCOPE(1, function_id);
 
     auto out = convert_particles<Dst>(src, layout);

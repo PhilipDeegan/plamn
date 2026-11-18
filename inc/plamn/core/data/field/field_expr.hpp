@@ -7,7 +7,7 @@
 // views and scalars, so it is trivially copyable to the device.
 
 #include "damn/core/geometry/point.hpp"
-#include "damn/core/meta/for_N.hpp"
+#include "mkn/kul/for.hpp"
 #include "damn/core/data/ndarray/ndarray_view.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/geometry/box_spans.hpp"
@@ -39,7 +39,7 @@ namespace expr
         template<typename I>
         NO_DISCARD auto operator()(damn::core::Point<I, dim> const& i) const DAMN_ALL
         {
-            return damn::core::for_N_fold<dim>([&](auto... d) { return view(i[d]...); });
+            return mkn::kul::for_N_fold<dim>([&](auto... d) { return view(i[d]...); });
         }
     };
 

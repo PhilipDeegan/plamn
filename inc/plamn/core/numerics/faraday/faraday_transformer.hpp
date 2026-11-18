@@ -1,7 +1,7 @@
 #ifndef PLAMN_CORE_NUMERICS_FARADAY_FARADAY_TRANSFORMER_HPP
 #define PLAMN_CORE_NUMERICS_FARADAY_FARADAY_TRANSFORMER_HPP
 
-#include "damn/core/meta/for_N.hpp"
+#include "mkn/kul/for.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/exec/kernels.hpp" // IWYU pragma: keep (gpu::Vec_t, gpu::TileLauncher: GPU builds)
 
@@ -53,7 +53,7 @@ public:
         auto constexpr static dim = Layout::dimension;
         auto const curlE          = curl<dim>(layout.dx, E);
 
-        damn::core::for_N<3>([&](auto c) {
+        mkn::kul::for_N<3>([&](auto c) {
             assign(Bnew[c], box_for(layout, Bnew[c]), of(B[c]) - dt * curlE.template get<c>());
         });
     }
@@ -98,7 +98,8 @@ private:
             auto const Bt      = tile_at(B, ti);
             auto const Et      = tile_at(E, ti);
             auto Bnt           = tile_at(Bnew, ti);
-            auto const boxes = damn::core::for_N_make_array<3>([&](auto c) { return box_for(layout, Bnt[c]); });
+            auto const boxes
+                = mkn::kul::for_N_make_array<3>([&](auto c) { return box_for(layout, Bnt[c]); });
             auto const curlE = curl(layout, Et);
             using Box_t      = std::decay_t<decltype(boxes)>::value_type;
             using Item_t     = FaradayTile<std::decay_t<decltype(curlE)>, decltype(Bnt), Box_t>;

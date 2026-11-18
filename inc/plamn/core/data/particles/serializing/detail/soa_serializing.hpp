@@ -3,7 +3,7 @@
 #define PLAMN_CORE_DATA_PARTICLES_SERIALIZING_DETAIL_SOA_SERIALIZING
 
 #include "damn/core/def/damn_config.hpp"
-#include "damn/core/meta/logic.hpp"
+#include "mkn/kul/for.hpp"
 
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/serializing/detail/def_serializing.hpp"
@@ -34,13 +34,13 @@ void ParticlesDeserializer<LayoutMode::SoA, CPU>::operator()(std::string const& 
 
     static_assert(Dst::alloc_mode == Src::alloc_mode);
     static_assert(layout_mode == Src::layout_mode
-                  || damn::core::any_in(Src::layout_mode, AoS, AoSMapped, AoSTS, AoSPCTS));
+                  || mkn::kul::any_in(Src::layout_mode, AoS, AoSMapped, AoSTS, AoSPCTS));
 
     if constexpr (layout_mode == Src::layout_mode)
     {
         throw std::runtime_error("no impl");
     }
-    else if (damn::core::any_in(Src::layout_mode, AoS, AoSMapped))
+    else if (mkn::kul::any_in(Src::layout_mode, AoS, AoSMapped))
     {
         //
     }
@@ -66,7 +66,7 @@ void ParticlesDeserializer<LayoutMode::SoAVX, CPU>::operator()(std::string const
 
     static_assert(Dst::alloc_mode == Src::alloc_mode);
     static_assert(layout_mode == Src::layout_mode
-                  || damn::core::any_in(Src::layout_mode, AoS, AoSMapped, AoSTS, AoSPCTS));
+                  || mkn::kul::any_in(Src::layout_mode, AoS, AoSMapped, AoSTS, AoSPCTS));
 
     ParticlesDeserializer<Src::layout_mode, CPU>{}.template readN<Src>(
         file_name, [&](auto const& particles) {

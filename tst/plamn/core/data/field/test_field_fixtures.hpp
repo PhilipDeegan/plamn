@@ -6,9 +6,11 @@
 
 #include "plamn/core/data/grid/grid.hpp"
 #include "plamn/core/data/field/field.hpp"
-#include "damn/core/math/numeric.hpp"
-#include "damn/core/meta/logic.hpp"
-#include "damn/core/math/equality.hpp"
+#include "mkn/kul/math.hpp"
+#include "mkn/kul/float.hpp"
+#include "mkn/kul/int.hpp"
+#include "mkn/kul/for.hpp"
+#include "mkn/kul/equality.hpp"
 #include "plamn/core/data/grid/grid_tiles.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 
@@ -34,7 +36,7 @@ bool valid_ghost_box(PQ const physicalQuantity)
     if constexpr (std::is_same_v<PQ, HybridQuantity::Scalar>)
     {
         using enum HybridQuantity::Scalar;
-        return not damn::core::any_in(physicalQuantity, rho, Vx, Vy, Vz);
+        return not mkn::kul::any_in(physicalQuantity, rho, Vx, Vy, Vz);
     }
     throw std::runtime_error("No other impl");
 }
@@ -48,7 +50,7 @@ struct FieldComparator
         if constexpr (binary_eq)
             return a == b;
         else
-            return damn::core::any_float_eq(a, b, diff);
+            return mkn::kul::any_float_eq(a, b, diff);
     };
 
     void add(auto const a, auto const b)
@@ -99,13 +101,14 @@ using FloatFieldComparator_t = FieldComparator<false>;
 
 
 template<std::size_t dim, typename PQ, typename D0, typename D1, auto am0, auto am1>
-damn::core::EqualityReport compare_fields(Field<dim, PQ, D0, am0> const& ref,
-                              Field<dim, PQ, D1, am1> const& cmp, double const diff = 1e-15)
+mkn::kul::EqualityReport compare_fields(Field<dim, PQ, D0, am0> const& ref,
+                                        Field<dim, PQ, D1, am1> const& cmp,
+                                        double const diff = 1e-15)
 {
     auto const same_sizes = ref.size() == cmp.size();
 
     if (!same_sizes)
-        return damn::core::EqualityReport{false, "Tensorfield shape/size mismatch"};
+        return mkn::kul::EqualityReport{false, "Tensorfield shape/size mismatch"};
 
     std::stringstream log;
 
@@ -128,31 +131,32 @@ damn::core::EqualityReport compare_fields(Field<dim, PQ, D0, am0> const& ref,
         log << "diff(" << eq.max_diff << ") - ";
         log << "nan0(" << eq.nan0 << ") - ";
         log << "nan1(" << eq.nan1 << ")\n";
-        return damn::core::EqualityReport{false, log.str()};
+        return mkn::kul::EqualityReport{false, log.str()};
     }
 
     log << "are == with ";
     log << "ok(" << eqvals << ") - ";
     log << "ok!=0(" << eqnot0 << ")  ";
 
-    return damn::core::EqualityReport{true, log.str()};
+    return mkn::kul::EqualityReport{true, log.str()};
 }
 
 template<typename... T0s, typename... T1s>
-damn::core::EqualityReport compare_fields(Grid<T0s...> const& ref, Grid<T1s...> const& cmp,
-                              double const diff = 1e-15)
+mkn::kul::EqualityReport compare_fields(Grid<T0s...> const& ref, Grid<T1s...> const& cmp,
+                                        double const diff = 1e-15)
 {
     return compare_fields(*ref, *cmp, diff);
 }
 
 
 template<typename... T0s, typename... T1s>
-damn::core::EqualityReport compare_fields(FieldTileSet<T0s...> const& ref, FieldTileSet<T1s...> const& cmp,
-                              [[maybe_unused]] double const diff = 1e-15)
+mkn::kul::EqualityReport compare_fields(FieldTileSet<T0s...> const& ref,
+                                        FieldTileSet<T1s...> const& cmp,
+                                        [[maybe_unused]] double const diff = 1e-15)
 {
     auto const same_sizes = ref.size() == cmp.size() and ref().size() == cmp().size();
     if (!same_sizes)
-        return damn::core::EqualityReport{false, "Tensorfield shape/size mismatch"};
+        return mkn::kul::EqualityReport{false, "Tensorfield shape/size mismatch"};
 
     std::string const names
         = ref.name() == cmp.name() ? ref.name() : ref.name() + std::string{"/"} + cmp.name();
@@ -176,7 +180,7 @@ damn::core::EqualityReport compare_fields(FieldTileSet<T0s...> const& ref, Field
             log << "cmp0(" << cmp0 << ") - ";
             log << "nan0(" << eq.nan0 << ") - ";
             log << "nan1(" << eq.nan1 << ")\n";
-            return damn::core::EqualityReport{false, log.str()};
+            return mkn::kul::EqualityReport{false, log.str()};
         }
 
         ok += eqvals;
@@ -187,23 +191,24 @@ damn::core::EqualityReport compare_fields(FieldTileSet<T0s...> const& ref, Field
     log << "ok(" << ok << ") - ";
     log << "ok!=0(" << okn0 << ")  ";
 
-    return damn::core::EqualityReport{true, log.str()};
+    return mkn::kul::EqualityReport{true, log.str()};
 }
 
 template<typename... T0s, typename... T1s>
-damn::core::EqualityReport compare_fields(GridTileSet<T0s...> const& ref, GridTileSet<T1s...> const& cmp,
-                              [[maybe_unused]] double const diff = 1e-15)
+mkn::kul::EqualityReport compare_fields(GridTileSet<T0s...> const& ref,
+                                        GridTileSet<T1s...> const& cmp,
+                                        [[maybe_unused]] double const diff = 1e-15)
 {
     return compare_field(*ref, *cmp, diff);
 }
 
 
 template<std::size_t dim, typename PQ, typename D, auto am, typename... T1s>
-damn::core::EqualityReport compare_fields(Field<dim, PQ, D, am> const& ref, FieldTileSet<T1s...> const& cmp,
-                              double const diff = 1e-15)
+mkn::kul::EqualityReport compare_fields(Field<dim, PQ, D, am> const& ref,
+                                        FieldTileSet<T1s...> const& cmp, double const diff = 1e-15)
 {
     if (ref.size() != cmp.size())
-        return damn::core::EqualityReport{false, "Field/FieldTileSet shape mismatch"};
+        return mkn::kul::EqualityReport{false, "Field/FieldTileSet shape mismatch"};
     auto tmp = ref;
     tmp.zero();
     reduce_single(tmp, cmp);
@@ -211,8 +216,8 @@ damn::core::EqualityReport compare_fields(Field<dim, PQ, D, am> const& ref, Fiel
 }
 
 template<typename... T0s, std::size_t dim, typename PQ, typename D, auto am>
-damn::core::EqualityReport compare_fields(FieldTileSet<T0s...> const& ref, Field<dim, PQ, D, am> const& cmp,
-                              double const diff = 1e-15)
+mkn::kul::EqualityReport compare_fields(FieldTileSet<T0s...> const& ref,
+                                        Field<dim, PQ, D, am> const& cmp, double const diff = 1e-15)
 {
     return compare_fields(cmp, ref, diff);
 }
@@ -225,14 +230,14 @@ damn::core::EqualityReport compare_fields(FieldTileSet<T0s...> const& ref, Field
  * Supports both AoSMapped (plain Field) and AoSCMTS (FieldTileSet) inputs.
  */
 template<std::size_t dim, typename PQ, typename D0, typename D1, auto am0, auto am1>
-damn::core::EqualityReport
+mkn::kul::EqualityReport
 compare_field_domains(auto const& layout, Field<dim, PQ, D0, am0> const& ref,
                       Field<dim, PQ, D1, am1> const& cmp, double const diff = 1e-15)
 {
     auto const same_sizes = ref.size() == cmp.size();
 
     if (!same_sizes)
-        return damn::core::EqualityReport{false, "Tensorfield shape/size mismatch"};
+        return mkn::kul::EqualityReport{false, "Tensorfield shape/size mismatch"};
 
     FloatFieldComparator_t eq{diff};
     eval_on_box(ref, domain_box(layout, ref),
@@ -256,30 +261,30 @@ compare_field_domains(auto const& layout, Field<dim, PQ, D0, am0> const& ref,
         log << "diff(" << eq.max_diff << ") - ";
         log << "nan0(" << eq.nan0 << ") - ";
         log << "nan1(" << eq.nan1 << ")\n";
-        return damn::core::EqualityReport{false, log.str()};
+        return mkn::kul::EqualityReport{false, log.str()};
     }
 
     log << "are == with ";
     log << "ok(" << eq.eqvals << ") - ";
     log << "ok!=0(" << eq.eqnot0 << ")  ";
 
-    return damn::core::EqualityReport{true, log.str()};
+    return mkn::kul::EqualityReport{true, log.str()};
 }
 
 template<typename... T0s, typename... T1s>
-damn::core::EqualityReport compare_field_domains(auto const& layout, Grid<T0s...> const& ref,
-                                                 Grid<T1s...> const& cmp, double const diff = 1e-15)
+mkn::kul::EqualityReport compare_field_domains(auto const& layout, Grid<T0s...> const& ref,
+                                               Grid<T1s...> const& cmp, double const diff = 1e-15)
 {
     return compare_field_domains(layout, *ref, *cmp, diff);
 }
 
 template<std::size_t dim, typename PQ, typename D, auto am, typename... T1s>
-damn::core::EqualityReport
-compare_field_domains(auto const& layout, Field<dim, PQ, D, am> const& ref,
-                      FieldTileSet<T1s...> const& cmp, double const diff = 1e-15)
+mkn::kul::EqualityReport compare_field_domains(auto const& layout, Field<dim, PQ, D, am> const& ref,
+                                               FieldTileSet<T1s...> const& cmp,
+                                               double const diff = 1e-15)
 {
     if (ref.size() != cmp.size())
-        return damn::core::EqualityReport{false, "Field/FieldTileSet shape mismatch"};
+        return mkn::kul::EqualityReport{false, "Field/FieldTileSet shape mismatch"};
     auto tmp = ref;
     tmp.zero();
     reduce_single(tmp, cmp);
@@ -287,9 +292,9 @@ compare_field_domains(auto const& layout, Field<dim, PQ, D, am> const& ref,
 }
 
 template<typename... T0s, std::size_t dim, typename PQ, typename D, auto am>
-damn::core::EqualityReport
-compare_field_domains(auto const& layout, FieldTileSet<T0s...> const& ref,
-                      Field<dim, PQ, D, am> const& cmp, double const diff = 1e-15)
+mkn::kul::EqualityReport compare_field_domains(auto const& layout, FieldTileSet<T0s...> const& ref,
+                                               Field<dim, PQ, D, am> const& cmp,
+                                               double const diff = 1e-15)
 {
     return compare_field_domains(layout, cmp, ref, diff);
 }

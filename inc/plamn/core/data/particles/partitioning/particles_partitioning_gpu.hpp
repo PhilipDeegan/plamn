@@ -40,7 +40,7 @@ public:
             return range_t{box, array.begin() + start,
                            array.begin() + std::distance(view.begin(), pivot)};
         }
-        else if constexpr (damn::core::any_in(Particles::layout_mode, SoAVX, SoAVXChunked, SoAVXTS))
+        else if constexpr (mkn::kul::any_in(Particles::layout_mode, SoAVX, SoAVXChunked, SoAVXTS))
             throw std::runtime_error("no impl");
         else if constexpr (Particles::layout_mode == SoA)
         {
@@ -64,7 +64,7 @@ public:
             return range_t{box, array.begin() + start,
                            array.begin() + std::distance(array.begin(), pivot)};
         }
-        else if constexpr (damn::core::any_in(Particles::layout_mode, SoAVX, SoAVXChunked, SoAVXTS))
+        else if constexpr (mkn::kul::any_in(Particles::layout_mode, SoAVX, SoAVXChunked, SoAVXTS))
             throw std::runtime_error("no impl");
         else if constexpr (Particles::layout_mode == SoA)
         {
@@ -81,7 +81,7 @@ public:
     auto operator()(std::array<box_t, S> const& boxes)
     {
         static_assert(S > 0);
-        auto iterators = damn::core::generate_from(
+        auto iterators = mkn::kul::generate_from(
             [&](auto const& box) { return range_t{box, array.begin(), array.begin()}; }, boxes);
         for (std::size_t i = 0; i < boxes.size(); ++i)
             start += (iterators[i] = (*this)(boxes[i])).size();

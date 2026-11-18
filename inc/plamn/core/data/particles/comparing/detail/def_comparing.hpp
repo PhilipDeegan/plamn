@@ -1,7 +1,7 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_COMPARING_DETAIL_DEF_COMPARING
 #define PLAMN_CORE_DATA_PARTICLES_COMPARING_DETAIL_DEF_COMPARING
 
-#include "damn/core/meta/type_meta.hpp"
+#include "mkn/kul/meta.hpp"
 
 #include <cstdint>
 
@@ -22,8 +22,8 @@ enum class LayoutMode : std::uint16_t;
 template<auto src_layout_mde, auto src_alloc_mde, auto dst_layout_mde, auto dst_alloc_mde>
 struct ParticlesComparator
 {
-    static_assert(damn::core::all_are<LayoutMode>(src_layout_mde, dst_layout_mde));
-    static_assert(damn::core::all_are<damn::AllocatorMode>(src_alloc_mde, dst_alloc_mde));
+    static_assert(mkn::kul::all_are<LayoutMode>(src_layout_mde, dst_layout_mde));
+    static_assert(mkn::kul::all_are<damn::AllocatorMode>(src_alloc_mde, dst_alloc_mde));
 
     auto constexpr static src_layout_mode = src_layout_mde;
     auto constexpr static src_alloc_mode  = src_alloc_mde;
@@ -32,7 +32,7 @@ struct ParticlesComparator
     auto constexpr static dst_alloc_mode  = dst_alloc_mde;
 
     template<typename PS0, typename PS1>
-    damn::core::EqualityReport operator()(PS0 const& ps0, PS1 const& ps1, double const atol = 1e-15);
+    mkn::kul::EqualityReport operator()(PS0 const& ps0, PS1 const& ps1, double const atol = 1e-15);
 };
 
 

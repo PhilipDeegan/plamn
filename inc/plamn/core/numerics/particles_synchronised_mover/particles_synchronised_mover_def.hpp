@@ -5,7 +5,7 @@
 #include "damn/core/data/tiles/tile_set_overlaps.hpp"
 #include "damn/core/def/detail/mkn_gpu.hpp"
 #include "damn/core/geometry/point.hpp"
-#include "damn/core/sys/env.hpp"
+#include "mkn/kul/env.hpp"
 
 #include "plamn/core/data/tiles/tile_set_overlaps.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
@@ -212,7 +212,7 @@ struct UpdaterTileSetSelectionBoxing : public UpdaterSelectionBoxing<Layout>
 namespace plamn::core::detail
 {
 auto static const timings_dir_str
-    = damn::core::get_env_as("PLAMN_ASYNC_TIMES", std::string{".damn/async/multi_updater"});
+    = mkn::kul::env::get_as("PLAMN_ASYNC_TIMES", std::string{".damn/async/multi_updater"});
 
 static bool particles_synchronised_mover_io_setup = []() {
     mkn::kul::Dir timings{timings_dir_str};

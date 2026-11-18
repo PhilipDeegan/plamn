@@ -1,7 +1,7 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_SERIALIZING_DETAIL_DEF_SERIALIZING
 #define PLAMN_CORE_DATA_PARTICLES_SERIALIZING_DETAIL_DEF_SERIALIZING
 
-#include "damn/core/meta/type_meta.hpp"
+#include "mkn/kul/meta.hpp"
 
 #include <cstdint>
 #include <fstream>
@@ -20,8 +20,8 @@ enum class LayoutMode : std::uint16_t;
 template<auto layout_mde, auto alloc_mde>
 struct ParticlesSerializer
 {
-    static_assert(damn::core::all_are<LayoutMode>(layout_mde));
-    static_assert(damn::core::all_are<damn::AllocatorMode>(alloc_mde));
+    static_assert(mkn::kul::all_are<LayoutMode>(layout_mde));
+    static_assert(mkn::kul::all_are<damn::AllocatorMode>(alloc_mde));
 
     auto constexpr static layout_mode = layout_mde;
     auto constexpr static alloc_mode  = alloc_mde;
@@ -53,8 +53,8 @@ struct ParticlesSerializer
 template<auto layout_mde, auto alloc_mde>
 struct ParticlesDeserializer
 {
-    static_assert(damn::core::all_are<LayoutMode>(layout_mde));
-    static_assert(damn::core::all_are<damn::AllocatorMode>(alloc_mde));
+    static_assert(mkn::kul::all_are<LayoutMode>(layout_mde));
+    static_assert(mkn::kul::all_are<damn::AllocatorMode>(alloc_mde));
 
     auto constexpr static layout_mode = layout_mde;
     auto constexpr static alloc_mode  = alloc_mde;

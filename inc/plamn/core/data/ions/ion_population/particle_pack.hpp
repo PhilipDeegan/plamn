@@ -1,7 +1,7 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTICLE_PACK_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLE_PACK_HPP
 
-#include "damn/core/meta/type_meta.hpp"
+#include "mkn/kul/meta.hpp"
 
 #include "plamn/core/def.hpp"
 
@@ -25,8 +25,8 @@ namespace core
     struct ParticlesPack
     {
         static constexpr std::size_t dimension = Particles::dimension;
-        using particles_type              = Particles;
-        using pointer_tuple_t                  = damn::core::tuple_fixed_type<Particles*, 3>;
+        using particles_type                   = Particles;
+        using pointer_tuple_t                  = mkn::kul::tuple_fixed_type<Particles*, 3>;
 
         void setBuffer(ParticlesPack* const source)
         {

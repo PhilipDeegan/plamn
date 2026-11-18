@@ -3,7 +3,7 @@
 #define PLAMN_CORE_DATA_PARTICLES_SERIALIZING_DETAIL_AOS_SERIALIZING
 
 #include "damn/core/def/damn_config.hpp"
-#include "damn/core/meta/logic.hpp"
+#include "mkn/kul/for.hpp"
 #include "damn/core/memory/span.hpp"
 
 #include "plamn/core/data/particles/particles_def.hpp"
@@ -36,7 +36,8 @@ template<typename Dst, typename Src>
 void ParticlesDeserializer<AoS, CPU>::operator()(std::string const& file_name, Dst& dst)
 {
     static_assert(Dst::alloc_mode == Src::alloc_mode);
-    static_assert(layout_mode == Src::layout_mode || damn::core::any_in(Src::layout_mode, AoS, AoSMapped));
+    static_assert(layout_mode == Src::layout_mode
+                  || mkn::kul::any_in(Src::layout_mode, AoS, AoSMapped));
 
     using Particle_t = typename Dst::value_type;
 

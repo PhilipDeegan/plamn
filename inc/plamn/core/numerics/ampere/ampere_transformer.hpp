@@ -1,8 +1,8 @@
 #ifndef PLAMN_CORE_NUMERICS_AMPERE_AMPERE_TRANSFORMER_HPP
 #define PLAMN_CORE_NUMERICS_AMPERE_AMPERE_TRANSFORMER_HPP
 
-#include "damn/core/math/array.hpp"
-#include "damn/core/meta/for_N.hpp"
+#include "mkn/kul/array.hpp"
+#include "mkn/kul/for.hpp"
 #include "damn/core/exec/kernels/region_chunks.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/geometry/box.hpp"
@@ -105,7 +105,8 @@ private:
     static auto amount()
     {
         auto constexpr dim = Layout::dimension;
-        return damn::core::Point<std::uint32_t, dim>{damn::core::ConstArray<std::uint32_t, dim>(box.amount)};
+        return damn::core::Point<std::uint32_t, dim>{
+            mkn::kul::ConstArray<std::uint32_t, dim>(box.amount)};
     }
 
 public:
@@ -132,7 +133,8 @@ public:
     template<typename J_t>
     static auto make_item(auto const& layout, auto const& B, J_t const& J)
     {
-        auto const boxes = damn::core::for_N_make_array<3>([&](auto c) { return box_for(layout, J[c]); });
+        auto const boxes
+            = mkn::kul::for_N_make_array<3>([&](auto c) { return box_for(layout, J[c]); });
         auto const curlB = curl(layout, B);
         using Box_t      = std::decay_t<decltype(boxes)>::value_type;
         return AmpereTile<std::decay_t<decltype(curlB)>, J_t, Box_t>{curlB, J, boxes};

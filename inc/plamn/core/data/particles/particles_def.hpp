@@ -1,8 +1,8 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTICLES_DEF_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLES_DEF_HPP
 
-#include "damn/core/math/array.hpp"
-#include "damn/core/meta/logic.hpp"
+#include "mkn/kul/array.hpp"
+#include "mkn/kul/for.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/def/damn_config.hpp"
 
@@ -58,14 +58,14 @@ enum class LayoutMode : std::uint16_t {
 bool constexpr is_tiled(LayoutMode lm)
 {
     using enum LayoutMode;
-    return damn::core::any_in(lm, AoSCMTS, AoSTS, SoATS, SoAVXTS, AoSPCTS);
+    return mkn::kul::any_in(lm, AoSCMTS, AoSTS, SoATS, SoAVXTS, AoSPCTS);
 }
 
 // flat SoAVX columns, with or without per cell offsets
 bool constexpr is_soavx(LayoutMode lm)
 {
     using enum LayoutMode;
-    return damn::core::any_in(lm, SoAVX, SoAVXChunked);
+    return mkn::kul::any_in(lm, SoAVX, SoAVXChunked);
 }
 
 // guards a forwarding constructor `template<typename... Args> This(Args&&...)` so that a
@@ -175,7 +175,7 @@ template<typename R = std::uint32_t, std::size_t dim>
 auto as_local_cell(std::array<int, dim> const& lower,
                    std::array<int, dim> const& icell) DAMN_ALL
 {
-    return damn::core::array_minus<R>(icell, lower);
+    return mkn::kul::array_minus<R>(icell, lower);
 }
 template<std::size_t dim>
 auto as_local_cell(damn::core::Box<int, dim> const& box, std::array<int, dim> const& icell) DAMN_ALL
@@ -219,11 +219,11 @@ Particles_t make_particles(damn::core::Box<T, D> const& box, std::size_t const g
     static_assert(Particles_t::storage_mode == StorageMode::VECTOR);
 
     using enum LayoutMode;
-    if constexpr (damn::core::any_in(Particles_t::layout_mode, AoSPC, SoAPC))
+    if constexpr (mkn::kul::any_in(Particles_t::layout_mode, AoSPC, SoAPC))
         return Particles_t{box, ghost_cells};
     else if constexpr (is_tiled(Particles_t::layout_mode))
         return Particles_t{box, ghost_cells};
-    else if constexpr (damn::core::any_in(Particles_t::layout_mode, AoSMapped, SoAVXChunked))
+    else if constexpr (mkn::kul::any_in(Particles_t::layout_mode, AoSMapped, SoAVXChunked))
     {
         // !!! TODO(cell-jump-limit): TEMPORARY margin, back to grow(box, ghost_cells) !!!
         int const ghosts = static_cast<int>(ghost_cells);

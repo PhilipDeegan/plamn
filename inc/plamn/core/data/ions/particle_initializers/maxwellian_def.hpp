@@ -1,7 +1,9 @@
 #ifndef PLAMN_CORE_DATA_IONS_PARTICLE_INITIALIZERS_MAXWELLIAN_DEF_HPP
 #define PLAMN_CORE_DATA_IONS_PARTICLE_INITIALIZERS_MAXWELLIAN_DEF_HPP
 
-#include "damn/core/math/numeric.hpp"
+#include "mkn/kul/math.hpp"
+#include "mkn/kul/float.hpp"
+#include "mkn/kul/int.hpp"
 
 #include "plamn/core/def.hpp"
 
@@ -25,7 +27,7 @@ basisTransform(std::array<std::array<double, 3>, 3> const& basis, std::array<dou
 // orthonormal basis with the first vector along B, identity if B ~ 0
 inline void localMagneticBasis(std::array<double, 3> B, std::array<std::array<double, 3>, 3>& basis)
 {
-    auto b2 = damn::core::norm(B);
+    auto b2 = mkn::kul::math::norm(B);
 
     if (b2 < 1e-8)
     {
@@ -37,7 +39,7 @@ inline void localMagneticBasis(std::array<double, 3> B, std::array<std::array<do
 
     // (1,1,1) x B
     basis[1]     = {B[2] - B[1], B[0] - B[2], B[1] - B[0]};
-    auto vecNorm = damn::core::norm(basis[1]);
+    auto vecNorm = mkn::kul::math::norm(basis[1]);
     for (auto& c : basis[1])
         c /= vecNorm;
 

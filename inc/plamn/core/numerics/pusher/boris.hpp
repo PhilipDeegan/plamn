@@ -3,8 +3,8 @@
 
 #include "damn/core/logger.hpp"
 #include "damn/core/def/damn_config.hpp"
-#include "damn/core/meta/logic.hpp"
-#include "damn/core/meta/type_meta.hpp"
+#include "mkn/kul/for.hpp"
+#include "mkn/kul/meta.hpp"
 
 #include "plamn/core/errors.hpp"
 #include "plamn/core/numerics/pusher/boris/basics.hpp"
@@ -159,7 +159,7 @@ private:
             std::array<int, dim> newCell;
             try
             {
-                newCell = boris::advance<alloc_mode>(damn::core::deref(out), halfDtOverDl_);
+                newCell = boris::advance<alloc_mode>(mkn::kul::deref(out), halfDtOverDl_);
             }
             catch (boris::MoveTwoCellException const& e)
             {
@@ -169,7 +169,7 @@ private:
                 throw plamn::core::DictionaryException{}("cause", ss.str());
             }
 
-            if constexpr (damn::core::any_in(Particles::layout_mode, LayoutMode::AoSMapped))
+            if constexpr (mkn::kul::any_in(Particles::layout_mode, LayoutMode::AoSMapped))
             {
                 if (newCell != inParticles.iCell(inIdx))
                     outParticles.change_icell(newCell, outIdx);
@@ -189,7 +189,7 @@ private:
         std::array<int, dim> newCell;
         try
         {
-            newCell = boris::advance<alloc_mode>(damn::core::deref(particle), halfDtOverDl);
+            newCell = boris::advance<alloc_mode>(mkn::kul::deref(particle), halfDtOverDl);
         }
         catch (boris::MoveTwoCellException const& e)
         {
@@ -199,7 +199,7 @@ private:
             throw plamn::core::DictionaryException{}("cause", ss.str());
         }
 
-        if constexpr (damn::core::any_in(Particles::layout_mode, LayoutMode::AoSMapped))
+        if constexpr (mkn::kul::any_in(Particles::layout_mode, LayoutMode::AoSMapped))
         {
             if (newCell != particles.iCell(idx))
                 particles.change_icell(newCell, idx);
@@ -212,7 +212,7 @@ private:
                             std::size_t const idx) DAMN_ALL
     {
         auto particle = particles.begin() + idx;
-        boris::accelerate(damn::core::deref(particle), particleEB, coef1);
+        boris::accelerate(mkn::kul::deref(particle), particleEB, coef1);
     }
 
 

@@ -2,6 +2,7 @@
 #define PLAMN_CORE_PUSHER_BORIS_DETAIL_MULTI_BORIS_HPP
 
 #include "damn/core/logger.hpp"
+#include "mkn/kul/throw.hpp"
 #include "damn/core/memory/span.hpp"
 #include "damn/core/exec/kernels.hpp"
 #include "damn/core/exec/thread_pool.hpp"
@@ -9,9 +10,8 @@
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/def/detail/mkn_gpu.hpp"
 #include "damn/core/geometry/box.hpp"
-#include "damn/core/meta/for_N.hpp"
-#include "damn/core/meta/logic.hpp"
-#include "damn/core/meta/type_meta.hpp"
+#include "mkn/kul/for.hpp"
+#include "mkn/kul/meta.hpp"
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/data/electromag/electromag.hpp"
@@ -117,7 +117,7 @@ struct MultiBorisBackend
 
     // only flat tiles have a push+deposit GPU kernel, AoSPCTS GPU COPY uses move_rest
     static constexpr bool has_gpu_copy
-        = damn::core::any_in(layout, LayoutMode::AoSTS, LayoutMode::AoSMapped);
+        = mkn::kul::any_in(layout, LayoutMode::AoSTS, LayoutMode::AoSMapped);
 
     template<auto pt, auto mode>
     using Functors = MultiBorisFunctors<pt, mode, MultiBorisBackend>;
@@ -662,7 +662,7 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
                     c[k][l]        = static_cast<int>(f + c[k][l]);
                 }
             if (over) [[unlikely]]
-                damn::throw_exception<boris::MoveTwoCellException>(bad_x, bad_v);
+                mkn::kul::throw_exception<boris::MoveTwoCellException>(bad_x, bad_v);
         };
         auto const lane_particle = [&](std::size_t const l) {
             Particle_t p;
@@ -950,7 +950,8 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
                         store(ms, mkn::avx::select(m, bc(1.), bc(0.)));
                         for (std::size_t l = 0; l < L; ++l)
                             if (ms[l] > .5 and std::abs(xs[l]) > particle_half_push_limit)
-                                damn::throw_exception<boris::MoveTwoCellException>(xs[l], vs[l]);
+                                mkn::kul::throw_exception<boris::MoveTwoCellException>(xs[l],
+                                                                                       vs[l]);
                     }
                     Vd const f = mkn::avx::floor(x);
                     d[k]       = x - f;
@@ -1396,7 +1397,7 @@ void MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>::push_copie
 template<auto particle_type, auto boris_mode, typename Backend_t>
 struct MultiBorisFunctors
 {
-    static_assert(damn::core::all_are<ParticleType>(particle_type));
+    static_assert(mkn::kul::all_are<ParticleType>(particle_type));
 
     using Layout_t       = Backend_t::Layout_t;
     using Particles_t    = Backend_t::Particles_t;
@@ -1579,8 +1580,8 @@ struct MultiBorisFunctors
     // other flat tiles: domain particles staying in the patch box register, level ghosts
     //  always (the array skips those leaving the ghost box)
     void move_check(auto const& pt, std::size_t const pidx, auto& particle)
-        requires(not damn::core::any_in(Particles_t::layout_mode, LayoutMode::AoSPCTS,
-                                        LayoutMode::AoSCMTS))
+        requires(not mkn::kul::any_in(Particles_t::layout_mode, LayoutMode::AoSPCTS,
+                                      LayoutMode::AoSCMTS))
     DAMN_ALL
     {
         if constexpr (particle_type == ParticleType::Domain)
@@ -1606,7 +1607,7 @@ struct MultiBorisFunctors
         auto const& pidx = std::get<2>(std::forward_as_tuple(args...));
 #if DAMN_HAVE_THRUST
         using enum LayoutMode;
-        if constexpr (damn::core::any_in(Particles_t::layout_mode, SoA, SoAPC, SoATS))
+        if constexpr (mkn::kul::any_in(Particles_t::layout_mode, SoA, SoAPC, SoATS))
             per_particle(SoAZipParticle{particles, pidx}, args...);
         else
 #endif
@@ -1662,8 +1663,8 @@ struct MultiBorisFunctors
     // LevelGhost passes in one task (never two concurrent tasks for the same tile_idx)
     // — see MultiBorisBackend::move_cpu_copy_pooled. Different tiles are independent.
     void one_copy_tile(std::size_t const tile_idx, auto& boxings, auto& view, auto& pop)
-        requires(damn::core::any_in(Particles_t::layout_mode, LayoutMode::AoSPCTS,
-                                    LayoutMode::AoSCMTS))
+        requires(mkn::kul::any_in(Particles_t::layout_mode, LayoutMode::AoSPCTS,
+                                  LayoutMode::AoSCMTS))
     {
         auto const& patch_id      = view.patchID();
         auto const& patch_boxings = boxings.at(patch_id);
@@ -1740,8 +1741,8 @@ struct MultiBorisFunctors
     }
 
     void one_copy_tile(std::size_t const tile_idx, auto& boxings, auto& view, auto& pop)
-        requires(not damn::core::any_in(Particles_t::layout_mode, LayoutMode::AoSPCTS,
-                                        LayoutMode::AoSCMTS))
+        requires(not mkn::kul::any_in(Particles_t::layout_mode, LayoutMode::AoSPCTS,
+                                      LayoutMode::AoSCMTS))
     {
         auto const& patch_id      = view.patchID();
         auto const& patch_boxings = boxings.at(patch_id);
@@ -1786,7 +1787,7 @@ struct MultiBorisFunctors
     auto em_tile(auto const tidx) DAMN_ALL
     {
         return electromag.template as<Electromag_vt>([&] DAMN_ALL(auto const& vf) {
-            return damn::core::for_N_make_array<3>([&](auto i) { return vf[i][tidx](); });
+            return mkn::kul::for_N_make_array<3>([&](auto i) { return vf[i][tidx](); });
         });
     }
 

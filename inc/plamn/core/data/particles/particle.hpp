@@ -1,7 +1,7 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTICLE_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLE_HPP
 
-#include "damn/core/math/array.hpp"
+#include "mkn/kul/array.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/def/damn_config.hpp"
 
@@ -59,10 +59,10 @@ struct Particle
 
 
     //                                                             1d  2d  3d
-    double weight_                 = 0;                         // 8   8   8
-    std::array<int, dim> iCell_    = damn::core::ConstArray<int, dim>();    // 12  16  20
-    std::array<double, dim> delta_ = damn::core::ConstArray<double, dim>(); // 20  32  44
-    std::array<double, 3> v_       = damn::core::ConstArray<double, 3>();   // 44  56  68
+    double weight_                 = 0;                                   // 8   8   8
+    std::array<int, dim> iCell_    = mkn::kul::ConstArray<int, dim>();    // 12  16  20
+    std::array<double, dim> delta_ = mkn::kul::ConstArray<double, dim>(); // 20  32  44
+    std::array<double, 3> v_       = mkn::kul::ConstArray<double, 3>();   // 44  56  68
 
     NO_DISCARD bool operator==(Particle<dim> const& that) const
     {
@@ -223,7 +223,7 @@ NO_DISCARD bool operator==(ParticleA<dim> const& particleA, ParticleB<dim> const
 
 auto shift_particle(auto particle, auto const& shift)
 {
-    damn::core::array_op<damn::core::PlusEquals<int>>(particle.iCell(), shift);
+    mkn::kul::array_op<mkn::kul::PlusEquals<int>>(particle.iCell(), shift);
     return particle;
 }
 

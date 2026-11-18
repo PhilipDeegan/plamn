@@ -1,7 +1,7 @@
 #ifndef PLAMN_CORE_DATA_GRID_GRID_BASE_HPP
 #define PLAMN_CORE_DATA_GRID_GRID_BASE_HPP
 
-#include "damn/core/meta/for_N.hpp"
+#include "mkn/kul/for.hpp"
 
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/field/field.hpp"
@@ -78,7 +78,8 @@ public:
 
     void copyData(auto const& that)
     {
-        if (damn::core::for_N_any<dimension>([&](auto i) { return this->shape()[i] != that.shape()[i]; }))
+        if (mkn::kul::for_N_any<dimension>(
+                [&](auto i) { return this->shape()[i] != that.shape()[i]; }))
             throw std::runtime_error("Grid::copyData: Incompatible input shape");
         std::copy(that.data(), that.data() + Super::size(), Super::data());
     }

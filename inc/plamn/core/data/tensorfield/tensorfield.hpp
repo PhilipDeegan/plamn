@@ -1,9 +1,9 @@
 #ifndef PLAMN_TENSORFIELD_HPP
 #define PLAMN_TENSORFIELD_HPP
 
-#include "damn/core/meta/for_N.hpp"
+#include "mkn/kul/for.hpp"
 #include "damn/core/def/damn_config.hpp"
-#include "damn/core/meta/type_meta.hpp"
+#include "mkn/kul/meta.hpp"
 
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/field/field.hpp"
@@ -57,7 +57,7 @@ R static tensor_field_names(std::string const& name)
 template<typename Field_t, std::size_t N, typename Qtys>
 auto static tensor_field_make_fields(std::array<std::string, N> const& names, Qtys const& qtys)
 {
-    return damn::core::for_N_make_array<N>([&](auto i) { return Field_t{names[i], qtys[i]}; });
+    return mkn::kul::for_N_make_array<N>([&](auto i) { return Field_t{names[i], qtys[i]}; });
 }
 
 template<std::size_t rank>
@@ -133,7 +133,8 @@ struct TensorField
 
     void setBuffer(std::nullptr_t ptr)
     {
-        damn::core::for_N<N, damn::core::for_N_R_mode::forward_tuple>([&](auto i) { components_[i].setBuffer(nullptr); });
+        mkn::kul::for_N<N, mkn::kul::for_N_R_mode::forward_tuple>(
+            [&](auto i) { components_[i].setBuffer(nullptr); });
     }
 
     template<typename Fields>
@@ -141,7 +142,7 @@ struct TensorField
     {
         if (!fields)
             throw std::runtime_error("use other fn");
-        damn::core::for_N<N>([&](auto i) { components_[i].setBuffer(&(*fields)[i]); });
+        mkn::kul::for_N<N>([&](auto i) { components_[i].setBuffer(&(*fields)[i]); });
     }
 
 
@@ -161,7 +162,8 @@ struct TensorField
     template<typename V>
     auto as(auto&& a, auto&&... args) DAMN_ALL
     {
-        V r{damn::core::for_N<N, damn::core::for_N_R_mode::make_array>([&](auto i) { return a(components_[i], args...); })};
+        V r{mkn::kul::for_N<N, mkn::kul::for_N_R_mode::make_array>(
+            [&](auto i) { return a(components_[i], args...); })};
         DAMN_ASSERT(r.isUsable());
         return r;
     }
@@ -169,8 +171,8 @@ struct TensorField
     template<typename V>
     auto as(auto&& a, auto&&... args) const DAMN_ALL
     {
-        return V{
-            damn::core::for_N<N, damn::core::for_N_R_mode::make_array>([&](auto i) { return a(components_[i], args...); })};
+        return V{mkn::kul::for_N<N, mkn::kul::for_N_R_mode::make_array>(
+            [&](auto i) { return a(components_[i], args...); })};
     }
 
     std::array<Field_t, N> components_;
@@ -294,7 +296,7 @@ public:
                 throw std::runtime_error("Error, unusable TensorField, cannot copyData");
         })
 
-        damn::core::for_N<N>([&](auto i) { components_[i].copyData(source.components_[i]); });
+        mkn::kul::for_N<N>([&](auto i) { components_[i].copyData(source.components_[i]); });
     }
 
 
@@ -368,7 +370,7 @@ void check_tensor_field(std::vector<TensorField> const& vec)
 {
 #if DAMN_DEBUG
     for (auto const& tf : vec)
-        check_tensor_field(damn::core::deref(tf));
+        check_tensor_field(mkn::kul::deref(tf));
 #endif // DAMN_DEBUG
 }
 
@@ -394,7 +396,7 @@ void check_tensor_field(basic::TensorField<Field_t, rank> const& tf, auto const&
                                tf[0][tidx].layout());
     }
     else
-        static_assert(damn::core::dependent_false_v<Field_t>);
+        static_assert(mkn::kul::dependent_false_v<Field_t>);
 #endif // DAMN_DEBUG
 }
 
@@ -420,7 +422,7 @@ void check_tensor_field(basic::TensorField<Field_t, rank> const& tf)
                 tf.template as<TensorField_vt>([&](auto& c) { return c()[tidx](); }));
     }
     else
-        static_assert(damn::core::dependent_false_v<Field_t>);
+        static_assert(mkn::kul::dependent_false_v<Field_t>);
 #endif // DAMN_DEBUG
 }
 

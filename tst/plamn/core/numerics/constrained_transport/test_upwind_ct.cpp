@@ -3,8 +3,8 @@
 //  state, and tiled (per tile pool tasks, or one GPU launch) == untiled
 
 #include "damn/core/def/damn_config.hpp"
-#include "damn/core/meta/for_N.hpp"
-#include "damn/core/sys/env.hpp"
+#include "mkn/kul/for.hpp"
+#include "mkn/kul/env.hpp"
 
 #include "plamn/core/numerics/constrained_transport/upwind_ct_transformer.hpp"
 #include "plamn/core/numerics/reconstructions/linear.hpp"
@@ -26,7 +26,7 @@
 
 namespace plamn::core
 {
-auto static const cells = damn::core::get_env_as("PLAMN_CELLS", std::uint32_t{10});
+auto static const cells = mkn::kul::env::get_as("PLAMN_CELLS", std::uint32_t{10});
 static ::BS::thread_pool pool{4};
 using Linear_t = LinearReconstruction<VanLeerLimiter>;
 using CT_t     = UpwindCTTransformer<Linear_t>;
@@ -169,7 +169,7 @@ TYPED_TEST(UpwindCTTest, ideal_ohm_uniform)
 
     std::array<double, 3> const minus_vxB{
         -(v[1] * b[2] - v[2] * b[1]), -(v[2] * b[0] - v[0] * b[2]), -(v[0] * b[1] - v[1] * b[0])};
-    damn::core::for_N<3>([&](auto c) {
+    mkn::kul::for_N<3>([&](auto c) {
         double const expect
             = UpwindCT<Linear_t>::template has_equation<c, dim> ? minus_vxB[c] : 42.;
         std::size_t n = 0;

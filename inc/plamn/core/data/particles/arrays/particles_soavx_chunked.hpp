@@ -36,7 +36,7 @@
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/logger.hpp"
-#include "damn/core/meta/for_N.hpp"
+#include "mkn/kul/for.hpp"
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/arrays/particles_soavx.hpp"
@@ -363,7 +363,7 @@ public:
 
         auto columns            = this->as_tuple();
         auto const that_columns = that.as_tuple();
-        damn::core::for_N<std::tuple_size_v<decltype(columns)>>([&](auto c) {
+        mkn::kul::for_N<std::tuple_size_v<decltype(columns)>>([&](auto c) {
             auto& column = std::get<c>(columns);
             damn::resize(column, offset + n);
             damn::core::mem::copy<alloc_mode>(column.data() + offset,
@@ -394,11 +394,11 @@ public:
     {
         auto const cell  = cell_of_(c);
         this->weight_[i] = 0;
-        damn::core::for_N<dimension>([&](auto d) {
+        mkn::kul::for_N<dimension>([&](auto d) {
             this->iCell_[d][i] = cell[d];
             this->delta_[d][i] = 0;
         });
-        damn::core::for_N<3>([&](auto d) { this->v_[d][i] = 0; });
+        mkn::kul::for_N<3>([&](auto d) { this->v_[d][i] = 0; });
     }
 
     std::size_t nbr_particles_in(std::array<int, dimension> const& cell) const
@@ -488,18 +488,18 @@ private:
     void move_slot_(std::size_t const to, std::size_t const from)
     {
         auto columns = this->as_tuple();
-        damn::core::for_N<std::tuple_size_v<decltype(columns)>>(
+        mkn::kul::for_N<std::tuple_size_v<decltype(columns)>>(
             [&](auto k) { std::get<k>(columns)[to] = std::get<k>(columns)[from]; });
     }
 
     void write_slot_(std::size_t const i, auto const& p)
     {
         this->weight_[i] = p.weight();
-        damn::core::for_N<dimension>([&](auto d) {
+        mkn::kul::for_N<dimension>([&](auto d) {
             this->iCell_[d][i] = p.iCell()[d];
             this->delta_[d][i] = p.delta()[d];
         });
-        damn::core::for_N<3>([&](auto d) { this->v_[d][i] = p.v()[d]; });
+        mkn::kul::for_N<3>([&](auto d) { this->v_[d][i] = p.v()[d]; });
     }
 };
 
@@ -680,10 +680,10 @@ void SoAVXChunkedParticles<Super_>::sort()
     auto* const sizes   = this->sizes_.data();
     auto* const slots   = this->slots_.data();
     auto const* weights = this->weight_.data();
-    auto cells_of       = damn::core::for_N<dimension, damn::core::for_N_R_mode::make_array>(
+    auto cells_of       = mkn::kul::for_N<dimension, mkn::kul::for_N_R_mode::make_array>(
         [&](auto d) -> int const* { return this->iCell_[d].data(); });
     auto const cell_idx = [=] DAMN_ALL(std::size_t const i) {
-        auto const cell = damn::core::for_N<dimension, damn::core::for_N_R_mode::make_array>(
+        auto const cell = mkn::kul::for_N<dimension, mkn::kul::for_N_R_mode::make_array>(
             [&](auto d) { return cells_of[d][i]; });
         DAMN_ASSERT(isIn(damn::core::Point{cell}, shell));
         return Chunks::flat(shell, cell);
@@ -749,11 +749,11 @@ void SoAVXChunkedParticles<Super_>::sort()
 
     // 3. the particles into their slots of the scratch columns, swapped in, the gaps filled
     damn::resize(this->scratch_.weight_, slots_total, false);
-    damn::core::for_N<dimension>([&](auto d) {
+    mkn::kul::for_N<dimension>([&](auto d) {
         damn::resize(this->scratch_.iCell_[d], slots_total, false);
         damn::resize(this->scratch_.delta_[d], slots_total, false);
     });
-    damn::core::for_N<3>([&](auto d) { damn::resize(this->scratch_.v_[d], slots_total, false); });
+    mkn::kul::for_N<3>([&](auto d) { damn::resize(this->scratch_.v_[d], slots_total, false); });
     auto const columns = [](auto& v) {
         return std::apply([](auto&... c) { return std::make_tuple(c.data()...); }, v.as_tuple());
     };
@@ -763,7 +763,7 @@ void SoAVXChunkedParticles<Super_>::sort()
         if (slots[i] == none)
             return;
         auto const to = starts[cell_idx(i)] + slots[i];
-        damn::core::for_N<std::tuple_size_v<decltype(src)>>(
+        mkn::kul::for_N<std::tuple_size_v<decltype(src)>>(
             [&](auto c) { std::get<c>(dst)[to] = std::get<c>(src)[i]; });
     };
     if constexpr (gpu)
@@ -779,7 +779,7 @@ void SoAVXChunkedParticles<Super_>::sort()
 
     auto mine   = this->as_tuple();
     auto theirs = this->scratch_.as_tuple();
-    damn::core::for_N<std::tuple_size_v<decltype(mine)>>(
+    mkn::kul::for_N<std::tuple_size_v<decltype(mine)>>(
         [&](auto c) { std::get<c>(mine).swap(std::get<c>(theirs)); });
     for (std::size_t c = 0; c < cells; ++c)
         for (std::size_t i = starts[c] + sizes[c]; i < starts[c] + sizes[c] + gaps[c]; ++i)

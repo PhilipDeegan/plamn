@@ -2,8 +2,8 @@
 //  MHD time integrators (Euler, TVDRK2, TVDRK3, SSPRK4_5) on one periodic patch, 1D 2D 3D:
 //  a uniform state stays uniform; mass, momentum, energy are conserved; div B stays ~0
 
-#include "damn/core/meta/for_N.hpp"
-#include "damn/core/sys/env.hpp"
+#include "mkn/kul/for.hpp"
+#include "mkn/kul/env.hpp"
 
 #include "plamn/core/models/mhd_state.hpp"
 #include "plamn/core/numerics/reconstructions/linear.hpp"
@@ -28,7 +28,7 @@
 
 namespace plamn::core
 {
-auto static const cells    = damn::core::get_env_as("PLAMN_CELLS", std::uint32_t{10});
+auto static const cells    = mkn::kul::env::get_as("PLAMN_CELLS", std::uint32_t{10});
 double static const gamma_ = 5. / 3.;
 using Linear_t             = LinearReconstruction<VanLeerLimiter>;
 

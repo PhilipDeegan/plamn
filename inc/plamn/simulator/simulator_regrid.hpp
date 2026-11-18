@@ -17,7 +17,7 @@
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/logger.hpp"
-#include "damn/core/math/array.hpp"
+#include "mkn/kul/array.hpp"
 #include "damn/mpi/clustering.hpp"
 #include "damn/mpi/regrid.hpp"
 
@@ -225,7 +225,7 @@ void Simulator<opts>::rebalance_(double const t)
     DAMN_LOG_SCOPE(1, "Simulator::rebalance_");
 
     auto const boxes = damn::amr::chop(hierarchy_.domain, patch_size_);
-    auto const block = damn::core::ConstArray<int, dimension>(rebalance_block);
+    auto const block = mkn::kul::ConstArray<int, dimension>(rebalance_block);
     auto const cut = damn::amr::cut_partition(boxes, block,
                                               particle_weights_(0, damn::amr::blocks(boxes, block)),
                                               damn::amr::node_share_capacity(topology_));

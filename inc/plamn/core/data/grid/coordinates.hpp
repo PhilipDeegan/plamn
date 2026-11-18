@@ -3,7 +3,7 @@
 
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/memory/span.hpp"
-#include "damn/core/meta/for_N.hpp"
+#include "mkn/kul/for.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 
 #include "plamn/core/data/grid/layout.hpp"
@@ -35,7 +35,7 @@ struct CoordinateVectors
 
     auto spans() const
     {
-        return damn::core::for_N<dim>([&](auto i) { return damn::core::make_span(xyz[i]); });
+        return mkn::kul::for_N<dim>([&](auto i) { return damn::core::make_span(xyz[i]); });
     }
 };
 

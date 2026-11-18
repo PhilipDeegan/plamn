@@ -1,7 +1,7 @@
 #include "plamn/core/def.hpp"
 
 #include "plamn/plamn_core.hpp"
-#include "damn/core/sys/time.hpp"
+#include "mkn/kul/time.hpp"
 
 #include "plamn/core/data/particles/partitioning/particles_partitioning.hpp"
 
@@ -75,9 +75,9 @@ struct ParticlesDataFixture
 
     ParticlesDataFixture()
         : middle{StaticParticlesDataFixture::instance().middle()}
-        , neighbours{
-              damn::core::generate_from([&](auto& box) { return std::make_unique<ParticlesData_t>(box); },
-                            StaticParticlesDataFixture::instance().neighbours())}
+        , neighbours{mkn::kul::generate_from(
+              [&](auto& box) { return std::make_unique<ParticlesData_t>(box); },
+              StaticParticlesDataFixture::instance().neighbours())}
     {
         auto& particles = middle.domainParticles;
         for (auto const& particle : StaticParticlesDataFixture::instance().particles)
@@ -116,9 +116,9 @@ TYPED_TEST(ParticlesDataTest, works)
     }
 
     auto before_size = particles.size();
-    auto start       = damn::core::now_in_microseconds();
+    auto start       = mkn::kul::Now::MICROS();
     auto iterator    = Partitioner{particles}(middle.box);
-    auto end         = damn::core::now_in_microseconds();
+    auto end         = mkn::kul::Now::MICROS();
 
     EXPECT_EQ(before_size, particles.size());
     EXPECT_EQ(iterator.size(), std::pow(Test::box_size, dim) * Test::ppc);
@@ -149,9 +149,9 @@ TYPED_TEST(ParticlesDataTest, worksVector)
     }
 
     auto before_size = particles.size();
-    auto start       = damn::core::now_in_microseconds();
+    auto start       = mkn::kul::Now::MICROS();
     auto iterators   = Partitioner{particles}(std::vector{middle.box});
-    auto end         = damn::core::now_in_microseconds();
+    auto end         = mkn::kul::Now::MICROS();
 
     auto iterator = iterators.back();
 

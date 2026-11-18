@@ -1,7 +1,7 @@
 #ifndef PLAMN_IONS_HPP
 #define PLAMN_IONS_HPP
 
-#include "damn/core/math/array.hpp"
+#include "mkn/kul/array.hpp"
 
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/field/field_algorithm.hpp"
@@ -52,7 +52,7 @@ namespace core
             : massDensity_{massDensityName(), HybridQuantity::Scalar::rho}
             , chargeDensity_{chargeDensityName(), HybridQuantity::Scalar::rho}
             , bulkVelocity_{"bulkVel", HybridQuantity::Vector::V}
-            , populations_{damn::core::generate_from(
+            , populations_{mkn::kul::generate_from(
                   [&dict](auto ipop) { //
                       return IonPopulation{dict["pop" + std::to_string(ipop)]};
                   },

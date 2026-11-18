@@ -3,9 +3,10 @@
 
 #include "plamn/core/def.hpp"
 #include "plamn/plamn_core.hpp"
-#include "damn/core/math/array.hpp"
-#include "damn/core/meta/logic.hpp"
-#include "damn/core/meta/tuple.hpp"
+#include "mkn/kul/array.hpp"
+#include "mkn/kul/for.hpp"
+#include "mkn/kul/tuple.hpp"
+#include "mkn/kul/zip.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 
 #include "plamn/core/data/particles/sorting/particles_sorting.hpp"
@@ -27,7 +28,7 @@ Particle_t particle(std::array<int, dim> const& icell, [[maybe_unused]] std::siz
     Tup params{
         /*.weight = */ .001,
         /*.iCell  = */ icell,
-        /*.delta  = */ damn::core::ConstArray<double, dim>(.51),
+        /*.delta  = */ mkn::kul::ConstArray<double, dim>(.51),
         /*.v      = */ {{.002002002002, .003003003003, .004004004004}} //
     };
 
@@ -37,7 +38,7 @@ Particle_t particle(std::array<int, dim> const& icell, [[maybe_unused]] std::siz
 template<std::size_t dim>
 Particle<dim> particle(int const icell = 15)
 {
-    return particle(damn::core::ConstArray<int, dim>(icell));
+    return particle(mkn::kul::ConstArray<int, dim>(icell));
 }
 
 
@@ -58,7 +59,7 @@ void shuffle(Particles& particles, std::optional<int> seed = std::nullopt)
 
     std::shuffle(particles.begin(), particles.end(), gen);
 
-    if constexpr (damn::core::any_in(Particles::layout_mode, LayoutMode::AoSMapped))
+    if constexpr (mkn::kul::any_in(Particles::layout_mode, LayoutMode::AoSMapped))
     {
         particles.empty_map();
         particles.map_particles();
@@ -71,7 +72,8 @@ void delta_disperse(Particles& particles, std::optional<int> seed = std::nullopt
     auto gen = rando(seed);
     ParticleDeltaDistribution<double> deltaDistrib;
     for (auto& p : particles)
-        p.delta() = damn::core::ConstArrayFrom<Particles::dimension>([&] { return deltaDistrib(gen); });
+        p.delta()
+            = mkn::kul::ConstArrayFrom<Particles::dimension>([&] { return deltaDistrib(gen); });
 }
 
 template<typename Particles>
@@ -81,7 +83,7 @@ void vary_velocity(Particles& particles, double const min, double const max,
     auto gen = rando(seed);
     std::uniform_real_distribution<double> dist{min, max};
     for (auto& p : particles)
-        p.v() = damn::core::ConstArrayFrom<3>([&] { return dist(gen); });
+        p.v() = mkn::kul::ConstArrayFrom<3>([&] { return dist(gen); });
 }
 
 
