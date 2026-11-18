@@ -304,7 +304,7 @@ void Simulator<opts>::regrid_(double const t, int const from, bool const always)
         else
         {
             make_level_(ln + 1, boxes);
-            initialize_refined_(fine);
+            solver::hybrid::initialize_refined(hybrid_, level_services_(fine), startTime_);
             prepare_step_(ln + 1, t);
         }
     }
@@ -402,55 +402,15 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
         for (auto& pop : patch.ions)
             pop.levelGhostParticles() = pop.levelGhostParticlesOld();
     });
-    sort_refined_particles_(fine);
+    solver::hybrid::sort_refined_particles(hybrid_, level_services_(fine));
 
     if (!keep_finer)
-        refined_moments_(fine);
+        solver::hybrid::refined_moments(hybrid_, level_services_(fine));
     else
-        moved_moments_(fine);
+        solver::hybrid::moved_moments(hybrid_, level_services_(fine));
     prepare_step_(ln, t);
 }
 
-
-// a level moved onto new owners (keep_finer: the same boxes, a rebalance): the moments moved
-//  with it are kept on the domain (under a finer level they are the finer level's, coarsened at
-//  the last synchronization: a deposit would replace them), the deposit of its particles only
-//  gives the ghost nodes the move does not bring (outside the level: level ghost deposits),
-//  then the patch borders from the neighbours, as level 0's rebalance
-template<auto opts>
-void Simulator<opts>::moved_moments_(std::size_t const ln)
-{
-    auto const each_moment = [](auto& patch, auto&& fn) {
-        for (auto& pop : patch.populations)
-        {
-            fn(pop->density);
-            fn(pop->charge_density);
-            for (auto& f : pop->flux)
-                fn(f);
-        }
-    };
-    std::vector<std::vector<std::vector<double>>> kept; // per patch, per moment: its values
-    per_patch_(ln, [&](auto& patch) {
-        auto& mine = kept.emplace_back();
-        each_moment(patch,
-                    [&](auto const& f) { mine.emplace_back(f.data(), f.data() + f.size()); });
-    });
-    refined_moments_(ln); // the ghost nodes; the domain put back below
-    std::size_t i = 0;
-    per_patch_(ln, [&](auto& patch) {
-        std::size_t m = 0;
-        each_moment(patch, [&](auto& f) {
-            auto const& values = kept[i][m++];
-            damn::core::for_each_point(domain_box(patch.layout, f), [&](auto const& ijk) {
-                auto& v = f(ijk);
-                v       = values[static_cast<std::size_t>(&v - f.data())];
-            });
-        });
-        ++i;
-    });
-    copy_(ln, damn::amr::fill_ghosts, "IonPopMoments");
-    solver::hybrid::compute_moments(level_services_(ln));
-}
 
 } // namespace plamn
 

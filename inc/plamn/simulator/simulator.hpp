@@ -39,6 +39,7 @@
 #include "plamn/diagnostic/vtkhdf.hpp"
 #include "plamn/simulator/hybrid_patch_view.hpp"
 #include "plamn/solver/hybrid/advance.hpp"
+#include "plamn/solver/hybrid/initialize.hpp"
 #include "plamn/solver/hybrid/level_steps.hpp"
 #include "plamn/solver/hybrid/model.hpp"
 #include "plamn/solver/stacks.hpp"
@@ -408,7 +409,6 @@ private:
     typename Patch_t::Surroundings surroundings_(int ln, Box_t const& box) const;
     // the boxes of level ln + 1 from level ln's tagged cells (collective)
     NO_DISCARD std::vector<Box_t> cluster_(int ln);
-    void refine_magnetic_(std::size_t ln);
     NO_DISCARD std::vector<std::vector<Box_t>> pretag_();
     // the levels finer than from re-clustered (tagging) at t; always: re-made even where their
     //  boxes did not change (SAMRAI's, see RegridMode)
@@ -418,11 +418,6 @@ private:
     void after_step_(int ln, double t, bool last);
     // keep_finer: the finer levels stay (each to be regridded onto its own boxes in turn)
     void regrid_level_(int ln, std::vector<Box_t> const& boxes, double t, bool keep_finer = false);
-    void initialize_root_();
-    void initialize_refined_(std::size_t ln);
-    void refined_moments_(std::size_t ln); // a refined level's moments and J from its particles
-    void sort_refined_particles_(std::size_t ln); // SoAVXChunked: chunks before the first push
-    void moved_moments_(std::size_t ln);          // a level moved (rebalance): its moments kept
 
     // level ghost fills (patch ghosts, then level ghosts from the coarser level at time t)
     void fill_magnetic_ghosts_(std::size_t ln, std::string const& key, double t);
@@ -462,6 +457,14 @@ private:
             self.fill_electric_ghosts_(ln, key, t);
         }
         NO_DISCARD double alpha(double const t) const { return self.alpha_(ln, t); }
+        void check_set(std::string const& key, std::string const& where)
+        {
+            self.check_set_(ln, key, where);
+        }
+        NO_DISCARD auto mesh_size() const
+        {
+            return damn::amr::mesh_size(self.hierarchy_, static_cast<int>(ln));
+        }
 
         // with the coarser level (ln > 0)
         NO_DISCARD LevelServices coarser() const { return {self, ln - 1}; }
