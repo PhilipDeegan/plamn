@@ -49,6 +49,7 @@ profile:
         tst/plamn/core/numerics/interpolator/test_interpolator.cpp
         tst/plamn/core/numerics/boundary_condition/test_field_boundary_condition.cpp
         tst/plamn/core/boundary/test_boundary.cpp
+        tst/plamn/core/boundary/test_physical_boundaries.cpp
         tst/plamn/core/numerics/particles_synchronised_mover/test_updater.cpp
         tst/plamn/core/numerics/particles_synchronised_mover/test_multi_updater.cpp
         tst/plamn/core/numerics/particles_synchronised_mover/test_level_updater.cpp
