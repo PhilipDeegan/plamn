@@ -14,6 +14,9 @@
 //                  tangential ones Neumann
 //   AntiSymmetric  a scalar Dirichlet 0 (linear); a vector's normal component Neumann, its
 //                  tangential ones Dirichlet 0
+//   DivergenceFreeTransverseNeumann / Dirichlet  B: its tangential components Neumann (or
+//                  Dirichlet at the condition's values), then its normal one set face by face
+//                  outward so each ghost cell's discrete divergence is zero
 //
 // A FieldCondition holds which, and Dirichlet's values (one per component) and extrapolation:
 //  plain data, as many boundaries carry one per quantity
@@ -81,6 +84,46 @@ namespace boundary::detail
                               auto const& field)
     {
         return toCenteredBox(ghost_cells, centering<dim>(field.physicalQuantity()));
+    }
+} // namespace boundary::detail
+
+
+namespace boundary::detail
+{
+    // B's normal component past the boundary, given its tangential ones there: face by face away
+    //  from the domain (the boundary face is the domain's), each ghost cell's discrete divergence
+    //  zero: Bn(next face) = Bn(face) - dn * sum over tangential directions of dBt/dt
+    template<typename VecField, typename Layout>
+    void
+    divergence_free_normal(VecField& B, BoundaryLocation const location,
+                           damn::core::Box<std::uint32_t, Layout::dimension> const& ghost_cells,
+                           Layout const& layout)
+    {
+        auto constexpr dim = Layout::dimension;
+        auto const n       = static_cast<std::size_t>(direction_of(location));
+        auto const side    = side_of(location);
+        auto& Bn           = B[n];
+        auto const one     = [&](auto const& cell) {
+            double div = 0.;
+            for (std::size_t t = 0; t < dim; ++t)
+                if (t != n)
+                {
+                    auto up = cell;
+                    ++up[t];
+                    div += (B[t](up) - B[t](cell)) / layout.dx[t];
+                }
+            auto outer = cell; // the cell's face away from the domain, and the inner one
+            auto inner = cell;
+            if (side == Side::Upper)
+                ++outer[n];
+            else
+                ++inner[n];
+            Bn(outer) = Bn(inner) + (side == Side::Upper ? -1. : 1.) * layout.dx[n] * div;
+        };
+        if (side == Side::Upper) // nearest the domain first: each face reads one already set
+            damn::core::for_each_point(ghost_cells, one);
+        else
+            damn::core::for_each_point_reverse(ghost_cells, one);
     }
 } // namespace boundary::detail
 
@@ -176,11 +219,20 @@ void apply_vector(FieldCondition const& condition, VecField& vecfield,
                 else
                     dirichlet(field, location, ghost_cells, layout, 0.);
                 break;
-            default:
-                throw std::runtime_error(
-                    "plamn: divergence free transverse conditions are B's (not ported yet)");
+            case DivergenceFreeTransverseNeumann:
+                if (c != normal)
+                    neumann(field, location, ghost_cells, layout);
+                break;
+            case DivergenceFreeTransverseDirichlet:
+                if (c != normal)
+                    dirichlet(field, location, ghost_cells, layout, condition.value[c],
+                              condition.extrapolation);
+                break;
         }
     }
+    if (condition.type == DivergenceFreeTransverseNeumann
+        or condition.type == DivergenceFreeTransverseDirichlet)
+        boundary::detail::divergence_free_normal(vecfield, location, ghost_cells, layout);
 }
 
 } // namespace plamn::core

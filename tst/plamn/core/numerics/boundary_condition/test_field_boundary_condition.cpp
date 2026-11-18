@@ -12,8 +12,11 @@
 
 #include "gtest/gtest.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 
 namespace plamn::core
 {
@@ -71,6 +74,9 @@ struct BoundaryPatch
     Grid_t rho{"rho", layout, S::rho};
     VecField_t B{"B", layout, V_::B};
 };
+
+template<typename P>
+using Layout_of = typename P::Layout_t;
 
 template<typename P>
 struct FieldConditionTest : public ::testing::Test
@@ -171,6 +177,58 @@ TYPED_TEST(FieldConditionTest, reflective_vector_conditions)
     check(0, false);
     check(1, true);
     check(2, true);
+}
+
+TYPED_TEST(FieldConditionTest, divergence_free_transverse_conditions)
+{
+    // B's tangential components Neumann (or Dirichlet), then its normal one: every ghost cell
+    //  past the boundary has a zero discrete divergence
+    auto& p          = this->patch;
+    auto constexpr d = TypeParam::dim;
+    auto const div   = [&](auto const& cell) {
+        double sum = 0;
+        for (std::size_t t = 0; t < d; ++t)
+        {
+            auto up = cell;
+            ++up[t];
+            sum += (p.B[t](up) - p.B[t](cell)) / p.layout.dx[t];
+        }
+        return sum;
+    };
+    for (auto const type : {FieldConditionType::DivergenceFreeTransverseNeumann,
+                            FieldConditionType::DivergenceFreeTransverseDirichlet})
+        for (auto const& [side, loc] : {std::pair{Side::Lower, BoundaryLocation::XLower},
+                                        std::pair{Side::Upper, BoundaryLocation::XUpper}})
+        {
+            p.fill(p.B[0]);
+            p.fill(p.B[1]);
+            p.fill(p.B[2]);
+            auto const box = p.ghost_cells(side);
+            // the cells the transverse derivatives of the condition reach: not the last ones
+            //  along the transverse directions (their upper faces past the allocation)
+            auto cells = box;
+            for (std::size_t t = 1; t < d; ++t)
+                cells.upper[t] -= 1;
+            apply_vector(FieldCondition{.type = type, .value = {0., .25, -.5}}, p.B, loc, box,
+                         p.layout);
+            damn::core::for_each_point(cells, [&](auto const& cell) {
+                double scale = 1.;
+                for (std::size_t t = 0; t < d; ++t)
+                    scale = std::max(scale, std::abs(p.B[t](cell)) / p.layout.dx[t]);
+                EXPECT_NEAR(div(cell), 0., 64 * std::numeric_limits<double>::epsilon() * scale);
+            });
+            if (type == FieldConditionType::DivergenceFreeTransverseDirichlet)
+                damn::core::for_each_point(box, [&](auto const& cell) { // Bz: dual, dual
+                    if (cell[0]
+                        == (side == Side::Lower ? Layout_of<TypeParam>::ghost_width - 1
+                                                : box.lower[0]))
+                    {
+                        auto m = cell;
+                        m[0] += side == Side::Lower ? 1 : -1;
+                        EXPECT_DOUBLE_EQ(p.B[2](cell), 2 * -.5 - p.B[2](m));
+                    }
+                });
+        }
 }
 
 TEST(BoundaryDefs, locations)
