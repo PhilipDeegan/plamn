@@ -50,16 +50,15 @@ template<auto opts>
 damn::amr::Level<Simulator<opts>::dimension>
 Simulator<opts>::level_of_(int const ln, std::vector<Box_t> const& boxes)
 {
-    // refined levels: patches of whole coarser cells, the size a multiple of the ratio, the cells
-    // shared evenly (no patch left with a few cells); level 0 as rebalance_ chops the domain
+    // the cells shared evenly (no patch left with a few cells, SAMRAI's patches on one rank);
+    // refined levels: patches of whole coarser cells, the size a multiple of the ratio
     auto size = patch_size_;
     if (ln > 0)
         for (auto& s : size)
             s = std::max(hierarchy_.ratio, s / hierarchy_.ratio * hierarchy_.ratio);
     std::vector<Box_t> patches;
     for (auto const& box : boxes)
-        for (auto const& b : ln > 0 ? damn::amr::chop_evenly(box, size, hierarchy_.ratio)
-                                    : damn::amr::chop(box, size))
+        for (auto const& b : damn::amr::chop_evenly(box, size, ln > 0 ? hierarchy_.ratio : 1))
             patches.push_back(b);
     return damn::amr::make_level(
         ln, patches,

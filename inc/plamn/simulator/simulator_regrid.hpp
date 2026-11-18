@@ -224,7 +224,7 @@ void Simulator<opts>::rebalance_(double const t)
 {
     DAMN_LOG_SCOPE(1, "Simulator::rebalance_");
 
-    auto const boxes = damn::amr::chop(hierarchy_.domain, patch_size_);
+    auto const boxes = damn::amr::chop_evenly(hierarchy_.domain, patch_size_); // as level_of_
     auto const block = mkn::kul::ConstArray<int, dimension>(rebalance_block);
     auto const cut = damn::amr::cut_partition(boxes, block,
                                               particle_weights_(0, damn::amr::blocks(boxes, block)),
