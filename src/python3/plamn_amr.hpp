@@ -75,6 +75,7 @@ void declare_amr(nb::module_& m)
               else
                   throw std::runtime_error("plamn chop: mode " + mode + ": chop or even");
               std::vector<PyBox<dim>> out;
+              out.reserve(boxes.size());
               for (auto const& b : boxes)
                   out.push_back(from_box(b));
               return out;
@@ -86,6 +87,7 @@ void declare_amr(nb::module_& m)
           [](std::vector<PyBox<dim>> const& boxes, std::vector<double> const& weights,
              std::vector<int> const& node_of_rank) {
               std::vector<damn::core::Box<int, dim>> bs;
+              bs.reserve(boxes.size());
               for (auto const& [lo, up] : boxes)
                   bs.push_back(to_box<dim>(lo, up));
               auto const t = topology_of(node_of_rank);
