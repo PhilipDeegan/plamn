@@ -85,6 +85,23 @@ class NoDataHierarchy:
                 per_rank[rank] += self.ratio**ln * w
         return per_rank.max() / per_rank.mean() if per_rank.mean() else 1.0
 
+    def comm_cost(self, cost=None, reach=None):
+        """the cells exchanged (same level ghosts and coarse cells under each patch) weighed by
+        distance: cost {distance: per cell}, placeholders until measured (Self and Local free,
+        Numa 0.3, Node 1, Remote 10)"""
+        cost = cost or {
+            "Self": 0.0,
+            "Local": 0.0,
+            "Numa": 0.3,
+            "Node": 1.0,
+            "Remote": 10.0,
+        }
+        total = 0.0
+        for m in self.metrics(reach):
+            for key in ("ghost_cells", "coarse_cells"):
+                total += sum(cost[d] * n for d, n in m[key].items())
+        return total
+
     def critical_path(self):
         """sum over levels of r^l (substeps) times the busiest rank's weight, over the same with
         the mean: 1 when every level is balanced (levels advance one after another)"""
@@ -202,6 +219,9 @@ class Chopper:
     partition: str = "levels"
     block: int = 8
     cell_weight: object = None
+    spill: float = (
+        None  # columns: a rank above (1 + spill) x a level's mean sheds patches
+    )
 
     def __post_init__(self):
         sim = self.sim
@@ -315,6 +335,41 @@ class Chopper:
             levels[ln] = self._chop_owned(ln, pieces)
         return levels
 
+    def _spill(self, patches, weights):
+        """a level's patches with no rank above (1 + spill) x the mean: an overloaded rank hands
+        patches (the largest within its excess first, else its smallest) to the least loaded
+        rank of its node with room, else of any node: closest first, as cross level overlaps
+        cost by distance"""
+        load = np.zeros(self.ranks)
+        mine = [[] for _ in range(self.ranks)]
+        for i, ((_, _, r), w) in enumerate(zip(patches, weights)):
+            load[r] += w
+            mine[r].append(i)
+        cap = (1 + self.spill) * load.mean()
+        owner = [r for _, _, r in patches]
+        node = np.asarray(self.node_of_rank)
+        for r in np.argsort(-load):
+            while load[r] > cap and len(mine[r]) > 1:
+                excess = load[r] - cap
+                ws = sorted(mine[r], key=lambda i: -weights[i])
+                fits = [i for i in ws if weights[i] <= excess]
+                i = fits[0] if fits else ws[-1]
+                w = weights[i]
+                room = np.where(load + w <= cap)[0]
+                same = room[node[room] == node[r]]
+                pool = same if len(same) else room
+                if not len(pool):
+                    break
+                t = pool[np.argmin(load[pool])]
+                if t == r:
+                    break
+                mine[r].remove(i)
+                mine[t].append(i)
+                load[r] -= w
+                load[t] += w
+                owner[i] = int(t)
+        return [(lo, up, o) for (lo, up, _), o in zip(patches, owner)]
+
     def chop(self, tag_boxes, work=None):
         """a NoDataHierarchy of tag_boxes ({level: boxes}, level 0 the domain if missing);
         work: optional per level 0 cell weights (level 0's shape)"""
@@ -352,6 +407,8 @@ class Chopper:
             if columns is not None:
                 patches = columns[ln]
                 weights = [self._weight(ln, lo, up, None) for lo, up, _ in patches]
+                if self.spill is not None:
+                    patches = self._spill(patches, weights)
                 h.levels.append(patches)
                 h.weights.append(weights)
                 continue

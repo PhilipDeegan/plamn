@@ -150,6 +150,46 @@ class AmrTest(unittest.TestCase):
         ]:  # each level 1 patch over its owner's cells
             self.assertEqual({owner[c // 2] for c in range(lo, up + 1)}, {rank})
 
+    def test_spill_sheds_to_the_same_node_first(self):
+        # 80 cells, level 1 over the coarse cells 0..9 (fine 0..19, patches of 4 fine cells),
+        # 4 ranks 2 per node, blocks of 10: level 1 is all under block 0 (work 10 + 2 x 20 = 50
+        # of 120: rank 0 alone), so columns put all of level 1 on rank 0. spill 0.5: cap
+        # 1.5 x 20 / 4 = 7.5 (x ppc) for patches of 4: rank 0 sheds to rank 1 (its node) first,
+        # then to the other node, down to 8 4 4 4
+        sim = simulation_1d(cells=80, largest_patch_size=4)
+        refined = {1: [([0], [19])]}
+        columns = Chopper(sim, ranks=4, ranks_per_node=2, partition="columns", block=10)
+        h0 = columns.chop(refined)
+        self.assertEqual({rank for _, _, rank in h0.levels[1]}, {0})
+
+        columns.spill = 0.5
+        h = columns.chop(refined)
+        level1 = np.zeros(4)
+        for (lo,), (up,), rank in h.levels[1]:
+            level1[rank] += (up - lo + 1) * 10  # cells x ppc
+        self.assertEqual(level1.tolist(), [80.0, 40.0, 40.0, 40.0])
+        self.assertLess(h.critical_path(), h0.critical_path())
+
+        # the first patch rank 0 sheds goes to rank 1, on its node, before the other node
+        first = [rank for _, _, rank in h.levels[1] if rank != 0]
+        self.assertIn(1, first)
+
+    def test_comm_cost_weighs_the_exchanged_cells_by_distance(self):
+        sim = simulation_1d()
+        h = Chopper(sim, ranks=2, partition="columns", block=10).chop(
+            {1: [([20], [59])]}
+        )
+        cost = {"Self": 0.0, "Local": 0.0, "Numa": 1.0, "Node": 1.0, "Remote": 1.0}
+        crossing = sum(
+            m[key][d]
+            for m in h.metrics()
+            for key in ("ghost_cells", "coarse_cells")
+            for d in ("Numa", "Node", "Remote")
+        )
+        self.assertGreater(crossing, 0)
+        self.assertEqual(h.comm_cost(cost), crossing)
+        self.assertEqual(h.comm_cost({**cost, "Node": 0.0}), 0.0)  # one node: all Node
+
 
 if __name__ == "__main__":
     unittest.main()
