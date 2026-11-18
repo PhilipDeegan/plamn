@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <algorithm>
 #include <iostream>
+#include <limits>
 
 namespace plamn::core
 {
@@ -195,7 +196,9 @@ struct GodunovTest : public ::testing::Test
 using Dims_t = testing::Types<TestParam<1>, TestParam<2>, TestParam<3>>;
 TYPED_TEST_SUITE(GodunovTest, Dims_t, );
 
-// the transformer's stored values at every face of the box are GodunovFace's at that face
+// the transformer's stored values at every face of the box are GodunovFace's at that face: the
+//  same formulas compiled in two contexts (a compiler may contract them differently, e.g.
+//  hipcc's FMAs), so within a few ulps of the larger value, the largest difference printed
 TYPED_TEST(GodunovTest, transformer_matches_face)
 {
     using Patch_t = FacePatch<TypeParam::dim>;
@@ -203,6 +206,13 @@ TYPED_TEST(GodunovTest, transformer_matches_face)
     Patch_t p{layout};
     fill_primitive(p);
     GodunovFace<Linear_t> const face{gamma_};
+
+    double max_diff  = 0;
+    auto const close = [&](double const stored, double const direct) {
+        auto const scale = std::max({1., std::abs(stored), std::abs(direct)});
+        max_diff         = std::max(max_diff, std::abs(stored - direct));
+        EXPECT_NEAR(stored, direct, 16 * std::numeric_limits<double>::epsilon() * scale);
+    };
 
     mkn::kul::for_N<Patch_t::dim>([&](auto dir) {
         faces<dir>(p);
@@ -213,19 +223,20 @@ TYPED_TEST(GodunovTest, transformer_matches_face)
             [&](auto const& ijk) {
                 ++n;
                 auto const r = face.template operator()<dir>(ijk, p.rho, p.V, p.B, p.P);
-                EXPECT_EQ(f.F_rho(ijk), r.F.rho);
-                EXPECT_EQ(f.F_Etot(ijk), r.F.Etot);
-                EXPECT_EQ(f.dR(ijk), r.uct_coefs[3]);
+                close(f.F_rho(ijk), r.F.rho);
+                close(f.F_Etot(ijk), r.F.Etot);
+                close(f.dR(ijk), r.uct_coefs[3]);
                 for (std::size_t c = 0; c < 3; ++c)
                 {
-                    EXPECT_EQ(f.F_rhoV[c](ijk), r.F.rhoV[c]);
-                    EXPECT_EQ(f.F_B[c](ijk), r.F.B[c]);
-                    EXPECT_EQ(f.vt[c](ijk), r.vt[c]);
+                    close(f.F_rhoV[c](ijk), r.F.rhoV[c]);
+                    close(f.F_B[c](ijk), r.F.B[c]);
+                    close(f.vt[c](ijk), r.vt[c]);
                 }
                 EXPECT_TRUE(std::isfinite(r.F.Etot));
             });
         EXPECT_GT(n, 0u);
     });
+    std::cout << "transformer vs face, largest difference " << max_diff << std::endl;
 }
 
 
