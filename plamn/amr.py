@@ -142,39 +142,39 @@ class NoDataHierarchy:
         return PatchHierarchy({0.0: levels}, Box(np.asarray(lower), np.asarray(upper)))
 
 
-def _union(a, b):
-    """the box a and b make together, if they make one: (lower, upper) lists, else None"""
-    (al, au), (bl, bu) = a, b
-    differ = [d for d in range(len(al)) if al[d] != bl[d] or au[d] != bu[d]]
-    if not differ:
-        return a
-    if len(differ) > 1:
-        return None
-    d = differ[0]
-    if au[d] + 1 != bl[d] and bu[d] + 1 != al[d]:
-        return None
-    return [min(x, y) for x, y in zip(al, bl)], [max(x, y) for x, y in zip(au, bu)]
-
-
 def coalesce(boxes):
-    """(lower, upper) boxes merged two by two while their union is a box, in lower corner order
-    (as damn::amr::coalesce)"""
+    """disjoint (lower, upper) boxes merged while two are adjacent along a direction with the
+    same extent in every other: passes over the directions until none merge (sorted: n log n a
+    pass, for the many pieces of large domains)"""
     boxes = [(list(lo), list(up)) for lo, up in boxes]
-    merged = True
-    while merged:
-        merged = False
-        boxes.sort()
-        for i in range(len(boxes)):
-            for j in range(i + 1, len(boxes)):
-                u = _union(boxes[i], boxes[j])
-                if u is not None:
-                    boxes[i] = u
-                    del boxes[j]
-                    merged = True
-                    break
-            if merged:
-                break
-    return boxes
+    if not boxes:
+        return boxes
+    ndim = len(boxes[0][0])
+    while True:
+        before = len(boxes)
+        for d in range(ndim):
+            others = [i for i in range(ndim) if i != d]
+            boxes.sort(
+                key=lambda b: (
+                    tuple(b[0][i] for i in others)
+                    + tuple(b[1][i] for i in others)
+                    + (b[0][d],)
+                )
+            )
+            merged = []
+            for lo, up in boxes:
+                if merged:
+                    mlo, mup = merged[-1]
+                    if (
+                        all(mlo[i] == lo[i] and mup[i] == up[i] for i in others)
+                        and mup[d] + 1 == lo[d]
+                    ):
+                        mup[d] = up[d]
+                        continue
+                merged.append((lo, up))
+            boxes = merged
+        if len(boxes) == before:
+            return boxes
 
 
 def _intersect(a, b):
@@ -263,42 +263,55 @@ class Chopper:
 
     def _columns(self, tag_boxes):
         """every level's (lower, upper, rank), ranks from level 0 blocks weighed by the work
-        over them"""
-        r = self.ratio
-        chop = getattr(plamn_etc, f"chop_{self.ndim}")
+        over them (per axis counts, no per cell map: large domains)"""
+        r, b = self.ratio, self.block
         partition = getattr(plamn_etc, f"partition_{self.ndim}")
-        domain = ([0] * self.ndim, [c - 1 for c in self.cells])
-        blocks = chop(*domain, [self.block] * self.ndim, 1, "chop")
+        grid = [-(-c // b) for c in self.cells]
 
-        work = np.zeros(self.cells)  # per level 0 cell: every level's work over it
+        work = np.zeros(grid)  # per block: every level's work over it
         for ln, boxes in tag_boxes.items():
-            scale = self._cell_weight(ln) * r**ln
-            for b in boxes:
-                lower, upper = _box(b)
+            f = r**ln
+            scale = self._cell_weight(ln) * f
+            for box in boxes:
+                lower, upper = _box(box)
                 counts = [
-                    np.bincount(np.arange(lo, up + 1) // r**ln, minlength=n)[:n]
-                    for lo, up, n in zip(lower, upper, self.cells)
+                    np.bincount(np.arange(lo, up + 1) // (f * b), minlength=n)[:n]
+                    for lo, up, n in zip(lower, upper, grid)
                 ]
-                per_cell = counts[0]
+                per_block = counts[0]
                 for c in counts[1:]:
-                    per_cell = np.multiply.outer(per_cell, c)
-                work += scale * per_cell
-        weights = [
-            float(np.sum(work[tuple(slice(l, u + 1) for l, u in zip(lo, up))]))
-            for lo, up in blocks
+                    per_block = np.multiply.outer(per_block, c)
+                work += scale * per_block
+
+        index = list(np.ndindex(*grid))
+        blocks = [
+            (
+                [k * b for k in idx],
+                [min((k + 1) * b, c) - 1 for k, c in zip(idx, self.cells)],
+            )
+            for idx in index
         ]
-        owners = partition(blocks, weights, self.node_of_rank)
+        ranks = partition(
+            blocks, [float(work[idx]) for idx in index], self.node_of_rank
+        )
+        owner = np.asarray(ranks).reshape(grid)
 
         levels = {}
         for ln in sorted(tag_boxes):
             f = r**ln
             pieces = []
-            for b in tag_boxes[ln]:
-                box = _box(b)
-                for (lo, up), owner in zip(blocks, owners):
-                    fine = ([x * f for x in lo], [(x + 1) * f - 1 for x in up])
-                    if (piece := _intersect(box, fine)) is not None:
-                        pieces.append((*piece, owner))
+            for box in tag_boxes[ln]:
+                lower, upper = _box(box)
+                first = [lo // (f * b) for lo in lower]
+                last = [up // (f * b) for up in upper]
+                for off in np.ndindex(*[hi - lo + 1 for lo, hi in zip(first, last)]):
+                    k = tuple(lo + o for lo, o in zip(first, off))
+                    block = (
+                        [x * b * f for x in k],
+                        [min((x + 1) * b, c) * f - 1 for x, c in zip(k, self.cells)],
+                    )
+                    if (piece := _intersect((lower, upper), block)) is not None:
+                        pieces.append((*piece, int(owner[k])))
             levels[ln] = self._chop_owned(ln, pieces)
         return levels
 
