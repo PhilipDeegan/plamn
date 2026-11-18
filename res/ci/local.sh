@@ -18,6 +18,9 @@ W=(-W 9 -a "-Wno-unused-parameter -Wno-unused-variable -Wno-error=strict-aliasin
 step "core tests"
 mkn build test -p test_plamn_core -dKO -t "$J" "${W[@]}" -x res/mkn/thrust
 
+step "slow tests compile (CI's slow.yml runs them)"
+mkn build -p test_plamn_core_slow -dKO -t "$J" "${W[@]}" -x res/mkn/mpi
+
 step "python modules (1D, 2D)"
 ./mkn.py --dim 1 2 -- "${W[@]}"
 
