@@ -13,7 +13,7 @@
 #include "damn/amr/topology.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/logger.hpp"
-#include "mkn/kul/array.hpp"
+#include "mkn/kul/std/array.hpp"
 
 #include "plamn/simulator/simulator.hpp" // IWYU pragma: keep (the class)
 #include "plamn/amr/level_pairs.hpp"

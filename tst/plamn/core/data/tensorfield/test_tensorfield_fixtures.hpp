@@ -6,7 +6,7 @@
 #include "plamn/plamn_core.hpp"
 #include "damn/core/def/damn_config.hpp"
 
-#include "mkn/kul/array.hpp"
+#include "mkn/kul/std/array.hpp"
 #include "mkn/kul/for.hpp"
 #include "mkn/kul/equality.hpp"
 #include "plamn/core/data/tensorfield/tensorfield.hpp"

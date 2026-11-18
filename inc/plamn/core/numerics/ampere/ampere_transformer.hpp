@@ -1,7 +1,7 @@
 #ifndef PLAMN_CORE_NUMERICS_AMPERE_AMPERE_TRANSFORMER_HPP
 #define PLAMN_CORE_NUMERICS_AMPERE_AMPERE_TRANSFORMER_HPP
 
-#include "mkn/kul/array.hpp"
+#include "mkn/kul/std/array.hpp"
 #include "mkn/kul/for.hpp"
 #include "damn/core/exec/kernels/region_chunks.hpp"
 #include "damn/core/def/damn_config.hpp"

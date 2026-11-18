@@ -14,7 +14,7 @@
 #include "damn/core/def/detail/mkn_gpu.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/logger.hpp"
-#include "mkn/kul/array.hpp"
+#include "mkn/kul/std/array.hpp"
 #include "mkn/kul/for.hpp"
 
 #include "plamn/core/def.hpp"

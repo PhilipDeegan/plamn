@@ -5,7 +5,7 @@
 #include "mkn/kul/for.hpp"
 #include "damn/core/def.hpp"
 #include "damn/core/def/damn_config.hpp"
-#include "mkn/kul/array.hpp"
+#include "mkn/kul/std/array.hpp"
 #include "damn/core/memory/span.hpp"
 
 #include "plamn/core/data/grid/coordinates.hpp"

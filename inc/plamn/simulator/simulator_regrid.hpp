@@ -17,7 +17,7 @@
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/logger.hpp"
-#include "mkn/kul/array.hpp"
+#include "mkn/kul/std/array.hpp"
 #include "damn/mpi/clustering.hpp"
 #include "damn/mpi/regrid.hpp"
 

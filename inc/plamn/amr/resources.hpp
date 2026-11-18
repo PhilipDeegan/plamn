@@ -14,7 +14,7 @@
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/memory/box_span.hpp"
 #include "damn/core/geometry/point.hpp"
-#include "mkn/kul/array.hpp"
+#include "mkn/kul/std/array.hpp"
 
 #include "plamn/core/data/particles/particle_components.hpp"
 #include "plamn/core/def.hpp"

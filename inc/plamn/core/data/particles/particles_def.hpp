@@ -1,7 +1,7 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTICLES_DEF_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLES_DEF_HPP
 
-#include "mkn/kul/array.hpp"
+#include "mkn/kul/std/array.hpp"
 #include "mkn/kul/for.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/def/damn_config.hpp"

@@ -3,7 +3,7 @@
 
 #include "plamn/core/def.hpp"
 #include "plamn/plamn_core.hpp"
-#include "mkn/kul/array.hpp"
+#include "mkn/kul/std/array.hpp"
 #include "mkn/kul/for.hpp"
 #include "mkn/kul/tuple.hpp"
 #include "mkn/kul/zip.hpp"

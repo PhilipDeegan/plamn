@@ -12,7 +12,7 @@
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/def/damn_config.hpp"
-#include "mkn/kul/array.hpp"
+#include "mkn/kul/std/array.hpp"
 
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/layout_defs.hpp"

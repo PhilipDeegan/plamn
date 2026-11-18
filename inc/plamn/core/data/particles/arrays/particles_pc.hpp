@@ -6,7 +6,7 @@
 #include "damn/core/def/detail/mkn_gpu.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/logger.hpp"
-#include "mkn/kul/array.hpp"
+#include "mkn/kul/std/array.hpp"
 #include "mkn/kul/math.hpp"
 #include "mkn/kul/float.hpp"
 #include "mkn/kul/int.hpp"

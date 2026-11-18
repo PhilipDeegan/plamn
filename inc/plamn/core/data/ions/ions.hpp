@@ -1,7 +1,7 @@
 #ifndef PLAMN_IONS_HPP
 #define PLAMN_IONS_HPP
 
-#include "mkn/kul/array.hpp"
+#include "mkn/kul/std/array.hpp"
 
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/field/field_algorithm.hpp"

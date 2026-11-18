@@ -2,7 +2,7 @@
 #define PLAMN_CORE_DATA_FIELD_FIELD_ALGORITHM_HPP
 
 #include "damn/core/memory/span.hpp"
-#include "mkn/kul/array.hpp"
+#include "mkn/kul/std/array.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "mkn/kul/constexprifier.hpp"
 #include "damn/core/data/ndarray/ndarray_vector.hpp"
