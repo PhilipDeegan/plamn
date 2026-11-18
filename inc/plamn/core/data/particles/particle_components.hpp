@@ -1,7 +1,7 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTICLE_COMPONENTS_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLE_COMPONENTS_HPP
 
-// components(particles): every particle component as a damn::core::StridedSpan over the array's
+// components(particles): every particle component as a mkn::kul::StridedSpan over the array's
 // own memory, whatever the layout:
 //
 //   AoS, AoSMapped        a member of Particle            stride sizeof(Particle)
@@ -15,7 +15,7 @@
 
 #include "damn/core/def.hpp"
 #include "damn/core/def/damn_config.hpp"
-#include "damn/core/memory/strided_span.hpp"
+#include "mkn/kul/strided_span.hpp"
 
 #include "plamn/core/data/particles/particles_def.hpp"
 
@@ -30,7 +30,7 @@ template<std::size_t dim, bool is_const>
 struct ParticleComponents
 {
     template<typename T>
-    using Span_t = damn::core::StridedSpan<std::conditional_t<is_const, T const, T>>;
+    using Span_t = mkn::kul::StridedSpan<std::conditional_t<is_const, T const, T>>;
 
     Span_t<double> weight;
     std::array<Span_t<int>, dim> iCell;
@@ -67,7 +67,7 @@ NO_DISCARD auto components(Particles& particles)
     auto constexpr dim      = P::dimension;
     auto constexpr is_const = std::is_const_v<Particles>;
     auto constexpr layout   = P::layout_mode;
-    using damn::core::strided_span;
+    using mkn::kul::strided_span;
 
     ParticleComponents<dim, is_const> c;
     auto const n = particles.size();

@@ -5,12 +5,10 @@
 #include "damn/core/data/ndarray/ndarray_view.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/logger.hpp"
-#include "damn/core/math/array.hpp"
-#include "damn/core/math/numeric.hpp"
-#include "damn/core/meta/type_meta.hpp"
+#include "mkn/kul/std/array.hpp"
+#include "mkn/kul/meta.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/box_spans.hpp"
-
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/data/grid/grid.hpp"
 #include "plamn/core/data/field/field.hpp"
@@ -36,7 +34,7 @@
 namespace plamn::core
 {
 template<typename D>
-struct FieldBorderSumOp : public damn::core::PlusEquals<D>
+struct FieldBorderSumOp : public mkn::kul::PlusEquals<D>
 {
 };
 
@@ -63,7 +61,7 @@ template<typename Op>
 bool constexpr is_border_op()
 {
     using value_type = Op::value_type;
-    return damn::core::is_any_of<Op, FieldBorderSumOp<value_type>, FieldBorderMaxOp<value_type>>();
+    return mkn::kul::is_any_of<Op, FieldBorderSumOp<value_type>, FieldBorderMaxOp<value_type>>();
 }
 
 template<typename Op>
@@ -91,7 +89,7 @@ template<typename Field_t>
 class FieldBox
 {
     using value_type = std::decay_t<typename Field_t::type>;
-    using SetEqualOp = damn::core::SetEqual<value_type>;
+    using SetEqualOp = mkn::kul::SetEqual<value_type>;
 
 public:
     auto constexpr static dimension = Field_t::dimension;
@@ -141,7 +139,7 @@ public:
     Field_t& field;
     damn::core::Box<int, dimension> amr_box;
     damn::core::Box<std::uint32_t, dimension> lcl_box;
-    damn::core::Point<int, dimension> offset_ = damn::core::ConstArray<int, dimension>();
+    damn::core::Point<int, dimension> offset_ = mkn::kul::ConstArray<int, dimension>();
 };
 
 template<typename Field_t>
@@ -215,7 +213,7 @@ void operate_on_fields(FieldBox<GridTileSet<Layout_t, Args...>>& dst,
 {
     DAMN_LOG_SCOPE(3, "operate_on_fields_border_sum<GridTileSet,GridTileSet>");
 
-    static_assert(damn::core::dependent_false_v<Operator>);
+    static_assert(mkn::kul::dependent_false_v<Operator>);
 
     auto const pq = dst.field.physicalQuantity();
     assert(src.field.physicalQuantity() == pq);
@@ -548,7 +546,7 @@ void append_from_fields(FieldBox<FieldTileSet<Args...> const> const& src, auto& 
     auto view = damn::core::make_array_view(vec.data() + base, *amr_selection_box.shape().as_unsigned());
 
     using value_type = std::decay_t<decltype(view(amr_selection_box.lower.as_unsigned()))>;
-    if constexpr (std::is_base_of_v<damn::core::PlusEquals<value_type>, Operator>)
+    if constexpr (std::is_base_of_v<mkn::kul::PlusEquals<value_type>, Operator>)
     {
         // sum: accumulate from all overlapping tile ghost boxes (resize already zero-inits)
         for (auto const& tile : src.field())
@@ -586,8 +584,8 @@ void append_from_fields(FieldBox<Args...> const& src, auto& vec)
     vec.resize(seek + src.lcl_box.size());
 
     damn::core::for_each_span(src.lcl_box, [&](auto const& start, auto const size) {
-        operate_on_span<damn::core::SetEqual<value_type>>(vec.data() + seek,
-                                              detail::span_data(src.field, start), size);
+        operate_on_span<mkn::kul::SetEqual<value_type>>(vec.data() + seek,
+                                                        detail::span_data(src.field, start), size);
         seek += size;
     });
 }
@@ -664,7 +662,7 @@ void copy_fields(FieldTileSet<T0s...>& dst, basic::Field<opts> const& src,
 template<typename... T0s, auto opts>
 void copy_fields(basic::Field<opts>& dst, FieldTileSet<T0s...> const& src)
 {
-    reduce_single_<damn::core::SetEqual<typename basic::Field<opts>::value_type>>(src, dst);
+    reduce_single_<mkn::kul::SetEqual<typename basic::Field<opts>::value_type>>(src, dst);
 }
 
 template<auto opts0, auto opts1>
@@ -713,7 +711,7 @@ auto& reduce_single_(Grid_t const& grid, GridTiles_t& tiles)
     auto const expander     = BoxExpander{ghost_box, patch_box};
     tiles.zero();
 
-    assert(damn::core::array_equals(tiles.shape(), grid.shape()));
+    assert(mkn::kul::array_equals(tiles.shape(), grid.shape()));
 
     for (auto& tile : tiles())
     {
@@ -749,7 +747,7 @@ void gather_owned(Tiles const& tiles, auto const& box, auto& dst, auto const& or
     auto const expander = tile_owner_expander(tiles);
     for (auto const& tile : tiles())
         if (auto const overlap = box * expander(*tile))
-            operate_on_spans<damn::core::SetEqual<typename Tiles::type>>(
+            operate_on_spans<mkn::kul::SetEqual<typename Tiles::type>>(
                 dst, damn::core::as_unsigned(shift(*overlap, origin * -1)), tile(),
                 damn::core::as_unsigned(
                     shift(*overlap, qty_ghost_box(tile.layout(), pq).lower * -1)));
@@ -766,7 +764,7 @@ void scatter_to_tiles(auto const& src, auto const& origin, auto const& box, Tile
     {
         auto const tile_gb = qty_ghost_box(tile.layout(), pq);
         if (auto const overlap = box * tile_gb)
-            operate_on_spans<damn::core::SetEqual<typename Tiles::type>>(
+            operate_on_spans<mkn::kul::SetEqual<typename Tiles::type>>(
                 tile(), damn::core::as_unsigned(shift(*overlap, tile_gb.lower * -1)), src,
                 damn::core::as_unsigned(shift(*overlap, origin * -1)));
     }
@@ -789,7 +787,7 @@ void sync_owned(Tiles& tiles, auto const& box)
         for (auto const& src_tile : tiles())
             if (&src_tile != &dst_tile)
                 if (auto const overlap = *dst_box * expander(*src_tile))
-                    operate_on_spans<damn::core::SetEqual<typename Tiles::type>>(
+                    operate_on_spans<mkn::kul::SetEqual<typename Tiles::type>>(
                         dst_tile(), damn::core::as_unsigned(shift(*overlap, dst_gb.lower * -1)),
                         src_tile(),
                         damn::core::as_unsigned(
@@ -801,9 +799,9 @@ template<typename Dst, typename Src>
 auto& reduce_single(Dst& dst, Src const& src)
 {
     if constexpr (is_field_tile_set_v<Src>)
-        reduce_single_<damn::core::SetEqual<typename Dst::value_type>>(src, dst);
+        reduce_single_<mkn::kul::SetEqual<typename Dst::value_type>>(src, dst);
     else if constexpr (is_field_tile_set_v<Dst>)
-        reduce_single_<damn::core::SetEqual<typename Dst::value_type>>(src, dst);
+        reduce_single_<mkn::kul::SetEqual<typename Dst::value_type>>(src, dst);
     else
     {
         static_assert(is_field_v<Src> and is_field_v<Dst>);
@@ -881,7 +879,7 @@ template<typename Dst, typename Src>
 auto& reduce_into(Dst& dst, Src const& src)
 {
     if constexpr (is_field_tile_set_v<Src>)
-        reduce_into_<damn::core::PlusEquals<typename Dst::value_type>>(src, dst);
+        reduce_into_<mkn::kul::PlusEquals<typename Dst::value_type>>(src, dst);
     else
     {
         static_assert(is_field_v<Dst> and is_field_v<Src>);
@@ -970,7 +968,7 @@ void FieldTileOverlaps<GL, opts>::sync_inner_ghosts(auto& field, auto const& ove
 
     for (std::size_t i = 0; i < field().size(); ++i)
         for (auto const& overlap : overlaps_per_tile[i].overlaps)
-            operate_on_fields<damn::core::SetEqual<value_type>>(
+            operate_on_fields<mkn::kul::SetEqual<value_type>>(
                 FieldBox{field()[i], field()[i].layout(), overlap.lcl_dst},
                 FieldBox{*overlap.src, field()[i].layout(), overlap.lcl_src});
 }

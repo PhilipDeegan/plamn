@@ -6,12 +6,11 @@
 //   local index space: ghost inclusive, starts at 0 on the first ghost node
 //   gw: field ghost width, the same for primal and dual
 
-#include "damn/core/math/numeric.hpp"
+#include "mkn/kul/math.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/def/damn_config.hpp"
-#include "damn/core/math/array.hpp"
-
+#include "mkn/kul/std/array.hpp"
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/layout_defs.hpp"
 #include "plamn/core/models/quantities/quantity.hpp"
@@ -32,13 +31,13 @@ NO_DISCARD constexpr QtyCentering flip(QtyCentering const c) DAMN_ALL
 template<std::size_t dim>
 NO_DISCARD constexpr auto primal_centering() DAMN_ALL
 {
-    return damn::core::ConstArray<QtyCentering, dim>(QtyCentering::primal);
+    return mkn::kul::ConstArray<QtyCentering, dim>(QtyCentering::primal);
 }
 
 template<std::size_t dim>
 NO_DISCARD constexpr auto dual_centering() DAMN_ALL
 {
-    return damn::core::ConstArray<QtyCentering, dim>(QtyCentering::dual);
+    return mkn::kul::ConstArray<QtyCentering, dim>(QtyCentering::dual);
 }
 
 NO_DISCARD constexpr std::uint32_t dual_offset(QtyCentering const c) DAMN_ALL
@@ -146,7 +145,7 @@ NO_DISCARD constexpr auto qty_ghost_box(damn::core::Box<int, dim> const& cells,
                                         std::uint32_t const gw)
 {
     return damn::core::grow(qty_box(cells, centering),
-                            damn::core::ConstArray<std::uint32_t, dim>(gw));
+                            mkn::kul::ConstArray<std::uint32_t, dim>(gw));
 }
 
 
@@ -210,13 +209,13 @@ template<std::size_t dim>
 NO_DISCARD constexpr auto cell_center(std::array<double, dim> const& dx,
                                       damn::core::Point<int, dim> const& amr) DAMN_ALL
 {
-    return coordinate(dx, amr, damn::core::ConstArray<QtyCentering, dim>(QtyCentering::dual));
+    return coordinate(dx, amr, mkn::kul::ConstArray<QtyCentering, dim>(QtyCentering::dual));
 }
 
 template<std::size_t dim>
 NO_DISCARD constexpr double cell_volume(std::array<double, dim> const& dx) DAMN_ALL
 {
-    return damn::core::product(dx, 1.0);
+    return mkn::kul::math::product(dx, 1.0);
 }
 
 

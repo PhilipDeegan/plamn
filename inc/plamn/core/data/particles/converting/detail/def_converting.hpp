@@ -2,7 +2,7 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_CONVERTING_DETAIL_DEF_CONVERTING
 #define PLAMN_CORE_DATA_PARTICLES_CONVERTING_DETAIL_DEF_CONVERTING
 
-#include "damn/core/meta/type_meta.hpp"
+#include "mkn/kul/meta.hpp"
 
 #include <cstdint>
 
@@ -19,8 +19,8 @@ enum class LayoutMode : std::uint16_t;
 template<auto src_layout_mde, auto src_alloc_mde, auto dst_layout_mde, auto dst_alloc_mde>
 struct ParticlesConverter
 {
-    static_assert(damn::core::all_are<LayoutMode>(src_layout_mde, dst_layout_mde));
-    static_assert(damn::core::all_are<damn::AllocatorMode>(src_alloc_mde, dst_alloc_mde));
+    static_assert(mkn::kul::all_are<LayoutMode>(src_layout_mde, dst_layout_mde));
+    static_assert(mkn::kul::all_are<damn::AllocatorMode>(src_alloc_mde, dst_alloc_mde));
 
     auto constexpr static src_layout_mode = src_layout_mde;
     auto constexpr static src_alloc_mode  = src_alloc_mde;

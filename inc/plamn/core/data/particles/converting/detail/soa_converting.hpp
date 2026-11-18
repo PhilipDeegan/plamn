@@ -3,7 +3,7 @@
 #define PLAMN_CORE_DATA_PARTICLES_CONVERTING_DETAIL_SOA_CONVERTING
 
 #include "damn/core/def/damn_config.hpp"
-#include "damn/core/meta/for_N.hpp"
+#include "mkn/kul/for.hpp"
 #include "damn/core/memory/memory.hpp"
 
 #include "plamn/core/data/particles/converting/particles_converting.hpp"
@@ -60,7 +60,7 @@ Dst ParticlesConverter<SoATS, CPU, AoS, CPU>::operator()( //
         auto const& [tmp, particles, i, S] = std::forward_as_tuple(args...);
         auto tmp_tuple                     = tmp.as_tuple();
         auto src_tuple                     = particles.as_tuple();
-        damn::core::for_N<std::tuple_size_v<decltype(tmp_tuple)>>([&](auto vi) {
+        mkn::kul::for_N<std::tuple_size_v<decltype(tmp_tuple)>>([&](auto vi) {
             auto& a = std::get<vi>(tmp_tuple);
             auto& b = std::get<vi>(src_tuple);
             damn::core::mem::copy<CPU>(a.data(), b.data() + N * i, S);
@@ -103,7 +103,7 @@ Dst ParticlesConverter<SoATS, GPU_UNIFIED, AoS, CPU>::operator()( //
         auto const& [tmp, particles, i, S] = std::forward_as_tuple(args...);
         auto tmp_tuple                     = tmp.as_tuple();
         auto src_tuple                     = particles.as_tuple();
-        damn::core::for_N<std::tuple_size_v<decltype(tmp_tuple)>>([&](auto vi) {
+        mkn::kul::for_N<std::tuple_size_v<decltype(tmp_tuple)>>([&](auto vi) {
             auto& a = std::get<vi>(tmp_tuple);
             auto& b = std::get<vi>(src_tuple);
             damn::core::mem::copy<GPU_UNIFIED>(a.data(), b.data() + N * i, S);

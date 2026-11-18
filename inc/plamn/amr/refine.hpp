@@ -25,7 +25,6 @@
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/geometry/box_spans.hpp"
-
 #include "plamn/amr/resources.hpp"
 #include "plamn/amr/split/splitter.hpp"
 #include "plamn/core/data/particles/particle.hpp"
@@ -38,7 +37,6 @@
 #include <stdexcept>
 #include <utility>
 #include <vector>
-#include <iterator>
 
 namespace damn::amr
 {

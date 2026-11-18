@@ -1,8 +1,8 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTICLES_DETAIL_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLES_DETAIL_HPP
 
-#include "damn/core/sys/strings.hpp"
-#include "damn/core/meta/logic.hpp"
+#include "mkn/kul/string.hpp"
+#include "mkn/kul/for.hpp"
 
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/arrays/particles_pc.hpp"
@@ -125,10 +125,11 @@ struct ParticlesResolver<opts, o>::strings
     std::string_view static constexpr layout_mode  = magic_enum::enum_name(opts.layout_mode);
     std::string_view static constexpr storage_mode = magic_enum::enum_name(opts.storage_mode);
     std::string_view static constexpr cma          = ",";
-    std::string_view static constexpr _dim         = damn::core::to_string_view_v<std::size_t, opts.dim>;
+    std::string_view static constexpr _dim = mkn::kul::to_string_view_v<std::size_t, opts.dim>;
 
     auto static constexpr type_id
-        = damn::core::join_string_views_v<_dim, cma, layout_mode, cma, alloc_mode, cma, storage_mode, cma>;
+        = mkn::kul::join_string_views_v<_dim, cma, layout_mode, cma, alloc_mode, cma, storage_mode,
+                                        cma>;
 };
 
 
@@ -145,7 +146,7 @@ void per_particle(Particles_t& particles, auto const& fn)
     if constexpr (is_tiled(Particles_t::layout_mode))
         for (auto& tile : particles())
             per_particle(tile(), fn);
-    else if constexpr (damn::core::any_in(Particles_t::layout_mode, AoSPC, SoAPC))
+    else if constexpr (mkn::kul::any_in(Particles_t::layout_mode, AoSPC, SoAPC))
         for (auto& cell : particles())
             per_particle(cell, fn);
     else

@@ -1,14 +1,13 @@
 #include "plamn/core/def.hpp"
 
 
-#include "damn/core/meta/enum_meta.hpp"
+#include "mkn/kul/constexprifier.hpp"
 #include "plamn/plamn_core.hpp"
 #include "plamn/simulator/simulator_def.hpp"
 
 #include "plamn/core/numerics/ohm/ohm_transformer.hpp"
 #include "plamn/core/data/grid/layout_defs.hpp"
 
-#include "plamn/simulator/simulator_def.hpp"
 
 
 #include "gmock/gmock.h"
@@ -316,7 +315,7 @@ TYPED_TEST(OhmTest, ThatOhmInfoCanBeBuiltFromDict)
 
 
 // asEnumConstant enumerates [0, Enum::count), which is what replaced the EnumTraits value table
-static_assert(std::is_same_v<damn::core::EnumConstantVariant_t<HyperMode>,
+static_assert(std::is_same_v<mkn::kul::EnumConstantVariant_t<HyperMode>,
                              std::variant<std::integral_constant<HyperMode, HyperMode::constant>,
                                           std::integral_constant<HyperMode, HyperMode::spatial>>>);
 
@@ -324,9 +323,9 @@ TYPED_TEST(OhmTest, ThatAsEnumConstantLiftsEveryHyperMode)
 {
     for (auto const mode : {HyperMode::constant, HyperMode::spatial})
         std::visit([&](auto const tag) { EXPECT_EQ(mode, decltype(tag)::value); },
-                   damn::core::asEnumConstant(mode));
+                   mkn::kul::asEnumConstant(mode));
 
-    EXPECT_THROW(damn::core::asEnumConstant(HyperMode::count), std::runtime_error);
+    EXPECT_THROW(mkn::kul::asEnumConstant(HyperMode::count), std::runtime_error);
 }
 
 

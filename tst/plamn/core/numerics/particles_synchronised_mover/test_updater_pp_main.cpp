@@ -15,9 +15,9 @@
 // #define DAMN_LOG_SCOPE_PRINT 1
 
 
-#include "damn/core/meta/logic.hpp"
-#include "damn/core/sys/strings.hpp"
-#include "damn/core/sys/env.hpp"
+#include "mkn/kul/for.hpp"
+#include "mkn/kul/string.hpp"
+#include "mkn/kul/env.hpp"
 #include "plamn/core/numerics/particles_synchronised_mover/particles_synchronised_mover.hpp"
 #include "plamn/core/numerics/particles_synchronised_mover/particles_synchronised_mover_pc.hpp"
 #include "plamn/core/numerics/particles_synchronised_mover/particles_synchronised_mover_per_particle.hpp"
@@ -46,14 +46,14 @@ void PrintTo(Particles<opts> const& arr, std::ostream* os)
 bool constexpr static WITH_PATCH_GHOST  = false;
 bool constexpr static USE_SERIALIZATION = 0;
 
-auto static const bytes  = damn::core::get_env_as("PLAMN_GPU_BYTES", std::uint64_t{500000000});
-auto static const cells  = damn::core::get_env_as("PLAMN_CELLS", std::uint32_t{4});
-auto static const ppc    = damn::core::get_env_as("PLAMN_PPC", std::size_t{4});
-auto static const seed   = damn::core::get_env_as("PLAMN_SEED", std::size_t{1012});
-auto static const dt     = damn::core::get_env_as("PLAMN_TIMESTEP", double{.001});
-auto static const shufle = damn::core::get_env_as("PLAMN_UNSORTED", std::size_t{0});
-auto static const do_cmp = damn::core::get_env_as("PLAMN_COMPARE", std::size_t{!USE_SERIALIZATION});
-auto static const gen_bin = damn::core::get_env_as("PLAMN_GENERATE_PARTICLES_BIN", std::size_t{0});
+auto static const bytes   = mkn::kul::env::get_as("PLAMN_GPU_BYTES", std::uint64_t{500000000});
+auto static const cells   = mkn::kul::env::get_as("PLAMN_CELLS", std::uint32_t{4});
+auto static const ppc     = mkn::kul::env::get_as("PLAMN_PPC", std::size_t{4});
+auto static const seed    = mkn::kul::env::get_as("PLAMN_SEED", std::size_t{1012});
+auto static const dt      = mkn::kul::env::get_as("PLAMN_TIMESTEP", double{.001});
+auto static const shufle  = mkn::kul::env::get_as("PLAMN_UNSORTED", std::size_t{0});
+auto static const do_cmp  = mkn::kul::env::get_as("PLAMN_COMPARE", std::size_t{!USE_SERIALIZATION});
+auto static const gen_bin = mkn::kul::env::get_as("PLAMN_GENERATE_PARTICLES_BIN", std::size_t{0});
 
 std::string static const aos_particles_bin = "aos_particles.bin";
 
@@ -67,7 +67,7 @@ bool static const premain = []() {
 
         using namespace plamn; //
         using namespace std::literals;
-        if (auto e = damn::core::get_env("PLAMN_SCOPE_TIMING", "false"); e == "1" || e == "true")
+        if (auto e = mkn::kul::env::get("PLAMN_SCOPE_TIMING", "false"); e == "1" || e == "true")
             phlop::threaded::ScopeTimerMan::INSTANCE()
                 .file_name(".damn_times.0.txt")
                 // .force_strings()
@@ -89,7 +89,7 @@ template<typename Ions, typename EM, typename Layout_t>
 auto get_updater_for(Ions& ions, EM const& em, Layout_t const& layout)
 {
     using Particles = typename Ions::particles_type;
-    if constexpr (damn::core::any_in(Particles::layout_mode, LayoutMode::AoSMapped))
+    if constexpr (mkn::kul::any_in(Particles::layout_mode, LayoutMode::AoSMapped))
         return construct_<ParticlesSynchronisedMover<Ions, EM, Layout_t>>(ions, em, layout);
     else if constexpr (Particles::layout_mode == LayoutMode::AoSPC)
         return construct_<ParticlesSynchronisedMoverPC<Ions, EM, Layout_t>>(ions, em, layout);
@@ -124,8 +124,8 @@ void update(Ions& ions, auto const& em, auto const& layout)
 {
     using Particles = typename Ions::particles_type;
     auto constexpr function_id
-        = damn::core::join_string_views_v<detail::strings::update, Particles::type_id,
-                                          detail::strings::cma>;
+        = mkn::kul::join_string_views_v<detail::strings::update, Particles::type_id,
+                                        detail::strings::cma>;
     DAMN_LOG_LINE_STR(function_id);
     DAMN_LOG_SCOPE(1, function_id);
 

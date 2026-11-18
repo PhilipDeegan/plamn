@@ -1,7 +1,7 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_EXPORTING_DETAIL_DEF_EXPORTING
 #define PLAMN_CORE_DATA_PARTICLES_EXPORTING_DETAIL_DEF_EXPORTING
 
-#include "damn/core/meta/type_meta.hpp"
+#include "mkn/kul/meta.hpp"
 
 #include <cstdint>
 #include <cstddef>
@@ -23,8 +23,8 @@ enum class LayoutMode : std::uint16_t;
 template<auto layout_mde, auto alloc_mde>
 struct ParticlesExporter
 {
-    static_assert(damn::core::all_are<LayoutMode>(layout_mde));
-    static_assert(damn::core::all_are<damn::AllocatorMode>(alloc_mde));
+    static_assert(mkn::kul::all_are<LayoutMode>(layout_mde));
+    static_assert(mkn::kul::all_are<damn::AllocatorMode>(alloc_mde));
 
     auto constexpr static layout_mode = layout_mde;
     auto constexpr static alloc_mode  = alloc_mde;

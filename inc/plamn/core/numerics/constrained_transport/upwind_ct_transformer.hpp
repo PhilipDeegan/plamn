@@ -3,7 +3,7 @@
 
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/exec/kernels.hpp" // IWYU pragma: keep (gpu::Vec_t, gpu::TileLauncher: GPU builds)
-#include "damn/core/meta/for_N.hpp"
+#include "mkn/kul/for.hpp"
 #include "plamn/core/data/grid/detail/detail.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
@@ -55,7 +55,7 @@ public:
         if constexpr (not is_field_tile_set_v<Field>)
         {
             auto constexpr static dim = std::decay_t<decltype(layout)>::dimension;
-            damn::core::for_N<3>([&](auto c) {
+            mkn::kul::for_N<3>([&](auto c) {
                 if constexpr (CT::template has_equation<c, dim>)
                     // captureless kernel: the fields travel as arguments, device-copyable
                     eval_on_box(
@@ -115,7 +115,7 @@ private:
             auto const& layout = E[0][ti].layout();
             auto Et            = tile_at(E, ti);
             auto const boxes
-                = damn::core::for_N_make_array<3>([&](auto c) { return box_for(layout, Et[c]); });
+                = mkn::kul::for_N_make_array<3>([&](auto c) { return box_for(layout, Et[c]); });
             auto const s = [&](auto const& f) { return tile_at(f, ti); };
             using Item_t = UpwindCTTile<std::decay_t<decltype(s(aLx))>, decltype(Et),
                                         typename decltype(boxes)::value_type>;
@@ -134,7 +134,7 @@ private:
 
         Launcher{n_tiles}([=] DAMN_ALL() mutable {
             auto& it = ip[Launcher::tile_idx()];
-            damn::core::for_N<3>([&](auto c) {
+            mkn::kul::for_N<3>([&](auto c) {
                 if constexpr (CT::template has_equation<c, dim>)
                     Launcher::for_each_point(it.boxes[c], [&](auto const& ijk) {
                         it.E[c](ijk) = CT::template E<c, dim>(

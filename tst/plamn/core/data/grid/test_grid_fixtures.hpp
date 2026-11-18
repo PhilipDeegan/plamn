@@ -4,7 +4,7 @@
 #include "plamn/core/def.hpp"
 
 #include "plamn/core/data/grid/grid.hpp"
-#include "damn/core/math/equality.hpp"
+#include "mkn/kul/equality.hpp"
 #include "plamn/core/data/grid/grid_tiles.hpp"
 #include "plamn/core/data/field/field_box.hpp"
 
@@ -15,11 +15,11 @@ namespace plamn::core
 
 
 template<typename... T0s, typename... T1s>
-damn::core::EqualityReport compare_reduced_fields(GridTileSet<T0s...> const& ref, Grid<T1s...> const& cmp,
-                                      double const diff = 1e-15)
+mkn::kul::EqualityReport compare_reduced_fields(GridTileSet<T0s...> const& ref,
+                                                Grid<T1s...> const& cmp, double const diff = 1e-15)
 {
     if (!ref.size() != cmp.size())
-        return damn::core::EqualityReport{false, "Grid/GridTileset shape/size mismatch"};
+        return mkn::kul::EqualityReport{false, "Grid/GridTileset shape/size mismatch"};
     auto tmp = cmp;
     tmp.zero();
     reduce_into(tmp, ref);
@@ -28,11 +28,12 @@ damn::core::EqualityReport compare_reduced_fields(GridTileSet<T0s...> const& ref
 
 
 template<typename... T0s, typename... T1s>
-damn::core::EqualityReport compare_reduced_fields(Grid<T0s...> const& ref, GridTileSet<T1s...> const& cmp,
-                                      double const diff = 1e-15)
+mkn::kul::EqualityReport compare_reduced_fields(Grid<T0s...> const& ref,
+                                                GridTileSet<T1s...> const& cmp,
+                                                double const diff = 1e-15)
 {
     if (ref.size() != cmp.size())
-        return damn::core::EqualityReport{false, "Grid/GridTileset shape/size mismatch"};
+        return mkn::kul::EqualityReport{false, "Grid/GridTileset shape/size mismatch"};
     auto tmp = ref;
     tmp.zero();
     reduce_into(tmp, cmp);
@@ -41,11 +42,11 @@ damn::core::EqualityReport compare_reduced_fields(Grid<T0s...> const& ref, GridT
 
 
 template<typename... T0s, typename... T1s>
-damn::core::EqualityReport compare_fields(GridTileSet<T0s...> const& ref, Grid<T1s...> const& cmp,
-                              double const diff = 1e-15)
+mkn::kul::EqualityReport compare_fields(GridTileSet<T0s...> const& ref, Grid<T1s...> const& cmp,
+                                        double const diff = 1e-15)
 {
     if (ref.size() != cmp.size())
-        return damn::core::EqualityReport{false, "Grid/GridTileset shape/size mismatch"};
+        return mkn::kul::EqualityReport{false, "Grid/GridTileset shape/size mismatch"};
     auto tmp = cmp;
     tmp.zero();
     reduce_single(tmp, ref);
@@ -54,11 +55,11 @@ damn::core::EqualityReport compare_fields(GridTileSet<T0s...> const& ref, Grid<T
 
 
 template<typename... T0s, typename... T1s>
-damn::core::EqualityReport compare_fields(Grid<T0s...> const& ref, GridTileSet<T1s...> const& cmp,
-                              double const diff = 1e-15)
+mkn::kul::EqualityReport compare_fields(Grid<T0s...> const& ref, GridTileSet<T1s...> const& cmp,
+                                        double const diff = 1e-15)
 {
     if (ref.size() != cmp.size())
-        return damn::core::EqualityReport{false, "Grid/GridTileset shape/size mismatch"};
+        return mkn::kul::EqualityReport{false, "Grid/GridTileset shape/size mismatch"};
     auto tmp = ref;
     tmp.zero();
     reduce_single(tmp, cmp);
@@ -67,11 +68,11 @@ damn::core::EqualityReport compare_fields(Grid<T0s...> const& ref, GridTileSet<T
 
 
 template<typename... T0s, typename... T1s>
-damn::core::EqualityReport compare_reduced_fields(Grid<T0s...> const& ref, Grid<T1s...> const& cmp,
-                                      double const diff = 1e-15)
+mkn::kul::EqualityReport compare_reduced_fields(Grid<T0s...> const& ref, Grid<T1s...> const& cmp,
+                                                double const diff = 1e-15)
 {
     if (ref.size() != cmp.size())
-        return damn::core::EqualityReport{false, "Grid shape/size mismatch"};
+        return mkn::kul::EqualityReport{false, "Grid shape/size mismatch"};
     return compare_fields(*ref, *cmp, diff);
 }
 

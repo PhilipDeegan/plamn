@@ -4,11 +4,9 @@
 #include "plamn/simulator/simulator_def.hpp"
 
 #include "damn/core/geometry/point.hpp"
-#include "damn/core/geometry/point.hpp"
 #include "plamn/core/data/grid/layout_defs.hpp"
 #include "plamn/core/numerics/faraday/faraday_transformer.hpp"
 
-#include "plamn/simulator/simulator_def.hpp"
 
 #include "tst/plamn/core/data/field/test_field.hpp"
 #include "tst/plamn/core/data/vecfield/test_vecfield_fixtures.hpp"

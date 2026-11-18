@@ -1,7 +1,7 @@
 #ifndef PLAMN_CORE_NUMERICS_TIME_INTEGRATOR_MHD_TIME_INTEGRATOR_HPP
 #define PLAMN_CORE_NUMERICS_TIME_INTEGRATOR_MHD_TIME_INTEGRATOR_HPP
 
-#include "damn/core/meta/for_N.hpp"
+#include "mkn/kul/for.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
 #include "plamn/core/numerics/constrained_transport/upwind_ct_transformer.hpp"
@@ -113,7 +113,7 @@ public:
             GodunovTransformer<Reconstruction> const godunov{gamma_};
 
             pc.to_primitive(p.layout, u.rho, u.rhoV, u.B, u.Etot, u.V, u.P);
-            damn::core::for_N<dim>([&](auto d) {
+            mkn::kul::for_N<dim>([&](auto d) {
                 auto& f = p.fluxes[d];
                 auto& c = p.ct[d];
                 godunov.template operator()<d>(p.layout, u.rho, u.V, u.B, u.P, f.F_rho, f.F_rhoV,

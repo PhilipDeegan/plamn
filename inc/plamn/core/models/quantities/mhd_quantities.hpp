@@ -1,7 +1,8 @@
 #ifndef PLAMN_CORE_MHD_MHD_QUANTITIES_HPP
 #define PLAMN_CORE_MHD_MHD_QUANTITIES_HPP
 
-#include "damn/core/def/enum_table.hpp"
+#include "mkn/kul/enum.hpp"
+#include "mkn/kul/throw.hpp"
 #include "damn/core/def/damn_config.hpp"
 
 #include "plamn/core/def.hpp"
@@ -76,18 +77,19 @@ public:
     };
     enum class Tensor : std::uint16_t { count = 0 };
 
-    static constexpr auto vector_components = damn::core::make_enum_table<Vector, std::array<Scalar, 3>>({
-        {Vector::V, {Scalar::Vx, Scalar::Vy, Scalar::Vz}},
-        {Vector::B, {Scalar::Bx, Scalar::By, Scalar::Bz}},
-        {Vector::rhoV, {Scalar::rhoVx, Scalar::rhoVy, Scalar::rhoVz}},
-        {Vector::E, {Scalar::Ex, Scalar::Ey, Scalar::Ez}},
-        {Vector::J, {Scalar::Jx, Scalar::Jy, Scalar::Jz}},
-        {Vector::VecFlux_x, {Scalar::VecFluxX_x, Scalar::VecFluxY_x, Scalar::VecFluxZ_x}},
-        {Vector::VecFlux_y, {Scalar::VecFluxX_y, Scalar::VecFluxY_y, Scalar::VecFluxZ_y}},
-        {Vector::VecFlux_z, {Scalar::VecFluxX_z, Scalar::VecFluxY_z, Scalar::VecFluxZ_z}},
-        {Vector::VecAllPrimal,
-         {Scalar::VecAllPrimalX, Scalar::VecAllPrimalY, Scalar::VecAllPrimalZ}},
-    });
+    static constexpr auto vector_components
+        = mkn::kul::make_enum_table<Vector, std::array<Scalar, 3>>({
+            {Vector::V, {Scalar::Vx, Scalar::Vy, Scalar::Vz}},
+            {Vector::B, {Scalar::Bx, Scalar::By, Scalar::Bz}},
+            {Vector::rhoV, {Scalar::rhoVx, Scalar::rhoVy, Scalar::rhoVz}},
+            {Vector::E, {Scalar::Ex, Scalar::Ey, Scalar::Ez}},
+            {Vector::J, {Scalar::Jx, Scalar::Jy, Scalar::Jz}},
+            {Vector::VecFlux_x, {Scalar::VecFluxX_x, Scalar::VecFluxY_x, Scalar::VecFluxZ_x}},
+            {Vector::VecFlux_y, {Scalar::VecFluxX_y, Scalar::VecFluxY_y, Scalar::VecFluxZ_y}},
+            {Vector::VecFlux_z, {Scalar::VecFluxX_z, Scalar::VecFluxY_z, Scalar::VecFluxZ_z}},
+            {Vector::VecAllPrimal,
+             {Scalar::VecAllPrimalX, Scalar::VecAllPrimalY, Scalar::VecAllPrimalZ}},
+        });
 
     static constexpr auto all_primal_field = Scalar::ScalarAllPrimal;
 
@@ -141,7 +143,7 @@ namespace mhd
 
     // finite volume: conserved/primitive variables cell centred, B on faces, E and J on
     // edges, fluxes on the face normal to their direction
-    auto constexpr static quantities = damn::core::make_enum_table<S, Quantity>({
+    auto constexpr static quantities = mkn::kul::make_enum_table<S, Quantity>({
         {S::rho, {Phys::Rho, Comp::scalar, ddd}},
         {S::Vx, {Phys::V, Comp::x, ddd}},
         {S::Vy, {Phys::V, Comp::y, ddd}},
@@ -183,7 +185,7 @@ NO_DISCARD constexpr Quantity quantity(MHDQuantity::Scalar const qty) DAMN_ALL
 {
     auto const idx = static_cast<std::size_t>(qty);
     if (idx >= mhd::quantities.size())
-        damn::throw_runtime_error("Wrong mhdQuantity");
+        mkn::kul::throw_runtime_error("Wrong mhdQuantity");
     return mhd::quantities[idx < mhd::quantities.size() ? idx : 0];
 }
 

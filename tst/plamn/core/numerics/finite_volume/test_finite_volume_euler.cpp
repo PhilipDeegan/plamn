@@ -4,7 +4,7 @@
 //  hybrid's FaradayTransformer, on the MHD layout, tiled == untiled
 
 #include "damn/core/def/damn_config.hpp"
-#include "damn/core/sys/env.hpp"
+#include "mkn/kul/env.hpp"
 
 #include "plamn/core/numerics/faraday/faraday_transformer.hpp"
 #include "plamn/core/numerics/finite_volume/finite_volume_euler_transformer.hpp"
@@ -26,7 +26,7 @@
 
 namespace plamn::core
 {
-auto static const cells = damn::core::get_env_as("PLAMN_CELLS", std::uint32_t{10});
+auto static const cells = mkn::kul::env::get_as("PLAMN_CELLS", std::uint32_t{10});
 static ::BS::thread_pool pool{4};
 double static const dt = 0.01;
 

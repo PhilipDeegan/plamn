@@ -1,7 +1,7 @@
 #ifndef PLAMN_CORE_NUMERICS_OHM_OHM_TRANSFORMER_HPP
 #define PLAMN_CORE_NUMERICS_OHM_OHM_TRANSFORMER_HPP
 
-#include "damn/core/meta/constexprifier.hpp"
+#include "mkn/kul/constexprifier.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/exec/kernels.hpp" // IWYU pragma: keep (gpu::Vec_t, gpu::TileLauncher: GPU builds)
 
@@ -98,7 +98,7 @@ private:
     // fn<isResistive, isHyperResistive>(): runtime flags as compile-time tags
     void with_flags(auto&& fn) const
     {
-        damn::core::Constexprifier{info_.isResistive(), info_.isHyperResistive()}(fn);
+        mkn::kul::Constexprifier{info_.isResistive(), info_.isHyperResistive()}(fn);
     }
 
     // block per tile, block threads stride each E component's box
@@ -121,7 +121,8 @@ private:
             auto const Bt      = tile_at(B, ti);
             auto const Jt      = tile_at(J, ti);
             auto Et            = tile_at(Enew, ti);
-            auto const boxes = damn::core::for_N_make_array<3>([&](auto c) { return box_for(layout, Et[c]); });
+            auto const boxes
+                = mkn::kul::for_N_make_array<3>([&](auto c) { return box_for(layout, Et[c]); });
             auto const gradPe = grad(layout, Pet);
             using Box_t       = std::decay_t<decltype(boxes)>::value_type;
             using Item_t      = OhmTile<Ohm<Layout_t>, std::decay_t<decltype(gradPe)>,

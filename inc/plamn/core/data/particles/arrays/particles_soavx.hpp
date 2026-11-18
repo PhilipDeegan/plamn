@@ -3,7 +3,7 @@
 
 #include "damn/core/vector.hpp"
 #include "damn/core/memory/span.hpp"
-#include "damn/core/meta/for_N.hpp"
+#include "mkn/kul/for.hpp"
 #include "damn/core/sys/monitoring.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/def/detail/mkn_gpu.hpp"
@@ -30,11 +30,13 @@ template<std::size_t dim>
 static auto soaxv_as_tuple(auto& v)
 {
     // every component its own container: weight, iCell[dim], delta[dim], v[3]
-    auto tup = std::tuple_cat(
-        std::forward_as_tuple(v.weight_),
-        damn::core::for_N<dim, damn::core::for_N_R_mode::forward_tuple>([&](auto i) -> auto& { return v.iCell_[i]; }),
-        damn::core::for_N<dim, damn::core::for_N_R_mode::forward_tuple>([&](auto i) -> auto& { return v.delta_[i]; }),
-        damn::core::for_N<3, damn::core::for_N_R_mode::forward_tuple>([&](auto i) -> auto& { return v.v_[i]; }) //
+    auto tup = std::tuple_cat(std::forward_as_tuple(v.weight_),
+                              mkn::kul::for_N<dim, mkn::kul::for_N_R_mode::forward_tuple>(
+                                  [&](auto i) -> auto& { return v.iCell_[i]; }),
+                              mkn::kul::for_N<dim, mkn::kul::for_N_R_mode::forward_tuple>(
+                                  [&](auto i) -> auto& { return v.delta_[i]; }),
+                              mkn::kul::for_N<3, mkn::kul::for_N_R_mode::forward_tuple>(
+                                  [&](auto i) -> auto& { return v.v_[i]; }) //
     );
 
     static_assert(std::tuple_size_v<decltype(tup)> == 1 + dim + dim + 3); // 6, 8, 10
@@ -59,9 +61,9 @@ struct SoAVXArray
         assert(idx < src.size());
         this->weight_[dst] = src.weight(idx);
         auto const cell    = src.iCell(idx);
-        damn::core::for_N<dim>([&](auto vi) { this->iCell_[vi][dst] = cell[vi]; });
-        damn::core::for_N<dim>([&](auto vi) { this->delta_[vi][dst] = src.delta(idx)[vi]; });
-        damn::core::for_N<3>([&](auto vi) { this->v_[vi][dst] = src.v(idx)[vi]; });
+        mkn::kul::for_N<dim>([&](auto vi) { this->iCell_[vi][dst] = cell[vi]; });
+        mkn::kul::for_N<dim>([&](auto vi) { this->delta_[vi][dst] = src.delta(idx)[vi]; });
+        mkn::kul::for_N<3>([&](auto vi) { this->v_[vi][dst] = src.v(idx)[vi]; });
     }
 
     template<typename Particle_t>
@@ -70,9 +72,9 @@ struct SoAVXArray
         assert(dst < size_);
         this->weight_[dst] = src.weight();
         auto const cell    = src.iCell();
-        damn::core::for_N<dim>([&](auto vi) { this->iCell_[vi][dst] = cell[vi]; });
-        damn::core::for_N<dim>([&](auto vi) { this->delta_[vi][dst] = src.delta()[vi]; });
-        damn::core::for_N<3>([&](auto vi) { this->v_[vi][dst] = src.v()[vi]; });
+        mkn::kul::for_N<dim>([&](auto vi) { this->iCell_[vi][dst] = cell[vi]; });
+        mkn::kul::for_N<dim>([&](auto vi) { this->delta_[vi][dst] = src.delta()[vi]; });
+        mkn::kul::for_N<3>([&](auto vi) { this->v_[vi][dst] = src.v()[vi]; });
     }
 
 #if DAMN_HAVE_THRUST
@@ -120,9 +122,9 @@ struct SoAVXSpan
     {
         reset(array);
         this->weight_ += beg;
-        damn::core::for_N<dim>([&](auto vi) { this->iCell_[vi] += beg; });
-        damn::core::for_N<dim>([&](auto vi) { this->delta_[vi] += beg; });
-        damn::core::for_N<3>([&](auto vi) { this->v_[vi] += beg; });
+        mkn::kul::for_N<dim>([&](auto vi) { this->iCell_[vi] += beg; });
+        mkn::kul::for_N<dim>([&](auto vi) { this->delta_[vi] += beg; });
+        mkn::kul::for_N<3>([&](auto vi) { this->v_[vi] += beg; });
         size_ = siz;
     }
 
@@ -171,9 +173,9 @@ struct SoAVXSpan
                 return column.data();
         };
         this->weight_ = data(src.weight_);
-        damn::core::for_N<dim>([&](auto vi) { this->iCell_[vi] = data(src.iCell_[vi]); });
-        damn::core::for_N<dim>([&](auto vi) { this->delta_[vi] = data(src.delta_[vi]); });
-        damn::core::for_N<3>([&](auto vi) { this->v_[vi] = data(src.v_[vi]); });
+        mkn::kul::for_N<dim>([&](auto vi) { this->iCell_[vi] = data(src.iCell_[vi]); });
+        mkn::kul::for_N<dim>([&](auto vi) { this->delta_[vi] = data(src.delta_[vi]); });
+        mkn::kul::for_N<3>([&](auto vi) { this->v_[vi] = data(src.v_[vi]); });
         size_ = src.size();
     }
 
@@ -311,7 +313,8 @@ public:
     //  writers use iCell_[d][i]
     std::array<int, dimension> const iCell(std::size_t i) const DAMN_ALL
     {
-        return damn::core::for_N<dimension, damn::core::for_N_R_mode::make_array>([&](auto d) { return iCell_[d][i]; });
+        return mkn::kul::for_N<dimension, mkn::kul::for_N_R_mode::make_array>(
+            [&](auto d) { return iCell_[d][i]; });
     }
 
     auto& delta(std::size_t i) const DAMN_ALL { return delta_[i]; }
@@ -368,12 +371,12 @@ public:
     {
         Super::get_vec(this->weight_).push_back(iter.weight());
         auto const cell = iter.iCell();
-        damn::core::for_N<dimension, damn::core::for_N_R_mode::forward_tuple>(
+        mkn::kul::for_N<dimension, mkn::kul::for_N_R_mode::forward_tuple>(
             [&](auto i) { Super::get_vec(this->iCell_[i]).push_back(cell[i]); });
-        damn::core::for_N<dimension, damn::core::for_N_R_mode::forward_tuple>([&](auto i) {
+        mkn::kul::for_N<dimension, mkn::kul::for_N_R_mode::forward_tuple>([&](auto i) {
             Super::get_vec(this->delta_[i]).push_back(iter.template delta<dimension, i>());
         });
-        damn::core::for_N<3, damn::core::for_N_R_mode::forward_tuple>([&](auto i) {
+        mkn::kul::for_N<3, mkn::kul::for_N_R_mode::forward_tuple>([&](auto i) {
             Super::get_vec(this->v_[i]).push_back(iter.template v<dimension, i>());
         });
     }
@@ -385,11 +388,11 @@ public:
     {
         Super::get_vec(this->weight_).push_back(particle.weight());
         auto const cell = particle.iCell();
-        damn::core::for_N<dimension, damn::core::for_N_R_mode::forward_tuple>(
+        mkn::kul::for_N<dimension, mkn::kul::for_N_R_mode::forward_tuple>(
             [&](auto i) { Super::get_vec(this->iCell_[i]).push_back(cell[i]); });
-        damn::core::for_N<dimension, damn::core::for_N_R_mode::forward_tuple>(
+        mkn::kul::for_N<dimension, mkn::kul::for_N_R_mode::forward_tuple>(
             [&](auto i) { Super::get_vec(this->delta_[i]).push_back(particle.delta()[i]); });
-        damn::core::for_N<3, damn::core::for_N_R_mode::forward_tuple>(
+        mkn::kul::for_N<3, mkn::kul::for_N_R_mode::forward_tuple>(
             [&](auto i) { Super::get_vec(this->v_[i]).push_back(particle.v()[i]); });
     }
 
@@ -538,7 +541,7 @@ public:
     {
         auto this_tuple = as_tuple();
         auto that_tuple = that.as_tuple();
-        damn::core::for_N<std::tuple_size_v<decltype(this_tuple)>>(
+        mkn::kul::for_N<std::tuple_size_v<decltype(this_tuple)>>(
             [&](auto i) { std::get<i>(this_tuple).swap(std::get<i>(that_tuple)); });
     }
 
@@ -575,12 +578,13 @@ public:
 
     auto copy(std::size_t i) const DAMN_ALL
     {
-        return Particle<dimension>{
-            weight_[i],
-            damn::core::for_N<dimension, damn::core::for_N_R_mode::make_array>([&](auto d) { return iCell_[d][i]; }),
-            damn::core::for_N<dimension, damn::core::for_N_R_mode::make_array>(
-                [&](auto d) -> auto& { return delta_[d][i]; }),
-            damn::core::for_N<3, damn::core::for_N_R_mode::make_array>([&](auto d) -> auto& { return v_[d][i]; })};
+        return Particle<dimension>{weight_[i],
+                                   mkn::kul::for_N<dimension, mkn::kul::for_N_R_mode::make_array>(
+                                       [&](auto d) { return iCell_[d][i]; }),
+                                   mkn::kul::for_N<dimension, mkn::kul::for_N_R_mode::make_array>(
+                                       [&](auto d) -> auto& { return delta_[d][i]; }),
+                                   mkn::kul::for_N<3, mkn::kul::for_N_R_mode::make_array>(
+                                       [&](auto d) -> auto& { return v_[d][i]; })};
     }
 
 
@@ -614,18 +618,18 @@ public:
     void assign(Particle<dimension> const& src, std::size_t const& dst) DAMN_ALL
     {
         weight_[dst] = src.weight();
-        damn::core::for_N<dimension>([&](auto d) {
+        mkn::kul::for_N<dimension>([&](auto d) {
             iCell_[d][dst] = src.iCell()[d];
             delta_[d][dst] = src.delta()[d];
         });
-        damn::core::for_N<3>([&](auto d) { v_[d][dst] = src.v()[d]; });
+        mkn::kul::for_N<3>([&](auto d) { v_[d][dst] = src.v()[d]; });
     }
 
     template<typename Particle_t>
     void assign(Particle_t const& src, std::size_t const& dst) DAMN_ALL
     {
         auto this_tuple = as_tuple();
-        damn::core::for_N<std::tuple_size_v<decltype(this_tuple)>>(
+        mkn::kul::for_N<std::tuple_size_v<decltype(this_tuple)>>(
             [&](auto i) { std::get<i>(this_tuple)[dst] = std::get<i>(*src); });
     }
 
@@ -635,7 +639,7 @@ public:
     {
         auto this_tuple = as_tuple();
         auto that_tuple = src.as_tuple();
-        damn::core::for_N<std::tuple_size_v<decltype(this_tuple)>>(
+        mkn::kul::for_N<std::tuple_size_v<decltype(this_tuple)>>(
             [&](auto vi) { std::get<vi>(this_tuple)[dst] = std::get<vi>(that_tuple)[idx]; });
     }
 
@@ -686,7 +690,7 @@ struct SoAVXParticles<OuterSuper>::iterator_impl
     iterator_impl(T& particles_, std::size_t const& s = 0) DAMN_ALL
         : particles{particles_},
           curr_pos{s},
-          particle{damn::core::deref(particles), curr_pos}
+          particle{mkn::kul::deref(particles), curr_pos}
     {
     }
     iterator_impl(iterator_impl&& that)      = default;
@@ -695,8 +699,8 @@ struct SoAVXParticles<OuterSuper>::iterator_impl
     auto& set()
     {
         // DAMN_LOG_LINE_SS(particle.fdelta()[0]);
-        if (curr_pos != damn::core::deref(particles).size())
-            particle.set(particle_zip_iterator(damn::core::deref(particles), curr_pos));
+        if (curr_pos != mkn::kul::deref(particles).size())
+            particle.set(particle_zip_iterator(mkn::kul::deref(particles), curr_pos));
         // DAMN_LOG_LINE_SS(particle.fdelta()[0]);
         return *this;
     }
@@ -768,7 +772,7 @@ struct SoAVXParticles<OuterSuper>::iterator_impl
 
 
 
-    auto copy() const DAMN_ALL { return damn::core::deref(particles).copy(curr_pos); }
+    auto copy() const DAMN_ALL { return mkn::kul::deref(particles).copy(curr_pos); }
 
     T particles;
     std::size_t curr_pos = 0;

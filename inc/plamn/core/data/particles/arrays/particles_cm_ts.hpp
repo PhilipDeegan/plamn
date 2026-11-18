@@ -6,8 +6,8 @@
 #include "damn/core/data/tiles/tile_set.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/geometry/point.hpp"
-#include "damn/core/math/array.hpp"
-#include "damn/core/meta/logic.hpp"
+#include "mkn/kul/std/array.hpp"
+#include "mkn/kul/for.hpp"
 
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
@@ -369,10 +369,10 @@ auto& MappedTileSetVector<Particles>::move_check(auto const& pt, std::size_t con
                                                  auto const& particle)
 {
     using enum ParticleType;
-    static_assert(damn::core::any_in(particle_type, Domain, LevelGhost));
+    static_assert(mkn::kul::any_in(particle_type, Domain, LevelGhost));
 
     auto const& newcell = particle.iCell();
-    if (damn::core::array_equals(newcell, pt.icell))
+    if (mkn::kul::array_equals(newcell, pt.icell))
         return *this; // old cell == new cell, no change required
 
     auto& tile = *particles_.at(pt.tile_cell);

@@ -3,8 +3,8 @@
 //  formulas, the round trip, and tiled (per tile pool tasks, or one GPU launch) == untiled
 
 #include "damn/core/def/damn_config.hpp"
-#include "damn/core/meta/logic.hpp"
-#include "damn/core/sys/env.hpp"
+#include "mkn/kul/for.hpp"
+#include "mkn/kul/env.hpp"
 
 #include "plamn/core/numerics/primitive_conservative/primitive_conservative_transformer.hpp"
 #include "plamn/simulator/simulator_def.hpp"
@@ -24,7 +24,7 @@
 
 namespace plamn::core
 {
-auto static const cells    = damn::core::get_env_as("PLAMN_CELLS", std::uint32_t{10});
+auto static const cells    = mkn::kul::env::get_as("PLAMN_CELLS", std::uint32_t{10});
 double static const gamma_ = 5. / 3.;
 static ::BS::thread_pool pool{4};
 

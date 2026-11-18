@@ -16,16 +16,14 @@
 #include "damn/core/data/ndarray/ndarray_view.hpp"
 #include "damn/core/def/detail/mkn_gpu.hpp"
 #include "damn/core/logger.hpp"
-#include "damn/core/math/array.hpp"
-#include "damn/core/math/numeric.hpp"
-#include "damn/core/meta/logic.hpp"
-#include "damn/core/meta/tuple.hpp"
-#include "damn/core/meta/type_meta.hpp"
+#include "mkn/kul/std/array.hpp"
+#include "mkn/kul/math.hpp"
+#include "mkn/kul/for.hpp"
+#include "mkn/kul/tuple.hpp"
+#include "mkn/kul/meta.hpp"
 #include "damn/core/vector.hpp"
-
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
-
 #include "mkn/gpu.hpp"
 
 #include <cassert>
@@ -102,7 +100,7 @@ public:
 private:
     Particles particles;
 
-    std::array<ParticlesTile*, 7> _links = damn::core::ConstArray<ParticlesTile*, 7>(nullptr);
+    std::array<ParticlesTile*, 7> _links = mkn::kul::ConstArray<ParticlesTile*, 7>(nullptr);
 };
 
 
@@ -503,8 +501,8 @@ public:
 
     void static resize(Particles& ps, std::size_t const& s, bool const& copy = true)
     {
-        if constexpr (damn::core::any_in(layout_mode, LayoutMode::SoA))
-            damn::core::apply(ps.as_tuple(), [&](auto& v) { resize(v, s, copy); });
+        if constexpr (mkn::kul::any_in(layout_mode, LayoutMode::SoA))
+            mkn::kul::apply(ps.as_tuple(), [&](auto& v) { resize(v, s, copy); });
         else
             resize(ps.particles_, s, copy);
     }
@@ -517,8 +515,8 @@ public:
 
     void static reserve(Particles& ps, std::size_t const& s, bool const& copy = true)
     {
-        if constexpr (damn::core::any_in(layout_mode, LayoutMode::SoA))
-            damn::core::apply(ps.as_tuple(), [&](auto& v) { reserve(v, s, copy); });
+        if constexpr (mkn::kul::any_in(layout_mode, LayoutMode::SoA))
+            mkn::kul::apply(ps.as_tuple(), [&](auto& v) { reserve(v, s, copy); });
         else
             reserve(ps.particles_, s, copy);
     }
@@ -645,7 +643,7 @@ template<typename Particles>
 template<auto type>
 void TileSetVector<Particles>::on_appended()
 {
-    static_assert(damn::core::all_are<ParticleType>(type));
+    static_assert(mkn::kul::all_are<ParticleType>(type));
     static_assert(type != ParticleType::All);
     DAMN_LOG_SCOPE(3, "TileSetVector::on_appended");
 
@@ -669,7 +667,7 @@ void TileSetVector<Particles>::on_appended()
             resize(gaps, cs, false);
         }
         cap_(lix) = cap;
-        if constexpr (damn::core::any_in(layout_mode, LayoutMode::AoSMapped))
+        if constexpr (mkn::kul::any_in(layout_mode, LayoutMode::AoSMapped))
             tile().remap();
     });
 
@@ -747,12 +745,12 @@ struct TileSetParticles : public Super_
     auto& move_check(auto const& pt, std::size_t const idx, auto& particle) DAMN_ALL
     {
         using enum ParticleType;
-        static_assert(damn::core::any_in(particle_type, Domain, LevelGhost));
+        static_assert(mkn::kul::any_in(particle_type, Domain, LevelGhost));
         auto const& newcell = particle.iCell();
         if constexpr (particle_type == LevelGhost)
             if (!isIn(newcell, Super::ghost_box()))
                 return *this;
-        if (damn::core::array_equals(Super::local_tile_cell(newcell), pt.tile_cell))
+        if (mkn::kul::array_equals(Super::local_tile_cell(newcell), pt.tile_cell))
             return *this;
 
         bool constexpr static ATOMIC = true;
@@ -785,8 +783,8 @@ struct TileSetParticles : public Super_
 
     auto max_size() const
     {
-        return damn::core::max_from(this->particles_,
-                        [](auto const& v, auto const& i) { return v.data()[i].size(); });
+        return mkn::kul::math::max_from(
+            this->particles_, [](auto const& v, auto const& i) { return v.data()[i].size(); });
     }
 
     auto nbr_particles_in(std::array<int, dimension> const arr) const

@@ -1,4 +1,4 @@
-#include "damn/core/math/equality.hpp"
+#include "mkn/kul/equality.hpp"
 #ifndef PLAMN_CORE_DATA_PARTICLES_COMPARING_PARTICLES_COMPARING
 #define PLAMN_CORE_DATA_PARTICLES_COMPARING_PARTICLES_COMPARING
 
@@ -12,7 +12,7 @@ namespace plamn::core
 
 template<auto src_layout_mde, auto src_alloc_mde, auto dst_layout_mde, auto dst_alloc_mde>
 template<typename PS0, typename PS1>
-damn::core::EqualityReport
+mkn::kul::EqualityReport
 ParticlesComparator<src_layout_mde, src_alloc_mde, dst_layout_mde, dst_alloc_mde>::operator()(
     PS0 const& ps0, PS1 const& ps1, double const atol)
 {

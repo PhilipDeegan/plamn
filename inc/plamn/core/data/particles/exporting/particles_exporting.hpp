@@ -2,7 +2,7 @@
 #define PLAMN_CORE_DATA_PARTICLES_EXPORTING_PARTICLES_EXPORTING
 
 #include "damn/core/logger.hpp"
-#include "damn/core/sys/strings.hpp"
+#include "mkn/kul/string.hpp"
 
 #include "plamn/core/data/particles/exporting/detail/def_exporting.hpp"
 #include "plamn/core/data/particles/exporting/detail/aos_exporting.hpp"   // IWYU pragma: keep
@@ -25,8 +25,9 @@ void delete_particles_in(Src& src, Box_t const& box)
 {
     using Exporter = ParticlesExporter<Src::layout_mode, Src::alloc_mode>;
 
-    std::string_view constexpr static FN_ID     = "delete_particles,";
-    [[maybe_unused]] auto constexpr function_id = damn::core::join_string_views_v<FN_ID, Src::type_id>;
+    std::string_view constexpr static FN_ID = "delete_particles,";
+    [[maybe_unused]] auto constexpr function_id
+        = mkn::kul::join_string_views_v<FN_ID, Src::type_id>;
     DAMN_LOG_SCOPE(3, function_id);
 
     Exporter{}.delete_particles_in(src, box);
@@ -37,8 +38,9 @@ void delete_particles_not_in(Src& src, Box_t const& box)
 {
     using Exporter = ParticlesExporter<Src::layout_mode, Src::alloc_mode>;
 
-    std::string_view constexpr static FN_ID     = "delete_particles,";
-    [[maybe_unused]] auto constexpr function_id = damn::core::join_string_views_v<FN_ID, Src::type_id>;
+    std::string_view constexpr static FN_ID = "delete_particles,";
+    [[maybe_unused]] auto constexpr function_id
+        = mkn::kul::join_string_views_v<FN_ID, Src::type_id>;
     DAMN_LOG_SCOPE(3, function_id);
 
     Exporter{}.delete_particles_not_in(src, box);

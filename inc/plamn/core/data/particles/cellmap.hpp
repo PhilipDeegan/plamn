@@ -7,7 +7,7 @@
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/geometry/range.hpp"
-#include "damn/core/meta/container_meta.hpp"
+#include "mkn/kul/meta.hpp"
 #include "damn/core/data/ndarray/ndarray_vector.hpp"
 #include "damn/core/geometry/point.hpp"
 
@@ -206,20 +206,20 @@ public:
 
 
     // same as above but cell is found with the CellExtractor
-    template<damn::core::Iterable Array, typename CellExtractor = DefaultExtractor>
+    template<mkn::kul::Iterable Array, typename CellExtractor = DefaultExtractor>
     void add(Array const& items, std::size_t itemIndex, CellExtractor extract = default_extractor);
 
 
 
     // add all given items indexes to the cellmap.
     // items will be added to the cell they are in, given the CellExtractor
-    template<damn::core::Iterable Array, typename CellExtractor = DefaultExtractor>
+    template<mkn::kul::Iterable Array, typename CellExtractor = DefaultExtractor>
     void add(Array const& items, CellExtractor extract = default_extractor);
 
 
 
     // same as above but for indexes within the given range
-    template<damn::core::Iterable Array, typename CellExtractor = DefaultExtractor>
+    template<mkn::kul::Iterable Array, typename CellExtractor = DefaultExtractor>
     void add(Array const& items, std::size_t first, std::size_t last,
              CellExtractor extract = default_extractor);
 
@@ -296,12 +296,12 @@ public:
 
 
     // erase items indexes from the cellmap
-    template<damn::core::Iterable Array, typename CellExtractor = DefaultExtractor>
+    template<mkn::kul::Iterable Array, typename CellExtractor = DefaultExtractor>
     void erase(Array const& items, std::size_t itemIndex,
                CellExtractor extract = default_extractor);
 
 
-    template<damn::core::Iterable Array>
+    template<mkn::kul::Iterable Array>
     void erase(Array const& items, cell_t const oldCell, std::size_t const itemIndex);
 
 
@@ -378,7 +378,7 @@ inline void CellMap<opts>::addToCell(CellIndex const& cell, std::size_t itemInde
 
 
 template<auto opts>
-template<damn::core::Iterable Array, typename CellExtractor>
+template<mkn::kul::Iterable Array, typename CellExtractor>
 inline void CellMap<opts>::add(Array const& items, CellExtractor extract)
 {
     for (std::size_t itemIndex = 0; itemIndex < items.size(); ++itemIndex)
@@ -388,7 +388,7 @@ inline void CellMap<opts>::add(Array const& items, CellExtractor extract)
 }
 
 template<auto opts>
-template<damn::core::Iterable Array, typename CellExtractor>
+template<mkn::kul::Iterable Array, typename CellExtractor>
 inline void CellMap<opts>::add(Array const& items, std::size_t first, std::size_t last,
                                CellExtractor extract)
 
@@ -401,7 +401,7 @@ inline void CellMap<opts>::add(Array const& items, std::size_t first, std::size_
 
 
 template<auto opts>
-template<damn::core::Iterable Array, typename CellExtractor>
+template<mkn::kul::Iterable Array, typename CellExtractor>
 inline void CellMap<opts>::add(Array const& items, std::size_t itemIndex, CellExtractor extract)
 {
     addToCell(extract(items[itemIndex]), itemIndex);
@@ -410,7 +410,7 @@ inline void CellMap<opts>::add(Array const& items, std::size_t itemIndex, CellEx
 
 
 template<auto opts>
-template<damn::core::Iterable Array, typename CellExtractor>
+template<mkn::kul::Iterable Array, typename CellExtractor>
 inline void CellMap<opts>::erase(Array const& items, std::size_t itemIndex, CellExtractor extract)
 {
     auto& blist = cellIndexes_(local_(extract(items[itemIndex])));
@@ -419,7 +419,7 @@ inline void CellMap<opts>::erase(Array const& items, std::size_t itemIndex, Cell
 
 
 template<auto opts>
-template<damn::core::Iterable Array>
+template<mkn::kul::Iterable Array>
 inline void CellMap<opts>::erase(Array const& items, cell_t const oldCell,
                                  std::size_t const itemIndex)
 {

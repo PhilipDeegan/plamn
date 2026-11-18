@@ -3,8 +3,8 @@
 //  against GodunovFace, and tiled (per tile pool tasks, or one GPU launch) == untiled
 
 #include "damn/core/def/damn_config.hpp"
-#include "damn/core/meta/for_N.hpp"
-#include "damn/core/sys/env.hpp"
+#include "mkn/kul/for.hpp"
+#include "mkn/kul/env.hpp"
 
 #include "plamn/core/numerics/godunov/godunov_transformer.hpp"
 #include "plamn/core/numerics/reconstructions/linear.hpp"
@@ -25,7 +25,7 @@
 
 namespace plamn::core
 {
-auto static const cells    = damn::core::get_env_as("PLAMN_CELLS", std::uint32_t{10});
+auto static const cells    = mkn::kul::env::get_as("PLAMN_CELLS", std::uint32_t{10});
 double static const gamma_ = 5. / 3.;
 static ::BS::thread_pool pool{4};
 using Linear_t = LinearReconstruction<VanLeerLimiter>;
@@ -46,7 +46,7 @@ TEST(GodunovPoint, rusanov_consistency)
 {
     // equal left and right states: no dissipation, the physical flux
     MHDPrimitive const u{1.2, {.3, -.2, .1}, {.7, .4, -.5}, .9};
-    damn::core::for_N<3>([&](auto dir) {
+    mkn::kul::for_N<3>([&](auto dir) {
         auto const r = rusanov<dir>(gamma_, u, u);
         auto const f = ideal_mhd_flux<dir>(gamma_, u);
         EXPECT_DOUBLE_EQ(r.F.rho, f.rho);
@@ -204,7 +204,7 @@ TYPED_TEST(GodunovTest, transformer_matches_face)
     fill_primitive(p);
     GodunovFace<Linear_t> const face{gamma_};
 
-    damn::core::for_N<Patch_t::dim>([&](auto dir) {
+    mkn::kul::for_N<Patch_t::dim>([&](auto dir) {
         faces<dir>(p);
         auto const& f = p.faces[dir];
         std::size_t n = 0;
@@ -281,7 +281,7 @@ TYPED_TEST(GodunovTileTest, tiled_matches_untiled)
     fill_primitive(ref);
     fill_primitive(cmp);
 
-    damn::core::for_N<Ref_t::dim>([&](auto dir) {
+    mkn::kul::for_N<Ref_t::dim>([&](auto dir) {
         faces<dir>(ref);
         faces<dir>(cmp);
         auto const box_of = [dir](auto const& layout, auto const& f) {

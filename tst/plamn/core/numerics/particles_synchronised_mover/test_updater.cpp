@@ -3,17 +3,17 @@
 #include "plamn/plamn_core.hpp"
 #include "plamn/simulator/simulator_def.hpp"
 
-#include "damn/core/math/array.hpp"
-#include "damn/core/math/numeric.hpp"
+#include "mkn/kul/std/array.hpp"
+#include "mkn/kul/math.hpp"
+#include "mkn/kul/float.hpp"
+#include "mkn/kul/int.hpp"
 #include "plamn/core/numerics/particles_synchronised_mover/particles_synchronised_mover.hpp"
 #include "plamn/core/models/electromag_initializer.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/numerics/interpolator/interpolating.hpp"
-#include "plamn/core/numerics/interpolator/interpolating.hpp"
 #include "plamn/core/data/particles/appending/particles_appending.hpp"
 #include "plamn/core/data/particles/converting/particles_converting.hpp"
 
-#include "plamn/simulator/simulator_def.hpp"
 
 
 #include "tst/plamn/core/data/vecfield/test_vecfield_fixtures.hpp"
@@ -783,9 +783,9 @@ template<typename Layout>
 void populate_particles(auto& ions, Layout& layout)
 {
     auto constexpr dim = Layout::dimension;
-    Particle<dim> const particle{1.0 / nbrPartPerCell, damn::core::ConstArray<int, dim>(),
-                                 damn::core::ConstArray<double, dim>(.5),
-                                 damn::core::ConstArray<double, 3>(1)};
+    Particle<dim> const particle{1.0 / nbrPartPerCell, mkn::kul::ConstArray<int, dim>(),
+                                 mkn::kul::ConstArray<double, dim>(.5),
+                                 mkn::kul::ConstArray<double, 3>(1)};
     auto const ghost_box = damn::core::grow(layout.cells, 1);
 
     auto const shift_particle = [](auto p, auto const bix) {
@@ -869,8 +869,8 @@ struct ParticlesSynchronisedMoverOwnershipTest : public ParticlesSynchronisedMov
 
     static std::size_t count(auto const& particles, auto&& predicate)
     {
-        return damn::core::sum_from(particles,
-                                    [&](auto const& p) { return predicate(p) ? 1ul : 0ul; });
+        return mkn::kul::math::sum_from(particles,
+                                        [&](auto const& p) { return predicate(p) ? 1ul : 0ul; });
     }
 
     // particles of `cell` whose displacement takes them into the next cell
@@ -883,11 +883,11 @@ struct ParticlesSynchronisedMoverOwnershipTest : public ParticlesSynchronisedMov
 
     static double weights(auto const& particles)
     {
-        return damn::core::sum_from(particles,
-                                    [](auto const& particle) { return particle.weight(); });
+        return mkn::kul::math::sum_from(particles,
+                                        [](auto const& particle) { return particle.weight(); });
     }
 
-    static double total(auto const& field) { return sum(field); }
+    static double total(auto const& field) { return mkn::kul::math::sum(field); }
 
     // level ghosts move into the first domain cell, which is owned (domain) or not (handed to
     //  its owner, as a patch ghost)

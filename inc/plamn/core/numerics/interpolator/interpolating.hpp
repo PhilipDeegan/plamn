@@ -8,9 +8,9 @@
 #include "damn/core/def/detail/mkn_gpu.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/logger.hpp"
-#include "damn/core/meta/logic.hpp"
-#include "damn/core/meta/type_meta.hpp"
-#include "damn/core/sys/env.hpp"
+#include "mkn/kul/for.hpp"
+#include "mkn/kul/meta.hpp"
+#include "mkn/kul/env.hpp"
 
 #include "plamn/core/data/electromag/electromag.hpp" // IWYU pragma: keep (basic::Electromag: GPU builds)
 #include "plamn/core/data/field/field_tiles.hpp"
@@ -44,7 +44,7 @@ namespace plamn::core
 // patch domain, so only halo cells outside of it are visited: none for interior tiles
 template<typename Particles>
 void on_reachable_level_ghosts(Particles const& particles, std::size_t const tidx, auto&& fn)
-    requires(damn::core::any_in(Particles::layout_mode, LayoutMode::AoSPCTS, LayoutMode::AoSCMTS))
+    requires(mkn::kul::any_in(Particles::layout_mode, LayoutMode::AoSPCTS, LayoutMode::AoSCMTS))
 {
     auto const& patch_box    = particles.box();
     auto const ghost_cells   = patch_box.lower[0] - particles.ghost_box().lower[0];
@@ -92,7 +92,7 @@ inline TileDeposit tile_deposit_mode(std::size_t const n_points, std::size_t con
 {
     using enum TileDeposit;
     static std::optional<TileDeposit> const forced = []() -> std::optional<TileDeposit> {
-        auto const env = damn::core::get_env("PLAMN_GPU_TILE_DEPOSIT");
+        auto const env = mkn::kul::env::get("PLAMN_GPU_TILE_DEPOSIT");
         if (!env)
             return std::nullopt;
         if (*env == "shared_all")
@@ -165,8 +165,7 @@ public:
     template<auto type = ParticleType::Domain, typename Particles>
     void particleToMesh(Particles const& particles, auto const& /*layout: the tiles'*/, auto& rhoP,
                         auto& flux, double coef = 1.)
-        requires(damn::core::any_in(Particles::layout_mode, LayoutMode::AoSPCTS,
-                                    LayoutMode::AoSCMTS))
+        requires(mkn::kul::any_in(Particles::layout_mode, LayoutMode::AoSPCTS, LayoutMode::AoSCMTS))
     DAMN_ALL
     {
         for (std::size_t tidx = 0; tidx < particles().size(); ++tidx)
@@ -179,10 +178,10 @@ public:
     template<auto type = ParticleType::Domain, typename Particles>
     void particleToMesh_tile(std::size_t const tidx, Particles const& particles, auto& rhoP,
                              auto& flux, double coef = 1.)
-        requires(damn::core::any_in(Particles::layout_mode, LayoutMode::AoSPCTS,
-                                    LayoutMode::AoSCMTS, LayoutMode::AoSTS))
+        requires(mkn::kul::any_in(Particles::layout_mode, LayoutMode::AoSPCTS, LayoutMode::AoSCMTS,
+                                  LayoutMode::AoSTS))
     {
-        static_assert(damn::core::any_in(type, ParticleType::Domain, ParticleType::LevelGhost));
+        static_assert(mkn::kul::any_in(type, ParticleType::Domain, ParticleType::LevelGhost));
 
         auto [rhop, F]      = tiles_at(tidx, rhoP, flux);
         auto const& rho_lay = tile_layout(rhoP, tidx);
@@ -192,8 +191,8 @@ public:
         };
 
         auto& tile_particles = particles()[tidx]();
-        if constexpr (damn::core::any_in(Particles::layout_mode, LayoutMode::AoSCMTS,
-                                         LayoutMode::AoSTS))
+        if constexpr (mkn::kul::any_in(Particles::layout_mode, LayoutMode::AoSCMTS,
+                                       LayoutMode::AoSTS))
             deposit(tile_particles);
         else
             damn::core::for_each_point(tile_particles.local_box(),
@@ -279,8 +278,8 @@ public:
     template<auto type = ParticleType::Domain, typename Particles>
     void particleToMesh(Particles const& particles, auto const& layout, auto& rhoP, auto& flux,
                         double coef = 1., auto&... stream)
-        requires(damn::core::any_in(Particles::layout_mode, LayoutMode::AoS, LayoutMode::SoA,
-                                    LayoutMode::SoAVX, LayoutMode::SoAVXChunked))
+        requires(mkn::kul::any_in(Particles::layout_mode, LayoutMode::AoS, LayoutMode::SoA,
+                                  LayoutMode::SoAVX, LayoutMode::SoAVXChunked))
     DAMN_ALL
     {
         auto constexpr static alloc_mode = Particles::alloc_mode;
@@ -331,7 +330,7 @@ public:
                         particles.size(),
                         [=] DAMN_ALL() mutable {
                             auto particle = particles.begin() + damn::kernel::idx();
-                            Interpolator_t{}.particleToMesh(damn::core::deref(particle), rhoP, flux,
+                            Interpolator_t{}.particleToMesh(mkn::kul::deref(particle), rhoP, flux,
                                                             layout, coef);
                         }); //
                 )
@@ -456,7 +455,7 @@ public:
         using enum TileDeposit;
 
         extern __shared__ double data[];
-        auto const ziz  = static_cast<int>(damn::core::product(tbox.shape()));
+        auto const ziz  = static_cast<int>(mkn::kul::math::product(tbox.shape()));
         auto const tidx = static_cast<int>(threadIdx.x);
         auto const bdim = static_cast<int>(blockDim.x);
 
@@ -510,7 +509,7 @@ public:
         }
         else if constexpr (deposit_v == shared_one)
         {
-            damn::core::for_N<4>([&](auto ic) {
+            mkn::kul::for_N<4>([&](auto ic) {
                 auto constexpr c = ic();
                 auto& dst        = [&]() -> auto& {
                     if constexpr (c == 0)
@@ -603,7 +602,7 @@ public:
         auto& rhop_tile = Rhop[blockIdx.x];
         auto const ft   = Flux.template as<TensorField_t>([&](auto& c) { return c[blockIdx.x](); });
         auto const tbox = rhop_tile.ghost_box();
-        auto const ziz  = damn::core::product(tbox.shape());
+        auto const ziz  = mkn::kul::math::product(tbox.shape());
         auto const tidx = threadIdx.x;
         auto const ws   = blockDim.x;
 
@@ -616,7 +615,7 @@ public:
 
         // Per-tile EM view and layout
         auto const em      = electromag.template as<Electromag_vt>([=] DAMN_ALL(auto const& vf) {
-            return damn::core::for_N_make_array<3>(
+            return mkn::kul::for_N_make_array<3>(
                 [&vf] DAMN_ALL(auto i) { return vf[i][blockIdx.x](); });
         });
         auto const& layout = electromag.E[0][blockIdx.x].layout();
@@ -872,7 +871,7 @@ public:
                         double mass = 1.)
         requires(Particles_t::layout_mode == LayoutMode::AoSPCTS)
     {
-        static_assert(damn::core::any_in(type, ParticleType::Domain, ParticleType::LevelGhost));
+        static_assert(mkn::kul::any_in(type, ParticleType::Domain, ParticleType::LevelGhost));
 
         for (std::size_t tidx = 0; tidx < particles().size(); ++tidx)
         {
@@ -897,7 +896,7 @@ public:
                         double mass = 1.)
         requires(Particles_t::layout_mode == LayoutMode::AoSCMTS)
     {
-        static_assert(damn::core::any_in(type, ParticleType::Domain, ParticleType::LevelGhost));
+        static_assert(mkn::kul::any_in(type, ParticleType::Domain, ParticleType::LevelGhost));
 
         for (std::size_t tidx = 0; tidx < particles().size(); ++tidx)
         {

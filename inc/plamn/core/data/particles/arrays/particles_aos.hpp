@@ -8,17 +8,11 @@
 #include "damn/core/sys/monitoring.hpp"
 #include "damn/core/def/detail/mkn_gpu.hpp"
 #include "damn/core/logger.hpp"
-#include "damn/core/meta/logic.hpp"
-#include "damn/core/meta/type_meta.hpp"
-
+#include "mkn/kul/assert.hpp"
+#include "mkn/kul/meta.hpp"
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/cellmap.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
-
-// #include "damn/core/geometry/point.hpp"
-// #include "damn/core/geometry/range.hpp"
-// #include "plamn/core/data/particles/particle.hpp"
-#include "mkn/gpu.hpp"
 
 #include <vector>
 #include <cstddef>
@@ -29,6 +23,10 @@
 #include <iterator>
 #include <stdexcept>
 #include <type_traits>
+// #include "damn/core/geometry/point.hpp"
+// #include "damn/core/geometry/range.hpp"
+// #include "plamn/core/data/particles/particle.hpp"
+#include "mkn/gpu.hpp"
 
 namespace plamn::core
 {
@@ -762,8 +760,8 @@ public:
             DAMN_LOG_LINE_STR(cellMap_.size());
         }
 
-        damn::core::abort_if(particles_.size() != cellMap_.size());
-        damn::core::abort_if(!is_consistent());
+        mkn::kul::abort_if(particles_.size() != cellMap_.size());
+        mkn::kul::abort_if(!is_consistent());
 
         // throw std::runtime_error("particle array not mapped, map.size() != array.size()");
     }
@@ -864,36 +862,39 @@ struct AoSParticles<Super, opts>::iterator_impl
         return static_cast<difference_type>(curr_pos) - static_cast<difference_type>(that.curr_pos);
     }
 
-    auto& weight() DAMN_ALL { return damn::core::deref(particles)[curr_pos].weight(); }
-    auto& weight() const DAMN_ALL { return damn::core::deref(particles)[curr_pos].weight(); }
+    auto& weight() DAMN_ALL { return mkn::kul::deref(particles)[curr_pos].weight(); }
+    auto& weight() const DAMN_ALL { return mkn::kul::deref(particles)[curr_pos].weight(); }
 
-    auto& iCell() DAMN_ALL { return damn::core::deref(particles)[curr_pos].iCell(); }
-    auto& iCell() const DAMN_ALL { return damn::core::deref(particles)[curr_pos].iCell(); }
+    auto& iCell() DAMN_ALL { return mkn::kul::deref(particles)[curr_pos].iCell(); }
+    auto& iCell() const DAMN_ALL { return mkn::kul::deref(particles)[curr_pos].iCell(); }
 
-    auto& delta() DAMN_ALL { return damn::core::deref(particles)[curr_pos].delta(); }
-    auto& delta() const DAMN_ALL { return damn::core::deref(particles)[curr_pos].delta(); }
+    auto& delta() DAMN_ALL { return mkn::kul::deref(particles)[curr_pos].delta(); }
+    auto& delta() const DAMN_ALL { return mkn::kul::deref(particles)[curr_pos].delta(); }
 
-    auto& v() DAMN_ALL { return damn::core::deref(particles)[curr_pos].v(); }
-    auto& v() const DAMN_ALL { return damn::core::deref(particles)[curr_pos].v(); }
+    auto& v() DAMN_ALL { return mkn::kul::deref(particles)[curr_pos].v(); }
+    auto& v() const DAMN_ALL { return mkn::kul::deref(particles)[curr_pos].v(); }
 
     auto& operator*() DAMN_ALL
     {
         // DAMN_ASSERT(curr_pos < particles->size());
-        return damn::core::deref(particles)[curr_pos];
+        return mkn::kul::deref(particles)[curr_pos];
     }
     auto& operator*() const DAMN_ALL
     {
         // DAMN_ASSERT(curr_pos < particles->size());
-        return damn::core::deref(particles)[curr_pos];
+        return mkn::kul::deref(particles)[curr_pos];
     }
 
-    auto& operator[](std::size_t const i) DAMN_ALL { return damn::core::deref(particles)[curr_pos + i]; }
+    auto& operator[](std::size_t const i) DAMN_ALL
+    {
+        return mkn::kul::deref(particles)[curr_pos + i];
+    }
     auto& operator[](std::size_t const i) const DAMN_ALL
     {
-        return damn::core::deref(particles)[curr_pos + i];
+        return mkn::kul::deref(particles)[curr_pos + i];
     }
 
-    auto copy() const DAMN_ALL { return damn::core::deref(particles)[curr_pos]; }
+    auto copy() const DAMN_ALL { return mkn::kul::deref(particles)[curr_pos]; }
 
     T particles{};
     std::size_t curr_pos = 0;

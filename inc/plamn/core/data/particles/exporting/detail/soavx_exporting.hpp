@@ -7,8 +7,8 @@
 
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/vector.hpp"
-#include "damn/core/meta/for_N.hpp"
-#include "damn/core/meta/type_meta.hpp"
+#include "mkn/kul/for.hpp"
+#include "mkn/kul/meta.hpp"
 #include "damn/core/memory/memory.hpp"
 
 #include "plamn/core/data/particles/particles_def.hpp"
@@ -149,7 +149,7 @@ private:
         }();
         return static_cast<std::size_t>(std::distance(it, pivot));
 #else
-        static_assert(damn::core::dependent_false_v<decltype(src)>,
+        static_assert(mkn::kul::dependent_false_v<decltype(src)>,
                       "SoAVX partitioning needs thrust (on the host too: damn's tpp/cccl)");
         return 0;
 #endif
@@ -165,7 +165,7 @@ private:
         {
             auto dst_columns       = dst.as_tuple();
             auto const src_columns = src.as_tuple();
-            damn::core::for_N<std::tuple_size_v<decltype(dst_columns)>>([&](auto c) {
+            mkn::kul::for_N<std::tuple_size_v<decltype(dst_columns)>>([&](auto c) {
                 auto& d       = std::get<c>(dst_columns);
                 auto const& s = std::get<c>(src_columns);
                 damn::resize(d, offset + n);

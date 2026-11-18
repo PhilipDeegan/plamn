@@ -3,7 +3,7 @@
 
 #include "damn/core/def/detail/mkn_avx.hpp"
 #include "damn/core/vector.hpp"
-#include "damn/core/meta/for_N.hpp"
+#include "mkn/kul/for.hpp"
 #include "damn/core/sys/monitoring.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/def/detail/mkn_gpu.hpp"
@@ -170,7 +170,7 @@ struct SoASpan
     {
         auto self = as_tuple();
         auto that = particles.as_tuple();
-        damn::core::for_N<std::tuple_size_v<decltype(that)>>(
+        mkn::kul::for_N<std::tuple_size_v<decltype(that)>>(
             [&](auto vi) { std::get<vi>(self) = std::get<vi>(that).data(); });
         size_ = particles.size();
     }
@@ -435,7 +435,7 @@ public:
     {
         auto this_tuple = as_tuple();
         auto that_tuple = src.as_tuple();
-        damn::core::for_N<std::tuple_size_v<decltype(this_tuple)>>([&](auto vi) {
+        mkn::kul::for_N<std::tuple_size_v<decltype(this_tuple)>>([&](auto vi) {
             auto& vec            = Super::get_vec(std::get<vi>(this_tuple));
             auto const& that_vec = std::get<vi>(that_tuple);
             for (std::size_t i = 0; i < src.size(); ++i)
@@ -451,7 +451,7 @@ public:
     {
         auto this_tuple = as_tuple();
         auto that_tuple = src.as_tuple();
-        damn::core::for_N<std::tuple_size_v<decltype(this_tuple)>>([&](auto vi) {
+        mkn::kul::for_N<std::tuple_size_v<decltype(this_tuple)>>([&](auto vi) {
             Super::get_vec(std::get<vi>(this_tuple)).emplace_back(std::get<vi>(that_tuple)[idx]);
         });
     }
@@ -464,7 +464,7 @@ public:
         if constexpr (std::tuple_size_v<decltype(arg_tuple)> == 4)
         {
             auto this_tuple = as_tuple();
-            damn::core::for_N<std::tuple_size_v<decltype(arg_tuple)>>([&](auto ic) {
+            mkn::kul::for_N<std::tuple_size_v<decltype(arg_tuple)>>([&](auto ic) {
                 auto constexpr i = ic();
                 Super::get_vec(std::get<i>(this_tuple)).emplace_back(std::get<i>(arg_tuple));
             });
@@ -516,7 +516,7 @@ public:
     {
         auto this_tuple = as_tuple();
         auto that_tuple = that.as_tuple();
-        damn::core::for_N<std::tuple_size_v<decltype(this_tuple)>>(
+        mkn::kul::for_N<std::tuple_size_v<decltype(this_tuple)>>(
             [&](auto i) { std::get<i>(this_tuple).swap(std::get<i>(that_tuple)); });
     }
 
@@ -581,7 +581,7 @@ public:
     void assign(Particle_t const& src, std::size_t const& dst) DAMN_ALL
     {
         auto this_tuple = as_tuple();
-        damn::core::for_N<std::tuple_size_v<decltype(this_tuple)>>(
+        mkn::kul::for_N<std::tuple_size_v<decltype(this_tuple)>>(
             [&](auto i) { std::get<i>(this_tuple)[dst] = std::get<i>(*src); });
     }
 
@@ -591,7 +591,7 @@ public:
     {
         auto this_tuple = as_tuple();
         auto that_tuple = src.as_tuple();
-        damn::core::for_N<std::tuple_size_v<decltype(this_tuple)>>(
+        mkn::kul::for_N<std::tuple_size_v<decltype(this_tuple)>>(
             [&](auto vi) { std::get<vi>(this_tuple)[dst] = std::get<vi>(that_tuple)[idx]; });
     }
 

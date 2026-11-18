@@ -2,12 +2,11 @@
 #define PLAMN_FLUID_PARTICLE_INITIALIZER_HPP
 
 #include "damn/core/math/random.hpp"
-#include "damn/core/meta/for_N.hpp"
+#include "mkn/kul/for.hpp"
 #include "damn/core/def.hpp"
 #include "damn/core/def/damn_config.hpp"
-#include "damn/core/math/array.hpp"
+#include "mkn/kul/std/array.hpp"
 #include "damn/core/memory/span.hpp"
-
 #include "plamn/core/data/grid/coordinates.hpp"
 #include "plamn/core/data/ions/particle_initializers/maxwellian_def.hpp"
 #include "plamn/core/data/particles/particle.hpp"
@@ -17,6 +16,7 @@
 #include "plamn/initializer/data_provider.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/models/quantities/quantity.hpp"
+#include "mkn/kul/random.hpp"
 
 #include <cmath>
 #include <memory>
@@ -82,7 +82,7 @@ public:
         , nbrParticlePerCell_{nbrParticlesPerCell}
         , basis_{basis}
         , rngSeed_{seed}
-        , populationKey_{damn::core::fnv1a64(populationName)}
+        , populationKey_{mkn::kul::fnv1a64(populationName)}
         , over_alloc_factor_{over_alloc_factor}
     {
         if (!std::isfinite(over_alloc_factor_) or over_alloc_factor_ < 0)
@@ -182,9 +182,8 @@ template<typename Particles_t, typename Layout>
 std::size_t
 MaxwellianParticleInitializer<Particles_t, Layout>::nbrParticles(Layout const& layout) const
 {
-    auto const cells
-        = coordinate_vectors(layout.dx, layout.cells,
-                             damn::core::ConstArray<QtyCentering, dimension>(QtyCentering::dual));
+    auto const cells = coordinate_vectors(
+        layout.dx, layout.cells, mkn::kul::ConstArray<QtyCentering, dimension>(QtyCentering::dual));
     auto const n = std::apply([&](auto const&... c) { return density_(c...); }, cells.spans());
 
     std::size_t populated = 0;
@@ -199,13 +198,12 @@ void MaxwellianParticleInitializer<Particles_t, Layout>::loadParticles(Particles
                                                                        Layout const& layout) const
 {
     auto const deltas = [](auto& pos, auto& gen) {
-        return damn::core::for_N_make_array<dimension>([&](auto) { return pos(gen); });
+        return mkn::kul::for_N_make_array<dimension>([&](auto) { return pos(gen); });
     };
 
 
-    auto const cells
-        = coordinate_vectors(layout.dx, layout.cells,
-                             damn::core::ConstArray<QtyCentering, dimension>(QtyCentering::dual));
+    auto const cells = coordinate_vectors(
+        layout.dx, layout.cells, mkn::kul::ConstArray<QtyCentering, dimension>(QtyCentering::dual));
 
     auto const fns = std::make_from_tuple<MaxwellianInitFunctions>(std::tuple_cat(
         std::forward_as_tuple(density_, bulkVelocity_, thermalVelocity_, magneticField_, basis_),
@@ -252,7 +250,7 @@ void MaxwellianParticleInitializer<Particles_t, Layout>::loadParticles(Particles
 
         auto const cellWeight = n[flatCellIdx] / nbrParticlePerCell_;
         auto const iCell      = cells.points[flatCellIdx].toArray();
-        damn::core::SplitMix64 randGen{
+        mkn::kul::SplitMix64 randGen{
             damn::core::cell_key(seed, populationKey_, layout.level, iCell)};
         ParticleDeltaDistribution<double> deltaDistrib;
         std::array<double, 3> particleVelocity;

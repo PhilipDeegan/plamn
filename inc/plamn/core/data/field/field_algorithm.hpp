@@ -2,20 +2,19 @@
 #define PLAMN_CORE_DATA_FIELD_FIELD_ALGORITHM_HPP
 
 #include "damn/core/memory/span.hpp"
-#include "damn/core/math/array.hpp"
+#include "mkn/kul/std/array.hpp"
 #include "damn/core/geometry/box_spans.hpp"
-#include "damn/core/meta/constexprifier.hpp"
-#include "damn/core/data/ndarray/ndarray_vector.hpp"
+#include "mkn/kul/constexprifier.hpp"
 #include "damn/core/data/ndarray/ndarray_view.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/exec/kernels.hpp" // IWYU pragma: keep (gpu::Vec_t, gpu::TileLauncher: GPU builds)
-
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/field/field.hpp"
 #include "plamn/core/data/field/recentered_field.hpp"
 #include "plamn/core/data/tensorfield/tensorfield.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/models/quantities/quantity.hpp"
+#include "mkn/kul/for.hpp"
 
 #include <cassert>
 #include <array>
@@ -120,13 +119,14 @@ auto& convert_to_fortran_primal(      // DOES NOT WORK ON GHOST BOX!
     else
     {
         auto const isDual
-            = std::apply([](auto... dual) { return damn::core::Constexprifier{dual...}; },
-                         damn::core::generate_from([](auto c) { return c == QtyCentering::dual; },
-                                                   centering(layout, src)));
+            = std::apply([](auto... dual) { return mkn::kul::Constexprifier{dual...}; },
+                         mkn::kul::generate_from([](auto c) { return c == QtyCentering::dual; },
+                                                 centering(layout, src)));
 
         isDual([&]<bool... dual>() {
             constexpr std::array source{(dual ? QtyCentering::dual : QtyCentering::primal)...};
-            constexpr auto destination = damn::core::ConstArray<QtyCentering, dim>(QtyCentering::primal);
+            constexpr auto destination
+                = mkn::kul::ConstArray<QtyCentering, dim>(QtyCentering::primal);
             CompileTimeRecenteredField<source, destination, Field<dim, PQ, D, am>> const primal_src{
                 src, layout};
             damn::core::for_each_point_zip(lcl_src_box, lcl_dst_box, [&](auto const& lix, auto const& lix0) {

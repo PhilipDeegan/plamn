@@ -4,8 +4,8 @@
 // anywhere in the ghost box, leavers deleted, and move_in_domain
 
 #include "damn/core/logger.hpp"
-#include "damn/core/meta/type_meta.hpp"
-#include "damn/core/sys/env.hpp"
+#include "mkn/kul/meta.hpp"
+#include "mkn/kul/env.hpp"
 
 #include "plamn/core/data/particles/particles.hpp"
 #include "plamn/core/data/particles/appending/particles_appending.hpp"
@@ -30,15 +30,15 @@
 
 namespace plamn::core
 {
-using damn::core::all_are;
-using damn::core::any_in;
 using damn::core::for_each_point;
 using damn::core::grow;
 using damn::core::isIn;
 using damn::core::Point;
+using mkn::kul::all_are;
+using mkn::kul::any_in;
 
-auto static const cells = damn::core::get_env_as("PLAMN_CELLS", std::uint32_t{14});
-auto static const ppc   = damn::core::get_env_as("PLAMN_PPC", std::size_t{1000});
+auto static const cells = mkn::kul::env::get_as("PLAMN_CELLS", std::uint32_t{14});
+auto static const ppc   = mkn::kul::env::get_as("PLAMN_PPC", std::size_t{1000});
 
 
 template<std::size_t _dim, auto lm, auto am>

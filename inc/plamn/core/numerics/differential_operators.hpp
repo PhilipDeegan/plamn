@@ -3,7 +3,7 @@
 
 #include "damn/core/def/constants.hpp"
 #include "damn/core/geometry/point.hpp"
-#include "damn/core/meta/for_N.hpp"
+#include "mkn/kul/for.hpp"
 #include "damn/core/data/ndarray/ndarray_view.hpp"
 #include "damn/core/def/damn_config.hpp"
 
@@ -22,7 +22,8 @@ namespace plamn::core::detail
 template<std::size_t d, typename T, std::size_t dim>
 double shifted(auto const& array, damn::core::Point<T, dim> const& idx, int const shift) DAMN_ALL
 {
-    return damn::core::for_N_fold<dim>([&](auto... i) { return array((i == d ? idx[i] + shift : idx[i])...); });
+    return mkn::kul::for_N_fold<dim>(
+        [&](auto... i) { return array((i == d ? idx[i] + shift : idx[i])...); });
 }
 
 template<Component c>
@@ -285,7 +286,7 @@ NO_DISCARD double laplacian(Layout const& layout, Src const& f,
 
     // plain accumulation rather than sum(array): sum is host-only (std::accumulate)
     double lap = 0;
-    damn::core::for_N<Layout::dimension>([&](auto ic) {
+    mkn::kul::for_N<Layout::dimension>([&](auto ic) {
         constexpr auto d = ic();
         auto const inv   = 1.0 / layout.dx[d];
         lap += inv * inv

@@ -3,14 +3,13 @@
 #define PLAMN_CORE_DATA_PARTICLES_EXPORTING_DETAIL_AOS_EXPORTER
 
 #include "damn/core/def/damn_config.hpp"
-#include "damn/core/math/numeric.hpp"
+#include "mkn/kul/math.hpp"
 #include "damn/core/exec/kernels.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/geometry/range.hpp"
 #include "damn/core/def/detail/mkn_gpu.hpp"
 #include "damn/core/geometry/point.hpp"
-
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/appending/particles_appending.hpp"
@@ -429,7 +428,8 @@ void ParticlesExporter<AoSTS, CPU>::delete_particles_not_in(Src& src, Boxes cons
         if (auto const tile_gbox = damn::core::grow(*tile, ghost_nbr); tile_gbox * src.box() != tile_gbox)
         {                                                           // only patch border tiles
             auto const ranges = partition_particles(tile(), boxes); // what
-            auto const resiz  = damn::core::sum_from(ranges, [](auto const& r) { return r.size(); });
+            auto const resiz
+                = mkn::kul::math::sum_from(ranges, [](auto const& r) { return r.size(); });
 
             assert(static_cast<std::size_t>(resiz) <= tile().size());
             tile().resize(resiz);

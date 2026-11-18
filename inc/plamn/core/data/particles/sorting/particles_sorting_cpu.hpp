@@ -2,7 +2,8 @@
 #define PLAMN_CORE_DATA_PARTICLES_SORTING_PARTICLES_SORTING_CPU_HPP
 
 #include "damn/core/geometry/box_spans.hpp"
-#include "damn/core/meta/tuple.hpp"
+#include "mkn/kul/tuple.hpp"
+#include "mkn/kul/zip.hpp"
 
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
@@ -56,7 +57,7 @@ public:
     {
         auto constexpr static layout_mode = Particles::layout_mode;
         using enum LayoutMode;
-        if constexpr (damn::core::any_in(layout_mode, SoA, SoAVX, SoAVXChunked))
+        if constexpr (mkn::kul::any_in(layout_mode, SoA, SoAVX, SoAVXChunked))
         {
             DAMN_WITH_THRUST_ELSE_THROW({
                 using Iterator_t = std::conditional_t<layout_mode == SoA, SoAIteratorAdaptor,
@@ -67,7 +68,7 @@ public:
                 });
             })
         }
-        else if constexpr (damn::core::any_in(layout_mode, AoSTS, SoATS, SoAVXTS))
+        else if constexpr (mkn::kul::any_in(layout_mode, AoSTS, SoATS, SoAVXTS))
         {
             // fix soa - not finished
             for (auto& tile : particles())
@@ -81,7 +82,7 @@ public:
 
         else
         {
-            static_assert(!damn::core::any_in(layout_mode, AoSPC, SoAPC, AoSPCTS),
+            static_assert(!mkn::kul::any_in(layout_mode, AoSPC, SoAPC, AoSPCTS),
                           "cell sorting not implemented for this layout (no flat iteration)");
             std::sort(particles.begin() + l, particles.begin() + r,
                       [cf = cell_flattener](auto const& a, auto const& b) {
@@ -102,7 +103,7 @@ public:
     auto static constexpr by_deltas()
     {
         return [](auto const& a, auto const& b) -> bool {
-            return damn::core::as_tuple(a.delta()) < damn::core::as_tuple(b.delta());
+            return mkn::kul::as_tuple(a.delta()) < mkn::kul::as_tuple(b.delta());
         };
     }
 
@@ -110,7 +111,7 @@ public:
     {
         using enum LayoutMode;
 
-        if constexpr (damn::core::any_in(Particles::layout_mode, SoA))
+        if constexpr (mkn::kul::any_in(Particles::layout_mode, SoA))
         {
             DAMN_WITH_THRUST_ELSE_THROW({
                 using Iterator_t = SoAIteratorAdaptor;
@@ -120,7 +121,7 @@ public:
                 });
             })
         }
-        else if constexpr (damn::core::any_in(Particles::layout_mode, SoAVX, SoAVXChunked))
+        else if constexpr (mkn::kul::any_in(Particles::layout_mode, SoAVX, SoAVXChunked))
         {
             DAMN_WITH_THRUST_ELSE_THROW({
                 using Iterator_t = SoAVXIteratorAdaptor;
@@ -131,7 +132,7 @@ public:
                 });
             })
         }
-        else if constexpr (damn::core::any_in(Particles::layout_mode, AoSTS, SoATS, SoAVXTS))
+        else if constexpr (mkn::kul::any_in(Particles::layout_mode, AoSTS, SoATS, SoAVXTS))
         {
             throw std::runtime_error("no sort for AoSTS/SoATS");
         }
@@ -151,11 +152,11 @@ public:
         using enum LayoutMode;
 
 
-        if constexpr (damn::core::any_in(Particles::layout_mode, AoSPC, SoAPC))
+        if constexpr (mkn::kul::any_in(Particles::layout_mode, AoSPC, SoAPC))
             damn::core::for_each_point(particles.local_box(), [&](auto const& bix) {
                 std::sort(particles(bix).begin(), particles(bix).end(), by_deltas());
             });
-        else if constexpr (damn::core::any_in(Particles::layout_mode, AoSTS, SoATS, SoAVXTS))
+        else if constexpr (mkn::kul::any_in(Particles::layout_mode, AoSTS, SoATS, SoAVXTS))
         {
             // tiles mix cells: by (cell, delta), a delta-only sort would lose the cell order
             // fix soa - not finished
@@ -165,12 +166,12 @@ public:
                               auto const ca = cf(a.iCell()), cb = cf(b.iCell());
                               if (ca != cb)
                                   return ca < cb;
-                              return damn::core::as_tuple(a.delta()) < as_tuple(b.delta());
+                              return mkn::kul::as_tuple(a.delta()) < as_tuple(b.delta());
                           });
         }
         else
         {
-            static_assert(!damn::core::any_in(Particles::layout_mode, AoSPCTS),
+            static_assert(!mkn::kul::any_in(Particles::layout_mode, AoSPCTS),
                           "delta sorting not implemented for this layout (no flat iteration)");
             auto const end = particles.end();
             auto beg       = particles.begin();
