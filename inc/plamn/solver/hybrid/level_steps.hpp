@@ -1,0 +1,144 @@
+#ifndef PLAMN_SOLVER_HYBRID_LEVEL_STEPS_HPP
+#define PLAMN_SOLVER_HYBRID_LEVEL_STEPS_HPP
+
+// a hybrid level and its coarser hybrid level, around the finer level's substeps (PHARE's
+//  HybridHybridMessengerStrategy, as damn::amr::advance's hooks call them)
+//   prepare_step   E and B at the start of a step: the finer level's time interpolation, reflux
+//   first_step     the finer level's level ghost particles of the coarser level's step end
+//   last_step      those become the old ones
+//   synchronize    the finer level onto the coarser one, its B refluxed, its ghosts refilled
+//
+// level: the simulator's services for one level (solver/hybrid/advance.hpp), and
+//   refine(op, region, pairs)            from the coarser level into it
+//   coarsen(op, pairs)                   from it onto the coarser level
+//   coarser()                            the coarser level's services
+//   coarse_dt()                          the coarser level's step it subcycles in
+//   time_ratio()                         its substeps per step of the coarser level
+
+#include "damn/amr/copy.hpp"
+#include "damn/amr/level_map.hpp"
+#include "damn/core/logger.hpp"
+
+#include "plamn/amr/coarsen.hpp"
+#include "plamn/amr/level_pairs.hpp"
+#include "plamn/amr/refine.hpp"
+#include "plamn/core/data/particles/exporting/particles_exporting.hpp"
+#include "plamn/core/numerics/faraday/faraday_transformer.hpp"
+#include "plamn/solver/hybrid/model.hpp"
+
+#include "phlop/timing/scope.hpp"
+
+#include <cstddef>
+#include <utility>
+#include <string>
+#include <vector>
+
+namespace plamn::solver::hybrid
+{
+template<auto opts>
+void prepare_step(HybridModel<opts> const&, auto&& level)
+{
+    level.per_patch([](auto& patch) {
+        for (std::size_t i = 0; i < 3; ++i)
+        {
+            patch.oldB[i].copyData(patch.emB[i]);
+            patch.oldE[i].copyData(patch.emE[i]);
+        }
+    });
+}
+
+// a level ghost particle lives in one patch, its cell's owner (Surroundings): the others' copies
+//  of a split dropped, old (initialization, regrid, restart) or new (coarse step)
+void own_level_ghosts(auto&& level, bool const new_ghosts)
+{
+    level.per_patch([&](auto& patch) {
+        if (patch.level_ghost_not_owned.empty())
+            return;
+        for (auto& pop : patch.ions)
+            core::delete_particles_in(new_ghosts ? pop.levelGhostParticlesNew()
+                                                 : pop.levelGhostParticlesOld(),
+                                      patch.level_ghost_not_owned);
+    });
+}
+
+// the coarser level is at the end of its step: the level ghost particles of then, split from its
+//  domain particles
+template<auto opts>
+void first_step(HybridModel<opts> const& model, auto&& level)
+{
+    using Splitter_t = HybridModel<opts>::Splitter_t;
+    level.per_patch([](auto& patch) {
+        for (auto& pop : patch.ions)
+            pop.levelGhostParticlesNew().clear();
+        for (auto& e : patch.fluxSumE)
+            e.zero();
+    });
+    for (auto const& name : model.population_names)
+        level.refine(amr::ParticleSplitter<Splitter_t>{}, damn::amr::LevelRegion::LevelGhosts,
+                     {{name + "_domain", name + "_level_ghost_new", ""}});
+    own_level_ghosts(level, /*new_ghosts=*/true);
+}
+
+template<auto opts>
+void last_step(HybridModel<opts> const&, auto&& level)
+{
+    level.per_patch([](auto& patch) {
+        for (auto& pop : patch.ions)
+        {
+            std::swap(pop.levelGhostParticlesNew(), pop.levelGhostParticlesOld());
+            pop.levelGhostParticlesNew().clear();
+            pop.levelGhostParticles() = pop.levelGhostParticlesOld();
+        }
+    });
+}
+
+// the finest level's share of the coarser level's reflux, per substep: the time average of E over
+//  them (coarser finer levels accumulate theirs when synchronized)
+void accumulate_flux_sum(auto&& level, double const coef)
+{
+    level.per_patch([&](auto& patch) {
+        for (std::size_t i = 0; i < 3; ++i)
+        {
+            auto* sum         = patch.fluxSumE[i].data();
+            auto const* avg   = patch.avgE[i].data();
+            auto const values = patch.fluxSumE[i].size();
+            for (std::size_t k = 0; k < values; ++k)
+                sum[k] += coef * avg[k];
+        }
+    });
+}
+
+// the level onto the coarser one, both at t: E and the total ion charge density and flux
+// coarsened (as PHARE's synchronize: the populations' moments, the mass density and the bulk
+// velocity stay the coarser level's own), then the coarser level's B recomputed from the fine
+// time average of E (reflux), then its ghosts refilled
+template<auto opts>
+void synchronize(HybridModel<opts> const&, auto&& level, double const t)
+{
+    DAMN_LOG_SCOPE(1, "Simulator::synchronize_");
+    auto coarse = level.coarser();
+
+    level.coarsen(amr::ElectricFieldCoarsener{}, amr::vector_pairs("EM_E", "EM_E"));
+    auto moments = amr::vector_pairs("ions_charge_flux", "ions_charge_flux");
+    moments.push_back({"ions_charge_density", "ions_charge_density", ""});
+    level.coarsen(amr::MomentsCoarsener{}, moments);
+
+    // reflux: the coarser Eavg under the fine level is the fine one's time average
+    level.coarsen(amr::ElectricFieldCoarsener{}, amr::vector_pairs("EMAvg_E", "EM_fluxSum_E"));
+    coarse.copy(damn::amr::fill_ghosts, "EMAvg_E");
+    auto const dt = level.coarse_dt();
+    coarse.per_patch([&](auto& patch) {
+        core::FaradayTransformer{}(patch.layout, patch.Bold, patch.emAvg.E, patch.em.B, dt);
+    });
+    coarse.fill_magnetic_ghosts("EM_B", t);
+    if (coarse.number() > 0)
+        accumulate_flux_sum(coarse, 1. / level.time_ratio());
+
+    // ghosts after the coarsening
+    coarse.fill_electric_ghosts("EM_E", t);
+    coarse.copy(damn::amr::fill_ghosts, "IonMoments");
+}
+
+} // namespace plamn::solver::hybrid
+
+#endif // PLAMN_SOLVER_HYBRID_LEVEL_STEPS_HPP

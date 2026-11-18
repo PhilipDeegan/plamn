@@ -233,14 +233,14 @@ void Simulator<opts>::initialize_refined_(std::size_t const ln)
     fill_magnetic_ghosts_(ln, "EM_B", startTime_);
     fill_electric_ghosts_(ln, "EM_E", startTime_);
 
-    for (auto const& name : population_names_)
+    for (auto const& name : hybrid_.population_names)
     {
         refine_(ln, amr::ParticleSplitter<Splitter_t>{}, LevelRegion::Interior,
                 {{name + "_domain", name + "_domain", ""}});
         refine_(ln, amr::ParticleSplitter<Splitter_t>{}, LevelRegion::LevelGhosts,
                 {{name + "_domain", name + "_level_ghost_old", ""}});
     }
-    own_level_ghosts_(ln, /*new_ghosts=*/false);
+    solver::hybrid::own_level_ghosts(level_services_(ln), /*new_ghosts=*/false);
     per_patch_(ln, [](auto& patch) {
         for (auto& pop : patch.ions)
             pop.levelGhostParticles() = pop.levelGhostParticlesOld();

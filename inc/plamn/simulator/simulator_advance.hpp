@@ -122,24 +122,16 @@ void Simulator<opts>::advance_level_(int const level_number, double const t, dou
     // the finest level's share of the coarser level's reflux, per substep: the time average of
     //  E over them (coarser finer levels accumulate theirs when synchronized)
     if (ln > 0 and ln + 1 == levels_.size())
-        accumulate_flux_sum_(ln, 1. / time_ratio());
+        solver::hybrid::accumulate_flux_sum(level_services_(ln), 1. / time_ratio());
 }
 
-// E and B at the start of the step, for the finer level's time interpolation and the reflux
 template<auto opts>
 void Simulator<opts>::prepare_step_(int const ln, double)
 {
-    per_patch_(static_cast<std::size_t>(ln), [](auto& patch) {
-        for (std::size_t i = 0; i < 3; ++i)
-        {
-            patch.oldB[i].copyData(patch.emB[i]);
-            patch.oldE[i].copyData(patch.emE[i]);
-        }
-    });
+    solver::hybrid::prepare_step(hybrid_, level_services_(static_cast<std::size_t>(ln)));
 }
 
-// the coarser level is at coarse_t + coarse_dt: the level ghost particles of then, split from
-// its domain particles
+// the coarser level is at coarse_t + coarse_dt
 template<auto opts>
 void Simulator<opts>::first_step_(int const level_number, double, double const coarse_t,
                                   double const coarse_dt)
@@ -150,93 +142,22 @@ void Simulator<opts>::first_step_(int const level_number, double, double const c
     auto& l          = levels_[ln];
     l.coarse_t       = coarse_t;
     l.coarse_dt      = coarse_dt;
-    per_patch_(ln, [](auto& patch) {
-        for (auto& pop : patch.ions)
-            pop.levelGhostParticlesNew().clear();
-        for (auto& e : patch.fluxSumE)
-            e.zero();
-    });
-    for (auto const& name : population_names_)
-        refine_(ln, amr::ParticleSplitter<Splitter_t>{}, damn::amr::LevelRegion::LevelGhosts,
-                {{name + "_domain", name + "_level_ghost_new", ""}});
-    own_level_ghosts_(ln, /*new_ghosts=*/true);
-}
-
-template<auto opts>
-void Simulator<opts>::own_level_ghosts_(std::size_t const ln, bool const new_ghosts)
-{
-    per_patch_(ln, [&](auto& patch) {
-        if (patch.level_ghost_not_owned.empty())
-            return;
-        for (auto& pop : patch.ions)
-            core::delete_particles_in(new_ghosts ? pop.levelGhostParticlesNew()
-                                                 : pop.levelGhostParticlesOld(),
-                                      patch.level_ghost_not_owned);
-    });
+    solver::hybrid::first_step(hybrid_, level_services_(ln));
 }
 
 template<auto opts>
 void Simulator<opts>::last_step_(int const ln)
 {
-    per_patch_(static_cast<std::size_t>(ln), [](auto& patch) {
-        for (auto& pop : patch.ions)
-        {
-            std::swap(pop.levelGhostParticlesNew(), pop.levelGhostParticlesOld());
-            pop.levelGhostParticlesNew().clear();
-            pop.levelGhostParticles() = pop.levelGhostParticlesOld();
-        }
-    });
-}
-
-// level ln onto ln - 1, both at t: E and the total ion charge density and flux coarsened (as
-// PHARE's synchronize: the populations' moments, the mass density and the bulk velocity stay the
-// coarser level's own), then the coarser level's B recomputed from the fine time average of E
-// (reflux), then its ghosts refilled
-template<auto opts>
-void Simulator<opts>::synchronize_(int const level_number, double const t)
-{
-    DAMN_LOG_SCOPE(1, "Simulator::synchronize_");
-    auto const ln     = static_cast<std::size_t>(level_number);
-    auto const coarse = ln - 1;
-
-    coarsen_(ln, amr::ElectricFieldCoarsener{}, amr::vector_pairs("EM_E", "EM_E"));
-    auto moments = amr::vector_pairs("ions_charge_flux", "ions_charge_flux");
-    moments.push_back({"ions_charge_density", "ions_charge_density", ""});
-    coarsen_(ln, amr::MomentsCoarsener{}, moments);
-
-    // reflux: the coarser Eavg under the fine level is the fine one's time average
-    coarsen_(ln, amr::ElectricFieldCoarsener{}, amr::vector_pairs("EMAvg_E", "EM_fluxSum_E"));
-    copy_(coarse, damn::amr::fill_ghosts, "EMAvg_E");
-    auto const dt = levels_[ln].coarse_dt;
-    per_patch_(coarse, [&](auto& patch) {
-        core::FaradayTransformer{}(patch.layout, patch.Bold, patch.emAvg.E, patch.em.B, dt);
-    });
-    fill_magnetic_ghosts_(coarse, "EM_B", t);
-    if (coarse > 0)
-        accumulate_flux_sum_(coarse, 1. / time_ratio());
-
-    // ghosts after the coarsening
-    fill_electric_ghosts_(coarse, "EM_E", t);
-    copy_(coarse, damn::amr::fill_ghosts, "IonMoments");
-    fine_dump_(coarse, t);
+    solver::hybrid::last_step(hybrid_, level_services_(static_cast<std::size_t>(ln)));
 }
 
 template<auto opts>
-void Simulator<opts>::accumulate_flux_sum_(std::size_t const ln, double const coef)
+void Simulator<opts>::synchronize_(int const ln, double const t)
 {
-    per_patch_(ln, [&](auto& patch) {
-        for (std::size_t i = 0; i < 3; ++i)
-        {
-            auto* sum         = patch.fluxSumE[i].data();
-            auto const* avg   = patch.avgE[i].data();
-            auto const values = patch.fluxSumE[i].size();
-            for (std::size_t k = 0; k < values; ++k)
-                sum[k] += coef * avg[k];
-        }
-    });
+    solver::hybrid::synchronize(hybrid_, level_services_(static_cast<std::size_t>(ln)), t);
+    fine_dump_(static_cast<std::size_t>(ln) - 1, t);
 }
 
-// the ions' totals from the populations' (complete) moments
 } // namespace plamn
 
 #endif // PLAMN_SIMULATOR_SIMULATOR_ADVANCE_HPP

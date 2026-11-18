@@ -218,7 +218,7 @@ void Simulator<opts>::register_resources_()
     for (std::size_t i = 0; i < nbr_pops; ++i)
     {
         auto const name = ions["pop" + std::to_string(i)]["name"].template to<std::string>();
-        population_names_.push_back(name);
+        hybrid_.population_names.push_back(name);
 
         // every population's moments in one exchange, as PHARE
         add("IonPopBorderSum", components(name + "_flux"));

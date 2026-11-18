@@ -113,10 +113,10 @@ void Simulator<opts>::setup_computed_()
             return out;
         },
         [](Patch_t& patch, auto&) -> auto& { return patch.ions.momentumTensor(); });
-    for (std::size_t i = 0; i < population_names_.size(); ++i)
+    for (std::size_t i = 0; i < hybrid_.population_names.size(); ++i)
         add_tensor(
-            "/ions/pop/" + population_names_[i] + "/momentum_tensor",
-            population_names_[i] + "_momentumTensor",
+            "/ions/pop/" + hybrid_.population_names[i] + "/momentum_tensor",
+            hybrid_.population_names[i] + "_momentumTensor",
             [i](Patch_t& patch) {
                 return std::vector<PopRef>{std::ref(*(patch.ions.begin() + i))};
             },

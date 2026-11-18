@@ -387,17 +387,17 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
         }
     });
     using MaskedSplit = amr::Masked<amr::ParticleSplitter<Splitter_t>, dimension>;
-    for (auto const& name : population_names_)
+    for (auto const& name : hybrid_.population_names)
         refine_(fine, MaskedSplit{{}, &old_cells}, LevelRegion::Interior,
                 {{name + "_domain", name + "_domain", ""}});
 
     // ghosts: patch ghosts from the new neighbours, level ghosts from the coarser level now
     fill_magnetic_ghosts_(fine, "EM_B", t);
     fill_electric_ghosts_(fine, "EM_E", t);
-    for (auto const& name : population_names_)
+    for (auto const& name : hybrid_.population_names)
         refine_(fine, amr::ParticleSplitter<Splitter_t>{}, LevelRegion::LevelGhosts,
                 {{name + "_domain", name + "_level_ghost_old", ""}});
-    own_level_ghosts_(fine, /*new_ghosts=*/false);
+    solver::hybrid::own_level_ghosts(level_services_(fine), /*new_ghosts=*/false);
     per_patch_(fine, [](auto& patch) {
         for (auto& pop : patch.ions)
             pop.levelGhostParticles() = pop.levelGhostParticlesOld();

@@ -39,6 +39,7 @@
 #include "plamn/diagnostic/vtkhdf.hpp"
 #include "plamn/simulator/hybrid_patch_view.hpp"
 #include "plamn/solver/hybrid/advance.hpp"
+#include "plamn/solver/hybrid/level_steps.hpp"
 #include "plamn/solver/hybrid/model.hpp"
 #include "plamn/solver/stacks.hpp"
 #include "plamn/amr/load_balancing.hpp"
@@ -441,7 +442,6 @@ private:
 
     // a level ghost particle lives in one patch, its cell's owner (Surroundings): the others'
     //  copies of a split dropped, old (initialization, regrid, restart) or new (coarse step)
-    void own_level_ghosts_(std::size_t ln, bool new_ghosts);
 
     // what the models' solvers use of a level (solver/hybrid/advance.hpp)
     struct LevelServices
@@ -462,6 +462,20 @@ private:
             self.fill_electric_ghosts_(ln, key, t);
         }
         NO_DISCARD double alpha(double const t) const { return self.alpha_(ln, t); }
+
+        // with the coarser level (ln > 0)
+        NO_DISCARD LevelServices coarser() const { return {self, ln - 1}; }
+        NO_DISCARD double coarse_dt() const { return self.levels_[ln].coarse_dt; }
+        NO_DISCARD int time_ratio() const { return self.time_ratio(); }
+        void refine(auto const& op, damn::amr::LevelRegion const region,
+                    std::vector<damn::amr::LevelPair> const& pairs, double const alpha = 0)
+        {
+            self.refine_(ln, op, region, pairs, alpha);
+        }
+        void coarsen(auto const& op, std::vector<damn::amr::LevelPair> const& pairs)
+        {
+            self.coarsen_(ln, op, pairs);
+        }
     };
     NO_DISCARD LevelServices level_services_(std::size_t const ln) { return {*this, ln}; }
 
@@ -471,14 +485,12 @@ private:
     void first_step_(int ln, double t, double coarse_t, double coarse_dt);
     void last_step_(int ln);
     void synchronize_(int ln, double t);
-    void accumulate_flux_sum_(std::size_t ln, double coef);
 
     damn::CoutRedirect cout_redirect_{rank_log_file()}; // first: for the whole lifetime
     initializer::Dict dict_;
     Hierarchy_t hierarchy_;
     std::vector<Level> levels_;
-    Resources_t resources_; // what moves together, by name
-    std::vector<std::string> population_names_;
+    Resources_t resources_;                            // what moves together, by name
     std::vector<std::vector<Box_t>> refinement_boxes_; // per level, in that level's cells
     // refinement="tagging": what to tag on, how to cluster, every how many level 0 steps
     std::optional<amr::Tagging> tagging_;

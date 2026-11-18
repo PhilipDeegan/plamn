@@ -75,7 +75,7 @@ std::vector<std::string> Simulator<opts>::restart_names_() const
     names.push_back("ions_charge_density");
     for (auto const* c : {"_x", "_y", "_z"})
         names.push_back(std::string{"ions_charge_flux"} + c);
-    for (auto const& pop : population_names_)
+    for (auto const& pop : hybrid_.population_names)
     {
         names.push_back(pop + "_domain");
         for (auto const* m : {"_density", "_charge_density", "_flux_x", "_flux_y", "_flux_z"})
@@ -231,10 +231,10 @@ void Simulator<opts>::rebuild_after_load_()
         });
         if (ln > 0)
         {
-            for (auto const& name : population_names_)
+            for (auto const& name : hybrid_.population_names)
                 refine_(ln, amr::ParticleSplitter<Splitter_t>{}, LevelRegion::LevelGhosts,
                         {{name + "_domain", name + "_level_ghost_old", ""}});
-            own_level_ghosts_(ln, /*new_ghosts=*/false);
+            solver::hybrid::own_level_ghosts(level_services_(ln), /*new_ghosts=*/false);
             per_patch_(ln, [](auto& patch) {
                 for (auto& pop : patch.ions)
                     pop.levelGhostParticles() = pop.levelGhostParticlesOld();

@@ -65,7 +65,8 @@ void Simulator<opts>::setup_diagnostics_()
     diagnostics_.dir               = get("filePath", std::string{"phare_output"});
     diagnostics_.overwrite         = get("mode", std::string{}) == "overwrite";
     diagnostics_.fine_dump_lvl_max = get("fine_dump_lvl_max", 0);
-    diagnostics_.quantities = ::plamn::diagnostic::hybrid_quantities<View_t>(population_names_);
+    diagnostics_.quantities
+        = ::plamn::diagnostic::hybrid_quantities<View_t>(hybrid_.population_names);
     for (auto const& d : diagnostics_.list) // unknown quantities: at setup, not at a dump
         if (d.type == "particle")
             std::ignore = particle_population_(d.quantity);
@@ -109,9 +110,9 @@ void Simulator<opts>::dump_(diagnostic::Diagnostic& diag, double const time, int
 template<auto opts>
 std::size_t Simulator<opts>::particle_population_(std::string const& quantity) const
 {
-    for (std::size_t i = 0; i < population_names_.size(); ++i)
+    for (std::size_t i = 0; i < hybrid_.population_names.size(); ++i)
         for (auto const* kind : {"/domain", "/levelGhost"})
-            if (quantity == "/ions/pop/" + population_names_[i] + kind)
+            if (quantity == "/ions/pop/" + hybrid_.population_names[i] + kind)
                 return i;
     throw std::runtime_error("plamn diagnostics: unsupported particle quantity " + quantity
                              + " (/ions/pop/<name>/domain or levelGhost)");
@@ -174,8 +175,8 @@ void Simulator<opts>::dump_vtkhdf_(diagnostic::Diagnostic& diag, double const ti
         file->write_attribute("/", "domain_box", upper);
         file->write_attribute("/", "periodicities", periodic);
         auto const& ions = dict_["simulation"]["ions"];
-        for (std::size_t i = 0; i < population_names_.size(); ++i)
-            if (diag.quantity.starts_with("/ions/pop/" + population_names_[i] + "/"))
+        for (std::size_t i = 0; i < hybrid_.population_names.size(); ++i)
+            if (diag.quantity.starts_with("/ions/pop/" + hybrid_.population_names[i] + "/"))
             {
                 auto const& pop = ions["pop" + std::to_string(i)];
                 file->write_attribute("/", "pop_mass", pop["mass"].template to<double>());
@@ -406,8 +407,8 @@ void Simulator<opts>::dump_phareh5_(diagnostic::Diagnostic& diag, double const t
     file->write_attribute("/", "origin", origin);
     file->write_attribute("/", "periodicities", periodic);
     auto const& ions = dict_["simulation"]["ions"];
-    for (std::size_t i = 0; i < population_names_.size(); ++i)
-        if (diag.quantity.starts_with("/ions/pop/" + population_names_[i] + "/"))
+    for (std::size_t i = 0; i < hybrid_.population_names.size(); ++i)
+        if (diag.quantity.starts_with("/ions/pop/" + hybrid_.population_names[i] + "/"))
         {
             auto const& pop = ions["pop" + std::to_string(i)];
             file->write_attribute("/", "pop_mass", pop["mass"].template to<double>());
