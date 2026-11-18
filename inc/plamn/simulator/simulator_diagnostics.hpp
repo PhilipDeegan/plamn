@@ -142,10 +142,10 @@ void Simulator<opts>::dump_vtkhdf_(diagnostic::Diagnostic& diag, double const ti
     {
         // the number of components, from any patch's accessor (a rank may have none)
         std::size_t local = 0;
-        for (auto const& l : levels_)
-            if (!l.data.data.empty())
+        for (auto const& [ln, ld] : hybrid_.levels)
+            if (!ld.data.empty())
             {
-                with_fields(*l.data.data[0], [&](auto const& f) { local = f.size(); });
+                with_fields(*ld.data[0], [&](auto const& f) { local = f.size(); });
                 break;
             }
         components = damn::mpi::max(local);
@@ -201,7 +201,7 @@ void Simulator<opts>::dump_vtkhdf_(diagnostic::Diagnostic& diag, double const ti
         }
         if (is_computed_)
             compute(static_cast<std::size_t>(ln), diag.quantity);
-        auto& ld = levels_[ln].data;
+        auto& ld = data_(ln);
 
         // this rank's patches' rows, one after another
         std::vector<std::size_t> first{0};
@@ -283,7 +283,7 @@ void Simulator<opts>::dump_phareh5_(diagnostic::Diagnostic& diag, double const t
     {
         if (is_computed_)
             compute(static_cast<std::size_t>(ln), diag.quantity);
-        auto& ld            = levels_[ln].data;
+        auto& ld            = data_(ln);
         auto const n_local  = ld.data.size();
         auto const n_slots  = damn::mpi::max(n_local);
         auto const patch_at = [&](std::size_t const i) {

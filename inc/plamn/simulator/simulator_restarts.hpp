@@ -37,6 +37,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <filesystem>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -157,7 +158,7 @@ void Simulator<opts>::write_restart_(std::string const& dir)
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
     {
         auto const group = "/level" + std::to_string(ln);
-        write_checkpoint(file, group, hierarchy_.levels[ln], levels_[ln].data, names);
+        write_checkpoint(file, group, hierarchy_.levels[ln], data_(ln), names);
     }
     for (std::size_t ln = 0; ln < clustered_.size(); ++ln)
         write_boxes(file, "/clustered" + std::to_string(ln), clustered_[ln]);
@@ -197,7 +198,7 @@ void Simulator<opts>::load_restart_()
         auto const stored = read_level<dimension>(file, group + "/level", ln);
         damn::amr::set_level(hierarchy_, stored.level);
         allocate_level_(ln);
-        read_checkpoint(file, group, hierarchy_.levels[ln], levels_[ln].data, names);
+        read_checkpoint(file, group, hierarchy_.levels[ln], data_(ln), names);
     }
     clustered_.resize(static_cast<std::size_t>(file.read_attribute<int>("/restart", "clustered")));
     for (std::size_t ln = 0; ln < clustered_.size(); ++ln)

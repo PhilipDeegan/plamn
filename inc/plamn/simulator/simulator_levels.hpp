@@ -78,9 +78,9 @@ template<auto opts>
 void Simulator<opts>::allocate_level_(int const ln)
 {
     auto const& sim = dict_["simulation"];
-    levels_.resize(static_cast<std::size_t>(ln) + 1);
-    auto& l = levels_[ln];
-    l.data  = damn::amr::allocate(hierarchy_.levels[ln], rank_, [&](auto const& p) {
+    resize_levels_(static_cast<std::size_t>(ln) + 1);
+    auto& ld = data_(ln);
+    ld       = damn::amr::allocate(hierarchy_.levels[ln], rank_, [&](auto const& p) {
         Layout_t const layout{p.box, damn::amr::mesh_size(hierarchy_, ln),
                               damn::amr::position(hierarchy_, ln, p.box.lower), ln};
         return std::make_unique<Patch_t>(layout, sim, surroundings_(ln, p.box));
@@ -104,6 +104,7 @@ void Simulator<opts>::link_level_(int const ln)
     auto const pgw    = Patch_t::particle_ghost_width;
     auto constexpr gw = Patch_t::field_ghost_width;
     auto& l           = levels_[ln];
+    auto& ld          = data_(ln);
 
     // the level's neighbours, as far as any resource reaches outside its patch: field ghosts
     // plus primal nodes, or particle ghosts
@@ -117,7 +118,7 @@ void Simulator<opts>::link_level_(int const ln)
     l.to_coarser = damn::amr::make_level_map(hierarchy_, ln - 1, rank_, topology_,
                                              reach + 2 * amr::splitBoxGrowth<Splitter_t>() + 4);
     l.level_ghost_cells.clear();
-    for (auto const& p : l.data.patches)
+    for (auto const& p : ld.patches)
     {
         auto& cells = l.level_ghost_cells.emplace_back();
         cells.push_back(damn::core::grow(p.box, mkn::kul::ConstArray<int, dimension>(gw)));
@@ -256,15 +257,15 @@ void Simulator<opts>::refine_magnetic_(std::size_t const ln)
 {
     refine_(ln, amr::FieldRefiner{}, damn::amr::LevelRegion::Interior,
             amr::vector_pairs("EM_B", "EM_B"));
-    auto& l = levels_[ln];
-    for (std::size_t i = 0; i < damn::amr::size(l.data); ++i)
+    auto& ld = data_(ln);
+    for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
     {
-        auto& patch = *l.data.data[i];
+        auto& patch = *ld.data[i];
         auto bx     = amr::field_resource<Patch_t::field_ghost_width>(patch.emB[0]);
         auto by     = amr::field_resource<Patch_t::field_ghost_width>(patch.emB[1]);
         auto bz     = amr::field_resource<Patch_t::field_ghost_width>(patch.emB[2]);
-        amr::divergence_free_touch_up(std::array{&bx, &by, &bz}, l.data.patches[i].box,
-                                      l.data.patches[i].box,
+        amr::divergence_free_touch_up(std::array{&bx, &by, &bz}, ld.patches[i].box,
+                                      ld.patches[i].box,
                                       damn::amr::mesh_size(hierarchy_, static_cast<int>(ln)));
     }
 }
@@ -295,7 +296,7 @@ std::vector<std::vector<typename Simulator<opts>::Box_t>> Simulator<opts>::preta
         fill_magnetic_ghosts_(ln + 1, "EM_B", startTime_);
         boxes.push_back(std::move(level_boxes));
     }
-    levels_.clear();
+    resize_levels_(0);
     hierarchy_.levels.clear();
     return boxes;
 }

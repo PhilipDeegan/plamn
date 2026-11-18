@@ -37,7 +37,7 @@ namespace plamn
 template<auto opts>
 std::vector<double> Simulator<opts>::domain_values(std::string const& name, std::size_t const ln)
 {
-    auto& ld = levels_.at(ln).data;
+    auto& ld = data_(ln);
     std::vector<double> values;
     for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
     {
@@ -62,7 +62,7 @@ std::vector<double> Simulator<opts>::all_domain_values(std::string const& name,
     if (n_ranks_ == 1)
         return mine;
 
-    auto& ld = levels_.at(ln).data;
+    auto& ld = data_(ln);
     // every rank's values and per patch sizes (a rank may have no patch)
     std::vector<int> sizes; // of my patches, in my level order
     for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
@@ -107,7 +107,7 @@ std::vector<double> Simulator<opts>::all_domain_values(std::string const& name,
 template<auto opts>
 std::vector<double> Simulator<opts>::level_values(std::string const& name, std::size_t const ln)
 {
-    auto& ld = levels_.at(ln).data;
+    auto& ld = data_(ln);
     std::vector<int> points; // dimension per point
     std::vector<double> values;
     for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
@@ -180,11 +180,12 @@ std::string Simulator<opts>::summary()
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
     {
         auto& l = levels_[ln];
+        auto& ld = data_(ln);
         // patches, cells, patch ghost cells, level ghost cells, particles
         std::array<unsigned long long, 5> mine{}, all{};
-        for (std::size_t i = 0; i < damn::amr::size(l.data); ++i)
+        for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
         {
-            auto const& box   = l.data.patches[i].box;
+            auto const& box   = ld.patches[i].box;
             auto const& links = l.neighbours.of[i];
             ++mine[0];
             mine[1] += static_cast<unsigned long long>(box.size());

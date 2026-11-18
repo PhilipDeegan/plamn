@@ -110,12 +110,12 @@ void Simulator<opts>::check_set_(std::size_t const ln, std::string const& key,
     if constexpr (!DAMN_DEBUG)
         return;
 
-    auto& l           = levels_[ln];
+    auto& ld          = data_(ln);
     auto const domain = damn::amr::level_domain(hierarchy_, static_cast<int>(ln));
-    for (std::size_t i = 0; i < damn::amr::size(l.data); ++i)
+    for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
         for (auto const* c : {"_x", "_y", "_z"})
-            damn::amr::with_resource(l.data.data[i], key + c, [&](auto const& r) {
-                auto const& cells = l.data.patches[i].box;
+            damn::amr::with_resource(ld.data[i], key + c, [&](auto const& r) {
+                auto const& cells = ld.patches[i].box;
                 auto const at
                     = simulator::detail::first_unset(r, cells, domain, hierarchy_.periodic);
                 if (!at)
@@ -132,18 +132,19 @@ void Simulator<opts>::touch_up_level_ghosts_(std::size_t const ln, std::string c
 {
     auto constexpr gw = Patch_t::field_ghost_width;
     auto& l           = levels_[ln];
+    auto& ld          = data_(ln);
     auto const dx     = damn::amr::mesh_size(hierarchy_, static_cast<int>(ln));
-    for (std::size_t i = 0; i < damn::amr::size(l.data); ++i)
+    for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
     {
         std::vector<amr::FieldResource<typename Patch_t::Grid_t, gw>> B;
         for (auto const* c : {"_x", "_y", "_z"})
-            damn::amr::with_resource(l.data.data[i], key + c, [&](auto& r) {
+            damn::amr::with_resource(ld.data[i], key + c, [&](auto& r) {
                 if constexpr (std::is_same_v<std::decay_t<decltype(r)>,
                                              amr::FieldResource<typename Patch_t::Grid_t, gw>>)
                     B.push_back(r);
             });
         for (auto const& region : l.level_ghost_cells[i])
-            amr::divergence_free_touch_up(std::array{&B[0], &B[1], &B[2]}, l.data.patches[i].box,
+            amr::divergence_free_touch_up(std::array{&B[0], &B[1], &B[2]}, ld.patches[i].box,
                                           region, dx);
     }
 }

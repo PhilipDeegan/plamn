@@ -121,15 +121,15 @@ std::vector<typename Simulator<opts>::Box_t> Simulator<opts>::cluster_(int const
 {
     DAMN_LOG_SCOPE(1, "Simulator::cluster_");
     using Resource = amr::FieldResource<typename Patch_t::Grid_t, Patch_t::field_ghost_width>;
-    auto& l        = levels_[ln];
+    auto& ld       = data_(ln);
     auto const dx  = damn::amr::mesh_size(hierarchy_, ln);
 
     std::vector<damn::core::Point<int, dimension>> tagged;
-    for (std::size_t i = 0; i < damn::amr::size(l.data); ++i)
+    for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
     {
         auto const resource = [&](std::string const& name) {
             std::optional<Resource> r;
-            damn::amr::with_resource(l.data.data[i], name, [&](auto& x) {
+            damn::amr::with_resource(ld.data[i], name, [&](auto& x) {
                 if constexpr (std::is_same_v<std::decay_t<decltype(x)>, Resource>)
                     r = x;
             });
@@ -137,7 +137,7 @@ std::vector<typename Simulator<opts>::Box_t> Simulator<opts>::cluster_(int const
                 throw std::runtime_error("plamn Simulator: no field " + name + " to tag on");
             return *r;
         };
-        for (auto const& c : amr::tagged_cells(*tagging_, l.data.patches[i].box, dx, resource))
+        for (auto const& c : amr::tagged_cells(*tagging_, ld.patches[i].box, dx, resource))
             tagged.push_back(c);
     }
     if (n_ranks_ > 1)
@@ -162,7 +162,7 @@ std::vector<double> Simulator<opts>::particle_weights_(int const ln,
     auto const fine = static_cast<std::size_t>(ln);
     // the level's own particles, where it is
     if (fine < levels_.size())
-        for (auto const& patch : levels_[fine].data.data)
+        for (auto const& patch : data_(fine).data)
         {
             auto const counts = simulator::detail::cell_counts(*patch);
             for (std::size_t b = 0; b < boxes.size(); ++b)
@@ -173,7 +173,7 @@ std::vector<double> Simulator<opts>::particle_weights_(int const ln,
     {
         auto const old = fine < levels_.size() ? hierarchy_.levels[ln].patches
                                                : std::vector<damn::amr::Patch<dimension>>{};
-        for (auto const& patch : levels_[fine - 1].data.data)
+        for (auto const& patch : data_(fine - 1).data)
         {
             auto const counts = simulator::detail::cell_counts(*patch);
             for (std::size_t b = 0; b < boxes.size(); ++b)
@@ -204,7 +204,7 @@ bool Simulator<opts>::should_rebalance_()
         // every rank's level 0 workload
         double const mine = lb_.mode == "homogeneous" ? [&] {
             double cells = 0;
-            for (auto const& p : levels_[0].data.patches)
+            for (auto const& p : data_(0).patches)
                 cells += static_cast<double>(p.box.size());
             return cells;
         }()
@@ -244,15 +244,16 @@ void Simulator<opts>::rebalance_(double const t)
                                                      damn::amr::periodic_shifts(hierarchy_, 0));
         auto const& sim = dict_["simulation"];
         auto& l         = levels_[0];
-        l.data          = damn::mpi::regrid(map, std::move(l.data), [&](auto const& p) {
+        auto& ld        = data_(0);
+        ld              = damn::mpi::regrid(map, std::move(ld), [&](auto const& p) {
             Layout_t const layout{p.box, damn::amr::mesh_size(hierarchy_, 0),
                                   damn::amr::position(hierarchy_, 0, p.box.lower), 0};
             return std::make_unique<Patch_t>(layout, sim, surroundings_(0, p.box));
         });
-        for (std::size_t i = 0; i < damn::amr::size(l.data); ++i)
+        for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
         {
-            l.data.data[i]->rebox(surroundings_(0, l.data.patches[i].box));
-            for (auto& pop : l.data.data[i]->ions)
+            ld.data[i]->rebox(surroundings_(0, ld.patches[i].box));
+            for (auto& pop : ld.data[i]->ions)
                 pop.patchGhostParticles().clear();
         }
         link_level_(0);
@@ -292,7 +293,7 @@ void Simulator<opts>::regrid_(double const t, int const from, bool const always)
             continue;
         if (boxes.empty())
         {
-            levels_.resize(fine);
+            resize_levels_(fine);
             clustered_.resize(fine);
             damn::amr::remove_finer_levels(hierarchy_, ln);
             break;
@@ -337,7 +338,7 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
     auto const finer = keep_finer ? std::vector<damn::amr::Level<dimension>>(
                                         hierarchy_.levels.begin() + ln + 1, hierarchy_.levels.end())
                                   : std::vector<damn::amr::Level<dimension>>{};
-    levels_.resize(keep_finer ? std::max(levels_.size(), fine + 1) : fine + 1);
+    resize_levels_(keep_finer ? std::max(levels_.size(), fine + 1) : fine + 1);
     damn::amr::set_level(hierarchy_, level_of_(ln, boxes)); // drops the finer: put back below
     for (auto const& level : finer)
         damn::amr::set_level(hierarchy_, level);
@@ -351,10 +352,11 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
         return std::make_unique<Patch_t>(layout, sim, surroundings_(ln, p.box));
     };
     auto& l = levels_[fine];
-    l.data  = n_ranks_ > 1 ? damn::mpi::regrid(map, std::move(l.data), make)
-                           : damn::amr::regrid(map, std::move(l.data), make);
-    for (std::size_t i = 0; i < damn::amr::size(l.data); ++i)
-        l.data.data[i]->rebox(surroundings_(ln, l.data.patches[i].box));
+    auto& ld = data_(fine);
+    ld       = n_ranks_ > 1 ? damn::mpi::regrid(map, std::move(ld), make)
+                            : damn::amr::regrid(map, std::move(ld), make);
+    for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
+        ld.data[i]->rebox(surroundings_(ln, ld.patches[i].box));
     link_level_(ln);
     l.coarse_t  = t;
     l.coarse_dt = 0; // the coarser level's data at t
@@ -363,10 +365,10 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
     using MaskedField = amr::Masked<amr::FieldRefiner, dimension>;
     MaskedField const masked_field{{}, &old_cells};
     refine_(fine, masked_field, LevelRegion::Interior, amr::vector_pairs("EM_B", "EM_B"));
-    for (std::size_t i = 0; i < damn::amr::size(l.data); ++i)
+    for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
     {
-        auto& patch      = *l.data.data[i];
-        auto const cells = l.data.patches[i].box;
+        auto& patch      = *ld.data[i];
+        auto const cells = ld.patches[i].box;
         auto bx          = amr::field_resource<gw>(patch.emB[0]);
         auto by          = amr::field_resource<gw>(patch.emB[1]);
         auto bz          = amr::field_resource<gw>(patch.emB[2]);

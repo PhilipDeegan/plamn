@@ -38,6 +38,7 @@
 #include "damn/core/def/constants.hpp"
 #include "plamn/diagnostic/vtkhdf.hpp"
 #include "plamn/simulator/hybrid_patch_view.hpp"
+#include "plamn/solver/hybrid/model.hpp"
 #include "plamn/amr/load_balancing.hpp"
 #include "plamn/core/def.hpp"
 #include "plamn/core/numerics/interpolator/interpolating.hpp"
@@ -114,7 +115,7 @@ public:
     using Grid_t       = Patch_t::Grid_t;
     using Layout_t     = Patch_t::Layout_t;
     using Hierarchy_t  = damn::amr::Hierarchy<dimension>;
-    using LevelData_t  = damn::amr::LevelData<dimension, std::unique_ptr<Patch_t>>;
+    using LevelData_t  = solver::HybridModel<opts>::LevelData_t;
     using Neighbours_t = damn::amr::Neighbours<dimension>;
     using LevelMap_t   = damn::amr::LevelMap<dimension>;
     using Resources_t  = std::map<std::string, std::vector<damn::amr::ResourcePair>>;
@@ -165,7 +166,7 @@ public:
 
     // for tests and diagnostics
     NO_DISCARD auto& hierarchy() const { return hierarchy_; }
-    NO_DISCARD auto& level(std::size_t const ln = 0) { return levels_.at(ln).data; }
+    NO_DISCARD auto& level(std::size_t const ln = 0) { return data_(ln); }
     NO_DISCARD std::size_t n_levels() const { return levels_.size(); }
 
     // a field resource's values on the domain nodes of every local patch of level ln, patch by
@@ -241,10 +242,9 @@ public:
     NO_DISCARD int time_ratio() const { return hierarchy_.ratio * hierarchy_.ratio; }
 
 private:
-    // one level's data and how it moves
+    // one level, whatever its model: how its data moves (the data: the models')
     struct Level
     {
-        LevelData_t data;
         Neighbours_t neighbours;
         std::optional<LevelMap_t> to_coarser; // levels > 0
         // per local patch: the fine ghost cells no patch of the level covers, whole coarser
@@ -327,10 +327,24 @@ private:
         std::chrono::steady_clock::time_point start;
     } restarts_;
 
+    // the hybrid model: its levels' patch data
+    solver::HybridModel<opts> hybrid_;
+    // level ln's patch data (made if new)
+    NO_DISCARD LevelData_t& data_(std::size_t const ln)
+    {
+        return hybrid_.levels[static_cast<int>(ln)];
+    }
+    // the levels from n on gone, with their data; the levels to n made (no data yet)
+    void resize_levels_(std::size_t const n)
+    {
+        levels_.resize(n);
+        hybrid_.truncate(n);
+    }
+
     // one patch's work, for every local patch of level ln
     void per_patch_(std::size_t const ln, auto&& fn)
     {
-        for (auto& patch : levels_[ln].data.data)
+        for (auto& patch : data_(ln).data)
             fn(*patch);
     }
 
@@ -338,10 +352,11 @@ private:
     void copy_(std::size_t const ln, auto const how, std::string const& key)
     {
         auto& l = levels_[ln];
+        auto& ld = data_(ln);
         if (n_ranks_ > 1)
-            damn::mpi::copy(how, l.neighbours, resources_.at(key), l.data);
+            damn::mpi::copy(how, l.neighbours, resources_.at(key), ld);
         else
-            damn::amr::copy(how, l.neighbours, resources_.at(key), l.data);
+            damn::amr::copy(how, l.neighbours, resources_.at(key), ld);
     }
 
     // from level ln - 1 into level ln
@@ -349,12 +364,11 @@ private:
                  std::vector<damn::amr::LevelPair> const& pairs, double const alpha = 0)
     {
         auto& l = levels_[ln];
+        auto& ld = data_(ln);
         if (n_ranks_ > 1)
-            damn::mpi::refine(op, region, *l.to_coarser, pairs, levels_[ln - 1].data, l.data,
-                              alpha);
+            damn::mpi::refine(op, region, *l.to_coarser, pairs, data_(ln - 1), ld, alpha);
         else
-            damn::amr::refine(op, region, *l.to_coarser, pairs, levels_[ln - 1].data, l.data,
-                              alpha);
+            damn::amr::refine(op, region, *l.to_coarser, pairs, data_(ln - 1), ld, alpha);
     }
 
     // from level ln onto level ln - 1
@@ -362,10 +376,11 @@ private:
                   std::vector<damn::amr::LevelPair> const& pairs)
     {
         auto& l = levels_[ln];
+        auto& ld = data_(ln);
         if (n_ranks_ > 1)
-            damn::mpi::coarsen(op, *l.to_coarser, pairs, l.data, levels_[ln - 1].data);
+            damn::mpi::coarsen(op, *l.to_coarser, pairs, ld, data_(ln - 1));
         else
-            damn::amr::coarsen(op, *l.to_coarser, pairs, l.data, levels_[ln - 1].data);
+            damn::amr::coarsen(op, *l.to_coarser, pairs, ld, data_(ln - 1));
     }
 
     // a box's load balancing weight: the particles it will hold, plus its cells for the field

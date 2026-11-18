@@ -338,7 +338,7 @@ void Simulator<opts>::move_ions_(std::size_t const ln, double const t, double co
             });
         else
         { // the level's patches at once, each with its boxing by patch id
-            auto& data = levels_[ln].data;
+            auto& data = data_(ln);
             simulator::LevelAccessor<LevelData_t, Patch_t, &Patch_t::emAvg> accessor{data};
             std::unordered_map<std::string, typename Patch_t::Boxing_t> boxings;
             for (std::size_t i = 0; i < accessor.size(); ++i)
