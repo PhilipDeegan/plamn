@@ -260,7 +260,7 @@ void Simulator<opts>::rebalance_(double const t)
         fill_magnetic_ghosts_(0, "EM_B", t);
         fill_electric_ghosts_(0, "EM_E", t);
         copy_(0, damn::amr::fill_ghosts, "IonPopMoments");
-        compute_moments_(0);
+        solver::hybrid::compute_moments(level_services_(0));
         prepare_step_(0, t);
     }
 
@@ -449,7 +449,7 @@ void Simulator<opts>::moved_moments_(std::size_t const ln)
         ++i;
     });
     copy_(ln, damn::amr::fill_ghosts, "IonPopMoments");
-    compute_moments_(ln);
+    solver::hybrid::compute_moments(level_services_(ln));
 }
 
 } // namespace plamn

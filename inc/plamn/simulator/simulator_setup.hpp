@@ -183,7 +183,7 @@ void Simulator<opts>::setup_()
         rebalance_check_.emplace(check);
     }
 
-    ohm_info_.emplace(core::OhmInfo::FROM(sim["algo"]["ohm"]));
+    hybrid_.ohm.emplace(core::OhmInfo::FROM(sim["algo"]["ohm"]));
 
     register_resources_();
     setup_computed_();

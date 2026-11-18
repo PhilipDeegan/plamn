@@ -213,11 +213,11 @@ void Simulator<opts>::initialize_root_()
         core::resetMoments(patch.ions);
         core::depositParticles(patch.ions, patch.layout, Interpolator{}, core::DomainDeposit{});
     });
-    fill_ion_borders_(0);
-    compute_moments_(0);
+    solver::hybrid::fill_ion_borders(level_services_(0));
+    solver::hybrid::compute_moments(level_services_(0));
 
     // J from B, then E from Ohm's law
-    ampere_ohm_<&Patch_t::em>(0);
+    solver::hybrid::ampere_ohm<&Patch_t::em>(hybrid_, level_services_(0));
     copy_(0, damn::amr::fill_ghosts, "EM_E");
     check_set_(0, "EM_E", "root initialization");
 }
@@ -320,14 +320,15 @@ void Simulator<opts>::sort_refined_particles_(std::size_t const ln)
 template<auto opts>
 void Simulator<opts>::refined_moments_(std::size_t const ln)
 {
-    // as move_ions_: the domain particles, the level ghosts (each held by one patch), then the
+    // as the ions moved (solver/hybrid/advance.hpp): the domain particles, the level ghosts (each
+    // held by one patch), then the
     //  border sums
     per_patch_(ln, [&](auto& patch) {
         core::deposit_domain<dimension, interp_order>(patch.ions, patch.layout);
         core::depositParticles(patch.ions, patch.layout, Interpolator{}, core::LevelGhostDeposit{});
     });
-    fill_ion_borders_(ln);
-    compute_moments_(ln);
+    solver::hybrid::fill_ion_borders(level_services_(ln));
+    solver::hybrid::compute_moments(level_services_(ln));
 
     // J from B; E was refined
     per_patch_(ln,

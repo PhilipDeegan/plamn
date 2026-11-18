@@ -10,10 +10,10 @@
 //
 // initialize() follows PHARE's HybridLevelInitializer: the root level from the user's
 // functions, finer levels refined from the coarser one (fields, B divergence free, particles
-// split). advance() is damn::amr::advance (time refinement): each level takes PHARE's SolverPPC
-// step (predictor1, average, move ions (domain only), predictor2, average, move ions (all),
-// corrector), finer levels ratio^2 steps per coarser one (dt ~ dx^2), as PHARE's
-// MultiPhysicsIntegrator and HybridHybridMessengerStrategy:
+// split). advance() is damn::amr::advance (time refinement): each level takes its model's step,
+// solver::advance (hybrid: PHARE's SolverPPC, solver/hybrid/advance.hpp), finer levels ratio^2
+// steps per coarser one (dt ~ dx^2), as PHARE's MultiPhysicsIntegrator and
+// HybridHybridMessengerStrategy:
 //   level ghosts (fine ghosts no fine patch covers): E and B refined from the coarser level,
 //     linear in time between its start of step (EM_*_old) and its end (EM_*); B made divergence
 //     free; moments from the deposit of level ghost particles split from the coarser level at
@@ -38,6 +38,7 @@
 #include "damn/core/def/constants.hpp"
 #include "plamn/diagnostic/vtkhdf.hpp"
 #include "plamn/simulator/hybrid_patch_view.hpp"
+#include "plamn/solver/hybrid/advance.hpp"
 #include "plamn/solver/hybrid/model.hpp"
 #include "plamn/solver/stacks.hpp"
 #include "plamn/amr/load_balancing.hpp"
@@ -438,19 +439,31 @@ private:
         return l.coarse_dt > 0 ? (t - l.coarse_t) / l.coarse_dt : 1;
     }
 
-    void compute_moments_(std::size_t ln);
-    void fill_ion_borders_(std::size_t ln);
-    void deposit_level_ghosts_(std::size_t ln, double t);
     // a level ghost particle lives in one patch, its cell's owner (Surroundings): the others'
     //  copies of a split dropped, old (initialization, regrid, restart) or new (coarse step)
     void own_level_ghosts_(std::size_t ln, bool new_ghosts);
-    void move_ions_(std::size_t ln, double t, double dt, core::UpdaterMode mode);
-    template<auto electromag>
-    void ampere_ohm_(std::size_t ln);
-    void average_(std::size_t ln, double t, double dt);
-    void predictor1_(std::size_t ln, double t, double dt);
-    void predictor2_(std::size_t ln, double t, double dt);
-    void corrector_(std::size_t ln, double t, double dt);
+
+    // what the models' solvers use of a level (solver/hybrid/advance.hpp)
+    struct LevelServices
+    {
+        Simulator& self;
+        std::size_t ln;
+
+        NO_DISCARD std::size_t number() const { return ln; }
+        NO_DISCARD auto& data() { return self.data_(ln); }
+        void per_patch(auto&& fn) { self.per_patch_(ln, fn); }
+        void copy(auto const how, std::string const& key) { self.copy_(ln, how, key); }
+        void fill_magnetic_ghosts(std::string const& key, double const t)
+        {
+            self.fill_magnetic_ghosts_(ln, key, t);
+        }
+        void fill_electric_ghosts(std::string const& key, double const t)
+        {
+            self.fill_electric_ghosts_(ln, key, t);
+        }
+        NO_DISCARD double alpha(double const t) const { return self.alpha_(ln, t); }
+    };
+    NO_DISCARD LevelServices level_services_(std::size_t const ln) { return {*this, ln}; }
 
     // damn::amr::advance's hooks, see damn/amr/time_refinement.hpp
     void advance_level_(int ln, double t, double dt);
@@ -503,8 +516,6 @@ private:
     int n_ranks_ = 1;
     damn::amr::Topology topology_;
 
-    std::optional<core::OhmInfo> ohm_info_; // const members: set once, in setup_
-    typename Patch_t::ParticlesSynchronisedMover_t mover_{};
 
     std::array<int, dimension> patch_size_{};
     // cells per direction of the blocks level 0 is cut on when rebalanced
