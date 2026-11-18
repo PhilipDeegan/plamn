@@ -1,0 +1,64 @@
+name: setup
+description: >-
+  plamn's CI environment in the phare_dep container: apt tools, PHARE's python venv on PATH,
+  phlop; optionally damn (private: deploy key) at tpp/damn on the branch of the same name, else
+  the PR's base, and mkn on PATH
+
+inputs:
+  damn-key:
+    description: "damn's read-only deploy key (secrets.DAMN_DEPLOY_KEY), empty for no damn checkout"
+    required: false
+    default: ""
+  mkn:
+    description: download mkn
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+  - shell: bash
+    run: apt update && apt install -y curl git openssh-client
+
+  # the image has PHARE's requirements.txt (numpy, dill, matplotlib, ...) in a venv only
+  # ~/.bashrc activates, which run steps don't source: put it first on PATH for later steps
+  - shell: bash
+    run: |
+      for venv in /.venv /root/.venv; do
+        if [ -x $venv/bin/python3 ]; then echo "$venv/bin" >> $GITHUB_PATH; break; fi
+      done
+  # phlop.run.test_cases: one process per test, in parallel; tst/plamn/python/.phlop.exec.yaml:
+  #  --tags mpi also runs the simulator tests on 3 ranks (mpirun)
+  - shell: bash
+    run: |
+      python3 -c "import dill, numpy, matplotlib; print('pyphare requirements from', __import__('sys').prefix)"
+      python3 -m pip install phlop
+
+  # damn is private: check it out where mkn looks for it (tpp/damn) instead of cloning
+  - if: inputs.damn-key != ''
+    uses: actions/checkout@v4
+    with:
+      repository: PhilipDeegan/damn
+      ssh-key: ${{ inputs.damn-key }}
+      path: tpp/damn
+  - if: inputs.damn-key != ''
+    name: damn's branch of the same name (a plamn PR that needs a damn PR), else the PR's base (next)
+    shell: bash
+    env:
+      BRANCH: ${{ github.head_ref || github.ref_name }}
+      BASE: ${{ github.base_ref }}
+    run: |
+      cd tpp/damn && git config --global --add safe.directory "$PWD"
+      for b in "$BRANCH" "$BASE"; do
+        if [ -n "$b" ] && [ "$b" != master ] && git ls-remote --exit-code --heads origin "$b" >/dev/null; then
+          git fetch -q --depth 1 origin "$b" && git checkout -q FETCH_HEAD && break
+        fi
+      done
+      echo "damn: $(git log --oneline -1)"
+
+  - if: inputs.mkn == 'true'
+    shell: bash
+    run: |
+      curl -Lo mkn https://github.com/mkn/mkn/releases/download/latest/mkn_nix
+      chmod +x mkn && mkdir -p "$RUNNER_TEMP/mkn" && mv mkn "$RUNNER_TEMP/mkn/"
+      echo "$RUNNER_TEMP/mkn" >> $GITHUB_PATH
