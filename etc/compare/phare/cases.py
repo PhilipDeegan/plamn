@@ -54,6 +54,14 @@ CASES = {
     "advance_L2_nested": dict(boxes=((1, 12), (6, 19)), steps=4),
     "harris_2d": dict(harris=True, steps=2),
     "ion_ion_beam_1d": dict(ion_ion_beam=True, steps=1, pops=["main", "beam"]),
+    # compare_physics.py --all-times (the slow CI's PHARE comparison): the beam on 2 levels, long
+    "beam_1d_long": dict(
+        ion_ion_beam=True,
+        steps=2000,
+        dump_every=100,
+        pops=["main", "beam"],
+        refinement_boxes={"L0": {"B0": [(50,), (110,)]}},
+    ),
     # compare_physics.py's (not a ladder step): 3 levels, tagging, final B composites
     "harris_3d": dict(harris3d=True, steps=2),
 }
@@ -156,7 +164,9 @@ def _ion_ion_beam_1d(ph, out, case, largest_patch_size, fmt, fine_dump):
         dl=0.2,
         hyper_resistivity=0.01,
         # the script's commented boxes: its uniform plasma tags nothing, one level otherwise
-        refinement_boxes={"L0": {"B0": [(50,), (110,)]}, "L1": {"B0": [(140,), (180,)]}},
+        refinement_boxes=case.get(
+            "refinement_boxes", {"L0": {"B0": [(50,), (110,)]}, "L1": {"B0": [(140,), (180,)]}}
+        ),
         diag_options=_diag_options(out, fmt, fine_dump),
     )
     def const(v):
@@ -177,7 +187,8 @@ def _ion_ion_beam_1d(ph, out, case, largest_patch_size, fmt, fine_dump):
     )
     ph.ElectronModel(closure="isothermal", Te=0.0)
     # no LoadBalancer (the script's auto nppc): PHARE refuses one with refinement boxes
-    _diagnostics(ph, 0.001 * np.arange(case["steps"] + 1), case["pops"], fmt)
+    every = case.get("dump_every", 1)
+    _diagnostics(ph, 0.001 * np.arange(0, case["steps"] + 1, every), case["pops"], fmt)
     return sim
 
 
