@@ -65,11 +65,10 @@ void Simulator<opts>::setup_diagnostics_()
     diagnostics_.dir               = get("filePath", std::string{"phare_output"});
     diagnostics_.overwrite         = get("mode", std::string{}) == "overwrite";
     diagnostics_.fine_dump_lvl_max = get("fine_dump_lvl_max", 0);
-    diagnostics_.quantities
-        = ::plamn::diagnostic::hybrid_quantities<View_t>(hybrid_.population_names);
+    diagnostics_.quantities        = solver::hybrid::diagnostic_quantities(hybrid_);
     for (auto const& d : diagnostics_.list) // unknown quantities: at setup, not at a dump
         if (d.type == "particle")
-            std::ignore = particle_population_(d.quantity);
+            std::ignore = solver::hybrid::particle_population(hybrid_, d.quantity);
         else if (!is_computed(d.quantity))
             std::ignore = diagnostic::quantity_for(diagnostics_.quantities, d.quantity);
 }
@@ -105,17 +104,6 @@ void Simulator<opts>::dump_(diagnostic::Diagnostic& diag, double const time, int
         dump_phareh5_(diag, time, only);
     else
         dump_vtkhdf_(diag, time, only);
-}
-
-template<auto opts>
-std::size_t Simulator<opts>::particle_population_(std::string const& quantity) const
-{
-    for (std::size_t i = 0; i < hybrid_.population_names.size(); ++i)
-        for (auto const* kind : {"/domain", "/levelGhost"})
-            if (quantity == "/ions/pop/" + hybrid_.population_names[i] + kind)
-                return i;
-    throw std::runtime_error("plamn diagnostics: unsupported particle quantity " + quantity
-                             + " (/ions/pop/<name>/domain or levelGhost)");
 }
 
 template<auto opts>
@@ -294,7 +282,7 @@ void Simulator<opts>::dump_phareh5_(diagnostic::Diagnostic& diag, double const t
 
         if (particles)
         {
-            auto const pop         = particle_population_(diag.quantity);
+            auto const pop         = solver::hybrid::particle_population(hybrid_, diag.quantity);
             bool const level_ghost = diag.quantity.ends_with("/levelGhost");
             std::vector<ph5::ParticleColumns<dimension>> columns;
             for (std::size_t i = 0; i < n_local; ++i)

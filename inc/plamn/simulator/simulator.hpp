@@ -40,6 +40,7 @@
 #include "plamn/simulator/hybrid_patch_view.hpp"
 #include "plamn/solver/hybrid/advance.hpp"
 #include "plamn/solver/hybrid/computed.hpp"
+#include "plamn/solver/hybrid/diagnostics.hpp"
 #include "plamn/solver/hybrid/initialize.hpp"
 #include "plamn/solver/hybrid/level_steps.hpp"
 #include "plamn/solver/hybrid/model.hpp"
@@ -287,13 +288,11 @@ private:
     // only >= 0: that level only (PHARE's dump_level: the time holds that level)
     void dump_phareh5_(diagnostic::Diagnostic& diag, double time, int only = -1);
     void dump_(diagnostic::Diagnostic& diag, double time, int only = -1); // the format's
-    // a particle diagnostic's population index (/ions/pop/<name>/domain or levelGhost)
-    NO_DISCARD std::size_t particle_population_(std::string const& quantity) const;
     // PHARE's fine_dump_lvl_max: every diagnostic, level ln only, at the end of its substeps
     //  that are not a level 0 step's end (the finest after advancing, coarser ones after their
     //  synchronization)
     void fine_dump_(std::size_t ln, double time);
-    using View_t = decltype(simulator::view(std::declval<Patch_t&>()));
+    using View_t = solver::HybridModel<opts>::View_t;
     struct Diagnostics
     {
         using Float = std::conditional_t<PLAMN_DIAG_DOUBLES, double, float>;
