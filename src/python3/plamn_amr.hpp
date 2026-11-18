@@ -58,6 +58,43 @@ inline damn::amr::Topology topology_of(std::vector<int> const& node_of_rank)
     return t;
 }
 
+// a data free hierarchy of levels given as (lower, upper, rank) per patch
+template<std::size_t dim>
+damn::amr::Hierarchy<dim> hierarchy_of(IntArray<dim> const& domain_lower,
+                                       IntArray<dim> const& domain_upper,
+                                       std::array<bool, dim> const& periodic, int const ratio,
+                                       std::vector<std::vector<PyPatch<dim>>> const& levels)
+{
+    damn::amr::Hierarchy<dim> h;
+    h.domain     = to_box<dim>(domain_lower, domain_upper);
+    h.periodic   = periodic;
+    h.ratio      = ratio;
+    h.max_levels = static_cast<int>(levels.size());
+    for (std::size_t ln = 0; ln < levels.size(); ++ln)
+    {
+        std::vector<damn::core::Box<int, dim>> boxes;
+        std::vector<int> ranks;
+        boxes.reserve(levels[ln].size());
+        ranks.reserve(levels[ln].size());
+        for (auto const& [lo, up, rank] : levels[ln])
+        {
+            boxes.push_back(to_box<dim>(lo, up));
+            ranks.push_back(rank);
+        }
+        h.levels.push_back(damn::amr::make_level(static_cast<int>(ln), boxes, ranks));
+    }
+    return h;
+}
+
+// per distance name, a count
+inline nb::dict by_distance(std::array<std::size_t, damn::amr::n_distances> const& a)
+{
+    nb::dict d;
+    for (std::size_t i = 0; i < damn::amr::n_distances; ++i)
+        d[std::string{damn::amr::to_string(static_cast<damn::amr::Distance>(i))}.c_str()] = a[i];
+    return d;
+}
+
 template<std::size_t dim>
 void declare_amr(nb::module_& m)
 {
@@ -102,22 +139,7 @@ void declare_amr(nb::module_& m)
              std::vector<std::vector<PyPatch<dim>>> const& levels,
              std::vector<int> const& node_of_rank, int const reach,
              std::vector<std::vector<double>> const& weights) {
-              damn::amr::Hierarchy<dim> h;
-              h.domain     = to_box<dim>(domain_lower, domain_upper);
-              h.periodic   = periodic;
-              h.ratio      = ratio;
-              h.max_levels = static_cast<int>(levels.size());
-              for (std::size_t ln = 0; ln < levels.size(); ++ln)
-              {
-                  std::vector<damn::core::Box<int, dim>> boxes;
-                  std::vector<int> ranks;
-                  for (auto const& [lo, up, rank] : levels[ln])
-                  {
-                      boxes.push_back(to_box<dim>(lo, up));
-                      ranks.push_back(rank);
-                  }
-                  h.levels.push_back(damn::amr::make_level(static_cast<int>(ln), boxes, ranks));
-              }
+              auto const h = hierarchy_of<dim>(domain_lower, domain_upper, periodic, ratio, levels);
               nb::list out;
               for (auto const& lm :
                    damn::amr::metrics(h, topology_of(node_of_rank), reach, weights))
@@ -145,6 +167,28 @@ void declare_amr(nb::module_& m)
           },
           "per level: patches, cells, weight per rank, imbalance, and the cells exchanged by "
           "distance (same level ghosts within reach, coarser cells under each grown patch)");
+
+    m.def(("migration_" + d).c_str(),
+          [](IntArray<dim> const& domain_lower, IntArray<dim> const& domain_upper,
+             std::array<bool, dim> const& periodic, int const ratio,
+             std::vector<std::vector<PyPatch<dim>>> const& from,
+             std::vector<std::vector<PyPatch<dim>>> const& to,
+             std::vector<int> const& node_of_rank) {
+              auto const a = hierarchy_of<dim>(domain_lower, domain_upper, periodic, ratio, from);
+              auto const b = hierarchy_of<dim>(domain_lower, domain_upper, periodic, ratio, to);
+              nb::list out;
+              for (auto const& lm : damn::amr::migration(a, b, topology_of(node_of_rank)))
+              {
+                  nb::dict dm;
+                  dm["level"]   = lm.level;
+                  dm["moved"]   = by_distance(lm.moved);
+                  dm["refined"] = by_distance(lm.refined);
+                  out.append(dm);
+              }
+              return out;
+          },
+          "per level of `to`, the cells moving from `from`'s owners by distance: held by the "
+          "old level (moved) or refined from the old coarser level (refined)");
 }
 
 inline void declare_amr(nb::module_& m)

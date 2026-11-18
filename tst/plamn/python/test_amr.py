@@ -190,6 +190,44 @@ class AmrTest(unittest.TestCase):
         self.assertEqual(h.comm_cost(cost), crossing)
         self.assertEqual(h.comm_cost({**cost, "Node": 0.0}), 0.0)  # one node: all Node
 
+    def test_keep_moves_nothing_for_the_same_levels(self):
+        sim = simulation_1d(cells=80, largest_patch_size=8)
+        refined = {1: [([20], [79])]}
+        before = Chopper(
+            sim, ranks=4, ranks_per_node=2, partition="columns", block=10
+        ).chop(refined)
+        keep = Chopper(sim, ranks=4, ranks_per_node=2, partition="keep")
+        after = keep.chop(refined, previous=before)
+        self.assertEqual(after.levels, before.levels)
+        for m in after.migration(before):
+            for key in ("moved", "refined"):
+                self.assertEqual(
+                    m[key]["Node"] + m[key]["Remote"], 0, (m["level"], key)
+                )
+        self.assertEqual(after.migration_cost(before), 0.0)
+
+    def test_keep_moves_less_than_a_fresh_partition(self):
+        # a regrid: level 1 shifted by 4 coarse cells (8 fine)
+        sim = simulation_1d(cells=80, largest_patch_size=8)
+        before = Chopper(
+            sim, ranks=4, ranks_per_node=2, partition="columns", block=10
+        ).chop({1: [([20], [79])]})
+        shifted = {1: [([28], [87])]}
+        fresh = Chopper(
+            sim, ranks=4, ranks_per_node=2, partition="columns", block=10
+        ).chop(shifted)
+        kept = Chopper(sim, ranks=4, ranks_per_node=2, partition="keep").chop(
+            shifted, previous=before
+        )
+        self.assertLessEqual(kept.migration_cost(before), fresh.migration_cost(before))
+        # the new fine cells (80..87) refine from the old level 0, all of level 1 accounted
+        cells = sum(
+            sum(m[k].values())
+            for m in kept.migration(before)[1:]
+            for k in ("moved", "refined")
+        )
+        self.assertEqual(cells, 60)
+
 
 if __name__ == "__main__":
     unittest.main()

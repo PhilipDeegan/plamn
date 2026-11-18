@@ -102,6 +102,35 @@ class NoDataHierarchy:
                 total += sum(cost[d] * n for d, n in m[key].items())
         return total
 
+    def migration(self, previous):
+        """moving from `previous` to this hierarchy, per level: the cells by distance from their
+        old owner, held by the old level (moved) or refined from its coarser one (refined)"""
+        fn = getattr(plamn_etc, f"migration_{self.ndim}")
+        return fn(
+            *self.domain,
+            self.periodic,
+            self.ratio,
+            previous.levels,
+            self.levels,
+            self.node_of_rank,
+        )
+
+    def migration_cost(self, previous, cost=None):
+        """migration's cells weighed by distance (comm_cost's placeholders)"""
+        cost = cost or {
+            "Self": 0.0,
+            "Local": 0.0,
+            "Numa": 0.3,
+            "Node": 1.0,
+            "Remote": 10.0,
+        }
+        return sum(
+            cost[d] * n
+            for m in self.migration(previous)
+            for key in ("moved", "refined")
+            for d, n in m[key].items()
+        )
+
     def critical_path(self):
         """sum over levels of r^l (substeps) times the busiest rank's weight, over the same with
         the mean: 1 when every level is balanced (levels advance one after another)"""
@@ -192,6 +221,22 @@ def coalesce(boxes):
             boxes = merged
         if len(boxes) == before:
             return boxes
+
+
+def _minus(a, b):
+    """box a without box b: up to 2 x dim disjoint boxes"""
+    if _intersect(a, b) is None:
+        return [a]
+    lower, upper = list(a[0]), list(a[1])
+    out = []
+    for d in range(len(lower)):
+        if lower[d] < b[0][d]:  # the part of a below b along d
+            out.append((lower.copy(), upper[:d] + [b[0][d] - 1] + upper[d + 1 :]))
+            lower[d] = b[0][d]
+        if upper[d] > b[1][d]:  # above
+            out.append((lower[:d] + [b[1][d] + 1] + lower[d + 1 :], upper.copy()))
+            upper[d] = b[1][d]
+    return out
 
 
 def _intersect(a, b):
@@ -370,9 +415,42 @@ class Chopper:
                 owner[i] = int(t)
         return [(lo, up, o) for (lo, up, _), o in zip(patches, owner)]
 
-    def chop(self, tag_boxes, work=None):
+    def _keep(self, ln, tag_boxes, previous):
+        """level ln's (lower, upper, rank): its boxes cut along the previous hierarchy's owners,
+        where its level ln held the cells (their data stays), else where its coarser level
+        did (the cells refine from there), else partitioned afresh; each rank's pieces then
+        coalesced and chopped (as columns)"""
+        r = self.ratio
+        old = previous.levels[ln] if ln < len(previous.levels) else []
+        coarse = previous.levels[ln - 1] if 0 < ln <= len(previous.levels) else []
+        pieces, fresh = [], []
+        for b in tag_boxes:
+            box = _box(b)
+            for lo, up, owner in old:
+                if (piece := _intersect(box, (lo, up))) is not None:
+                    pieces.append((*piece, owner))
+            rest = [box]  # what the old level did not hold
+            for lo, up, _ in old:
+                rest = [p for q in rest for p in _minus(q, (lo, up))]
+            for part in rest:
+                left = [part]
+                for lo, up, owner in coarse:
+                    fine = ([x * r for x in lo], [(x + 1) * r - 1 for x in up])
+                    if (piece := _intersect(part, fine)) is not None:
+                        pieces.append((*piece, owner))
+                        left = [p for q in left for p in _minus(q, piece)]
+                fresh += left
+        if fresh:
+            partition = getattr(plamn_etc, f"partition_{self.ndim}")
+            weights = [self._weight(ln, lo, up, None) for lo, up in fresh]
+            ranks = partition(fresh, weights, self.node_of_rank)
+            pieces += [(lo, up, rank) for (lo, up), rank in zip(fresh, ranks)]
+        return self._chop_owned(ln, pieces)
+
+    def chop(self, tag_boxes, work=None, previous=None):
         """a NoDataHierarchy of tag_boxes ({level: boxes}, level 0 the domain if missing);
-        work: optional per level 0 cell weights (level 0's shape)"""
+        work: optional per level 0 cell weights (level 0's shape); previous: the hierarchy
+        being replaced (partition "keep": its owners kept where its data is)"""
         if work is not None:
             work = np.asarray(work, dtype=float)
             if list(work.shape) != self.cells:
@@ -383,10 +461,12 @@ class Chopper:
         tag_boxes = dict(tag_boxes)
         tag_boxes.setdefault(0, [domain])
         partition = getattr(plamn_etc, f"partition_{self.ndim}")
-        if self.partition not in ("levels", "curve", "columns"):
+        if self.partition not in ("levels", "curve", "columns", "keep"):
             raise ValueError(
-                f"Chopper: partition {self.partition}: levels, curve or columns"
+                f"Chopper: partition {self.partition}: levels, curve, columns or keep"
             )
+        if self.partition == "keep" and previous is None:
+            raise ValueError("Chopper: partition keep needs the previous hierarchy")
         columns = self._columns(tag_boxes) if self.partition == "columns" else None
 
         h = NoDataHierarchy(
@@ -406,6 +486,14 @@ class Chopper:
                 )
             if columns is not None:
                 patches = columns[ln]
+                weights = [self._weight(ln, lo, up, None) for lo, up, _ in patches]
+                if self.spill is not None:
+                    patches = self._spill(patches, weights)
+                h.levels.append(patches)
+                h.weights.append(weights)
+                continue
+            if self.partition == "keep":
+                patches = self._keep(ln, tag_boxes[ln], previous)
                 weights = [self._weight(ln, lo, up, None) for lo, up, _ in patches]
                 if self.spill is not None:
                     patches = self._spill(patches, weights)
