@@ -31,6 +31,7 @@
 #include <optional>
 #include <tuple>
 #include <type_traits>
+#include <vector>
 
 namespace plamn::core
 {
@@ -73,7 +74,7 @@ public:
         Basis const basis                                 = Basis::Cartesian,
         std::array<InputFunction, 3> const& magneticField = {nullptr, nullptr, nullptr},
         double const densityCutOff = 1e-5, std::string const& populationName = "",
-        double const over_alloc_factor = .05)
+        double const over_alloc_factor = .05, double const densityBackground = 0.)
         : density_{density}
         , bulkVelocity_{bulkVelocity}
         , thermalVelocity_{thermalVelocity}
@@ -84,6 +85,7 @@ public:
         , rngSeed_{seed}
         , populationKey_{mkn::kul::fnv1a64(populationName)}
         , over_alloc_factor_{over_alloc_factor}
+        , densityBackground_{densityBackground}
     {
         if (!std::isfinite(over_alloc_factor_) or over_alloc_factor_ < 0)
             throw std::runtime_error("over_alloc_factor must be finite and non-negative");
@@ -95,7 +97,8 @@ public:
      */
     void loadParticles(Particles& particles, Layout const& layout) const override;
 
-    // nbrParticlePerCell for each cell whose density is at least the cutoff, as loadParticles
+    // nbrParticlePerCell for each cell whose density is at least the cutoff, as loadParticles;
+    //  a background at least the cutoff populates every cell, nothing to sample
     NO_DISCARD std::size_t nbrParticles(Layout const& layout) const override;
 
 
@@ -134,6 +137,10 @@ private:
     std::optional<std::size_t> rngSeed_;
     std::uint64_t populationKey_;
     double over_alloc_factor_ = .05;
+    // the constant part of the density, added to the density function (which then holds what
+    //  varies, never taking the density below the cutoff where the background is above it): a
+    //  background at least the cutoff populates every cell (declared last: initialized last)
+    double densityBackground_ = 0.;
 };
 
 
@@ -182,13 +189,16 @@ template<typename Particles_t, typename Layout>
 std::size_t
 MaxwellianParticleInitializer<Particles_t, Layout>::nbrParticles(Layout const& layout) const
 {
+    if (densityBackground_ >= densityCutOff_)
+        return layout.cells.size() * nbrParticlePerCell_;
+
     auto const cells = coordinate_vectors(
         layout.dx, layout.cells, mkn::kul::ConstArray<QtyCentering, dimension>(QtyCentering::dual));
     auto const n = std::apply([&](auto const&... c) { return density_(c...); }, cells.spans());
 
     std::size_t populated = 0;
     for (std::size_t i = 0; i < n->size(); ++i)
-        populated += (n->data()[i] >= densityCutOff_);
+        populated += (n->data()[i] + densityBackground_ >= densityCutOff_);
     return populated * nbrParticlePerCell_;
 }
 
@@ -209,8 +219,19 @@ void MaxwellianParticleInitializer<Particles_t, Layout>::loadParticles(Particles
         std::forward_as_tuple(density_, bulkVelocity_, thermalVelocity_, magneticField_, basis_),
         cells.spans()));
 
-    auto const [n, V, Vth] = fns();
-    auto const seed        = baseSeed(rngSeed_);
+    auto const [density, V, Vth] = fns();
+    auto const seed              = baseSeed(rngSeed_);
+
+    // the density: the function's values plus the background
+    std::vector<double> with_background;
+    double const* n = density;
+    if (densityBackground_ != 0.)
+    {
+        with_background.assign(density, density + cells.size());
+        for (auto& v : with_background)
+            v += densityBackground_;
+        n = with_background.data();
+    }
 
     // GPU_UNIFIED SoAVXChunked: filled on the host in a CPU array, then one bulk copy per
     //  column (append_columns), instead of a host write into managed memory per particle

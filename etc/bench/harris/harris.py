@@ -3,11 +3,12 @@
 on each code, timed: wall clock of the setup + initialization and of the step, and the scope
 timers (PHARE_SCOPE_TIMING=1, .phare/timings/rank.<r>.txt in each code's directory).
 
-  etc/bench/harris/harris.py [--codes master next pr_1601 plamn] [--ndim 2] [--levels 3]
+  etc/bench/harris/harris.py [--codes master pr_1601 plamn] [--ndim 2] [--levels 3]
                              [--steps 1] [--ppc N] [--out DIR] [--tiling-gpu DIR]
-                             [--plamn-layouts AoSMapped SoAVXChunked]
+                             [--plamn-layouts AoSMapped SoAVXChunked] [--np N]
 
-One rank, the pyphare threading defaults. PHARE codes: the AoSMapped layout. plamn: once per
+One rank (or --np N under mpirun, a rank per core, rank 0 reports; no particle counts then), the
+pyphare threading defaults. PHARE codes: the AoSMapped layout. plamn: once per
 --plamn-layouts layout (default AoSMapped), as the code plamn_<layout> (needs that layout's
 module of the dimension, ./mkn.py --dim 2 --layout SoAVXChunked). The input is
 tiling_gpu's config() itself, loaded from its file: its module settings (time_step, ppc) are kept
@@ -36,7 +37,7 @@ HERE = Path(__file__).resolve().parent
 PLAMN = HERE.parents[2]
 PHARES = Path("/mkn/git/phare")
 TILING_GPU = PHARES / "tiling_gpu"
-CODES = ["master", "next", "pr_1601", "plamn"]
+CODES = ["master", "pr_1601", "plamn"]
 
 
 def is_plamn(code):
@@ -141,14 +142,20 @@ def child(args):
     t0 = time.perf_counter()
     simulator = Simulator(sim, log_to_file=False).setup().initialize()
     init_s = time.perf_counter() - t0
-    initial = particles_per_level(simulator)  # outside the timed regions
+    # under mpirun (--np): rank 0 writes the result, no particle counts (the wrangler gathers
+    #  every particle on rank 0)
+    rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", "0"))
+    n_ranks = int(os.environ.get("OMPI_COMM_WORLD_SIZE", "1"))
+    initial = particles_per_level(simulator) if n_ranks == 1 else None  # outside the timed regions
     t0 = time.perf_counter()
     for _ in range(args.steps):
         simulator.advance()
     steps_s = time.perf_counter() - t0
-    final = particles_per_level(simulator)
+    final = particles_per_level(simulator) if n_ranks == 1 else None
     levels = simulator.data_wrangler().getNumberOfLevels()
     loaded = type(simulator.cpp_sim).__module__ if is_plamn(args.code) else "-"
+    if args.plots:
+        plot_fields(simulator, Path(args.plots), args.code)
     simulator.reset()
     result = {
         "code": args.code,
@@ -162,9 +169,26 @@ def child(args):
         "ppc": module.ppc,
         "cells": list(module.cells),
         "dropped": sorted(set(dropped)),
+        "ranks": n_ranks,
     }
-    Path("result.json").write_text(json.dumps(result))
+    if rank == 0:
+        Path("result.json").write_text(json.dumps(result))
     return 0
+
+
+def plot_fields(simulator, out, code):
+    """B's components and the ion density at the end, every level (pharesee's plot2d), from the
+    live hierarchy (hierarchy_from_sim): <out>/<code>_<quantity>.png, 2D runs"""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    from pyphare.pharesee.hierarchy.fromsim import hierarchy_from_sim
+
+    out.mkdir(parents=True, exist_ok=True)
+    for qty in ("EM_B", "density"):
+        hier = hierarchy_from_sim(simulator, qty=qty)
+        for q in hier.quantities():
+            hier.plot2d(qty=q, filename=str(out / f"{code}_{q}.png"), plot_patches=True)
 
 
 def perf_env():
@@ -200,8 +224,10 @@ def parent(args):
         cwd.mkdir(parents=True, exist_ok=True)
         env = dict(os.environ, PHARE_SCOPE_TIMING="1", **counters)
         env["PYTHONPATH"] = os.pathsep.join(str(p) for p in pythonpath(code))
-        cmd = [sys.executable, str(Path(__file__).resolve()), "--child", code]
+        mpi = ["mpirun", "-n", str(args.np), "--bind-to", "core"] if args.np > 1 else []
+        cmd = mpi + [sys.executable, str(Path(__file__).resolve()), "--child", code]
         cmd += ["--ndim", str(args.ndim), "--levels", str(args.levels), "--steps", str(args.steps)]
+        cmd += ["--plots", str(Path(args.plots).resolve())] if args.plots else []
         cmd += ["--tiling-gpu", str(args.tiling_gpu)] + (
             ["--ppc", str(args.ppc)] if args.ppc else []
         )
@@ -214,7 +240,7 @@ def parent(args):
         rows.append(json.loads((cwd / "result.json").read_text()))
 
     print(
-        f"\nharris {args.ndim}D, {args.steps} coarse step(s), max {args.levels} levels, 1 rank"
+        f"\nharris {args.ndim}D, {args.steps} coarse step(s), max {args.levels} levels, {args.np} rank(s)"
     )
     print(f"{'code':20} {'levels':>6} {'ppc':>4} {'init s':>9} {'step(s) s':>10}  dropped keywords")
     for r in rows:
@@ -248,6 +274,12 @@ def main(argv):
     p.add_argument("--ndim", type=int, default=2, choices=[2, 3])
     p.add_argument("--levels", type=int, default=3, help="max_nbr_levels")
     p.add_argument("--steps", type=int, default=1, help="coarse steps")
+    p.add_argument(
+        "--plots", default=None, help="a PNG per quantity per code here at the end (2D, 1 rank)"
+    )
+    p.add_argument(
+        "--np", type=int, default=1, help="MPI ranks per code (mpirun -n, a rank per core: no taskset)"
+    )
     p.add_argument(
         "--plamn-layouts", nargs="+", default=["AoSMapped"], help="plamn runs once per layout"
     )

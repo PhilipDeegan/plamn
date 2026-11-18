@@ -58,16 +58,47 @@ def cpp_lib(sim):
         ) from e
 
 
+def _patch_density_background():
+    """a population's density_background (default 0): the constant part of its density, added
+    to its density function (which then holds what varies, and must not take the density below
+    the cut-off where the background is above it); a background at least the population's
+    density_cut_off populates every cell, so counting its particles samples nothing. pyphare's
+    add_population takes a fixed keyword list: take it here, write it next to density_cut_off"""
+    from pyphare.pharein.initialize import hybrid
+    from pyphare.pharein.maxwellian_fluid_model import MaxwellianFluidModel
+
+    add_population = MaxwellianFluidModel.add_population
+
+    def add_population_with_background(self, name, density_background=0.0, **kwargs):
+        add_population(self, name, **kwargs)
+        if not density_background >= 0.0:
+            raise ValueError(f"population {name}: density_background must be >= 0")
+        self.model_dict[name]["density_background"] = float(density_background)
+
+    MaxwellianFluidModel.add_population = add_population_with_background
+
+    populate = hybrid._populate_populations
+
+    def populate_with_background(dp, sim):
+        populate(dp, sim)
+        model = sim.model.model_dict
+        for i, pop in enumerate(sim.model.populations):
+            path = f"simulation/ions/pop{i:d}/particle_initializer/density_background"
+            dp.add_double(path, model[pop].get("density_background", 0.0))
+
+    hybrid._populate_populations = populate_with_background
+
+
 def _patch_layout_for():
     """pharesee's hierarchy_from_sim builds hybrid layouts with PHARE's ghost widths (field 2, 4, 4
     and particles 1, 2, 2 for interp 1, 2, 3, in HybridGridLayoutFor): use the width each patch
     data carries (nGhosts, from plamn's allowed particle cell jump) instead. Both the tiling_gpu
     (no model argument) and PHARE master signatures."""
     try:  # pharesee needs matplotlib, not every plamn user has it
-        import pyphare.pharesee.hierarchy.fromsim as fromsim
+        from pyphare.pharesee.hierarchy import fromsim
     except ImportError:
         return
-    import pyphare.core.gridlayout as gridlayout
+    from pyphare.core import gridlayout
     from pyphare.core.box import Box
 
     original = getattr(
@@ -92,7 +123,7 @@ def _patch_layout_for():
 
 
 def _finalize_mpi():
-    import pyphare.simulator.simulator as simulator
+    from pyphare.simulator import simulator
 
     life_cycle = simulator.life_cycles.pop("samrai", None)
     if life_cycle is not None:
@@ -109,11 +140,11 @@ def patch():
         return
     _patched = True
 
-    import pyphare.cpp as cpp
-    import pyphare.cpp.validate as validate
     import pyphare.pharein as ph
-    import pyphare.pharein.initialize.dict_populator as dict_populator
-    import pyphare.simulator.simulator as simulator
+    from pyphare import cpp
+    from pyphare.cpp import validate
+    from pyphare.pharein.initialize import dict_populator
+    from pyphare.simulator import simulator
 
     dict_populator.dictator = current_dict
     ph.clearDict = clear_dict
@@ -122,10 +153,11 @@ def patch():
     cpp.cpp_lib = cpp_lib
 
     _patch_layout_for()
+    _patch_density_background()
 
     # restart directories: 10 digits each side of the point, as the C++ restart_path_for_time
     #  (pyphare's 5 decimals cannot tell small steps apart); keep_last deletes by this name
-    import pyphare.pharein.restarts as restarts
+    from pyphare.pharein import restarts
 
     restarts.format_time = lambda time: f"{time:021.10f}"
 

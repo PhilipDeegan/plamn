@@ -13,11 +13,7 @@ import unittest
 
 import numpy as np
 
-import plamn
-
-
-import pyphare.pharein as ph
-from pyphare.simulator.simulator import Simulator
+import plamn.backend.phare as ph
 
 time_step = 0.005
 time_step_nbr = 100
@@ -93,16 +89,12 @@ def level_bulk_velocity(simulator, ilvl):
 
 
 class MultiSpeciesMomentumTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        plamn.patch()
-
     def tearDown(self):
         if hasattr(self, "simulator"):
             self.simulator.reset()
 
     def test_ion_momentum_is_conserved(self):
-        self.simulator = Simulator(config(), log_to_file=False).setup().initialize()
+        self.simulator = ph.Simulator(config(), log_to_file=False).setup().initialize()
         self.assertEqual(self.simulator.data_wrangler().getNumberOfLevels(), 1)
 
         initial = level_bulk_velocity(

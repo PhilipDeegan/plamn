@@ -54,7 +54,7 @@ jobs:
     - run: |
         curl -Lo mkn https://github.com/mkn/mkn/releases/download/latest/mkn_nix
         chmod +x mkn
-        KLOG=3 ./mkn clean build test -dKOqp test_plamn_core -Wx res/mkn/mpi -t 4
+        KLOG=3 ./mkn clean build test -dKOqp test_plamn_core -W 9 -a "-Wno-unused-parameter -Wno-unused-variable -Wno-error=strict-aliasing" -x res/mkn/mpi -t 4
 
     # plamn runs pyphare's python against plamn's modules: pyphare from a PHARE checkout
     - uses: actions/checkout@v4
@@ -67,7 +67,7 @@ jobs:
     # the python modules, with the same settings as above (C++20, also for mkn's own modules);
     # the tests run serially, without MPI_Init
     - run: |
-        PATH=$PWD:$PATH KLOG=3 ./mkn.py --dim 1 2 --jobs 4 -- -qW -x res/mkn/mpi
+        PATH=$PWD:$PATH KLOG=3 ./mkn.py --dim 1 2 --jobs 4 -- -q -W 9 -a "-Wno-unused-parameter -Wno-unused-variable -Wno-error=strict-aliasing" -x res/mkn/mpi
         PYTHONPATH=.:phare/pyphare:tst/plamn/python \
           python3 -m phlop.run.test_cases -i tst -c 4 --tags mpi
 

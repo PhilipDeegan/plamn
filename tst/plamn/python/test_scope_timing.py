@@ -12,12 +12,9 @@ import re
 import unittest
 from pathlib import Path
 
-import plamn
-
-
 import alfven1d
-import pyphare.pharein as ph
-from pyphare.simulator.simulator import Simulator
+
+import plamn.backend.phare as ph
 
 CELLS = 100
 PATCH = 10
@@ -47,23 +44,21 @@ def config():
 
 
 class ScopeTimingTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        plamn.patch()
-
     def test_a_file_per_rank_and_summary(self):
         cwd = Path.cwd()
         DIR.mkdir(exist_ok=True)
         os.chdir(DIR)
         os.environ["PHARE_SCOPE_TIMING"] = "1"
         try:
-            simulator = Simulator(config(), log_to_file=False).setup().initialize()
+            simulator = ph.Simulator(config(), log_to_file=False).setup().initialize()
             cpp = simulator.cpp_sim
             for _ in range(STEPS):
                 simulator.advance()
             summary = cpp.summary()  # collective
             rank, ranks = cpp.rank(), cpp.ranks()
-            del cpp  # the last reference goes with reset: the C++ simulator writes the files
+            del (
+                cpp
+            )  # the last reference goes with reset: the C++ simulator writes the files
             simulator.reset()
         finally:
             del os.environ["PHARE_SCOPE_TIMING"]

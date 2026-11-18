@@ -10,11 +10,7 @@ import unittest
 
 import numpy as np
 
-import plamn
-
-
-import pyphare.pharein as ph
-from pyphare.simulator.simulator import Simulator
+import plamn.backend.phare as ph
 
 cells = (100, 100)
 dl = (0.2, 0.2)
@@ -97,13 +93,11 @@ def expected_particles(protons_density):
 
 
 class LoadBalancingTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        plamn.patch()
-
     def init(self, protons_density):
         self.simulator = (
-            Simulator(config(protons_density), log_to_file=False).setup().initialize()
+            ph.Simulator(config(protons_density), log_to_file=False)
+            .setup()
+            .initialize()
         )
         return self.simulator.cpp_sim
 

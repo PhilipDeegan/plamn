@@ -72,8 +72,15 @@ def mkn(profile, extra, jobs, defines=(), out=None, own_dir=False):
         cmd += ["-N", out]
     if out:
         cmd += ["-o", out]
-    if defines:
-        cmd += ["-a", " ".join(defines)]
+    # mkn takes one -a: extra's (e.g. warning flags after --) merged into the defines'
+    extra, args = list(extra), list(defines)
+    for flag in ("-a", "--arg"):
+        while flag in extra:
+            at = extra.index(flag)
+            args.append(extra[at + 1])
+            del extra[at : at + 2]
+    if args:
+        cmd += ["-a", " ".join(args)]
     cmd += extra
     print("+", shlex.join(cmd), flush=True)
     return subprocess.call(cmd)
@@ -90,6 +97,11 @@ def main(argv):
     parser.add_argument("--allocator", nargs="+", default=["CPU"], choices=ALLOCATORS)
     parser.add_argument("--no-etc", action="store_true", help="don't build py_etc")
     parser.add_argument("--jobs", type=int, default=8, help="mkn -t (CI: 4)")
+    parser.add_argument(
+        "--scope-print",
+        action="store_true",
+        help="DAMN_LOG_SCOPE_PRINT: scopes print their names (PHARE_LOG=RANK_FILES: a file per rank), to compare ranks for deadlocks",
+    )
     parser.add_argument(
         "--sync-pools", action="store_true", help="DAMN_THREAD_POOL_SYNC: no pool threads"
     )
@@ -121,6 +133,8 @@ def main(argv):
         extra += ["-x", "res/mkn/mpi"]
 
     scoping = [] if args.log_level is None else [f"-DDAMN_LOG_LEVEL={args.log_level}"]
+    if args.scope_print:  # DAMN_FORCE_LOG_LINE: printed in NDEBUG (-g 0) builds too
+        scoping += ["-DDAMN_LOG_SCOPE_PRINT", "-DDAMN_FORCE_LOG_LINE"]
     if args.sync_pools:
         scoping += ["-DDAMN_THREAD_POOL_SYNC=1"]
     if args.diag_doubles:

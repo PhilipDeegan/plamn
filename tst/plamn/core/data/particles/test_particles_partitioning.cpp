@@ -123,7 +123,7 @@ TYPED_TEST(ParticlesDataTest, works)
     EXPECT_EQ(before_size, particles.size());
     EXPECT_EQ(iterator.size(), std::pow(Test::box_size, dim) * Test::ppc);
 
-    for (std::size_t i = 0; i < iterator.size(); ++i)
+    for (std::size_t i = 0; i < static_cast<std::size_t>(iterator.size()); ++i)
         EXPECT_TRUE(isIn(particles.iCell(i), middle.box));
 
     for (std::size_t i = iterator.size(); i < particles.size(); ++i)
@@ -158,7 +158,7 @@ TYPED_TEST(ParticlesDataTest, worksVector)
     EXPECT_EQ(before_size, particles.size());
     EXPECT_EQ(iterator.size(), std::pow(Test::box_size, dim) * Test::ppc);
 
-    for (std::size_t i = 0; i < iterator.size(); ++i)
+    for (std::size_t i = 0; i < static_cast<std::size_t>(iterator.size()); ++i)
         EXPECT_TRUE(isIn(particles.iCell(i), middle.box));
 
     for (std::size_t i = iterator.size(); i < particles.size(); ++i)

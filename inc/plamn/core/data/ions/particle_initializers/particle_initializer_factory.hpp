@@ -51,6 +51,9 @@ namespace core
 
                 auto densityCutOff = cppdict::get_value(dict, "density_cut_off", double{1e-16});
 
+                // the density's constant part, added to the density function
+                auto densityBackground = cppdict::get_value(dict, "density_background", double{0.});
+
                 auto nbrPartPerCell = dict["nbr_part_per_cell"].template to<int>();
 
                 auto basisName = dict["basis"].template to<std::string>();
@@ -69,7 +72,7 @@ namespace core
                 {
                     return std::make_unique<MaxwellianParticleInitializer<Particles, Layout>>(
                         density, v, vth, nbrPartPerCell, seed, Basis::Cartesian, magneticField,
-                        densityCutOff, populationName);
+                        densityCutOff, populationName, .05, densityBackground);
                 }
                 else if (basisName == "magnetic")
                 {
@@ -79,7 +82,7 @@ namespace core
 
                     return std::make_unique<MaxwellianParticleInitializer<Particles, Layout>>(
                         density, v, vth, nbrPartPerCell, seed, Basis::Magnetic, magneticField,
-                        densityCutOff, populationName);
+                        densityCutOff, populationName, .05, densityBackground);
                 }
             }
             // TODO throw?

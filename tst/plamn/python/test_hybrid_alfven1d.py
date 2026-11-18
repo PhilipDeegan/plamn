@@ -7,14 +7,10 @@ the plamn root:
 
 import unittest
 
+import alfven1d
 import numpy as np
 
-import plamn
-
-
-import alfven1d
-import pyphare.pharein as ph
-from pyphare.simulator.simulator import Simulator
+import plamn.backend.phare as ph
 
 CELLS = 100
 STEPS = 150
@@ -25,7 +21,7 @@ def run(largest_patch_size):
     ph.clearDict()
     sim = alfven1d.config(cells=CELLS, time_step_nbr=STEPS, final_time=STEPS * 0.01)
     sim.largest_patch_size = (largest_patch_size,)
-    simulator = Simulator(sim, log_to_file=False).setup().initialize()
+    simulator = ph.Simulator(sim, log_to_file=False).setup().initialize()
     cpp = simulator.cpp_sim
 
     k = 2 * np.pi / CELLS
@@ -64,10 +60,6 @@ def run(largest_patch_size):
 
 
 class HybridAlfven1DTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        plamn.patch()
-
     def check(self, result, patches):
         self.assertEqual(result["patches"], patches)
         self.assertTrue(result["finite"])

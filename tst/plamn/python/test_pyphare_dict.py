@@ -6,20 +6,14 @@ run from the plamn root:
 
 import unittest
 
+import alfven1d
 import numpy as np
 
 import plamn
-
-
-import alfven1d
-import pyphare.pharein as ph
+import plamn.backend.phare as ph
 
 
 class PyphareDictTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        plamn.patch()
-
     def setUp(self):
         ph.global_vars.sim = None
         ph.clearDict()

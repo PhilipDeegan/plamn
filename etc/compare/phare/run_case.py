@@ -81,6 +81,9 @@ def main(argv=None):
     import cases
 
     if a.code == "plamn":
+        # PHARE's regrid points (SAMRAI's): a regrid refills the level ghost fields after the
+        #  synchronization, plamn's default skips it where the boxes do not change
+        os.environ.setdefault("PLAMN_REGRID_MODE", "high")
         import plamn
 
         plamn.patch()
@@ -95,11 +98,11 @@ def main(argv=None):
     parts = Path(a.out) / "particles"
     if keep:
         parts.mkdir(parents=True, exist_ok=True)
-        np.savez(parts / "0.npz", **particle_arrays(simulator, cases.POPULATIONS))
+        np.savez(parts / "0.npz", **particle_arrays(simulator, cases.populations(a.case)))
     for step in range(1, cases.CASES[a.case]["steps"] + 1):
         simulator.advance()
         if keep:
-            np.savez(parts / f"{step}.npz", **particle_arrays(simulator, cases.POPULATIONS))
+            np.savez(parts / f"{step}.npz", **particle_arrays(simulator, cases.populations(a.case)))
     simulator.reset()
     return 0
 

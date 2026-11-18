@@ -7,20 +7,16 @@
 
 import unittest
 
+import alfven1d
 import numpy as np
 
-import plamn
-
-
-import alfven1d
-import pyphare.pharein as ph
-from pyphare.simulator.simulator import Simulator
+import plamn.backend.phare as ph
 
 try:
     from pyphare.pharesee.hierarchy.fromsim import hierarchy_from_sim
     from pyphare.pharesee.hierarchy.patchdata import (
         LiveParticleData,
-    )  # noqa: F401
+    )
 except ImportError:  # a pyphare without the live DataWrangler
     hierarchy_from_sim = None
 
@@ -37,20 +33,14 @@ def domain(hier, qty):
     )
 
 
-@unittest.skipIf(
-    hierarchy_from_sim is None, "pyphare has no live DataWrangler"
-)
+@unittest.skipIf(hierarchy_from_sim is None, "pyphare has no live DataWrangler")
 class DataWranglerTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        plamn.patch()
-
     def setUp(self):
         ph.global_vars.sim = None
         ph.clearDict()
         sim = alfven1d.config(cells=CELLS, time_step_nbr=10, final_time=0.1)
         sim.largest_patch_size = (PATCH,)
-        self.simulator = Simulator(sim, log_to_file=False).setup().initialize()
+        self.simulator = ph.Simulator(sim, log_to_file=False).setup().initialize()
         self.cpp = self.simulator.cpp_sim
 
     def tearDown(self):
@@ -196,18 +186,14 @@ def config_2d():
     return sim
 
 
-@unittest.skipIf(
-    hierarchy_from_sim is None, "pyphare has no live DataWrangler"
-)
+@unittest.skipIf(hierarchy_from_sim is None, "pyphare has no live DataWrangler")
 class DataWrangler2DTest(unittest.TestCase):
     """the checks of PHARE's test_data_wrangler.py test_hybrid (2D, interp 1), on one level"""
 
-    @classmethod
-    def setUpClass(cls):
-        plamn.patch()
-
     def setUp(self):
-        self.simulator = Simulator(config_2d(), log_to_file=False).setup().initialize()
+        self.simulator = (
+            ph.Simulator(config_2d(), log_to_file=False).setup().initialize()
+        )
         self.cpp = self.simulator.cpp_sim
 
     def tearDown(self):

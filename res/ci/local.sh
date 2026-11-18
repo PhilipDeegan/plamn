@@ -11,14 +11,21 @@ mb=$(git merge-base "$BASE" HEAD)
 
 step() { echo; echo "== $*"; }
 
+# warnings as CI's: -W 9 (-Wall -Wextra -pedantic -Werror with gcc), PHARE's devMode exceptions
+#  (unused parameters, variables), and strict aliasing a warning only (nanobind's sources)
+W=(-W 9 -a "-Wno-unused-parameter -Wno-unused-variable -Wno-error=strict-aliasing")
+
 step "core tests"
-mkn build test -p test_plamn_core -dKO -t "$J" -x res/mkn/thrust
+mkn build test -p test_plamn_core -dKO -t "$J" "${W[@]}" -x res/mkn/thrust
+
+step "slow tests compile (CI's slow.yml runs them)"
+mkn build -p test_plamn_core_slow -dKO -t "$J" "${W[@]}" -x res/mkn/mpi
 
 step "python modules (1D, 2D)"
-./mkn.py --dim 1 2
+./mkn.py --dim 1 2 -- "${W[@]}"
 
 step "C++ diagnostics tests (embedded python): 1 rank (mkn test), then 3"
-mkn build test -p test_plamn_diagnostics -dKO -t "$J" -x res/mkn/mpi
+mkn build test -p test_plamn_diagnostics -dKO -t "$J" "${W[@]}" -x res/mkn/mpi
 for t in bin/test_plamn_diagnostics/test/*_test_diagnostics_*d.cpp; do
   mpirun --oversubscribe -n 3 "$t"
 done
@@ -28,8 +35,14 @@ PYTHONPATH=.:$PYPHARE/pyphare:tst/plamn/python \
   python3 -m phlop.run.test_cases -i tst -c 4 --tags mpi
 
 step "clang-format (changed lines)"
-git clang-format-22 --binary clang-format-22 --extensions c,cc,cpp,h,hpp,ipp --diff "$mb" -- inc src tst \
-  | grep -q "^diff" && { echo "clang-format would change files: git clang-format-22 $mb"; exit 1; } || true
+# (git clang-format --diff exits 1 when it has a diff: under pipefail a pipe into grep never
+#  failed this step; capture the diff, then look at it)
+fmt=$(git clang-format-22 --binary clang-format-22 --extensions c,cc,cpp,h,hpp,ipp --diff "$mb" -- inc src tst || true)
+if grep -q "^diff" <<<"$fmt"; then
+  echo "$fmt"
+  echo "clang-format would change files: git clang-format-22 $mb"
+  exit 1
+fi
 
 step "iwyu (applying its fixes changes nothing)"
 mkn build -dKOqp iwyu_fix -t "$J" -Wx res/mkn/mpi >/dev/null

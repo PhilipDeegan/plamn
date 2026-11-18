@@ -18,10 +18,7 @@ from pathlib import Path
 import numpy as np
 
 import plamn
-
-
-import pyphare.pharein as ph
-from pyphare.simulator.simulator import Simulator, startMPI
+import plamn.backend.phare as ph
 
 ndim = 2
 X_TIMES = {1: 4, 2: 2, 3: 1}[ndim]
@@ -212,12 +209,8 @@ def assert_vtkhdf_layout(test, path):
 
 
 class VtkDiagnosticsTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        plamn.patch()
-
     def setUp(self):
-        startMPI()
+        ph.startMPI()
         np_ = plamn.etc.mpi_size()
         self.out = str(
             Path("phare_outputs/plamn_vtk") / f"{self.id().split('.')[-1]}_np{np_}"
@@ -233,7 +226,7 @@ class VtkDiagnosticsTest(unittest.TestCase):
 
     def run_it(self, **kwargs):
         sim = simulation(self.out, **kwargs)
-        self.simulator = Simulator(sim, log_to_file=False).setup().initialize()
+        self.simulator = ph.Simulator(sim, log_to_file=False).setup().initialize()
         self.simulator.advance()  # dumps at t0 (initialize) and after the step
         plamn.etc.mpi_barrier()
         return self.simulator
@@ -260,8 +253,9 @@ class VtkDiagnosticsTest(unittest.TestCase):
                     root = f["VTKHDF"]
                     steps = root[f"Steps/Level{ln}"]
                     s = int(root["Steps"].attrs["NSteps"]) - 1  # the last
-                    b0, nb = int(steps["AMRBoxOffset"][s]), int(
-                        steps["NumberOfAMRBox"][s]
+                    b0, nb = (
+                        int(steps["AMRBoxOffset"][s]),
+                        int(steps["NumberOfAMRBox"][s]),
                     )
                     row = int(steps["PointDataOffset/data"][s])
                     data = root[f"Level{ln}/PointData/data"][:]
@@ -340,7 +334,7 @@ class VtkDiagnosticsTest(unittest.TestCase):
         ph.FluidDiagnostics(quantity="charge_density", write_timestamps=[0.0])
         list(sim.diagnostics.values())[-1].quantity = "/ions/pressure_tensor"
         with self.assertRaises(Exception):
-            self.simulator = Simulator(sim, log_to_file=False).setup()
+            self.simulator = ph.Simulator(sim, log_to_file=False).setup()
 
 
 if __name__ == "__main__":

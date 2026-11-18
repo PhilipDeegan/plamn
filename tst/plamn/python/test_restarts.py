@@ -13,16 +13,13 @@ the same ranks. Run with any number of ranks (the same for both), e.g.
 import shutil
 import unittest
 from datetime import timedelta
-from time import sleep
 from pathlib import Path
+from time import sleep
 
 import numpy as np
 
 import plamn
-
-
-import pyphare.pharein as ph
-from pyphare.simulator.simulator import Simulator, startMPI
+import plamn.backend.phare as ph
 
 timestep = 0.001
 restart_step = 4
@@ -110,7 +107,7 @@ def simulation(
     setup_model()
     if not setup:
         return sim
-    return Simulator(sim, log_to_file=False).setup().initialize()
+    return ph.Simulator(sim, log_to_file=False).setup().initialize()
 
 
 def state(simulator):
@@ -138,12 +135,8 @@ def state(simulator):
 
 
 class RestartsTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        plamn.patch()
-
     def setUp(self):
-        startMPI()
+        ph.startMPI()
         # the same on every rank of a run, its own per test and rank count: phlop runs a test
         #  on 1 and on 3 ranks at the same time
         name = f"{self.id().split('.')[-1]}_np{plamn.etc.mpi_size()}"
@@ -211,7 +204,9 @@ class RestartsTest(unittest.TestCase):
         self.run_both(steps=8, refinement_boxes={}, **self.chunked())
 
     def test_tagging_chunked(self):
-        first = self.run_both(steps=10, refinement="tagging", max_nbr_levels=3, **self.chunked())
+        first = self.run_both(
+            steps=10, refinement="tagging", max_nbr_levels=3, **self.chunked()
+        )
         self.assertGreater(first.cpp_sim.n_levels(), 1)
 
     def test_restarts_elapsed_time(self):
@@ -224,7 +219,7 @@ class RestartsTest(unittest.TestCase):
         )
         self.assertEqual(sim.restart_options["elapsed_timestamps"], [1])
         first = (
-            Simulator(sim, log_to_file=False).setup().cpp_initialize()
+            ph.Simulator(sim, log_to_file=False).setup().cpp_initialize()
         )  # no dump at t0
         self.simulators.append(first)
         sleep(2)
@@ -260,7 +255,7 @@ class RestartsTest(unittest.TestCase):
         """keep_last 3 and restart_time "auto": a restart every step for 7 steps, then from the
         last for 3 more: only the 8th to 10th steps' are left, the next "auto" is the 10th
         """
-        import pyphare.pharein.restarts as restarts
+        from pyphare.pharein import restarts
 
         def run(steps, timestamps):
             opts = dict(
@@ -300,7 +295,7 @@ class RestartsTest(unittest.TestCase):
         self.assertNotEqual(
             etc.restart_path_for_time("d", 1e-6), etc.restart_path_for_time("d", 2e-6)
         )
-        import pyphare.pharein.restarts as restarts
+        from pyphare.pharein import restarts
 
         self.assertEqual(restarts.format_time(0.004), "0000000000.0040000000")
 

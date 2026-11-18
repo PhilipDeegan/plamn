@@ -96,7 +96,7 @@ def main(argv=None):
     p.add_argument("--case", default="harris_2d")
     p.add_argument("--ndim", type=int, default=2)
     p.add_argument("--steps", type=int, default=10)
-    p.add_argument("--ref", default="next")
+    p.add_argument("--ref", default="master")
     p.add_argument("--cmp", default="plamn")
     p.add_argument("--np", type=int, default=1, help="MPI ranks per run")
     p.add_argument("--no-run", action="store_true", help="compare the runs already there")

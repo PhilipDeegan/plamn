@@ -4,7 +4,7 @@ import numpy as np
 
 
 def config(cells=50, time_step_nbr=10, final_time=0.1):
-    import pyphare.pharein as ph
+    import plamn.backend.phare as ph
 
     sim = ph.Simulation(
         smallest_patch_size=cells,

@@ -46,10 +46,7 @@ SMALL_PATCHES = {"harris_2d": 20}  # largest_patch_size of the "small" variant, 
 MIN_OVERLAP = 0.9  # tagged levels (harris_2d); refinement boxes must overlap fully
 TOLERANCE = {"EM_B": 1e-14, "EM_E": 1e-13, "moments": 1e-13}  # atol per kind
 PHARES = {  # name: PHARE checkout with a CMake build in build/
-    "master": "/mkn/git/phare/master",
-    # master (dc62fdd4e) + the level ghost and patch layout fixes: patch layout
-    #  independent level ghosts, ordered border sums, no ion border max, level 0 B ghosts
-    "next": "/mkn/git/phare/next",
+    "master": "/mkn/git/phare/master",  # has the level ghost and patch layout fixes
     "tiling_gpu": "/mkn/git/phare/tiling_gpu",
     "tiling_multithreaded": "/mkn/git/phare/tiling_multithreaded",
 }

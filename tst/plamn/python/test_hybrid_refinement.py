@@ -19,15 +19,13 @@ across the patches unbalances the ranks; rebalancing brings them back without ch
 when whole patches are too coarse to balance (level 0 cut on blocks, damn::amr::cut_partition).
 """
 
+import os
 import unittest
 
 import numpy as np
 
 import plamn
-
-
-import pyphare.pharein as ph
-from pyphare.simulator.simulator import Simulator, startMPI
+import plamn.backend.phare as ph
 
 PPC = 100
 
@@ -71,7 +69,7 @@ def alfven(refined, steps):
         },
     )
     ph.ElectronModel(closure="isothermal", Te=0.0)
-    simulator = Simulator(sim, log_to_file=False).setup().initialize()
+    simulator = ph.Simulator(sim, log_to_file=False).setup().initialize()
     for _ in range(
         steps
     ):  # not run(): newer pyphares reset the simulator once it is done
@@ -85,12 +83,20 @@ def alfven(refined, steps):
     return out
 
 
-def harris(steps, tagging=False, measure=None, load_balancer=None):
+def harris(
+    steps,
+    tagging=False,
+    measure=None,
+    load_balancer=None,
+    levels=2,
+    cells=(100, 100),
+    patch=(25, 25),
+):
     ph.global_vars.sim = None
     ph.clearDict()
     L = 0.5
     refinement = (
-        dict(refinement="tagging", max_nbr_levels=2)
+        dict(refinement="tagging", max_nbr_levels=levels)
         if tagging
         else dict(
             refinement="boxes", refinement_boxes={"L0": {"B0": [(30, 22), (69, 37)]}}
@@ -99,9 +105,9 @@ def harris(steps, tagging=False, measure=None, load_balancer=None):
     sim = ph.Simulation(
         time_step=0.005,
         time_step_nbr=steps,
-        cells=(100, 100),
+        cells=cells,
         dl=(0.4, 0.4),
-        largest_patch_size=(25, 25),
+        largest_patch_size=patch,
         hyper_resistivity=0.002,
         resistivity=0.001,
         **refinement,  # boxes: around the lower sheet
@@ -158,7 +164,7 @@ def harris(steps, tagging=False, measure=None, load_balancer=None):
     ph.ElectronModel(closure="isothermal", Te=0.0)
     if load_balancer:
         ph.LoadBalancer(**load_balancer)
-    simulator = Simulator(sim, log_to_file=False).setup().initialize()
+    simulator = ph.Simulator(sim, log_to_file=False).setup().initialize()
     cpp = simulator.cpp_sim
     initial = [cpp.total_particle_count(ln) for ln in range(cpp.n_levels())]
     measured = [measure(simulator)] if measure else []
@@ -232,7 +238,7 @@ def drift(load_balancer, steps=120, patch=(10, 10)):
     ph.ElectronModel(closure="isothermal", Te=0.0)
     if load_balancer:
         ph.LoadBalancer(**load_balancer)
-    simulator = Simulator(sim, log_to_file=False).setup().initialize()
+    simulator = ph.Simulator(sim, log_to_file=False).setup().initialize()
     cpp = simulator.cpp_sim
     imbalance = []
     for k in range(steps + 1):
@@ -243,6 +249,16 @@ def drift(load_balancer, steps=120, patch=(10, 10)):
     B = np.concatenate([np.asarray(cpp.level_values(f"EM_B_{q}", 0)) for q in "xyz"])
     simulator.reset()
     return {"imbalance": imbalance, "B": B}
+
+
+def init_fields(simulator):
+    """every level's E, B and protons density on its patches' domains, at initialization"""
+    cpp = simulator.cpp_sim
+    names = [f"EM_{v}_{q}" for v in "EB" for q in "xyz"] + ["protons_density"]
+    return [
+        np.concatenate([np.asarray(cpp.all_domain_values(n, ln)) for n in names])
+        for ln in range(cpp.n_levels())
+    ]
 
 
 def max_divb(simulator):
@@ -268,10 +284,6 @@ def max_divb(simulator):
 
 
 class HybridRefinementTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        plamn.patch()
-
     def test_alfven_reflux_does_not_kick_the_coarse_cells_beside_the_box(self):
         one, two = alfven(False, 1), alfven(True, 1)
         lo, up = 40, 59
@@ -324,7 +336,7 @@ class HybridRefinementTest(unittest.TestCase):
         """a beam population, only in a blob, drifting along B across the patches: without
         load balancing the ranks' particles drift apart, every 30 steps it brings them back.
         The physics is the same: B at the end as without it, to round off"""
-        startMPI()  # before asking how many ranks: pyphare starts it with the first simulator
+        ph.startMPI()  # before asking how many ranks: pyphare starts it with the first simulator
         if plamn.etc.mpi_size() < 2:
             self.skipTest("one rank: nothing to balance (--tags mpi runs it on 3)")
         no, lb = drift(None), drift(dict(every=30, tol=0.05))
@@ -339,7 +351,7 @@ class HybridRefinementTest(unittest.TestCase):
         initialization the ranks are 0.25+ apart (a patch is too coarse a unit); each rebalance
         (start of steps 0, 30, 60) cuts level 0 on blocks and brings them within 0.15, B the same
         as without the step 30 and 60 rebalances"""
-        startMPI()
+        ph.startMPI()
         if (
             plamn.etc.mpi_size() != 3
         ):  # 6 patches split evenly on 2 ranks: nothing to cut
@@ -352,6 +364,52 @@ class HybridRefinementTest(unittest.TestCase):
             self.assertLess(lb["imbalance"][step], 0.15, step)
         self.assertLess(lb["imbalance"][61], no["imbalance"][61])
         self.assertLess(np.abs(lb["B"] - no["B"]).max(), 1e-12)
+
+    def test_pretag_initializes_the_same_levels(self):
+        # pretag: every level's boxes from B alone before any particle exists, then the levels
+        # made knowing all of them: the same levels, fields and particles as tagging level by
+        # level with the particles
+        runs = {}
+        for pretag in ("0", "1"):
+            os.environ["PLAMN_PRETAG"] = pretag
+            try:
+                runs[pretag] = harris(0, tagging=True, levels=3, measure=init_fields)
+            finally:
+                del os.environ["PLAMN_PRETAG"]
+        off, on = runs["0"], runs["1"]
+        self.assertEqual(on["levels"], 3)
+        self.assertEqual(on["levels"], off["levels"])
+        self.assertEqual(on["initial"], off["initial"])
+        for ln, (a, b) in enumerate(zip(off["measured"][0], on["measured"][0])):
+            self.assertEqual(a.shape, b.shape, f"level {ln}")
+            np.testing.assert_array_equal(a, b, f"level {ln}")
+
+    def test_load_balancing_keeps_the_finer_levels(self):
+        """three levels from the start (the sheets are tagged at initialization): a rebalance
+        moves every level onto its new owners, coarser to finer, none dropped (a dropped level
+        would come back at the next regrid, split anew from its coarser level: other physics).
+        The same levels at every step and B as without load balancing"""
+        ph.startMPI()
+        if plamn.etc.mpi_size() < 2:
+            self.skipTest("one rank: nothing to balance (--tags mpi runs it on 3)")
+        steps = 4
+        run = lambda lb: harris(
+            steps,
+            tagging=True,
+            measure=lambda sim: sim.cpp_sim.n_levels(),
+            load_balancer=lb,
+            levels=3,
+            cells=(
+                40,
+                100,
+            ),  # y as harris()'s default: its sheets periodic to round off
+            patch=(10, 10),
+        )
+        no, lb = run(None), run(dict(every=2, tol=0.05))
+        self.assertEqual(no["measured"], [3] * (steps + 1))  # three levels throughout
+        self.assertEqual(lb["measured"], no["measured"])
+        for b_lb, b_no in zip(lb["B"], no["B"]):
+            self.assertLess(np.abs(b_lb - b_no).max(), 1e-12)
 
 
 if __name__ == "__main__":
