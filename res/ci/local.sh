@@ -28,8 +28,14 @@ PYTHONPATH=.:$PYPHARE/pyphare:tst/plamn/python \
   python3 -m phlop.run.test_cases -i tst -c 4 --tags mpi
 
 step "clang-format (changed lines)"
-git clang-format-22 --binary clang-format-22 --extensions c,cc,cpp,h,hpp,ipp --diff "$mb" -- inc src tst \
-  | grep -q "^diff" && { echo "clang-format would change files: git clang-format-22 $mb"; exit 1; } || true
+# (git clang-format --diff exits 1 when it has a diff: under pipefail a pipe into grep never
+#  failed this step; capture the diff, then look at it)
+fmt=$(git clang-format-22 --binary clang-format-22 --extensions c,cc,cpp,h,hpp,ipp --diff "$mb" -- inc src tst || true)
+if grep -q "^diff" <<<"$fmt"; then
+  echo "$fmt"
+  echo "clang-format would change files: git clang-format-22 $mb"
+  exit 1
+fi
 
 step "iwyu (applying its fixes changes nothing)"
 mkn build -dKOqp iwyu_fix -t "$J" -Wx res/mkn/mpi >/dev/null

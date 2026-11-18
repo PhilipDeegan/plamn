@@ -237,7 +237,7 @@ void MaxwellianParticleInitializer<Particles_t, Layout>::loadParticles(Particles
     //  column (append_columns), instead of a host write into managed memory per particle
     bool constexpr static staged = Particles_t::layout_mode == LayoutMode::SoAVXChunked
                                    and Particles_t::alloc_mode == damn::AllocatorMode::GPU_UNIFIED;
-    using Staging_t              = std::conditional_t<
+    using Staging_t = std::conditional_t<
         staged, Particles<Particles_t::options.with_alloc(damn::AllocatorMode::CPU)>, Particles_t>;
     auto staging = [&]() {
         if constexpr (staged)
