@@ -39,6 +39,7 @@
 #include "plamn/diagnostic/vtkhdf.hpp"
 #include "plamn/simulator/hybrid_patch_view.hpp"
 #include "plamn/solver/hybrid/model.hpp"
+#include "plamn/solver/stacks.hpp"
 #include "plamn/amr/load_balancing.hpp"
 #include "plamn/core/def.hpp"
 #include "plamn/core/numerics/interpolator/interpolating.hpp"
@@ -111,19 +112,18 @@ public:
     std::size_t static constexpr interp_order  = opts.interp_order;
     std::size_t static constexpr nbRefinedPart = opts.nbRefinedPart;
 
-    using Patch_t      = simulator::HybridPatch<opts>;
+    using Hybrid_t     = solver::HybridStack<opts>;
+    using Patch_t      = Hybrid_t::Patch_t;
     using Grid_t       = Patch_t::Grid_t;
     using Layout_t     = Patch_t::Layout_t;
     using Hierarchy_t  = damn::amr::Hierarchy<dimension>;
-    using LevelData_t  = solver::HybridModel<opts>::LevelData_t;
+    using LevelData_t  = Hybrid_t::LevelData_t;
     using Neighbours_t = damn::amr::Neighbours<dimension>;
     using LevelMap_t   = damn::amr::LevelMap<dimension>;
     using Resources_t  = std::map<std::string, std::vector<damn::amr::ResourcePair>>;
     using Box_t        = damn::core::Box<int, dimension>;
     using Interpolator = core::Interpolating<dimension, interp_order>;
-    using Splitter_t
-        = amr::Splitter<damn::core::DimConst<dimension>, damn::core::InterpConst<interp_order>,
-                        amr::RefinedParticlesConst<nbRefinedPart>>;
+    using Splitter_t   = Hybrid_t::Splitter_t;
 
     // dict: the whole input, copied: patches keep references into it
     explicit Simulator(initializer::Dict const& dict)

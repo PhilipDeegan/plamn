@@ -6,7 +6,7 @@
 //  simulation/grid/domain_boundaries): the heat capacity ratio, the time integration scheme
 //  (Euler, TVDRK2, TVDRK3, SSPRK4_5: a run time choice), resistivity and hyper resistivity, Hall,
 //  and the physical boundaries' conditions. The reconstruction (and its slope limiter) is the
-//  simulation's compile time options'
+//  simulation's compile time options'. Empty if the build does not enable it
 
 #include "damn/core/def.hpp"
 
@@ -15,6 +15,7 @@
 #include "plamn/core/models/quantities/mhd_quantities.hpp"
 #include "plamn/core/numerics/reconstructions/linear.hpp"
 #include "plamn/initializer/data_provider.hpp"
+#include "plamn/solver/model_def.hpp"
 
 #include "dict.hpp"
 
@@ -59,10 +60,14 @@ namespace mhd
     }
 } // namespace mhd
 
-template<auto opts>
+template<auto opts, bool enabled = has_mhd_v<opts>>
 struct MHDModel
 {
-    static_assert(opts.mhd_enabled);
+};
+
+template<auto opts>
+struct MHDModel<opts, true>
+{
     using Reconstruction = mhd::Reconstruction_t<opts>;
     using Quantity       = core::MHDQuantity;
 

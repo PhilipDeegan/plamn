@@ -3,11 +3,12 @@
 
 // the hybrid model of a simulation: its patch data per level number, for the levels it is active
 //  on (the hierarchy's geometry, neighbours and maps between levels are the simulator's, shared
-//  by the models)
+//  by the models). Empty if the build does not enable it
 
 #include "damn/amr/level_data.hpp"
 
 #include "plamn/simulator/hybrid_patch.hpp"
+#include "plamn/solver/model_def.hpp"
 
 #include <cstddef>
 #include <map>
@@ -15,10 +16,14 @@
 
 namespace plamn::solver
 {
-template<auto opts>
+template<auto opts, bool enabled = has_hybrid_v<opts>>
 struct HybridModel
 {
-    static_assert(opts.hybrid_enabled);
+};
+
+template<auto opts>
+struct HybridModel<opts, true>
+{
     using Patch_t     = simulator::HybridPatch<opts>;
     using LevelData_t = damn::amr::LevelData<opts.dimension, std::unique_ptr<Patch_t>>;
 
