@@ -8,6 +8,7 @@
 // zero-copy numpy views of the C++ coordinates, their returned arrays copied into C++
 
 #include "plamn_dict.hpp"
+#include "plamn_amr.hpp"
 #include "plamn/initializer/data_provider.hpp"
 #include "plamn/simulator/restart_paths.hpp"
 #include "plamn/simulator/simulator_def.hpp"
@@ -241,4 +242,6 @@ NB_MODULE(plamn_etc, m)
     nb::enum_<plamn::TimeStepType>(m, "TimeStepType", nb::is_arithmetic())
         .value("constant", plamn::TimeStepType::constant)
         .value("adaptive", plamn::TimeStepType::adaptive);
+
+    plamn::python3::declare_amr(m);
 }
