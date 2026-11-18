@@ -43,6 +43,7 @@
 #include "plamn/solver/hybrid/level_steps.hpp"
 #include "plamn/solver/hybrid/model.hpp"
 #include "plamn/solver/hybrid/patches.hpp"
+#include "plamn/solver/hybrid/restarts.hpp"
 #include "plamn/solver/stacks.hpp"
 #include "plamn/amr/load_balancing.hpp"
 #include "plamn/core/def.hpp"
@@ -318,7 +319,6 @@ private:
 
     // restarts, see simulator_restarts.hpp
     void setup_restarts_();
-    NO_DISCARD std::vector<std::string> restart_names_() const;
     void write_restart_(std::string const& dir);
     void load_restart_();
     void rebuild_after_load_();
