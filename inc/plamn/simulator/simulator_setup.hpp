@@ -29,6 +29,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <cstdlib>
 #include <type_traits>
 #include <vector>
@@ -109,6 +110,9 @@ void Simulator<opts>::setup_()
             throw std::runtime_error("plamn Simulator: regrid_mode normal or high, not " + mode);
         regrid_mode_ = mode == "high" ? RegridMode::high : RegridMode::normal;
     }
+    pretag_enabled_ = cppdict::get_value(dict_, "simulation/AMR/refinement/tagging/pretag", false);
+    if (auto const* env = std::getenv("PLAMN_PRETAG"))
+        pretag_enabled_ = std::string_view{env} == "1";
     if (amr.contains("largest_patch_size"))
     {
         auto const largest = amr["largest_patch_size"].template to<std::vector<int>>();
@@ -248,11 +252,19 @@ std::vector<double> Simulator<opts>::box_weights_(int const ln, std::vector<Box_
     for (std::size_t k = static_cast<std::size_t>(rank_); k < boxes.size();
          k += static_cast<std::size_t>(n_ranks_))
     {
-        Layout_t const layout{boxes[k], damn::amr::mesh_size(hierarchy_, ln),
-                              damn::amr::position(hierarchy_, ln, boxes[k].lower), ln};
         double w = static_cast<double>(boxes[k].size()); // field work, a particle's worth a cell
+        // a refined level's particles are split from the coarser level's: the box (whole coarser
+        //  cells) holds the children of the coarse cells under it, as many leaving a fine cell
+        //  for a neighbour as entering it (exact but at the level's edges): the coarse box's
+        //  particles (populated cells: density above each population's cutoff) times the
+        //  children per particle
+        auto const count_ln = ln > 0 ? ln - 1 : ln;
+        auto const box      = ln > 0 ? damn::core::coarsen(boxes[k], hierarchy_.ratio) : boxes[k];
+        double const per    = ln > 0 ? static_cast<double>(opts.nbRefinedPart) : 1.;
+        Layout_t const layout{box, damn::amr::mesh_size(hierarchy_, count_ln),
+                              damn::amr::position(hierarchy_, count_ln, box.lower), count_ln};
         for (auto const& initializer : initializers)
-            w += static_cast<double>(initializer->nbrParticles(layout));
+            w += per * static_cast<double>(initializer->nbrParticles(layout));
         weights[k] = w;
     }
     if (n_ranks_ > 1)

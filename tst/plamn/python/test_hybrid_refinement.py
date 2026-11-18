@@ -19,15 +19,14 @@ across the patches unbalances the ranks; rebalancing brings them back without ch
 when whole patches are too coarse to balance (level 0 cut on blocks, damn::amr::cut_partition).
 """
 
+import os
 import unittest
 
 import numpy as np
-
-import plamn
-
-
 import pyphare.pharein as ph
 from pyphare.simulator.simulator import Simulator, startMPI
+
+import plamn
 
 PPC = 100
 
@@ -253,6 +252,16 @@ def drift(load_balancer, steps=120, patch=(10, 10)):
     return {"imbalance": imbalance, "B": B}
 
 
+def init_fields(simulator):
+    """every level's E, B and protons density on its patches' domains, at initialization"""
+    cpp = simulator.cpp_sim
+    names = [f"EM_{v}_{q}" for v in "EB" for q in "xyz"] + ["protons_density"]
+    return [
+        np.concatenate([np.asarray(cpp.all_domain_values(n, ln)) for n in names])
+        for ln in range(cpp.n_levels())
+    ]
+
+
 def max_divb(simulator):
     """max |div B| per level, over every patch's cells, over the ranks (collective)"""
     from pyphare.pharesee.hierarchy.fromsim import hierarchy_from_sim
@@ -361,6 +370,25 @@ class HybridRefinementTest(unittest.TestCase):
         self.assertLess(lb["imbalance"][61], no["imbalance"][61])
         self.assertLess(np.abs(lb["B"] - no["B"]).max(), 1e-12)
 
+    def test_pretag_initializes_the_same_levels(self):
+        # pretag: every level's boxes from B alone before any particle exists, then the levels
+        # made knowing all of them: the same levels, fields and particles as tagging level by
+        # level with the particles
+        runs = {}
+        for pretag in ("0", "1"):
+            os.environ["PLAMN_PRETAG"] = pretag
+            try:
+                runs[pretag] = harris(0, tagging=True, levels=3, measure=init_fields)
+            finally:
+                del os.environ["PLAMN_PRETAG"]
+        off, on = runs["0"], runs["1"]
+        self.assertEqual(on["levels"], 3)
+        self.assertEqual(on["levels"], off["levels"])
+        self.assertEqual(on["initial"], off["initial"])
+        for ln, (a, b) in enumerate(zip(off["measured"][0], on["measured"][0])):
+            self.assertEqual(a.shape, b.shape, f"level {ln}")
+            np.testing.assert_array_equal(a, b, f"level {ln}")
+
     def test_load_balancing_keeps_the_finer_levels(self):
         """three levels from the start (the sheets are tagged at initialization): a rebalance
         moves every level onto its new owners, coarser to finer, none dropped (a dropped level
@@ -376,7 +404,10 @@ class HybridRefinementTest(unittest.TestCase):
             measure=lambda sim: sim.cpp_sim.n_levels(),
             load_balancer=lb,
             levels=3,
-            cells=(40, 100),  # y as harris()'s default: its sheets periodic to round off
+            cells=(
+                40,
+                100,
+            ),  # y as harris()'s default: its sheets periodic to round off
             patch=(10, 10),
         )
         no, lb = run(None), run(dict(every=2, tol=0.05))
@@ -384,6 +415,7 @@ class HybridRefinementTest(unittest.TestCase):
         self.assertEqual(lb["measured"], no["measured"])
         for b_lb, b_no in zip(lb["B"], no["B"]):
             self.assertLess(np.abs(b_lb - b_no).max(), 1e-12)
+
 
 if __name__ == "__main__":
     unittest.main()

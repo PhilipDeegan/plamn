@@ -391,6 +391,8 @@ private:
     typename Patch_t::Surroundings surroundings_(int ln, Box_t const& box) const;
     // the boxes of level ln + 1 from level ln's tagged cells (collective)
     NO_DISCARD std::vector<Box_t> cluster_(int ln);
+    void refine_magnetic_(std::size_t ln);
+    NO_DISCARD std::vector<std::vector<Box_t>> pretag_();
     // the levels finer than from re-clustered (tagging) at t; always: re-made even where their
     //  boxes did not change (SAMRAI's, see RegridMode)
     void regrid_(double t, int from = 0, bool always = false);
@@ -467,6 +469,9 @@ private:
     //           ghost fields are refilled after the synchronization)
     enum class RegridMode : std::uint8_t { normal, high };
     RegridMode regrid_mode_ = RegridMode::normal;
+    // refinement="tagging": every level's boxes found from B alone before any particle is made
+    //  (simulation/AMR/refinement/tagging/pretag, or PLAMN_PRETAG=1), see pretag_
+    bool pretag_enabled_ = false;
     std::vector<int> level_steps_; // per level > 0: its substeps in the coarser level's step
     int steps_ = 0;
     // simulation/AMR/loadbalancing (pyphare's LoadBalancer), with refinement="tagging"

@@ -154,6 +154,10 @@ void Simulator<opts>::initialize()
         return;
     }
 
+    std::optional<std::vector<std::vector<Box_t>>> pretag_boxes;
+    if (tagging_ and pretag_enabled_)
+        pretag_boxes = pretag_();
+
     make_level_(0, {hierarchy_.domain});
     initialize_root_();
     for (std::size_t ln = 1; ln <= refinement_boxes_.size(); ++ln)
@@ -161,11 +165,14 @@ void Simulator<opts>::initialize()
         make_level_(static_cast<int>(ln), refinement_boxes_[ln - 1]);
         initialize_refined_(ln);
     }
-    // tagging: each new level from the tags of the one under it, as long as some are
+    // tagging: each new level from the tags of the one under it, as long as some are (pretag:
+    //  those boxes are known already)
     if (tagging_)
         for (int ln = 0; ln + 1 < hierarchy_.max_levels; ++ln)
         {
-            auto const boxes = cluster_(ln);
+            if (pretag_boxes and static_cast<std::size_t>(ln) >= pretag_boxes->size())
+                break;
+            auto const boxes = pretag_boxes ? (*pretag_boxes)[ln] : cluster_(ln);
             if (boxes.empty())
                 break;
             clustered_.resize(static_cast<std::size_t>(ln) + 2);
@@ -220,20 +227,7 @@ template<auto opts>
 void Simulator<opts>::initialize_refined_(std::size_t const ln)
 {
     using damn::amr::LevelRegion;
-    refine_(ln, amr::FieldRefiner{}, LevelRegion::Interior, amr::vector_pairs("EM_B", "EM_B"));
-    {
-        auto& l = levels_[ln];
-        for (std::size_t i = 0; i < damn::amr::size(l.data); ++i)
-        {
-            auto& patch = *l.data.data[i];
-            auto bx     = amr::field_resource<Patch_t::field_ghost_width>(patch.emB[0]);
-            auto by     = amr::field_resource<Patch_t::field_ghost_width>(patch.emB[1]);
-            auto bz     = amr::field_resource<Patch_t::field_ghost_width>(patch.emB[2]);
-            amr::divergence_free_touch_up(std::array{&bx, &by, &bz}, l.data.patches[i].box,
-                                          l.data.patches[i].box,
-                                          damn::amr::mesh_size(hierarchy_, static_cast<int>(ln)));
-        }
-    }
+    refine_magnetic_(ln);
     refine_(ln, amr::FieldRefiner{}, LevelRegion::Interior, amr::vector_pairs("EM_E", "EM_E"));
     fill_magnetic_ghosts_(ln, "EM_B", startTime_);
     fill_electric_ghosts_(ln, "EM_E", startTime_);
@@ -253,6 +247,57 @@ void Simulator<opts>::initialize_refined_(std::size_t const ln)
     sort_refined_particles_(ln);
 
     refined_moments_(ln);
+}
+
+// a new level's B from the coarser level's: refined, then the divergence free touch up (its
+//  ghosts are filled after, by fill_magnetic_ghosts_)
+template<auto opts>
+void Simulator<opts>::refine_magnetic_(std::size_t const ln)
+{
+    refine_(ln, amr::FieldRefiner{}, damn::amr::LevelRegion::Interior,
+            amr::vector_pairs("EM_B", "EM_B"));
+    auto& l = levels_[ln];
+    for (std::size_t i = 0; i < damn::amr::size(l.data); ++i)
+    {
+        auto& patch = *l.data.data[i];
+        auto bx     = amr::field_resource<Patch_t::field_ghost_width>(patch.emB[0]);
+        auto by     = amr::field_resource<Patch_t::field_ghost_width>(patch.emB[1]);
+        auto bz     = amr::field_resource<Patch_t::field_ghost_width>(patch.emB[2]);
+        amr::divergence_free_touch_up(std::array{&bx, &by, &bz}, l.data.patches[i].box,
+                                      l.data.patches[i].box,
+                                      damn::amr::mesh_size(hierarchy_, static_cast<int>(ln)));
+    }
+}
+
+// refinement="tagging" with pretag: every level's boxes before any particle, from B alone as the
+//  run computes it (level 0's from the functions, a finer level's refined from the coarser one,
+//  with its ghosts), tagged and clustered as initialize does; the levels are dropped after, the
+//  run then makes them with these boxes knowing all of them. Per level above 0, its boxes
+template<auto opts>
+std::vector<std::vector<typename Simulator<opts>::Box_t>> Simulator<opts>::pretag_()
+{
+    DAMN_LOG_SCOPE(1, "Simulator::pretag_");
+    auto const& sim = dict_["simulation"];
+    make_level_(0, {hierarchy_.domain});
+    per_patch_(0, [&](auto& patch) {
+        core::ElectromagInitializer<dimension>{sim["electromag"]}(patch.em, patch.layout);
+    });
+    copy_(0, damn::amr::fill_ghosts, "EM_B");
+
+    std::vector<std::vector<Box_t>> boxes;
+    for (int ln = 0; ln + 1 < hierarchy_.max_levels; ++ln)
+    {
+        auto level_boxes = cluster_(ln);
+        if (level_boxes.empty())
+            break;
+        make_level_(ln + 1, level_boxes);
+        refine_magnetic_(static_cast<std::size_t>(ln) + 1);
+        fill_magnetic_ghosts_(ln + 1, "EM_B", startTime_);
+        boxes.push_back(std::move(level_boxes));
+    }
+    levels_.clear();
+    hierarchy_.levels.clear();
+    return boxes;
 }
 
 // the particles refined into a level (new or regridded) are appended unsorted: SoAVXChunked lays
