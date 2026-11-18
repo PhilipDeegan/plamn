@@ -42,6 +42,7 @@
 #include "plamn/solver/hybrid/initialize.hpp"
 #include "plamn/solver/hybrid/level_steps.hpp"
 #include "plamn/solver/hybrid/model.hpp"
+#include "plamn/solver/hybrid/patches.hpp"
 #include "plamn/solver/stacks.hpp"
 #include "plamn/amr/load_balancing.hpp"
 #include "plamn/core/def.hpp"
@@ -406,7 +407,8 @@ private:
     void allocate_level_(int ln); // the patch data of hierarchy_'s level ln, linked
     void link_level_(int ln);     // neighbours, map to the coarser level, level ghost cells
     // a patch of level ln (its cells): its particle ghost box among the level's other patches
-    typename Patch_t::Surroundings surroundings_(int ln, Box_t const& box) const;
+    NO_DISCARD Layout_t layout_of_(int ln, Box_t const& box) const;
+    NO_DISCARD auto make_patch_(int ln, Box_t const& box) const; // the model's
     // the boxes of level ln + 1 from level ln's tagged cells (collective)
     NO_DISCARD std::vector<Box_t> cluster_(int ln);
     NO_DISCARD std::vector<std::vector<Box_t>> pretag_();

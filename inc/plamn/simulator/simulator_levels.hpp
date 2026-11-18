@@ -77,25 +77,25 @@ void Simulator<opts>::make_level_(int const ln, std::vector<Box_t> const& boxes)
 template<auto opts>
 void Simulator<opts>::allocate_level_(int const ln)
 {
-    auto const& sim = dict_["simulation"];
     resize_levels_(static_cast<std::size_t>(ln) + 1);
     auto& ld = data_(ln);
-    ld       = damn::amr::allocate(hierarchy_.levels[ln], rank_, [&](auto const& p) {
-        Layout_t const layout{p.box, damn::amr::mesh_size(hierarchy_, ln),
-                              damn::amr::position(hierarchy_, ln, p.box.lower), ln};
-        return std::make_unique<Patch_t>(layout, sim, surroundings_(ln, p.box));
-    });
+    ld       = damn::amr::allocate(hierarchy_.levels[ln], rank_,
+                                   [&](auto const& p) { return make_patch_(ln, p.box); });
     link_level_(ln);
 }
 
 template<auto opts>
-typename Simulator<opts>::Patch_t::Surroundings
-Simulator<opts>::surroundings_(int const ln, Box_t const& box) const
+typename Simulator<opts>::Layout_t Simulator<opts>::layout_of_(int const ln, Box_t const& box) const
 {
-    auto constexpr pgw = static_cast<int>(Patch_t::particle_ghost_width);
-    return {damn::amr::covered_by_level(
-                hierarchy_, ln, damn::core::grow(box, mkn::kul::ConstArray<int, dimension>(pgw))),
-            damn::amr::owned_elsewhere(hierarchy_, ln, box, pgw)};
+    return {box, damn::amr::mesh_size(hierarchy_, ln),
+            damn::amr::position(hierarchy_, ln, box.lower), ln};
+}
+
+template<auto opts>
+auto Simulator<opts>::make_patch_(int const ln, Box_t const& box) const
+{
+    return solver::hybrid::make_patch(hybrid_, layout_of_(ln, box), dict_["simulation"],
+                                      solver::hybrid::surroundings(hybrid_, hierarchy_, ln, box));
 }
 
 template<auto opts>

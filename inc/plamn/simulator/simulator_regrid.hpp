@@ -46,73 +46,6 @@
 // plamn::Simulator: tagging, clustering, regrid, load balancing
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
-namespace plamn::simulator::detail
-{
-// a patch's domain particles per cell, all populations
-template<std::size_t dim>
-struct CellCounts
-{
-    damn::core::Box<int, dim> cells;
-    std::vector<double> n = std::vector<double>(cells.size(), 0.);
-
-    NO_DISCARD std::size_t index(damn::core::Point<int, dim> const& c) const
-    {
-        std::size_t k = 0, stride = 1;
-        for (std::size_t d = 0; d < dim; ++d)
-        {
-            k += static_cast<std::size_t>(c[d] - cells.lower[d]) * stride;
-            stride *= static_cast<std::size_t>(cells.upper[d] - cells.lower[d] + 1);
-        }
-        return k;
-    }
-
-    // the particles in box's cells (those keep(cell) keeps)
-    NO_DISCARD double in(damn::core::Box<int, dim> const& box, auto&& keep) const
-    {
-        double sum = 0;
-        if (auto const overlap = box * cells)
-            damn::core::for_each_point(*overlap, [&](auto const& c) {
-                if (keep(c))
-                    sum += n[index(c)];
-            });
-        return sum;
-    }
-    NO_DISCARD double in(damn::core::Box<int, dim> const& box) const
-    {
-        return in(box, [](auto const&) { return true; });
-    }
-};
-
-template<typename Patch>
-NO_DISCARD auto cell_counts(Patch const& patch)
-{
-    auto constexpr dim = Patch::dimension;
-    CellCounts<dim> counts{patch.layout.cells};
-    for (auto const& pop : patch.ions)
-    {
-        auto const& particles = pop.domainParticles();
-        for (std::size_t p = 0; p < particles.size(); ++p)
-        {
-            damn::core::Point<int, dim> const c{particles[p].iCell()};
-            if (damn::core::isIn(c, counts.cells))
-                counts.n[counts.index(c)] += 1;
-        }
-    }
-    return counts;
-}
-
-// true if coarse cell c is refined into one of the patches (whole coarse cells)
-template<std::size_t dim>
-NO_DISCARD bool refined_into(damn::core::Point<int, dim> const& c, int const ratio,
-                             std::vector<damn::amr::Patch<dim>> const& patches)
-{
-    auto const fine = c * ratio;
-    for (auto const& p : patches)
-        if (damn::core::isIn(fine, p.box))
-            return true;
-    return false;
-}
-} // namespace plamn::simulator::detail
 
 namespace plamn
 {
@@ -162,29 +95,14 @@ std::vector<double> Simulator<opts>::particle_weights_(int const ln,
     auto const fine = static_cast<std::size_t>(ln);
     // the level's own particles, where it is
     if (fine < levels_.size())
-        for (auto const& patch : data_(fine).data)
-        {
-            auto const counts = simulator::detail::cell_counts(*patch);
-            for (std::size_t b = 0; b < boxes.size(); ++b)
-                weights[b] += counts.in(boxes[b]);
-        }
+        solver::hybrid::add_particles(hybrid_, level_services_(fine), boxes, weights);
     // where it is not (yet): the coarser level's particles, split
     if (ln > 0)
-    {
-        auto const old = fine < levels_.size() ? hierarchy_.levels[ln].patches
-                                               : std::vector<damn::amr::Patch<dimension>>{};
-        for (auto const& patch : data_(fine - 1).data)
-        {
-            auto const counts = simulator::detail::cell_counts(*patch);
-            for (std::size_t b = 0; b < boxes.size(); ++b)
-                weights[b]
-                    += nbRefinedPart
-                       * counts.in(
-                           damn::core::coarsen(boxes[b], hierarchy_.ratio), [&](auto const& c) {
-                               return !simulator::detail::refined_into(c, hierarchy_.ratio, old);
-                           });
-        }
-    }
+        solver::hybrid::add_split_particles(
+            hybrid_, level_services_(fine - 1), boxes, hierarchy_.ratio,
+            fine < levels_.size() ? hierarchy_.levels[ln].patches
+                                  : std::vector<damn::amr::Patch<dimension>>{},
+            weights);
     if (n_ranks_ > 1)
         MPI_Allreduce(MPI_IN_PLACE, weights.data(), static_cast<int>(weights.size()), MPI_DOUBLE,
                       MPI_SUM, MPI_COMM_WORLD);
@@ -242,17 +160,14 @@ void Simulator<opts>::rebalance_(double const t)
 
         auto const map  = damn::amr::make_regrid_map(old0, hierarchy_.levels[0], rank_,
                                                      damn::amr::periodic_shifts(hierarchy_, 0));
-        auto const& sim = dict_["simulation"];
         auto& l         = levels_[0];
         auto& ld        = data_(0);
-        ld              = damn::mpi::regrid(map, std::move(ld), [&](auto const& p) {
-            Layout_t const layout{p.box, damn::amr::mesh_size(hierarchy_, 0),
-                                  damn::amr::position(hierarchy_, 0, p.box.lower), 0};
-            return std::make_unique<Patch_t>(layout, sim, surroundings_(0, p.box));
-        });
+        ld              = damn::mpi::regrid(map, std::move(ld),
+                                            [&](auto const& p) { return make_patch_(0, p.box); });
         for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
         {
-            ld.data[i]->rebox(surroundings_(0, ld.patches[i].box));
+            ld.data[i]->rebox(
+                solver::hybrid::surroundings(hybrid_, hierarchy_, 0, ld.patches[i].box));
             for (auto& pop : ld.data[i]->ions)
                 pop.patchGhostParticles().clear();
         }
@@ -345,18 +260,13 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
     auto const map = damn::amr::make_regrid_map(old_level, hierarchy_.levels[ln], rank_,
                                                 damn::amr::periodic_shifts(hierarchy_, ln));
 
-    auto const& sim = dict_["simulation"];
-    auto const make = [&](auto const& p) {
-        Layout_t const layout{p.box, damn::amr::mesh_size(hierarchy_, ln),
-                              damn::amr::position(hierarchy_, ln, p.box.lower), ln};
-        return std::make_unique<Patch_t>(layout, sim, surroundings_(ln, p.box));
-    };
+    auto const make = [&](auto const& p) { return make_patch_(ln, p.box); };
     auto& l = levels_[fine];
-    auto& ld = data_(fine);
-    ld       = n_ranks_ > 1 ? damn::mpi::regrid(map, std::move(ld), make)
-                            : damn::amr::regrid(map, std::move(ld), make);
+    auto& ld        = data_(fine);
+    ld              = n_ranks_ > 1 ? damn::mpi::regrid(map, std::move(ld), make)
+                                   : damn::amr::regrid(map, std::move(ld), make);
     for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
-        ld.data[i]->rebox(surroundings_(ln, ld.patches[i].box));
+        ld.data[i]->rebox(solver::hybrid::surroundings(hybrid_, hierarchy_, ln, ld.patches[i].box));
     link_level_(ln);
     l.coarse_t  = t;
     l.coarse_dt = 0; // the coarser level's data at t

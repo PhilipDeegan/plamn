@@ -280,18 +280,7 @@ void Simulator<opts>::register_resources_()
 template<auto opts>
 std::vector<double> Simulator<opts>::box_weights_(int const ln, std::vector<Box_t> const& boxes)
 {
-    auto const& ions    = dict_["simulation"]["ions"];
-    auto const nbr_pops = ions["nbrPopulations"].template to<std::size_t>();
-
-    using Initializers = Patch_t::Types::ParticleInitializerFactory_t;
-    std::vector<decltype(Initializers::create(ions["pop0"]["particle_initializer"]))> initializers;
-    for (std::size_t i = 0; i < nbr_pops; ++i)
-    {
-        auto const& pop = ions["pop" + std::to_string(i)];
-        initializers.push_back(Initializers::create(pop["particle_initializer"],
-                                                    pop["name"].template to<std::string>()));
-    }
-
+    auto const count = solver::hybrid::initial_particle_counter(hybrid_, dict_["simulation"]);
     std::vector<double> weights(boxes.size(), 0.);
     for (std::size_t k = static_cast<std::size_t>(rank_); k < boxes.size();
          k += static_cast<std::size_t>(n_ranks_))
@@ -305,11 +294,7 @@ std::vector<double> Simulator<opts>::box_weights_(int const ln, std::vector<Box_
         auto const count_ln = ln > 0 ? ln - 1 : ln;
         auto const box      = ln > 0 ? damn::core::coarsen(boxes[k], hierarchy_.ratio) : boxes[k];
         double const per    = ln > 0 ? static_cast<double>(opts.nbRefinedPart) : 1.;
-        Layout_t const layout{box, damn::amr::mesh_size(hierarchy_, count_ln),
-                              damn::amr::position(hierarchy_, count_ln, box.lower), count_ln};
-        for (auto const& initializer : initializers)
-            w += per * static_cast<double>(initializer->nbrParticles(layout));
-        weights[k] = w;
+        weights[k]          = w + per * count(layout_of_(count_ln, box));
     }
     if (n_ranks_ > 1)
         MPI_Allreduce(MPI_IN_PLACE, weights.data(), static_cast<int>(weights.size()), MPI_DOUBLE,
