@@ -12,6 +12,7 @@
 // a Layout (PatchLayout) made from a cell count and mesh size, origin 0, level 0
 //   cells only: mesh size 1/cells, AMR box from 0
 //   amrbox only: mesh size .1
+//   amrbox and mesh size: a patch anywhere in a level of that mesh size (a refined level's)
 template<typename Layout>
 class TestLayout : public Layout
 {
@@ -40,6 +41,11 @@ public:
 
     TestLayout(damn::core::Box<int, dim> const& amrbox)
         : Super{amrbox, mkn::kul::ConstArray<double, dim>(.1)}
+    {
+    }
+
+    TestLayout(damn::core::Box<int, dim> const& amrbox, double const dl)
+        : Super{amrbox, mkn::kul::ConstArray<double, dim>(dl)}
     {
     }
 
