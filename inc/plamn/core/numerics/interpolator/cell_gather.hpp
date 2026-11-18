@@ -37,7 +37,7 @@ struct CellGather1
     template<std::size_t q>
     static constexpr auto cen = centering<dim>(qtys[q]);
 
-    // the union's values of cell (AMR), the cell's local index for the weights
+    // the union's values of cell (AMR), from the cell's local index
     void load(auto const& em, auto const& layout, auto const& cell)
     {
         auto const local = to_local(layout, cell);
@@ -60,18 +60,16 @@ struct CellGather1
         double P[dim][2][lanes], D[dim][3][lanes];
         for (std::size_t k = 0; k < dim; ++k)
         {
-            double const c = static_cast<double>(lc[k]);
             for (std::size_t l = 0; l < lanes; ++l)
             {
-                double const p1 = (c + d[k][l]) - c; // Weighter<1>: pos - start
+                double const p1 = d[k][l]; // Weighter<1>: the position relative to the start
                 P[k][1][l]      = p1;
                 P[k][0][l]      = 1. - p1;
 
                 // computeStartLeftShift<dual> as 1. or 0.: the selects as products by 1 or 0 (the
                 //  same values, x * 0 + y == y), branch free: the loop vectorises
                 double const sf = d[k][l] < .5 ? 1. : 0.;
-                double const st = c - sf;
-                double const d1 = ((c + d[k][l]) - .5) - st;
+                double const d1 = d[k][l] + (sf - .5); // as indexAndWeights__: sf - .5 is exact
                 double const d0 = 1. - d1;
                 D[k][0][l]      = sf * d0;
                 D[k][1][l]      = sf * d1 + (1. - sf) * d0;
@@ -193,14 +191,11 @@ struct CellGatherV : public CellGather1<dim, L>
         V const one = bc(1.), half = bc(.5), zero = bc(0.);
         for (std::size_t k = 0; k < dim; ++k)
         {
-            V const c  = bc(static_cast<double>(lc[k]));
-            V const p1 = (c + d[k]) - c;
-            P[k][1]    = p1;
-            P[k][0]    = one - p1;
+            P[k][1] = d[k];
+            P[k][0] = one - d[k];
 
             auto const s = mkn::avx::lt(d[k], half); // computeStartLeftShift<dual>
-            V const st   = c - mkn::avx::select(s, one, zero);
-            V const d1   = ((c + d[k]) - half) - st;
+            V const d1   = d[k] + (mkn::avx::select(s, one, zero) - half);
             V const d0   = one - d1;
             D[k][0]      = mkn::avx::select(s, d0, zero);
             D[k][1]      = mkn::avx::select(s, d1, d0);
@@ -259,8 +254,8 @@ private:
 
 // the deposit of a cell's particles at interpolation order 1, on lanes: per node of the cell's
 //  primal stencil (the cell and + 1 per direction) density and flux accumulate on lanes, summed
-//  over the lanes and added to the moments once (flush). The weights from the moments' local
-//  index of the cell, as Interpolator::particleToMesh (Weighter<1>, primal), its products in its
+//  over the lanes and added to the moments once (flush). The weights from the deltas alone,
+//  as Interpolator::particleToMesh (Weighter<1>, primal), its products in its
 //  order (weight, x, y, z); the sums per node differ from its particle by particle order
 template<std::size_t dim, std::size_t L>
 struct CellDepositV
@@ -292,9 +287,8 @@ struct CellDepositV
         V P[dim][2];
         for (std::size_t k = 0; k < dim; ++k)
         {
-            V const c = bc(static_cast<double>(lc[k]));
-            P[k][1]   = (c + d[k]) - c;
-            P[k][0]   = bc(1.) - P[k][1];
+            P[k][1] = d[k];
+            P[k][0] = bc(1.) - d[k];
         }
         for (std::size_t n = 0; n < nodes; ++n)
         {
