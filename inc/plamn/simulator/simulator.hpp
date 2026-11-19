@@ -3,7 +3,10 @@
 
 // Simulator: PHARE's simulator shell (dict parsing, times, initialize/advance) over damn
 //
-// hybrid only. Level 0 is the domain chopped into patches, partitioned over MPI's ranks by the
+// The models a build enables (solver/models.hpp) own the levels: MHD below max_mhd_level, hybrid
+// above. The simulator's own types and members are model free; a model's paths compile only
+// where the build enables it. Only hybrid levels run yet (an MHD level: initialize throws).
+// Level 0 is the domain chopped into patches, partitioned over MPI's ranks by the
 // particles they will hold (damn::amr::partition); finer levels come from the input's
 // refinement boxes (pyphare's refinement="boxes"), fixed for the run. Each level's data is a
 // LevelData of HybridPatch, communication damn::mpi's (damn::amr's on one rank).
@@ -120,18 +123,14 @@ public:
     std::size_t static constexpr interp_order  = opts.interp_order;
     std::size_t static constexpr nbRefinedPart = opts.nbRefinedPart;
 
-    using Hybrid_t     = solver::HybridStack<opts>;
-    using Patch_t      = Hybrid_t::Patch_t;
-    using Grid_t       = Patch_t::Grid_t;
-    using Layout_t     = Patch_t::Layout_t;
+    // model free: a model's types are its stack's (solver/stacks.hpp), named only where that
+    //  model is enabled
+    using Models_t     = solver::Models<opts>;
     using Hierarchy_t  = damn::amr::Hierarchy<dimension>;
-    using LevelData_t  = Hybrid_t::LevelData_t;
     using Neighbours_t = damn::amr::Neighbours<dimension>;
     using LevelMap_t   = damn::amr::LevelMap<dimension>;
     using Resources_t  = std::map<std::string, std::vector<damn::amr::ResourcePair>>;
     using Box_t        = damn::core::Box<int, dimension>;
-    using Interpolator = core::Interpolating<dimension, interp_order>;
-    using Splitter_t   = Hybrid_t::Splitter_t;
 
     // dict: the whole input, copied: patches keep references into it
     explicit Simulator(initializer::Dict const& dict)
@@ -164,7 +163,7 @@ public:
     //  quantity sums borders
     NO_DISCARD bool is_computed(std::string const& key) const;
     void compute(std::size_t ln, std::string const& key);
-    NO_DISCARD std::vector<Grid_t*> computed(Patch_t& patch, std::string const& key);
+    NO_DISCARD auto computed(auto& patch, std::string const& key); // the hybrid model's grids
 
     std::vector<int> const& domainBox() const override { return domainBox_; }
     std::vector<double> const& cellWidth() const override { return cellWidth_; }
@@ -277,10 +276,11 @@ private:
     };
 
     void setup_();
+    void setup_hybrid_(); // the hybrid model's ohm, populations, resources, computed quantities
+    void initialize_hybrid_(); // every level hybrid
 
     // computed quantities, the models' (simulator_computed.hpp)
-    using Computed_t = solver::HybridModel<opts>::Computed_t;
-    Computed_t const& computed_for_(std::string const& key) const;
+    auto const& computed_for_(std::string const& key) const;
 
     // diagnostics, see simulator_diagnostics.hpp
     void setup_diagnostics_();
@@ -293,7 +293,6 @@ private:
     //  that are not a level 0 step's end (the finest after advancing, coarser ones after their
     //  synchronization)
     void fine_dump_(std::size_t ln, double time);
-    using View_t = solver::HybridModel<opts>::View_t;
     struct Diagnostics
     {
         using Float = std::conditional_t<PLAMN_DIAG_DOUBLES, double, float>;
@@ -302,7 +301,6 @@ private:
         bool overwrite = false;    // pyphare's mode "overwrite": truncated at the first dump only
         int fine_dump_lvl_max = 0; // PHARE's: levels 1 to it dumped at their substeps, 0: none
         std::vector<diagnostic::Diagnostic> list;
-        std::map<std::string, diagnostic::Accessor<View_t>> quantities;
 #if DAMN_HAS_HIGHFIVE
         std::map<std::string, std::unique_ptr<damn::hdf5::h5::HighFiveFile>> files; // open ones
 #endif
@@ -327,7 +325,7 @@ private:
     // the models and the levels each owns (their levels' patch data)
     solver::Models<opts> models_;
     // level ln's patch data (made if new)
-    NO_DISCARD LevelData_t& data_(std::size_t const ln)
+    NO_DISCARD auto& data_(std::size_t const ln)
     {
         return models_.hybrid.levels[static_cast<int>(ln)];
     }
@@ -402,7 +400,7 @@ private:
     void allocate_level_(int ln); // the patch data of hierarchy_'s level ln, linked
     void link_level_(int ln);     // neighbours, map to the coarser level, level ghost cells
     // a patch of level ln (its cells): its particle ghost box among the level's other patches
-    NO_DISCARD Layout_t layout_of_(int ln, Box_t const& box) const;
+    NO_DISCARD auto layout_of_(int ln, Box_t const& box) const;
     NO_DISCARD auto make_patch_(int ln, Box_t const& box) const; // the model's
     // the boxes of level ln + 1 from level ln's tagged cells (collective)
     NO_DISCARD std::vector<Box_t> cluster_(int ln);
@@ -413,6 +411,7 @@ private:
     // regrid_mode high: the finer levels of ln regridded at SAMRAI's regrid points, after a step
     //  of ln to t (last: ln's last substep of its coarser level's step)
     void after_step_(int ln, double t, bool last);
+    void regrid_after_step_(int ln, double t); // after_step_'s regrid, at a regrid point
     // keep_finer: the finer levels stay (each to be regridded onto its own boxes in turn)
     void regrid_level_(int ln, std::vector<Box_t> const& boxes, double t, bool keep_finer = false);
 

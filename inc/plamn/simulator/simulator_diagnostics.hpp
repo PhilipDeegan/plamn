@@ -65,12 +65,17 @@ void Simulator<opts>::setup_diagnostics_()
     diagnostics_.dir               = get("filePath", std::string{"phare_output"});
     diagnostics_.overwrite         = get("mode", std::string{}) == "overwrite";
     diagnostics_.fine_dump_lvl_max = get("fine_dump_lvl_max", 0);
-    diagnostics_.quantities        = solver::hybrid::diagnostic_quantities(models_.hybrid);
-    for (auto const& d : diagnostics_.list) // unknown quantities: at setup, not at a dump
-        if (d.type == "particle")
-            std::ignore = solver::hybrid::particle_population(models_.hybrid, d.quantity);
-        else if (!is_computed(d.quantity))
-            std::ignore = diagnostic::quantity_for(diagnostics_.quantities, d.quantity);
+    if constexpr (!Models_t::hybrid_on)
+        throw std::runtime_error("plamn: MHD diagnostics are not in the simulator yet");
+    else
+    {
+        models_.hybrid.quantities = solver::hybrid::diagnostic_quantities(models_.hybrid);
+        for (auto const& d : diagnostics_.list) // unknown quantities: at setup, not at a dump
+            if (d.type == "particle")
+                std::ignore = solver::hybrid::particle_population(models_.hybrid, d.quantity);
+            else if (!is_computed(d.quantity))
+                std::ignore = diagnostic::quantity_for(models_.hybrid.quantities, d.quantity);
+    }
 }
 
 template<auto opts>
@@ -100,15 +105,19 @@ void Simulator<opts>::fine_dump_(std::size_t const ln, double const time)
 template<auto opts>
 void Simulator<opts>::dump_(diagnostic::Diagnostic& diag, double const time, int const only)
 {
-    if (diagnostics_.phareh5)
-        dump_phareh5_(diag, time, only);
-    else
-        dump_vtkhdf_(diag, time, only);
+    if constexpr (Models_t::hybrid_on) // none set up otherwise (setup_diagnostics_)
+    {
+        if (diagnostics_.phareh5)
+            dump_phareh5_(diag, time, only);
+        else
+            dump_vtkhdf_(diag, time, only);
+    }
 }
 
 template<auto opts>
 void Simulator<opts>::dump_vtkhdf_(diagnostic::Diagnostic& diag, double const time, int const only)
 {
+    using Patch_t = solver::HybridModel<opts>::Patch_t;
     DAMN_LOG_SCOPE(1, "Simulator::dump_vtkhdf_");
 #if DAMN_HAS_HIGHFIVE
     using namespace damn::hdf5;
@@ -122,7 +131,7 @@ void Simulator<opts>::dump_vtkhdf_(diagnostic::Diagnostic& diag, double const ti
         if (is_computed_)
             fn(computed(patch, diag.quantity));
         else
-            fn(diagnostic::quantity_for(diagnostics_.quantities,
+            fn(diagnostic::quantity_for(models_.hybrid.quantities,
                                         diag.quantity)(simulator::view(patch)));
     };
     auto const path        = diagnostics_.dir + "/" + diagnostic::file_name(diag.quantity);
@@ -227,6 +236,7 @@ void Simulator<opts>::dump_vtkhdf_(diagnostic::Diagnostic& diag, double const ti
 template<auto opts>
 void Simulator<opts>::dump_phareh5_(diagnostic::Diagnostic& diag, double const time, int const only)
 {
+    using Patch_t = solver::HybridModel<opts>::Patch_t;
     DAMN_LOG_SCOPE(1, "Simulator::dump_phareh5_");
 #if DAMN_HAS_HIGHFIVE
     using namespace damn::hdf5;
@@ -241,7 +251,7 @@ void Simulator<opts>::dump_phareh5_(diagnostic::Diagnostic& diag, double const t
         if (is_computed_)
             fn(computed(patch, diag.quantity));
         else
-            fn(diagnostic::quantity_for(diagnostics_.quantities,
+            fn(diagnostic::quantity_for(models_.hybrid.quantities,
                                         diag.quantity)(simulator::view(patch)));
     };
     // datasets: the quantity's last path element, then _x.. (vectors), _xx.. (tensors)

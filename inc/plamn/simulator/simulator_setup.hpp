@@ -79,10 +79,6 @@ void Simulator<opts>::setup_()
             Pool::INSTANCE().configure(pools, threads);
     }
 
-    auto const models = sim["models"].template to<std::vector<std::string>>();
-    if (models != std::vector<std::string>{"HybridModel"})
-        throw std::runtime_error("plamn Simulator: only HybridModel for now");
-
     timestepper_ = Timestepper::FROM(dict_);
     dt_          = timestepper_.dt();
     timeStepNbr_ = cppdict::get_value(dict_, "simulation/time_step_nbr", 0);
@@ -231,14 +227,20 @@ void Simulator<opts>::setup_()
         rebalance_check_.emplace(check);
     }
 
-    models_.hybrid.ohm.emplace(core::OhmInfo::FROM(sim["algo"]["ohm"]));
+    if constexpr (Models_t::hybrid_on)
+        setup_hybrid_();
+    setup_restarts_();
+    setup_diagnostics_();
+}
 
+template<auto opts>
+void Simulator<opts>::setup_hybrid_()
+{
+    models_.hybrid.ohm.emplace(core::OhmInfo::FROM(dict_["simulation"]["algo"]["ohm"]));
     register_resources_();
     solver::hybrid::setup_computed(models_.hybrid, [&](std::string const& key, auto const& names) {
         resources_[key] = damn::amr::same_names(names);
     });
-    setup_restarts_();
-    setup_diagnostics_();
 }
 
 // what moves between patches, named as for_each_resource(HybridPatch) names it

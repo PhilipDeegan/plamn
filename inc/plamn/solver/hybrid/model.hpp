@@ -11,6 +11,7 @@
 #include "plamn/amr/split/split.hpp" // IWYU pragma: keep (the Splitter specializations)
 #include "plamn/amr/split/splitter.hpp"
 #include "plamn/core/numerics/ohm/ohm.hpp"
+#include "plamn/diagnostic/quantities.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 #include "plamn/simulator/hybrid_patch.hpp"
 #include "plamn/simulator/hybrid_patch_view.hpp"
@@ -49,6 +50,7 @@ struct HybridModel<opts, true>
     using Computed_t = Computed<Patch_t, Grid_t, core::HybridQuantity::Scalar>;
     std::map<std::string, Computed_t> computed{}; // by key (solver/hybrid/computed.hpp)
     using View_t = decltype(simulator::view(std::declval<Patch_t&>())); // what diagnostics read
+    std::map<std::string, diagnostic::Accessor<View_t>> quantities{};   // diagnostics' fields
     Mover_t mover{};
 
     // the levels from n on gone

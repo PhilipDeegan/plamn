@@ -94,6 +94,7 @@ profile:
   test: tst/plamn/simulator/test_diagnostics_1d.cpp
         tst/plamn/simulator/test_diagnostics_2d.cpp
         tst/plamn/simulator/test_diagnostics_3d.cpp
+        tst/plamn/simulator/test_simulator_models.cpp
 
 - name: test_plamn_core_slow # ~17M particles, >10 min unoptimised
   parent: test_plamn_core

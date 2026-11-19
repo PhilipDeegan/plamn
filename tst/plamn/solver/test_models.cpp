@@ -9,7 +9,9 @@
 
 #include <cstddef>
 #include <stdexcept>
+#include <string>
 #include <type_traits>
+#include <vector>
 
 namespace plamn::solver
 {
@@ -96,6 +98,25 @@ TEST(Models, levelsOfADisabledModelRefused)
     Models<both> models;
     EXPECT_THROW(models.set_levels(amr(4), 3), std::runtime_error);
     EXPECT_THROW(models.set_levels(amr(-1), 3), std::runtime_error);
+}
+
+TEST(Models, inputModelsMatchTheLevels)
+{
+    auto const named = [](std::vector<std::string> const& names, int const max_mhd_level = -1) {
+        auto sim      = max_mhd_level < 0 ? initializer::Dict{} : amr(max_mhd_level);
+        sim["models"] = names;
+        return sim;
+    };
+    Models<both> models;
+    models.set_levels(named({"MHDModel"}), 3); // MHD alone: every level by default
+    EXPECT_EQ(models.mhd_levels, 3);
+    models.set_levels(named({"MHDModel", "HybridModel"}, 1), 3);
+    EXPECT_EQ(models.mhd_levels, 1);
+    EXPECT_THROW(models.set_levels(named({"HybridModel"}, 1), 3), std::runtime_error);
+    EXPECT_THROW(models.set_levels(named({"MHDModel", "HybridModel"}, 3), 3), std::runtime_error);
+    EXPECT_THROW(models.set_levels(named({"FluidModel"}), 3), std::runtime_error);
+    Models<hybrid_only> hybrid;
+    EXPECT_THROW(hybrid.set_levels(named({"MHDModel"}), 3), std::runtime_error);
 }
 
 } // namespace plamn::solver

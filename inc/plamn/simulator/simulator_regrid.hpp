@@ -52,6 +52,7 @@ namespace plamn
 template<auto opts>
 std::vector<typename Simulator<opts>::Box_t> Simulator<opts>::cluster_(int const ln)
 {
+    using Patch_t = solver::HybridModel<opts>::Patch_t;
     DAMN_LOG_SCOPE(1, "Simulator::cluster_");
     using Resource = amr::FieldResource<typename Patch_t::Grid_t, Patch_t::field_ghost_width>;
     auto& ld       = data_(ln);
@@ -235,6 +236,8 @@ template<auto opts>
 void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxes, double const t,
                                     bool const keep_finer)
 {
+    using Patch_t    = solver::HybridModel<opts>::Patch_t;
+    using Splitter_t = solver::HybridModel<opts>::Splitter_t;
     DAMN_LOG_SCOPE(1, "Simulator::regrid_level_");
     using damn::amr::LevelRegion;
     auto const fine   = static_cast<std::size_t>(ln);

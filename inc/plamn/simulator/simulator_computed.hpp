@@ -26,8 +26,7 @@
 namespace plamn
 {
 template<auto opts>
-typename Simulator<opts>::Computed_t const&
-Simulator<opts>::computed_for_(std::string const& key) const
+auto const& Simulator<opts>::computed_for_(std::string const& key) const
 {
     auto const it = models_.hybrid.computed.find(key);
     if (it == models_.hybrid.computed.end())
@@ -42,9 +41,9 @@ bool Simulator<opts>::is_computed(std::string const& key) const
 }
 
 template<auto opts>
-std::vector<typename Simulator<opts>::Grid_t*> Simulator<opts>::computed(Patch_t& patch,
-                                                                         std::string const& key)
+auto Simulator<opts>::computed(auto& patch, std::string const& key)
 {
+    using Grid_t = solver::HybridModel<opts>::Grid_t;
     std::vector<Grid_t*> out;
     for (auto const& [name, qty] : computed_for_(key).grids)
         out.push_back(std::addressof(patch.scratch_grid(name, qty))); // Grid overloads operator&

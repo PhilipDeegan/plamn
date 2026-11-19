@@ -85,10 +85,11 @@ void Simulator<opts>::allocate_level_(int const ln)
 }
 
 template<auto opts>
-typename Simulator<opts>::Layout_t Simulator<opts>::layout_of_(int const ln, Box_t const& box) const
+auto Simulator<opts>::layout_of_(int const ln, Box_t const& box) const
 {
-    return {box, damn::amr::mesh_size(hierarchy_, ln),
-            damn::amr::position(hierarchy_, ln, box.lower), ln};
+    using Layout_t = solver::HybridModel<opts>::Patch_t::Layout_t;
+    return Layout_t{box, damn::amr::mesh_size(hierarchy_, ln),
+                    damn::amr::position(hierarchy_, ln, box.lower), ln};
 }
 
 template<auto opts>
@@ -102,6 +103,8 @@ auto Simulator<opts>::make_patch_(int const ln, Box_t const& box) const
 template<auto opts>
 void Simulator<opts>::link_level_(int const ln)
 {
+    using Patch_t     = solver::HybridModel<opts>::Patch_t;
+    using Splitter_t  = solver::HybridModel<opts>::Splitter_t;
     auto const pgw    = Patch_t::particle_ghost_width;
     auto constexpr gw = Patch_t::field_ghost_width;
     auto& l           = levels_[ln];
@@ -140,7 +143,15 @@ void Simulator<opts>::initialize()
     DAMN_LOG_SCOPE(1, "Simulator::initialize");
     if (isInitialized_)
         throw std::runtime_error("plamn Simulator already initialized");
+    if (models_.mhd_levels > 0)
+        throw std::runtime_error("plamn: MHD levels are not in the simulator yet");
+    if constexpr (Models_t::hybrid_on)
+        initialize_hybrid_();
+}
 
+template<auto opts>
+void Simulator<opts>::initialize_hybrid_()
+{
     // the steps from the start (or the restart's time), the first dt (adaptive: from the
     //  initialized levels, as PHARE's for its first dump)
     auto const start_steps = [&]() {

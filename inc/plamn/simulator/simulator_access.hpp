@@ -173,6 +173,7 @@ Simulator<opts>::~Simulator()
 template<auto opts>
 std::string Simulator<opts>::summary()
 {
+    using Patch_t     = solver::HybridModel<opts>::Patch_t;
     auto constexpr gw = Patch_t::field_ghost_width;
 
     std::stringstream ss;

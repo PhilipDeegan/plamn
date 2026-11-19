@@ -82,16 +82,18 @@ double Simulator<opts>::advance()
     if (!isInitialized_)
         throw std::runtime_error("plamn Simulator: initialize() first");
 
-    if (should_rebalance_())
-        rebalance_(currentTime_);
+    if constexpr (Models_t::hybrid_on) // load balancing: by the hybrid levels' particles
+        if (should_rebalance_())
+            rebalance_(currentTime_);
 
     dt_ = timestepper_.next([&](auto const& cfl) { return stable_dt_(cfl); });
     Hooks hooks{*this};
     damn::amr::advance(hierarchy_, hooks, currentTime_, dt_, time_ratio());
     currentTime_ = timestepper_.end_step();
     ++steps_;
-    if (regrid_mode_ == RegridMode::normal and tagging_ and steps_ % regrid_interval_ == 0)
-        regrid_(currentTime_);
+    if constexpr (Models_t::hybrid_on) // regrids: of hybrid levels only yet
+        if (regrid_mode_ == RegridMode::normal and tagging_ and steps_ % regrid_interval_ == 0)
+            regrid_(currentTime_);
     return dt_;
 }
 
@@ -112,6 +114,13 @@ void Simulator<opts>::after_step_(int const ln, double const t, bool const last)
     };
     if (!at_regrid_point(ln) or (ln > 0 and last and at_regrid_point(ln - 1)))
         return;
+    if constexpr (Models_t::hybrid_on) // regrids: of hybrid levels only yet
+        regrid_after_step_(ln, t);
+}
+
+template<auto opts>
+void Simulator<opts>::regrid_after_step_(int const ln, double const t)
+{
     if (tagging_)
         regrid_(t, ln, /*always=*/true);
     else if (steps_ == 0) // refinement boxes: level 0's first step only

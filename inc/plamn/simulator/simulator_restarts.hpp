@@ -91,7 +91,10 @@ bool Simulator<opts>::dump_restarts(double const timestamp, double const timeste
     }
     if (!due)
         return false;
-    write_restart_(simulator::restart_dir_for_time(restarts_.dir, timestamp));
+    if constexpr (!Models_t::hybrid_on)
+        throw std::runtime_error("plamn: MHD restarts are not in the simulator yet");
+    else
+        write_restart_(simulator::restart_dir_for_time(restarts_.dir, timestamp));
     return true;
 }
 

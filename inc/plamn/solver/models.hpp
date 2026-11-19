@@ -16,6 +16,9 @@
 #include <cstddef>
 #include <stdexcept>
 #include <string>
+#include <vector>
+#include <format>
+#include <ranges>
 
 namespace plamn::solver
 {
@@ -80,11 +83,25 @@ struct Models
     }
 
     // the levels each model owns, from the input's simulation dict (max_levels: its
-    //  AMR/max_nbr_levels): PHARE's max_mhd_level, by default every level of an MHD only build,
-    //  none otherwise
+    //  AMR/max_nbr_levels): PHARE's max_mhd_level, by default (as pyphare) every level if MHD is
+    //  the only model, none otherwise. Its models (pyphare's model_options), if given: the
+    //  models the levels have, each enabled by the build
     void set_levels(initializer::Dict const& sim, int const max_levels)
     {
-        mhd_levels = cppdict::get_value(sim, "AMR/max_mhd_level", hybrid_on ? 0 : max_levels);
+        std::vector<std::string> names;
+        if (sim.contains("models"))
+            names = sim["models"].template to<std::vector<std::string>>();
+        auto const named = [&](std::string const& name) {
+            return std::ranges::find(names, name) != names.end();
+        };
+        for (auto const& name : names)
+            if (name != "HybridModel" and name != "MHDModel")
+                throw std::runtime_error("plamn: no model " + name);
+        if ((named("HybridModel") and !hybrid_on) or (named("MHDModel") and !mhd_on))
+            throw std::runtime_error("plamn: the build does not enable the models of the input");
+
+        bool const mhd_alone = names.empty() ? !hybrid_on : !named("HybridModel");
+        mhd_levels = cppdict::get_value(sim, "AMR/max_mhd_level", mhd_alone ? max_levels : 0);
         if (mhd_levels < 0 or mhd_levels > max_levels)
             throw std::runtime_error("plamn: max_mhd_level " + std::to_string(mhd_levels)
                                      + " outside [0, max_nbr_levels " + std::to_string(max_levels)
@@ -98,6 +115,10 @@ struct Models
                                      + std::to_string(mhd_levels) + " < max_nbr_levels "
                                      + std::to_string(max_levels)
                                      + ") in a build without the hybrid model");
+        if (!names.empty()
+            and ((mhd_levels > 0) != named("MHDModel")
+                 or (mhd_levels < max_levels) != named("HybridModel")))
+            throw std::runtime_error("plamn: models and max_mhd_level disagree");
     }
 };
 

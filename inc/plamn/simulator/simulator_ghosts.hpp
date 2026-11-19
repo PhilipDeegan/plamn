@@ -130,6 +130,7 @@ void Simulator<opts>::check_set_(std::size_t const ln, std::string const& key,
 template<auto opts>
 void Simulator<opts>::touch_up_level_ghosts_(std::size_t const ln, std::string const& key)
 {
+    using Patch_t     = solver::HybridModel<opts>::Patch_t;
     auto constexpr gw = Patch_t::field_ghost_width;
     auto& l           = levels_[ln];
     auto& ld          = data_(ln);
