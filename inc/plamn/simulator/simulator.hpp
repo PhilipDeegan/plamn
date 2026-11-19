@@ -293,7 +293,11 @@ private:
             self.first_step_(ln, t, ct, cdt);
         }
         void last_step(int ln) { self.last_step_(ln); }
-        void synchronize(int ln, double t) { self.synchronize_(ln, t); }
+        void synchronize(int ln, double t)
+        {
+            self.synchronize_(ln, t);
+            DAMN_SUPER_DEBUG_DO(self.debug_regrid_(ln, t);)
+        }
         void after_step(int ln, double t, bool last) { self.after_step_(ln, t, last); }
     };
 
@@ -479,6 +483,10 @@ private:
     void regrid_after_step_(int ln, double t); // after_step_'s regrid, at a regrid point
     // keep_finer: the finer levels stay (each to be regridded onto its own boxes in turn)
     void regrid_level_(int ln, std::vector<Box_t> const& boxes, double t, bool keep_finer = false);
+    // heavy debugging (-DDAMN_SUPER_DEBUG only, simulator_sums.hpp): every resource of level ln
+    //  summed and printed, at stage; the finest level regridded onto its boxes at given times
+    void sums_(std::size_t ln, char const* stage, double t);
+    void debug_regrid_(int ln, double t);
     // regrid_level_'s data, the level's model's: where the old level was, moved; the new cells
     //  (outside old_cells) refined from the coarser level, then the ghosts
     void regrid_hybrid_data_(int ln, auto const& map, std::vector<Box_t> const& old_cells, double t,
@@ -511,6 +519,8 @@ private:
     {
         Simulator& self;
         std::size_t ln;
+
+        void sums(char const* stage, double const t) { self.sums_(ln, stage, t); } // SUPER_DEBUG
 
         NO_DISCARD std::size_t number() const { return ln; }
         NO_DISCARD auto& data() { return self.data_(ln); }
@@ -555,6 +565,8 @@ private:
     {
         Simulator& self;
         std::size_t ln;
+
+        void sums(char const* stage, double const t) { self.sums_(ln, stage, t); } // SUPER_DEBUG
 
         void per_patch(auto&& fn)
         {
@@ -666,5 +678,6 @@ private:
 #include "plamn/simulator/simulator_computed.hpp"    // IWYU pragma: export
 #include "plamn/simulator/simulator_diagnostics.hpp" // IWYU pragma: export
 #include "plamn/simulator/simulator_setup.hpp"       // IWYU pragma: export
+#include "plamn/simulator/simulator_sums.hpp"        // IWYU pragma: export
 
 #endif // PLAMN_SIMULATOR_SIMULATOR_HPP

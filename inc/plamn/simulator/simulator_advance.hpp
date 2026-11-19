@@ -141,6 +141,7 @@ void Simulator<opts>::advance_level_(int const level_number, double const t, dou
     auto const ln = static_cast<std::size_t>(level_number);
     level_steps_.resize(std::max(level_steps_.size(), ln + 1));
     ++level_steps_[ln];
+    DAMN_SUPER_DEBUG_DO(sums_(ln, "start", t);)
     models_.visit(ln, [&](auto& model) {
         if constexpr (solver::is_mhd_model_v<std::remove_cvref_t<decltype(model)>>)
         {
@@ -150,6 +151,7 @@ void Simulator<opts>::advance_level_(int const level_number, double const t, dou
         else
             solver::advance(model, level_services_(ln), t, dt);
     });
+    DAMN_SUPER_DEBUG_DO(sums_(ln, "end", t);)
     if (ln + 1 == levels_.size()) // the finest; coarser ones after their synchronization
         fine_dump_(ln, t + dt);
 
