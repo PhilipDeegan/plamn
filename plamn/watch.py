@@ -14,12 +14,21 @@ levels over coarser ones. 2D colour map: --cmap (Spectral_r, as pyphare's hierar
 --save DIR: a PNG per drawing (DIR/<step>.png), no window. Quantities are resource
 names (Simulator.level_field): by default the hybrid model's B and E (EM_B_x, ...), the MHD
 model's rho, P, rhoV_x, B_y, B_z. Under MPI every rank gathers, rank 0 draws.
+
+--view3d [PATH]: instead of matplotlib, the first quantity in plamn's mathplot viewer (view3d, a
+separate program: PATH, else $PLAMN_VIEW3D), any dimension: rank 0 starts it and writes it a frame
+per drawing (the finest mesh's cell centres and values, or with --interp none each level's
+points where no finer level has any, sized by level). In its window: P pauses the run (every
+rank waits) and plays it, N runs it to the next drawing while paused, 1-7 slices, 0 the whole
+cloud, W/A/S/D/R/F and the arrows move, the mouse as mathplot's.
 """
 
 import argparse
 import importlib
 import math
 import os
+import struct
+import subprocess
 import sys
 from pathlib import Path
 
@@ -37,6 +46,9 @@ def cli_args_parser():
     parser.add_argument("--quantities", nargs="+", default=None, help="resource names to draw")
     parser.add_argument("--interp", default="nearest", choices=["nearest", "linear", "none"],
                         help="onto the finest mesh (none: each level as it is)")
+    parser.add_argument("--view3d", nargs="?", const=os.environ.get("PLAMN_VIEW3D", ""),
+                        default=None, help="the first quantity in plamn's view3d program (PATH, "
+                        "else $PLAMN_VIEW3D)")
     parser.add_argument("--cmap", default="Spectral_r",
                         help="2D colour map (pyphare's hierarchy plots: Spectral_r)")
     return parser
@@ -90,16 +102,7 @@ class Plotter:
                 plt.show()
 
     def fields(self, name):
-        """per level: (coordinates (n, ndim), values), every rank (collective)"""
-        import numpy as np
-
-        out = []
-        for ln in range(self.cpp.n_levels()):
-            points, values, dual = self.cpp.level_field(name, ln)
-            points = np.asarray(points, dtype=float).reshape(-1, self.ndim)
-            dx = np.asarray(self.dx) / 2**ln  # refinement ratio 2
-            out.append(((points + 0.5 * np.asarray(dual)) * dx, np.asarray(values)))
-        return out
+        return level_fields(self.cpp, name)
 
     def __call__(self, step):
         """every rank: the levels' data gathered, rank 0 draws"""
@@ -184,14 +187,29 @@ class Plotter:
         return mappable
 
 
-def flat_finest(levels, dx):
-    """(points (n, ndim), values): each level's points where the next finer level has none
-    within half its cell (in every direction), the finest level's all (pyphare's
-    flat_finest_field, from the points: no boxes needed)"""
+def level_fields(cpp, name):
+    """per level: (coordinates (n, ndim), values), every rank (collective)"""
+    import numpy as np
+
+    dx0 = np.asarray(cpp.cell_width(), dtype=float)
+    out = []
+    for ln in range(cpp.n_levels()):
+        points, values, dual = cpp.level_field(name, ln)
+        points = np.asarray(points, dtype=float).reshape(-1, len(dx0))
+        dx = dx0 / 2**ln  # refinement ratio 2
+        out.append(((points + 0.5 * np.asarray(dual)) * dx, np.asarray(values)))
+    return out
+
+
+def flat_finest(levels, dx, with_level=False):
+    """(points (n, ndim), values[, each point's level]): each level's points where the next
+    finer level has none within half its cell (in every direction), the finest level's all
+    (pyphare's flat_finest_field, from the points: no boxes needed)"""
     import numpy as np
     from scipy.spatial import cKDTree
 
     points, values = [levels[-1][0]], [levels[-1][1]]
+    which = [np.full(len(levels[-1][1]), len(levels) - 1)]
     for ln in range(len(levels) - 2, -1, -1):
         x, v = levels[ln]
         finer = levels[ln + 1][0]
@@ -203,6 +221,9 @@ def flat_finest(levels, dx):
             x, v = x[keep], v[keep]
         points.append(x)
         values.append(v)
+        which.append(np.full(len(v), ln))
+    if with_level:
+        return np.concatenate(points), np.concatenate(values), np.concatenate(which)
     return np.concatenate(points), np.concatenate(values)
 
 
@@ -234,6 +255,100 @@ def finest(levels, dx, domain_box, interp="nearest"):
     return x, np.where(np.isfinite(linear), linear, nearest)
 
 
+class View3D:
+    """a quantity in plamn's view3d program (mathplot): rank 0 starts it and writes it a frame
+    per drawing on its stdin (its format: "PLMF", title, t, step, n, xyz f32[3n], value f32[n],
+    radius f32[n]); it writes "pause" / "play" / "step" lines back on a pipe (--control-fd).
+    wait() (collective) holds every rank while it is paused"""
+
+    def __init__(self, cpp, quantity, path, interp="nearest"):
+        import numpy as np
+
+        self.cpp, self.quantity, self.interp = cpp, quantity, interp
+        self.dx = np.asarray(cpp.cell_width(), dtype=float)
+        self.root = cpp.rank() == 0
+        self.proc, self.paused, self.step_once, self.pending = None, False, False, b""
+        if self.root:
+            if not path:
+                raise ValueError("--view3d: no viewer (give its path, or set PLAMN_VIEW3D)")
+            r, w = os.pipe()
+            self.proc = subprocess.Popen([path, "--control-fd", str(w)], stdin=subprocess.PIPE,
+                                         pass_fds=(w,))
+            os.close(w)
+            self.control = r
+
+    def frame(self, step):
+        """the points, values and radii drawn (rank 0)"""
+        import numpy as np
+
+        levels = self.levels
+        if self.interp == "none":
+            pts, vals, lv = flat_finest(levels, self.dx, with_level=True)
+            radius = 0.5 * self.dx.min() / 2.0**lv
+        else:
+            x, v = finest(levels, self.dx, self.cpp.domain_box(), self.interp)
+            pts = np.stack(np.meshgrid(*x, indexing="ij"), -1).reshape(-1, len(x))
+            vals = np.asarray(v).reshape(-1)
+            radius = np.full(len(vals), 0.5 * self.dx.min() / 2 ** (len(levels) - 1))
+        xyz = np.zeros((len(vals), 3))
+        xyz[:, : pts.shape[1]] = pts
+        title = self.quantity.encode()
+        return b"".join([
+            b"PLMF", struct.pack("<I", len(title)), title,
+            struct.pack("<dQQ", self.cpp.currentTime(), step, len(vals)),
+            np.asarray(xyz, "<f4").tobytes(), np.asarray(vals, "<f4").tobytes(),
+            np.asarray(radius, "<f4").tobytes(),
+        ])
+
+    def __call__(self, step):
+        """every rank: the levels gathered, rank 0 sends the frame"""
+        self.levels = level_fields(self.cpp, self.quantity)
+        if self.proc is None:
+            return
+        try:
+            self.proc.stdin.write(self.frame(step))
+            self.proc.stdin.flush()
+        except (BrokenPipeError, OSError):  # its window closed: the run goes on without it
+            self.proc = None
+
+    def read(self, block):
+        """rank 0: the viewer's control lines so far (block: at least one)"""
+        os.set_blocking(self.control, block)
+        try:
+            data = os.read(self.control, 4096)
+        except BlockingIOError:
+            return
+        if not data:  # the viewer is gone: nothing holds the run
+            self.proc, self.paused = None, False
+            return
+        self.pending += data
+        *lines, self.pending = self.pending.split(b"\n")
+        for line in lines:
+            if line == b"pause":
+                self.paused = True
+            elif line == b"play":
+                self.paused = False
+            elif line == b"step":
+                self.step_once = True
+
+    def wait(self):
+        """collective: while the viewer is paused (P) every rank waits here; N lets the run
+        go to the next drawing"""
+        import plamn.etc
+
+        if self.root and self.proc is not None:
+            self.read(block=False)
+            while self.paused and not self.step_once and self.proc is not None:
+                self.read(block=True)
+            self.step_once = False
+        plamn.etc.mpi_max(0.0)  # the other ranks wait for rank 0 here
+
+    def close(self):
+        """the run is over: the viewer keeps the last frame until its window is closed"""
+        if self.proc is not None:
+            self.proc.stdin.close()
+
+
 def main(argv=None):
     args = cli_args_parser().parse_args(argv)
     import plamn.backend.phare as ph
@@ -251,16 +366,31 @@ def main(argv=None):
     simulator = ph.Simulator(sim, log_to_file=False).setup().initialize()
     cpp = simulator.cpp_sim
     quantities = args.quantities or (MHD_QUANTITIES if is_mhd(sim) else HYBRID_QUANTITIES)
-    plot = Plotter(cpp, quantities, args.save, args.interp, args.cmap) if args.watch else None
+    view = None
+    if args.view3d is not None and args.watch:
+        view = View3D(cpp, quantities[0], args.view3d, args.interp)
+    plot = None
+    if args.watch and view is None:
+        plot = Plotter(cpp, quantities, args.save, args.interp, args.cmap)
+
+    def draw(step):
+        if plot:
+            plot(step)
+        if view:
+            view(step)
+            view.wait()
+
     step = 0
-    if plot:
-        plot(step)
+    if args.watch:
+        draw(step)
     end = cpp.endTime()
     while cpp.currentTime() < end - 1e-10 * max(cpp.timeStep(), 1e-300):
         simulator.advance()
         step += 1
-        if plot and step % args.watch == 0:
-            plot(step)
+        if args.watch and step % args.watch == 0:
+            draw(step)
+    if view:
+        view.close()
     simulator.reset()
     return 0
 

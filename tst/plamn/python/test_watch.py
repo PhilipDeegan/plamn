@@ -64,6 +64,13 @@ class FinestTest(unittest.TestCase):
             self.assertTrue(((coarse < 3) | (coarse > 6)).all(), (dual, coarse))
             self.assertEqual((v != x[:, 0]).sum(), len(levels[1][0]))
 
+    def test_flat_finest_levels(self):
+        """with_level: each kept point's level (view3d sizes its balls by it)"""
+        levels = two_levels(lambda x: x[:, 0], [10], [(3, 5)])
+        x, v, lv = watch.flat_finest(levels, [1.0], with_level=True)
+        np.testing.assert_array_equal(lv == 1, v != x[:, 0])  # level 1: fn + 1
+        self.assertEqual((lv == 1).sum(), len(levels[1][0]))
+
     def test_1d(self):
         levels = two_levels(lambda x: x[:, 0], [10], [(3, 5)])
         for interp in ("nearest", "linear"):
