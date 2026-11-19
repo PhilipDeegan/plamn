@@ -12,6 +12,8 @@
 //   fluxes   per face direction, of the last flux computation; ct its upwind constrained
 //            transport inputs; butcher, butcherE the schemes' weighted sums of them (the step's
 //            fluxes and E, what a reflux replaces under a finer level)
+//   J, E_diss  resistive MHD's: J = curl B, the dissipative E (eta J) added to the constrained
+//            transport E and to the face fluxes (PHARE's DissipativeElectricField)
 //   flux_sum, flux_sum_E  the step fluxes and E summed over the level's substeps in its coarser
 //            level's step (PHARE's SolverMHD fluxSum_, fluxSumE_), what its reflux coarsens
 //   storage: grids, named as their views. The states not filled (NaN in debug builds): the
@@ -159,6 +161,8 @@ struct MHDPatch
         vector(E);
         vector(butcherE);
         vector(flux_sum_E);
+        vector(J);
+        vector(E_diss);
         for (auto* faces : {&fluxes, &butcher, &flux_sum})
             for (auto& f : *faces)
             {
@@ -194,6 +198,8 @@ struct MHDPatch
                                      fluxes_("sum_y", S::ScalarFlux_y, V::VecFlux_y),
                                      fluxes_("sum_z", S::ScalarFlux_z, V::VecFlux_z)};
     VecField flux_sum_E{"E_sum", layout, V::E, 0.};
+    // resistive MHD (MHDSteps: eta > 0): J = curl B, the dissipative E = eta J
+    VecField J{"J", layout, V::J, 0.}, E_diss{"E_diss", layout, V::E, 0.};
 
     // a face's fluxes' grids: F_rho, F_rhoV (x y z), F_B (x y z), F_Etot
     static std::vector<Grid_t*> flux_grids(Fluxes_t& f)

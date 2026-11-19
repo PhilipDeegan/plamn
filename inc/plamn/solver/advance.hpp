@@ -21,7 +21,7 @@ template<auto opts>
 void advance(MHDModel<opts> const& model, auto& level, double const t0, double const t1)
 {
     using R = MHDModel<opts>::Reconstruction;
-    core::MHDSteps<R> const steps{model.gamma};
+    core::MHDSteps<R> const steps{model.gamma, model.resistivity};
     switch (model.scheme)
     {
         case MHDOpts::TimeIntegratorType::Euler:

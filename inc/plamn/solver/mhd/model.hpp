@@ -112,6 +112,8 @@ struct MHDModel<opts, true>
             throw std::runtime_error("plamn: the MHD model needs a time integration scheme");
         if (m.hall)
             throw std::runtime_error("plamn: Hall MHD is not ported yet");
+        if (m.hyper_resistivity > 0) // PHARE's ComputeFluxes: only alongside the Hall term
+            throw std::runtime_error("plamn: hyper resistivity (nu > 0) needs the Hall term");
         auto const& grid = sim["grid"];
         core::validate_physical_boundaries<opts.dimension>(grid);
         if (grid.contains("domain_boundaries"))
