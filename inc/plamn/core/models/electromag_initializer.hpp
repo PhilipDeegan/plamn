@@ -7,11 +7,9 @@
 
 #include "plamn/core/data/vecfield/vecfield_initializer.hpp"
 #include "plamn/initializer/data_provider.hpp"
-
 #include "dict.hpp"
 
 #include <cstddef>
-#include <string>
 
 namespace plamn::core
 {
