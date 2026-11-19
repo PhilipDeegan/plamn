@@ -280,7 +280,14 @@ private:
     void setup_();
     void setup_hybrid_(); // the hybrid model's ohm, populations, resources, computed quantities
     void initialize_hybrid_(); // every level hybrid
-    void initialize_mhd_();    // level 0 MHD, alone
+    void initialize_mhd_();    // MHD levels: level 0 from the functions, the finer refined
+    // an MHD level from the coarser one: the advanced state refined (B divergence free), its
+    //  ghosts
+    void initialize_refined_mhd_(std::size_t ln, double t);
+    // MHD state s's level ghosts from the coarser level at t: rho, rhoV, Etot, B refined from the
+    //  coarser level's old and advanced states, linear in time (PHARE's MHDMessenger
+    //  stateGhostsRefiners_), B made divergence free
+    void refine_mhd_level_ghosts_(std::size_t ln, std::size_t s, double t);
 
     // computed quantities, the models' (simulator_computed.hpp)
     auto const& computed_for_(std::string const& key) const;
@@ -370,16 +377,28 @@ private:
         });
     }
 
+    // fn(level ln's data, level ln - 1's) of their model (one model on both: a model change
+    //  between them is not yet)
+    void with_level_pair_(std::size_t const ln, auto&& fn)
+    {
+        if (models_.is_mhd(ln) != models_.is_mhd(ln - 1))
+            throw std::runtime_error("plamn: MHD and hybrid levels together not yet");
+        models_.visit(ln, [&](auto& model) {
+            fn(model.levels[static_cast<int>(ln)], model.levels[static_cast<int>(ln) - 1]);
+        });
+    }
+
     // from level ln - 1 into level ln
     void refine_(std::size_t const ln, auto const& op, damn::amr::LevelRegion const region,
                  std::vector<damn::amr::LevelPair> const& pairs, double const alpha = 0)
     {
         auto& l = levels_[ln];
-        auto& ld = data_(ln);
-        if (n_ranks_ > 1)
-            damn::mpi::refine(op, region, *l.to_coarser, pairs, data_(ln - 1), ld, alpha);
-        else
-            damn::amr::refine(op, region, *l.to_coarser, pairs, data_(ln - 1), ld, alpha);
+        with_level_pair_(ln, [&](auto& ld, auto& coarse) {
+            if (n_ranks_ > 1)
+                damn::mpi::refine(op, region, *l.to_coarser, pairs, coarse, ld, alpha);
+            else
+                damn::amr::refine(op, region, *l.to_coarser, pairs, coarse, ld, alpha);
+        });
     }
 
     // from level ln onto level ln - 1
@@ -387,11 +406,12 @@ private:
                   std::vector<damn::amr::LevelPair> const& pairs)
     {
         auto& l = levels_[ln];
-        auto& ld = data_(ln);
-        if (n_ranks_ > 1)
-            damn::mpi::coarsen(op, *l.to_coarser, pairs, ld, data_(ln - 1));
-        else
-            damn::amr::coarsen(op, *l.to_coarser, pairs, ld, data_(ln - 1));
+        with_level_pair_(ln, [&](auto& ld, auto& coarse) {
+            if (n_ranks_ > 1)
+                damn::mpi::coarsen(op, *l.to_coarser, pairs, ld, coarse);
+            else
+                damn::amr::coarsen(op, *l.to_coarser, pairs, ld, coarse);
+        });
     }
 
     // a box's load balancing weight: the particles it will hold, plus its cells for the field
@@ -421,6 +441,9 @@ private:
     void link_level_(int ln);     // neighbours, map to the coarser level, level ghost cells
     void link_hybrid_level_(int ln);
     void link_mhd_level_(int ln);
+    // neighbours reaching reach cells, the map to the coarser level coarser_reach, the level ghost
+    //  cells of each local patch (gw: its field ghosts)
+    void link_geometry_(int ln, int reach, int coarser_reach, int gw);
     // a patch of level ln (its cells): its particle ghost box among the level's other patches
     NO_DISCARD auto layout_of_(int ln, Box_t const& box) const;
     NO_DISCARD auto make_patch_(auto const& model, int ln, Box_t const& box) const;

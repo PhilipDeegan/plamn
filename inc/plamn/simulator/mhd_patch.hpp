@@ -5,6 +5,9 @@
 //  (core/numerics/time_integrator: the patch members they name)
 //   states   the scheme's: states[0] the advanced one, the others its stages (n_states, the
 //            scheme's: a run time choice)
+//   old      states[0] at the start of the level's step (prepare_step): a finer level's ghosts
+//            interpolate in time between it and states[0] (PHARE's MHDMessenger rhoOld_...),
+//            the reflux redoes the step from it (PHARE's SolverMHD stateOld_)
 //   E        the constrained transport electric field of the last flux computation
 //   fluxes   per face direction, of the last flux computation; ct its upwind constrained
 //            transport inputs; butcher, butcherE the schemes' weighted sums of them
@@ -18,7 +21,8 @@
 //
 // for_each_resource names what damn's schedules may move (PHARE's MHD names for the advanced
 //  state): rho, rhoV_x..., B_x..., Etot, V_x..., P; a stage s > 0: rho_s<s>, rhoV_s<s>_x...;
-//  E_x... (the fluxes, constrained transport inputs and butcher sums never move)
+//  the old state: rho_old, rhoV_old_x..., B_old_x..., Etot_old; E_x... (the fluxes,
+//  constrained transport inputs and butcher sums never move)
 
 #include "damn/core/def.hpp"
 
@@ -110,9 +114,13 @@ struct MHDPatch
                                                  VecField{state_name("V", s), layout, V::V},
                                                  Grid_t{state_name("P", s), layout, S::P}});
         if constexpr (DAMN_DEBUG)
+        {
+            auto const nan
+                = [](auto& grid) { grid.fill(std::numeric_limits<double>::quiet_NaN()); };
             for (auto& u : states.data)
-                for_each_state_grid(
-                    *u, [](auto& grid) { grid.fill(std::numeric_limits<double>::quiet_NaN()); });
+                for_each_state_grid(*u, nan);
+            for_each_state_grid(old, nan);
+        }
     }
 
     MHDPatch(MHDPatch const&)            = delete;
@@ -142,6 +150,7 @@ struct MHDPatch
         };
         for (auto& u : states.data)
             for_each_state_grid(*u, fn);
+        for_each_state_grid(old, fn);
         vector(E);
         vector(butcherE);
         for (auto* faces : {&fluxes, &butcher})
@@ -162,6 +171,9 @@ struct MHDPatch
 
     Layout_t layout;
     States states;
+    State_t old{Grid_t{"rho_old", layout, S::rho}, VecField{"rhoV_old", layout, V::rhoV},
+                VecField{"B_old", layout, V::B},   Grid_t{"Etot_old", layout, S::Etot},
+                VecField{"V_old", layout, V::V},   Grid_t{"P_old", layout, S::P}};
     VecField E{"E", layout, V::E, 0.}, butcherE{"butcherE", layout, V::E, 0.};
     std::array<Fluxes_t, 3> fluxes{fluxes_("x", S::ScalarFlux_x, V::VecFlux_x),
                                    fluxes_("y", S::ScalarFlux_y, V::VecFlux_y),
@@ -211,6 +223,10 @@ void for_each_resource(MHDPatch<opts>& patch, auto&& fn)
         vector(u->V);
         scalar(u->P);
     }
+    scalar(patch.old.rho);
+    vector(patch.old.rhoV);
+    vector(patch.old.B);
+    scalar(patch.old.Etot);
     vector(patch.E);
 }
 

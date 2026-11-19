@@ -70,6 +70,11 @@ CASES = {
     # PHARE's shock_with_boundaries.py: inflow (super magnetofast, the left state) at x lower,
     #  open at x upper, the shock moving in at 1.05 the fastest wave; dumps every 100 of 1000 steps
     "mhd_shock_walls_1d": dict(mhd_shock=True, walls=True, steps=1000, dump_every=100, pops=[]),
+    # PHARE's tests/simulator/advance/test_advance_mhd.py input (bump density, cosine B and V),
+    #  1D, the ported scheme (Linear, VanLeer, Rusanov, TVDRK2), no resistivity; one refinement
+    #  box: the refined level made from level 0 (init), then advanced
+    "mhd_init_L1": dict(mhd_advance=True, boxes=((10, 29),), steps=0, pops=[]),
+    "mhd_advance_L1": dict(mhd_advance=True, boxes=((10, 29),), steps=8, pops=[]),
 }
 
 
@@ -342,6 +347,49 @@ def _harris_3d(ph, out, case, largest_patch_size, fmt, fine_dump):
     return sim
 
 
+def _advance_mhd_1d(ph, out, case, largest_patch_size, fmt, fine_dump):
+    """PHARE's test_advance_mhd model in 1D: 60 cells of 0.1, dt 0.001, every step dumped"""
+    cells, dl, dt = 60, 0.1, 0.001
+    sim = ph.Simulation(
+        time_step_nbr=max(case["steps"], 1),
+        time_step=dt,
+        cells=(cells,),
+        dl=(dl,),
+        refinement_boxes=_boxes(1, *case["boxes"]) if case["boxes"] else {},
+        largest_patch_size=largest_patch_size or 10,
+        diag_options=_diag_options(out, fmt, fine_dump),
+        strict=True,
+        nesting_buffer=1,
+        eta=0.0,
+        nu=0.0,
+        gamma=5.0 / 3.0,
+        reconstruction="Linear",
+        limiter="VanLeer",
+        riemann="Rusanov",
+        mhd_timestepper="TVDRK2",
+        hall=False,
+        model_options=["MHDModel"],
+    )
+    L = sim.simulation_domain()[0]
+
+    def density(x):
+        return 0.3 + np.exp(-((x - L / 2) ** 2))
+
+    def cosine(x):
+        return 0.1 * np.cos(2 * np.pi * x / L)
+
+    def const(v):
+        return lambda x: v + 0.0 * x
+
+    ph.MHDModel(density=density, vx=cosine, vy=cosine, vz=cosine, bx=const(1.0), by=cosine,
+                bz=cosine, p=const(1.0))
+    timestamps = dt * np.arange(case["steps"] + 1)
+    ph.ElectromagDiagnostics(quantity="B", write_timestamps=timestamps)
+    for q in ["rho", "V", "P"]:
+        ph.MHDDiagnostics(quantity=q, write_timestamps=timestamps)
+    return sim
+
+
 def _fast_speed(gamma, rho, p, bx, by):
     """the fast magnetosonic speed along x (PHARE's mhd_shock common.State)"""
     cs2, va2 = gamma * p / rho, (bx**2 + by**2) / rho
@@ -434,4 +482,6 @@ def simulation(name, out, ndim=NDIM, largest_patch_size=None, fmt="pharevtkhdf",
         return _harris_3d(ph, out, case, largest_patch_size, fmt, fine_dump)
     if case.get("mhd_shock"):
         return _mhd_shock_1d(ph, out, case, largest_patch_size, fmt)
+    if case.get("mhd_advance"):
+        return _advance_mhd_1d(ph, out, case, largest_patch_size, fmt, fine_dump)
     return _advance_hybrid(ph, out, case, ndim, largest_patch_size, fmt, fine_dump)

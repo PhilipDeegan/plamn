@@ -239,6 +239,31 @@ TEST(SimulatorModels, mhdRestartContinuesTheRun)
     }
 }
 
+// a refined MHD level from the coarser one (PHARE's MHDMessenger initLevel): its state
+//  refined, each fine cell pair meaning back to its coarse cell (FieldRefiner's dual stencil)
+TEST(SimulatorModels, mhdRefinedLevelFromTheCoarser)
+{
+    auto input              = mhd_input({"MHDModel"}, function(wave), 8);
+    auto& amr               = input["simulation"]["AMR"];
+    amr["max_nbr_levels"]   = 2;
+    amr["max_mhd_level"]    = 2;
+    auto& box               = amr["refinement"]["boxes"]["L0"];
+    box["nbr_boxes"]        = 1;
+    box["B0"]["lower"]["x"] = 8;
+    box["B0"]["upper"]["x"] = 23;
+    Simulator<mhd_only> sim{input};
+    sim.initialize();
+    ASSERT_EQ(sim.n_levels(), 2u);
+    for (auto const* name : {"rho", "Etot", "rhoV_x", "B_y"})
+    {
+        auto const coarse = sim.level_values(name, 0);
+        auto const fine   = sim.level_values(name, 1);
+        ASSERT_EQ(fine.size(), 32u) << name;
+        for (std::size_t i = 0; i < 16; ++i)
+            EXPECT_NEAR(.5 * (fine[2 * i] + fine[2 * i + 1]), coarse[8 + i], 1e-14) << name;
+    }
+}
+
 TEST(SimulatorModels, modelsTheBuildLacksRefused)
 {
     EXPECT_THROW((Simulator<mhd_only>{mhd_input({"HybridModel"}, constant(1.))}),

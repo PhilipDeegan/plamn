@@ -129,14 +129,13 @@ void Simulator<opts>::link_level_(int const ln)
         link_hybrid_level_(ln);
 }
 
-// the level's neighbours, as far as its fields reach outside a patch: ghosts plus primal nodes
+// the level's neighbours, as far as its fields reach outside a patch: ghosts plus primal nodes;
+//  to the coarser level, as far as a refined ghost's stencil reaches
 template<auto opts>
 void Simulator<opts>::link_mhd_level_(int const ln)
 {
-    auto constexpr gw      = solver::MHDModel<opts>::Patch_t::field_ghost_width;
-    levels_[ln].neighbours = damn::amr::make_neighbours(hierarchy_, ln, rank_, topology_, gw + 1);
-    if (ln > 0)
-        throw std::runtime_error("plamn: MHD refined levels are not in the simulator yet");
+    auto constexpr gw = solver::MHDModel<opts>::Patch_t::field_ghost_width;
+    link_geometry_(ln, gw + 1, gw + 1 + 4, gw);
 }
 
 template<auto opts>
@@ -146,34 +145,38 @@ void Simulator<opts>::link_hybrid_level_(int const ln)
     using Splitter_t  = solver::HybridModel<opts>::Splitter_t;
     auto const pgw    = Patch_t::particle_ghost_width;
     auto constexpr gw = Patch_t::field_ghost_width;
-    auto& l           = levels_[ln];
-    auto& ld          = data_(ln);
-
     // the level's neighbours, as far as any resource reaches outside its patch: field ghosts
-    // plus primal nodes, or particle ghosts
+    // plus primal nodes, or particle ghosts; to the coarser level: as far as a refined field
+    // ghost's stencil, or a split particle's parent, reaches
     auto constexpr reach = std::max<int>(gw + 1, pgw);
-    l.neighbours         = damn::amr::make_neighbours(hierarchy_, ln, rank_, topology_, reach);
+    link_geometry_(ln, reach, reach + 2 * amr::splitBoxGrowth<Splitter_t>() + 4, gw);
+}
+
+template<auto opts>
+void Simulator<opts>::link_geometry_(int const ln, int const reach, int const coarser_reach,
+                                     int const gw)
+{
+    auto& l      = levels_[ln];
+    l.neighbours = damn::amr::make_neighbours(hierarchy_, ln, rank_, topology_, reach);
     if (ln == 0)
         return;
-
-    // to the coarser level: as far as a refined field ghost's stencil, or a split particle's
-    //  parent, reaches
-    l.to_coarser = damn::amr::make_level_map(hierarchy_, ln - 1, rank_, topology_,
-                                             reach + 2 * amr::splitBoxGrowth<Splitter_t>() + 4);
+    l.to_coarser = damn::amr::make_level_map(hierarchy_, ln - 1, rank_, topology_, coarser_reach);
     l.level_ghost_cells.clear();
-    for (auto const& p : ld.patches)
-    {
-        auto& cells = l.level_ghost_cells.emplace_back();
-        cells.push_back(damn::core::grow(p.box, mkn::kul::ConstArray<int, dimension>(gw)));
-        for (auto const& covered : damn::amr::covered_by_level(hierarchy_, ln, cells.front()))
+    models_.visit(static_cast<std::size_t>(ln), [&](auto& model) {
+        for (auto const& p : model.levels[ln].patches)
         {
-            std::vector<Box_t> rest;
-            for (auto const& c : cells)
-                for (auto const& r : c.remove(covered))
-                    rest.push_back(r);
-            cells = std::move(rest);
+            auto& cells = l.level_ghost_cells.emplace_back();
+            cells.push_back(damn::core::grow(p.box, mkn::kul::ConstArray<int, dimension>(gw)));
+            for (auto const& covered : damn::amr::covered_by_level(hierarchy_, ln, cells.front()))
+            {
+                std::vector<Box_t> rest;
+                for (auto const& c : cells)
+                    for (auto const& r : c.remove(covered))
+                        rest.push_back(r);
+                cells = std::move(rest);
+            }
         }
-    }
+    });
 }
 
 template<auto opts>
@@ -194,9 +197,9 @@ void Simulator<opts>::initialize()
 template<auto opts>
 void Simulator<opts>::initialize_mhd_()
 {
-    if (hierarchy_.max_levels > 1)
-        throw std::runtime_error("plamn: MHD refined levels are not in the simulator yet");
-    if (!restarts_.load_path.empty()) // pyphare's restart_time: the level from the file
+    if (tagging_)
+        throw std::runtime_error("plamn: MHD tagging is not in the simulator yet");
+    if (!restarts_.load_path.empty()) // pyphare's restart_time: the levels from the file
         load_restart_();
     else
     {
@@ -206,11 +209,44 @@ void Simulator<opts>::initialize_mhd_()
             solver::mhd::initialize_state(models_.mhd, patch, dict_["simulation"]);
         });
         level.fill_state_ghosts(0, startTime_);
+        // the refinement boxes' levels, refined (PHARE's MHDMessenger initLevel)
+        for (std::size_t ln = 1; ln <= refinement_boxes_.size(); ++ln)
+        {
+            make_level_(static_cast<int>(ln), refinement_boxes_[ln - 1]);
+            initialize_refined_mhd_(ln, startTime_);
+        }
+        // every level's old state at t0, for the finer levels' time interpolation
+        for (std::size_t ln = 0; ln < levels_.size(); ++ln)
+            prepare_step_(static_cast<int>(ln), startTime_);
         currentTime_ = startTime_;
     }
     timestepper_.start_at(startTime_);
     dt_            = timestepper_.next([&](auto const& cfl) { return stable_dt_(cfl); });
     isInitialized_ = true;
+}
+
+template<auto opts>
+void Simulator<opts>::initialize_refined_mhd_(std::size_t const ln, double const t)
+{
+    using damn::amr::LevelRegion;
+    std::vector<damn::amr::LevelPair> pairs{{"rho", "rho", ""}, {"Etot", "Etot", ""}};
+    for (auto const& p : amr::vector_pairs("rhoV", "rhoV"))
+        pairs.push_back(p);
+    refine_(ln, amr::FieldRefiner{}, LevelRegion::Interior, pairs);
+    refine_(ln, amr::FieldRefiner{}, LevelRegion::Interior, amr::vector_pairs("B", "B"));
+    auto& ld      = models_.mhd.levels[static_cast<int>(ln)];
+    auto const dx = damn::amr::mesh_size(hierarchy_, static_cast<int>(ln));
+    using Patch_t = solver::MHDModel<opts>::Patch_t;
+    for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
+    {
+        auto& B = ld.data[i]->states[0].B.grids;
+        auto bx = amr::field_resource<Patch_t::field_ghost_width>(B[0]);
+        auto by = amr::field_resource<Patch_t::field_ghost_width>(B[1]);
+        auto bz = amr::field_resource<Patch_t::field_ghost_width>(B[2]);
+        amr::divergence_free_touch_up(std::array{&bx, &by, &bz}, ld.patches[i].box,
+                                      ld.patches[i].box, dx);
+    }
+    MHDLevel{*this, ln}.fill_state_ghosts(0, t);
 }
 
 template<auto opts>

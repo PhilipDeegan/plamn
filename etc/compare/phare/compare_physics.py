@@ -162,7 +162,7 @@ def main(argv=None):
 
     quantities = a.quantities
     if quantities is None:
-        if cases.CASES[a.case].get("mhd_shock"):
+        if cases.CASES[a.case].get("mhd_shock") or cases.CASES[a.case].get("mhd_advance"):
             quantities = ["B", "rho", "V", "P"]
         else:
             quantities = ["B", "E"] if a.all_times else ["B"]

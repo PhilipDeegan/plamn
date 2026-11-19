@@ -61,10 +61,11 @@ TEST(MHDPatch, resourcesNamedOnce)
     auto const names = resource_names(patch);
     std::set<std::string> const unique{names.begin(), names.end()};
     EXPECT_EQ(unique.size(), names.size());
-    // per state 4 scalars and 3 vectors, then E
-    EXPECT_EQ(names.size(), 2u * (3 + 3 * 3) + 3);
-    for (auto const* name :
-         {"rho", "rhoV_x", "B_z", "Etot", "V_y", "P", "rho_s1", "B_s1_x", "E_x", "E_z"})
+    // per state 3 scalars and 3 vectors, the old state's conservative 2 scalars and 2 vectors,
+    //  then E
+    EXPECT_EQ(names.size(), 2u * (3 + 3 * 3) + (2 + 2 * 3) + 3);
+    for (auto const* name : {"rho", "rhoV_x", "B_z", "Etot", "V_y", "P", "rho_s1", "B_s1_x",
+                             "rho_old", "rhoV_old_y", "B_old_z", "Etot_old", "E_x", "E_z"})
         EXPECT_TRUE(unique.contains(name)) << name;
 }
 
