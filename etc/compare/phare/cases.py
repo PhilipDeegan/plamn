@@ -64,6 +64,9 @@ CASES = {
     ),
     # compare_physics.py's (not a ladder step): 3 levels, tagging, final B composites
     "harris_3d": dict(harris3d=True, steps=2),
+    # compare_physics.py --all-times: PHARE's tests/functional/mhd_shock/shock_periodic.py (MHD
+    #  only, one level), dumps every 50 of its 400 steps
+    "mhd_shock_1d": dict(mhd_shock=True, steps=400, dump_every=50, pops=[]),
 }
 
 
@@ -336,6 +339,55 @@ def _harris_3d(ph, out, case, largest_patch_size, fmt, fine_dump):
     return sim
 
 
+def _mhd_shock_1d(ph, out, case, largest_patch_size, fmt):
+    """PHARE's tests/functional/mhd_shock (common.py config, shock_periodic.py's run): 800 cells,
+    dt 0.2, the discontinuity at the middle, at rest; B, rho, V, P every dump_every steps"""
+    gamma, bx, ncells, dt = 5.0 / 3.0, 0.75, 800, 0.2
+    left = dict(rho=1.0, p=1.0, by=1.0)
+    right = dict(rho=0.125, p=0.1, by=-1.0)
+    x0 = ncells / 2
+    sim = ph.Simulation(
+        smallest_patch_size=15,
+        largest_patch_size=largest_patch_size,
+        time_step=dt,
+        final_time=case["steps"] * dt,
+        cells=(ncells,),
+        dl=(1.0,),
+        refinement="tagging",
+        max_mhd_level=1,
+        max_nbr_levels=1,
+        hyper_resistivity=0.0,
+        resistivity=0.0,
+        diag_options=_diag_options(out, fmt, False),
+        strict=True,
+        eta=0.0,
+        nu=0.0,
+        gamma=gamma,
+        reconstruction="Linear",
+        limiter="VanLeer",
+        riemann="Rusanov",
+        mhd_timestepper="TVDRK2",
+        hall=False,
+        model_options=["MHDModel"],
+    )
+
+    def side(name):
+        return lambda x: np.where(x < x0, left[name], right[name])
+
+    def const(v):
+        return lambda x: v + 0.0 * x
+
+    ph.MHDModel(
+        density=side("rho"), vx=const(0.0), vy=const(0.0), vz=const(0.0),
+        bx=const(bx), by=side("by"), bz=const(0.0), p=side("p"),
+    )
+    timestamps = dt * np.arange(0, case["steps"] + 1, case["dump_every"])
+    ph.ElectromagDiagnostics(quantity="B", write_timestamps=timestamps)
+    for q in ["rho", "V", "P"]:
+        ph.MHDDiagnostics(quantity=q, write_timestamps=timestamps)
+    return sim
+
+
 def simulation(name, out, ndim=NDIM, largest_patch_size=None, fmt="pharevtkhdf", fine_dump=False):
     """Declares case ``name``'s input (pyphare.pharein) with diagnostics in ``out``, in
     format ``fmt``."""
@@ -350,4 +402,6 @@ def simulation(name, out, ndim=NDIM, largest_patch_size=None, fmt="pharevtkhdf",
         return _ion_ion_beam_1d(ph, out, case, largest_patch_size, fmt, fine_dump)
     if case.get("harris3d"):
         return _harris_3d(ph, out, case, largest_patch_size, fmt, fine_dump)
+    if case.get("mhd_shock"):
+        return _mhd_shock_1d(ph, out, case, largest_patch_size, fmt)
     return _advance_hybrid(ph, out, case, ndim, largest_patch_size, fmt, fine_dump)

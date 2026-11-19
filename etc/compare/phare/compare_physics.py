@@ -30,31 +30,49 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 
-def dump_times(path, qty="B"):
-    import h5py
-
-    with h5py.File(Path(path) / f"EM_{qty}.h5", "r") as f:
-        return sorted(f["/t"].keys(), key=float)
+# the MHD quantities (PHARE's MHDDiagnostics /mhd/<qty>), cell centred: scalars, or V (vector)
+MHD_SCALARS = ("rho", "P")
+MHD_VECTORS = ("V",)
 
 
-def composite(path, component, time=None, qty="B"):
-    """(the finest grid's B (or E) component at cell centres, time, number of levels)"""
-    import h5py
-    from scipy.ndimage import map_coordinates
+def components(qty):
+    return [""] if qty in MHD_SCALARS else list("xyz")
 
-    f = h5py.File(Path(path) / f"EM_{qty}.h5", "r")
-    times = sorted(f["/t"].keys(), key=float)
-    t = times[-1] if time is None else time
-    g = f[f"/t/{t}"]
-    levels = sorted((k for k in g.keys() if k.startswith("pl")), key=lambda k: int(k[2:]))
-    ds = f"EM_{qty}_{component}"
-    ndim = len(g[levels[0]][next(iter(g[levels[0]]))].attrs["lower"])
+
+def field(qty, component, ndim):
+    """(file, dataset, primal directions) of a quantity's component"""
+    if qty in MHD_SCALARS:
+        return f"mhd_{qty}.h5", qty, []
+    if qty in MHD_VECTORS:
+        return f"mhd_{qty}.h5", f"{qty}_{component}", []
     # Yee: B_c primal along c, E_c dual along c and primal across
     d_c = "xyz".index(component)
     if qty == "B":
         primal = [d_c] if d_c < ndim else []
     else:
         primal = [d for d in range(ndim) if d != d_c]
+    return f"EM_{qty}.h5", f"EM_{qty}_{component}", primal
+
+
+def dump_times(path, qty="B"):
+    import h5py
+
+    with h5py.File(Path(path) / field(qty, components(qty)[0], 1)[0], "r") as f:
+        return sorted(f["/t"].keys(), key=float)
+
+
+def composite(path, component, time=None, qty="B"):
+    """(the finest grid's quantity component at cell centres, time, number of levels)"""
+    import h5py
+    from scipy.ndimage import map_coordinates
+
+    f = h5py.File(Path(path) / field(qty, component, 1)[0], "r")
+    times = sorted(f["/t"].keys(), key=float)
+    t = times[-1] if time is None else time
+    g = f[f"/t/{t}"]
+    levels = sorted((k for k in g.keys() if k.startswith("pl")), key=lambda k: int(k[2:]))
+    ndim = len(g[levels[0]][next(iter(g[levels[0]]))].attrs["lower"])
+    _, ds, primal = field(qty, component, ndim)
 
     def level_cells(ln, shape):
         a = np.full(shape, np.nan)
@@ -90,7 +108,7 @@ def composite(path, component, time=None, qty="B"):
 
 def compare(ref, cmp, ndim, qty="B", time=None):
     rows = []
-    for c in "xyz":
+    for c in components(qty):
         a, ta, la = composite(ref, c, time, qty)
         b, tb, lb = composite(cmp, c, time, qty)
         if a.shape != b.shape:  # a code with fewer levels: up to the finer one
@@ -119,6 +137,10 @@ def main(argv=None):
     p.add_argument("--no-run", action="store_true", help="compare the runs already there")
     p.add_argument("--all-times", action="store_true", help="B and E at every dump time")
     p.add_argument("--json", default=None, help="the rows written to this file too")
+    p.add_argument(
+        "--quantities", nargs="+", default=None,
+        help="B, E, rho, V, P (default: B, and E with --all-times; an MHD case: B rho V P)",
+    )
     a = p.parse_args(argv)
 
     import os
@@ -138,13 +160,19 @@ def main(argv=None):
         for code in (a.ref, a.cmp):
             test_ladder.run(code, a.case, out[code], None, steps=a.steps)
 
-    times = dump_times(out[a.ref]) if a.all_times else [None]
-    what = "B and E at every dump" if a.all_times else "final B"
+    quantities = a.quantities
+    if quantities is None:
+        if cases.CASES[a.case].get("mhd_shock"):
+            quantities = ["B", "rho", "V", "P"]
+        else:
+            quantities = ["B", "E"] if a.all_times else ["B"]
+    times = dump_times(out[a.ref], quantities[0]) if a.all_times else [None]
+    what = " ".join(quantities) + (" at every dump" if a.all_times else ", final")
     print(f"{a.case} {a.ndim}D, {a.steps} steps, {cases.PPC} ppc: {a.ref} vs {a.cmp}, {what} on the"
           " finest grid (differences relative to the largest |value|)")
     report = []
     for t in times:
-        for qty in ("B", "E") if a.all_times else ("B",):
+        for qty in quantities:
             for c, ta, tb, la, lb, scale, dmax, drms, at in compare(
                 out[a.ref], out[a.cmp], a.ndim, qty, t
             ):

@@ -56,8 +56,9 @@ jobs:
 
   # PHARE master's 1D modules built as its CI builds them (cmake_ubuntu.yml: SAMRAI from the
   #  image, double precision diagnostics), plamn's the same way, then the same input under both
-  #  (etc/compare/phare): the ion beam, 2 levels, 2000 steps, B and E compared every 100 steps.
-  #  The MHD module is built for the MHD comparison to come (plamn's MHD module: not yet)
+  #  (etc/compare/phare): the ion beam, 2 levels, 2000 steps, B and E compared every 100 steps;
+  #  then the MHD shock (PHARE's tests/functional/mhd_shock, periodic): MHD only, one level, 400
+  #  steps, B rho V P compared every 50
   phare:
     runs-on: ubuntu-24.04
     container: ghcr.io/pharchive/phare_dep/ubuntu:26.04
@@ -70,8 +71,10 @@ jobs:
         damn-key: ${{ secrets.DAMN_DEPLOY_KEY }}
         mkn: "true"
 
-    - name: plamn's 1D module
-      run: KLOG=3 ./mkn.py --dim 1 --jobs 4 --diag-doubles -- -q -x res/mkn/mpi
+    - name: plamn's 1D modules (hybrid, MHD)
+      run: |
+        KLOG=3 ./mkn.py --dim 1 --jobs 4 --diag-doubles -- -q -x res/mkn/mpi
+        KLOG=3 ./mkn.py --mhd --no-etc --jobs 4 --diag-doubles -- -q -x res/mkn/mpi
 
     - uses: actions/checkout@v4
       with:
@@ -99,6 +102,15 @@ jobs:
       run: >-
         python3 etc/compare/phare/compare_physics.py --case beam_1d_long --ndim 1 --steps 2000
         --ref "$PHARE_DIR" --cmp plamn --all-times --json compare/beam_1d_long.json
+
+    - name: PHARE vs plamn, 1D MHD shock, 400 steps
+      if: always()
+      env:
+        PHARE_DIR: ${{ github.workspace }}/phare
+        LADDER_OUT: ${{ github.workspace }}/compare
+      run: >-
+        python3 etc/compare/phare/compare_physics.py --case mhd_shock_1d --ndim 1 --steps 400
+        --ref "$PHARE_DIR" --cmp plamn --all-times --json compare/mhd_shock_1d.json
 
     - if: always()
       uses: actions/upload-artifact@v4
