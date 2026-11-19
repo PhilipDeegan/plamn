@@ -7,6 +7,7 @@
 #include "mkn/kul/env.hpp"
 
 #include "plamn/core/numerics/godunov/godunov_transformer.hpp"
+#include "plamn/core/numerics/godunov/hlld.hpp"
 #include "plamn/core/numerics/reconstructions/linear.hpp"
 #include "plamn/simulator/simulator_def.hpp"
 
@@ -73,6 +74,47 @@ TEST(GodunovPoint, hll_consistency_and_upwinding)
     EXPECT_EQ(r.uct_coefs[2], 0.);
     for (std::size_t c = 0; c < 3; ++c)
         EXPECT_DOUBLE_EQ(r.vt[c], fast_l.V[c]);
+}
+
+// HLLD (PHARE's): equal states give the physical flux, also where its HLLC fallback applies
+//  (a strong normal field at low pressure: the rotational waves at the fast ones); a face every
+//  wave crosses one way takes the upwind flux; an isolated contact (only rho jumps) is exact,
+//  the upwind mass flux (HLL smears it)
+TEST(GodunovPoint, hlld_consistency_upwinding_and_contact)
+{
+    auto const consistent = [&](MHDPrimitive const& u) {
+        mkn::kul::for_N<3>([&](auto dir) {
+            auto const r   = hlld<dir>(gamma_, u, u);
+            auto const f   = ideal_mhd_flux<dir>(gamma_, u);
+            auto const tol = [](double const x) { return 1e-13 * (1 + std::abs(x)); };
+            EXPECT_NEAR(r.F.rho, f.rho, tol(f.rho));
+            EXPECT_NEAR(r.F.Etot, f.Etot, tol(f.Etot));
+            for (std::size_t c = 0; c < 3; ++c)
+            {
+                EXPECT_NEAR(r.F.rhoV[c], f.rhoV[c], tol(f.rhoV[c]));
+                EXPECT_NEAR(r.F.B[c], f.B[c], tol(f.B[c]));
+                EXPECT_NEAR(r.vt[c], u.V[c], 1e-15);
+            }
+            for (auto const c : r.uct_coefs)
+                EXPECT_TRUE(std::isfinite(c));
+        });
+    };
+    consistent({1.2, {.3, -.2, .1}, {.7, .4, -.5}, .9});
+    consistent({1., {.1, .2, -.1}, {5., 5., 5.}, 1e-6}); // the HLLC fallback
+
+    MHDPrimitive const fast_l{1., {10., .1, 0.}, {1., .2, .1}, .5};
+    MHDPrimitive const fast_r{.5, {9., -.1, .2}, {1., -.3, .1}, .2};
+    auto const up = hlld<0>(gamma_, fast_l, fast_r);
+    auto const f  = ideal_mhd_flux<0>(gamma_, fast_l);
+    EXPECT_EQ(up.F.rho, f.rho);
+    EXPECT_EQ(up.F.Etot, f.Etot);
+
+    // a contact moving right at .5: rho only jumps, the mass flux is the left rho * .5
+    MHDPrimitive const cl{1., {.5, .1, -.2}, {1., .5, .3}, 1.};
+    MHDPrimitive const cr{.2, {.5, .1, -.2}, {1., .5, .3}, 1.};
+    auto const contact = hlld<0>(gamma_, cl, cr);
+    EXPECT_NEAR(contact.F.rho, .5, 1e-12);
+    EXPECT_GT(std::abs(hll<0>(gamma_, cl, cr).F.rho - .5), 1e-3); // HLL diffuses it
 }
 
 TEST(GodunovPoint, rusanov_consistency)

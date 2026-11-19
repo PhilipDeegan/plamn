@@ -84,6 +84,10 @@ CASES = {
     "mhd_wenoz_L1": dict(mhd_advance=True, reconstruction="WENOZ", limiter="None",
                          boxes=((10, 29),), steps=8, pops=[]),
     "mhd_hll_L1": dict(mhd_advance=True, riemann="HLL", boxes=((10, 29),), steps=8, pops=[]),
+    "mhd_hlld_L1": dict(mhd_advance=True, riemann="HLLD", boxes=((10, 29),), steps=8, pops=[]),
+    # HLLD on the cells' values (no reconstruction: PHARE's res/sim/all.txt has this one)
+    "mhd_hlld_constant_L1": dict(mhd_advance=True, reconstruction="Constant", limiter="None",
+                                 riemann="HLLD", boxes=((10, 29),), steps=8, pops=[]),
     "mhd_init_L1": dict(mhd_advance=True, boxes=((10, 29),), steps=0, pops=[]),
     "mhd_advance_L1": dict(mhd_advance=True, boxes=((10, 29),), steps=8, pops=[]),
     # the refined level against the periodic boundary (its ghosts wrap around)
