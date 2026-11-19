@@ -16,7 +16,11 @@
 #include "plamn/core/models/options/mhd_options_def.hpp"
 #include "plamn/core/models/quantities/mhd_quantities.hpp"
 #include "plamn/diagnostic/quantities.hpp"
+#include "plamn/core/numerics/reconstructions/constant.hpp"
 #include "plamn/core/numerics/reconstructions/linear.hpp"
+#include "plamn/core/numerics/reconstructions/mp5.hpp"
+#include "plamn/core/numerics/reconstructions/weno3.hpp"
+#include "plamn/core/numerics/reconstructions/wenoz.hpp"
 #include "plamn/initializer/data_provider.hpp"
 #include "plamn/simulator/mhd_patch.hpp"
 #include "plamn/solver/model_def.hpp"
@@ -38,15 +42,31 @@ namespace mhd
     template<auto opts>
     auto constexpr reconstruction()
     {
-        using enum MHDOpts::SlopeLimiterType;
-        static_assert(opts.reconstruction_type == MHDOpts::ReconstructionType::Linear,
-                      "plamn: only the linear MHD reconstruction is ported");
+        using R = MHDOpts::ReconstructionType;
+        using L = MHDOpts::SlopeLimiterType;
         static_assert(opts.riemann_solver_type == MHDOpts::RiemannSolverType::Rusanov,
                       "plamn: only the Rusanov Riemann solver is ported");
-        if constexpr (opts.slope_limiter_type == MinMod)
-            return core::LinearReconstruction<core::MinModLimiter>{};
+        if constexpr (opts.reconstruction_type == R::Constant)
+            return core::ConstantReconstruction<>{};
+        else if constexpr (opts.reconstruction_type == R::Linear)
+        {
+            static_assert(opts.slope_limiter_type == L::MinMod
+                              or opts.slope_limiter_type == L::VanLeer,
+                          "plamn: the linear MHD reconstruction needs a slope limiter");
+            if constexpr (opts.slope_limiter_type == L::MinMod)
+                return core::LinearReconstruction<core::MinModLimiter>{};
+            else
+                return core::LinearReconstruction<core::VanLeerLimiter>{};
+        }
+        else if constexpr (opts.reconstruction_type == R::WENO3)
+            return core::WENO3Reconstruction<>{};
+        else if constexpr (opts.reconstruction_type == R::WENOZ)
+            return core::WENOZReconstruction<>{};
         else
-            return core::LinearReconstruction<core::VanLeerLimiter>{};
+        {
+            static_assert(opts.reconstruction_type == R::MP5, "plamn: no MHD reconstruction");
+            return core::MP5Reconstruction<>{};
+        }
     }
 
     template<auto opts>

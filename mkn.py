@@ -65,8 +65,8 @@ def mhd_module_name(dim, layout, allocator, reconstruction, limiter, riemann, ha
 
 
 # the MHD choices ported (plamn::solver::mhd::reconstruction static_asserts the rest)
-RECONSTRUCTIONS = ["Linear"]
-LIMITERS = ["VanLeer", "MinMod"]
+RECONSTRUCTIONS = ["Constant", "Linear", "WENO3", "WENOZ", "MP5"]
+LIMITERS = ["VanLeer", "MinMod", "None"]  # None: the non linear reconstructions
 RIEMANNS = ["Rusanov"]
 
 

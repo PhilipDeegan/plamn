@@ -80,6 +80,9 @@ CASES = {
     # resistive (eta: the dissipative E in the constrained transport and the face fluxes)
     "mhd_resistive_L0": dict(mhd_advance=True, eta=0.05, boxes=(), steps=8, pops=[]),
     "mhd_resistive_L1": dict(mhd_advance=True, eta=0.05, boxes=((10, 29),), steps=8, pops=[]),
+    # the other reconstructions (PHARE's test_advance_mhd's own: WENOZ, no limiter)
+    "mhd_wenoz_L1": dict(mhd_advance=True, reconstruction="WENOZ", limiter="None",
+                         boxes=((10, 29),), steps=8, pops=[]),
     "mhd_init_L1": dict(mhd_advance=True, boxes=((10, 29),), steps=0, pops=[]),
     "mhd_advance_L1": dict(mhd_advance=True, boxes=((10, 29),), steps=8, pops=[]),
     # the refined level against the periodic boundary (its ghosts wrap around)
@@ -379,8 +382,8 @@ def _advance_mhd_1d(ph, out, case, largest_patch_size, fmt, fine_dump):
         eta=case.get("eta", 0.0),
         nu=0.0,
         gamma=5.0 / 3.0,
-        reconstruction="Linear",
-        limiter="VanLeer",
+        reconstruction=case.get("reconstruction", "Linear"),
+        limiter=case.get("limiter", "VanLeer"),
         riemann="Rusanov",
         mhd_timestepper="TVDRK2",
         hall=False,
