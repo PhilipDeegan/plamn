@@ -130,6 +130,8 @@ void Simulator<opts>::setup_()
         and amr["refinement"]["tagging"].contains("threshold"))
     {
         tagging_.emplace(amr::tagging_from(amr["refinement"]["tagging"]));
+        if constexpr (Models_t::mhd_on)
+            mhd_tagging_.emplace(amr::tagging_from(amr["refinement"]["tagging"], "mhd_method"));
         clustering_.tag_buffer = cppdict::get_value(dict_, "simulation/AMR/tag_buffer", 1);
         if (amr.contains("nesting_buffer"))
             clustering_.nesting_buffer

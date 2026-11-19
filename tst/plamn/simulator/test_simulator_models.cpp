@@ -312,6 +312,35 @@ TEST(SimulatorModels, mhdRefinedLevelAdvanced)
         EXPECT_TRUE(std::isfinite(rho));
 }
 
+// MHD levels from tags (PHARE's default tagger, mhd_method, on the MHD state's B): a B wave
+//  tags cells, level 1 made from their clusters at initialization, regridded every 2 level 0
+//  steps; level 0 keeps its mass (the reflux)
+TEST(SimulatorModels, mhdTaggedLevels)
+{
+    auto input                                 = mhd_input({"MHDModel"}, function(wave), 8);
+    auto& sim_                                 = input["simulation"];
+    auto& amr                                  = sim_["AMR"];
+    amr["max_nbr_levels"]                      = 2;
+    amr["max_mhd_level"]                       = 2;
+    amr["refinement"]["tagging"]["threshold"]  = 0.01;
+    amr["refinement"]["tagging"]["mhd_method"] = std::string{"default"};
+    sim_["mhd_state"]["magnetic"]["initializer"]["y_component"] = function(wave);
+    Simulator<mhd_only> sim{input};
+    sim.initialize();
+    ASSERT_EQ(sim.n_levels(), 2u);
+    auto const mass = [&]() {
+        auto const rho = sim.level_values("rho", 0);
+        return std::accumulate(rho.begin(), rho.end(), 0.);
+    };
+    double const m0 = mass();
+    for (std::size_t i = 0; i < 10; ++i)
+        sim.advance();
+    EXPECT_NEAR(mass(), m0, 1e-13 * m0);
+    for (std::size_t ln = 0; ln < sim.n_levels(); ++ln)
+        for (auto const rho : sim.level_values("rho", ln))
+            EXPECT_TRUE(std::isfinite(rho)) << ln;
+}
+
 TEST(SimulatorModels, modelsTheBuildLacksRefused)
 {
     EXPECT_THROW((Simulator<mhd_only>{mhd_input({"HybridModel"}, constant(1.))}),

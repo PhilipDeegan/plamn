@@ -197,8 +197,6 @@ void Simulator<opts>::initialize()
 template<auto opts>
 void Simulator<opts>::initialize_mhd_()
 {
-    if (tagging_)
-        throw std::runtime_error("plamn: MHD tagging is not in the simulator yet");
     if (!restarts_.load_path.empty()) // pyphare's restart_time: the levels from the file
         load_restart_();
     else
@@ -215,6 +213,23 @@ void Simulator<opts>::initialize_mhd_()
             make_level_(static_cast<int>(ln), refinement_boxes_[ln - 1]);
             initialize_refined_mhd_(ln, startTime_);
         }
+        // tagging: each new level from the tags of the one under it, as long as some are (or
+        //  from the supplied tag boxes); pretag is a hybrid one (B before any particle): the
+        //  MHD state is already there to tag on
+        if (tagging_)
+            for (int ln = 0; ln + 1 < hierarchy_.max_levels; ++ln)
+            {
+                bool const supplied = !supplied_tag_boxes_.empty();
+                if (supplied and static_cast<std::size_t>(ln) >= supplied_tag_boxes_.size())
+                    break;
+                auto const boxes = supplied ? supplied_tag_boxes_[ln] : cluster_(ln);
+                if (boxes.empty())
+                    break;
+                clustered_.resize(static_cast<std::size_t>(ln) + 2);
+                clustered_[ln + 1] = boxes;
+                make_level_(ln + 1, boxes);
+                initialize_refined_mhd_(static_cast<std::size_t>(ln) + 1, startTime_);
+            }
         // every level's old state at t0, for the finer levels' time interpolation
         for (std::size_t ln = 0; ln < levels_.size(); ++ln)
             prepare_step_(static_cast<int>(ln), startTime_);

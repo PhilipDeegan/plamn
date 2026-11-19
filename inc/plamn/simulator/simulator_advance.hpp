@@ -95,9 +95,8 @@ double Simulator<opts>::advance()
     damn::amr::advance(hierarchy_, hooks, currentTime_, dt_, time_ratio());
     currentTime_ = timestepper_.end_step();
     ++steps_;
-    if constexpr (Models_t::hybrid_on) // regrids: of hybrid levels only yet
-        if (regrid_mode_ == RegridMode::normal and tagging_ and steps_ % regrid_interval_ == 0)
-            regrid_(currentTime_);
+    if (regrid_mode_ == RegridMode::normal and tagging_ and steps_ % regrid_interval_ == 0)
+        regrid_(currentTime_);
     return dt_;
 }
 
@@ -118,8 +117,7 @@ void Simulator<opts>::after_step_(int const ln, double const t, bool const last)
     };
     if (!at_regrid_point(ln) or (ln > 0 and last and at_regrid_point(ln - 1)))
         return;
-    if constexpr (Models_t::hybrid_on) // regrids: of hybrid levels only yet
-        regrid_after_step_(ln, t);
+    regrid_after_step_(ln, t);
 }
 
 template<auto opts>

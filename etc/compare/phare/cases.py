@@ -70,12 +70,20 @@ CASES = {
     # PHARE's shock_with_boundaries.py: inflow (super magnetofast, the left state) at x lower,
     #  open at x upper, the shock moving in at 1.05 the fastest wave; dumps every 100 of 1000 steps
     "mhd_shock_walls_1d": dict(mhd_shock=True, walls=True, steps=1000, dump_every=100, pops=[]),
+    # the periodic shock on 2 levels, the finer where PHARE's default tagger (B) puts it, regrids
+    #  following the waves; dumps every 10 of 100 steps
+    "mhd_shock_tagged_1d": dict(mhd_shock=True, levels=2, steps=100, dump_every=10, pops=[]),
     # PHARE's tests/simulator/advance/test_advance_mhd.py input (bump density, cosine B and V),
     #  1D, the ported scheme (Linear, VanLeer, Rusanov, TVDRK2), no resistivity; one refinement
     #  box: the refined level made from level 0 (init), then advanced
     "mhd_advance_L0": dict(mhd_advance=True, boxes=(), steps=8, pops=[]),
     "mhd_init_L1": dict(mhd_advance=True, boxes=((10, 29),), steps=0, pops=[]),
     "mhd_advance_L1": dict(mhd_advance=True, boxes=((10, 29),), steps=8, pops=[]),
+    # the refined level against the periodic boundary (its ghosts wrap around)
+    "mhd_advance_L1_edge": dict(mhd_advance=True, boxes=((1, 10),), steps=8, pops=[]),
+    # tagged (PHARE's default tagger on B, a low threshold: the cosine B's steeper parts), 2
+    #  levels, regrids at PHARE's points
+    "mhd_tagged_1d": dict(mhd_advance=True, tagging=0.008, boxes=(), steps=40, pops=[]),
 }
 
 
@@ -356,7 +364,11 @@ def _advance_mhd_1d(ph, out, case, largest_patch_size, fmt, fine_dump):
         time_step=dt,
         cells=(cells,),
         dl=(dl,),
-        refinement_boxes=_boxes(1, *case["boxes"]) if case["boxes"] else {},
+        **(
+            dict(refinement="tagging", max_nbr_levels=2, tagging_threshold=case["tagging"])
+            if case.get("tagging")
+            else dict(refinement_boxes=_boxes(1, *case["boxes"]) if case["boxes"] else {})
+        ),
         largest_patch_size=largest_patch_size or 10,
         diag_options=_diag_options(out, fmt, fine_dump),
         strict=True,
@@ -432,8 +444,8 @@ def _mhd_shock_1d(ph, out, case, largest_patch_size, fmt):
         cells=(ncells,),
         dl=(dx,),
         refinement="tagging",
-        max_mhd_level=1,
-        max_nbr_levels=1,
+        max_mhd_level=case.get("levels", 1),
+        max_nbr_levels=case.get("levels", 1),
         hyper_resistivity=0.0,
         resistivity=0.0,
         diag_options=_diag_options(out, fmt, False),

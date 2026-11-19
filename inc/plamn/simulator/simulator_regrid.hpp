@@ -52,28 +52,33 @@ namespace plamn
 template<auto opts>
 std::vector<typename Simulator<opts>::Box_t> Simulator<opts>::cluster_(int const ln)
 {
-    using Patch_t = solver::HybridModel<opts>::Patch_t;
     DAMN_LOG_SCOPE(1, "Simulator::cluster_");
-    using Resource = amr::FieldResource<typename Patch_t::Grid_t, Patch_t::field_ghost_width>;
-    auto& ld       = data_(ln);
-    auto const dx  = damn::amr::mesh_size(hierarchy_, ln);
-
+    auto const dx = damn::amr::mesh_size(hierarchy_, ln);
     std::vector<damn::core::Point<int, dimension>> tagged;
-    for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
-    {
-        auto const resource = [&](std::string const& name) {
-            std::optional<Resource> r;
-            damn::amr::with_resource(ld.data[i], name, [&](auto& x) {
-                if constexpr (std::is_same_v<std::decay_t<decltype(x)>, Resource>)
-                    r = x;
-            });
-            if (!r)
-                throw std::runtime_error("plamn Simulator: no field " + name + " to tag on");
-            return *r;
-        };
-        for (auto const& c : amr::tagged_cells(*tagging_, ld.patches[i].box, dx, resource))
-            tagged.push_back(c);
-    }
+    models_.visit(static_cast<std::size_t>(ln), [&](auto& model) {
+        using Model_t   = std::remove_cvref_t<decltype(model)>;
+        using Patch_t   = Model_t::Patch_t;
+        using Resource  = amr::FieldResource<typename Patch_t::Grid_t, Patch_t::field_ghost_width>;
+        bool const mhd  = solver::is_mhd_model_v<Model_t>;
+        auto const& tag = mhd ? *mhd_tagging_ : *tagging_;
+        auto& ld        = model.levels[ln];
+        for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
+        {
+            auto const resource = [&](std::string const& component) {
+                auto const name = mhd ? component : "EM_" + component; // hybrid: EM_B_x...
+                std::optional<Resource> r;
+                damn::amr::with_resource(ld.data[i], name, [&](auto& x) {
+                    if constexpr (std::is_same_v<std::decay_t<decltype(x)>, Resource>)
+                        r = x;
+                });
+                if (!r)
+                    throw std::runtime_error("plamn Simulator: no field " + name + " to tag on");
+                return *r;
+            };
+            for (auto const& c : amr::tagged_cells(tag, ld.patches[i].box, dx, resource))
+                tagged.push_back(c);
+        }
+    });
     if (n_ranks_ > 1)
         return damn::mpi::cluster(hierarchy_, ln, tagged, clustering_);
     return damn::amr::cluster(
@@ -220,7 +225,7 @@ void Simulator<opts>::regrid_(double const t, int const from, bool const always)
         else
         {
             make_level_(ln + 1, boxes);
-            solver::hybrid::initialize_refined(models_.hybrid, level_services_(fine), startTime_);
+            initialize_refined_level_(ln + 1, startTime_);
             prepare_step_(ln + 1, t);
         }
     }
@@ -236,12 +241,8 @@ template<auto opts>
 void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxes, double const t,
                                     bool const keep_finer)
 {
-    using Patch_t    = solver::HybridModel<opts>::Patch_t;
-    using Splitter_t = solver::HybridModel<opts>::Splitter_t;
     DAMN_LOG_SCOPE(1, "Simulator::regrid_level_");
-    using damn::amr::LevelRegion;
-    auto const fine   = static_cast<std::size_t>(ln);
-    auto constexpr gw = Patch_t::field_ghost_width;
+    auto const fine = static_cast<std::size_t>(ln);
 
     // the old level's cells, periodic images included
     std::vector<Box_t> old_cells;
@@ -263,11 +264,30 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
     auto const map = damn::amr::make_regrid_map(old_level, hierarchy_.levels[ln], rank_,
                                                 damn::amr::periodic_shifts(hierarchy_, ln));
 
-    auto const make = [&](auto const& p) { return make_patch_(models_.hybrid, ln, p.box); };
+    if (models_.is_mhd(fine))
+    {
+        if constexpr (Models_t::mhd_on)
+            regrid_mhd_data_(ln, map, old_cells, t);
+    }
+    else if constexpr (Models_t::hybrid_on)
+        regrid_hybrid_data_(ln, map, old_cells, t, keep_finer);
+}
+
+template<auto opts>
+void Simulator<opts>::regrid_hybrid_data_(int const ln, auto const& map,
+                                          std::vector<Box_t> const& old_cells, double const t,
+                                          bool const keep_finer)
+{
+    using Patch_t    = solver::HybridModel<opts>::Patch_t;
+    using Splitter_t = solver::HybridModel<opts>::Splitter_t;
+    using damn::amr::LevelRegion;
+    auto const fine   = static_cast<std::size_t>(ln);
+    auto constexpr gw = Patch_t::field_ghost_width;
+    auto const make   = [&](auto const& p) { return make_patch_(models_.hybrid, ln, p.box); };
     auto& l = levels_[fine];
-    auto& ld        = data_(fine);
-    ld              = n_ranks_ > 1 ? damn::mpi::regrid(map, std::move(ld), make)
-                                   : damn::amr::regrid(map, std::move(ld), make);
+    auto& ld          = data_(fine);
+    ld                = n_ranks_ > 1 ? damn::mpi::regrid(map, std::move(ld), make)
+                                     : damn::amr::regrid(map, std::move(ld), make);
     for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
         ld.data[i]->rebox(
             solver::hybrid::surroundings(models_.hybrid, hierarchy_, ln, ld.patches[i].box));
@@ -323,6 +343,61 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
     else
         solver::hybrid::moved_moments(models_.hybrid, level_services_(fine));
     prepare_step_(ln, t);
+}
+
+// PHARE's MHDMessenger regrid (stateInitRefiners_): the advanced state moved where the old level
+//  was, refined from the coarser level elsewhere (B divergence free there), then its ghosts
+template<auto opts>
+void Simulator<opts>::regrid_mhd_data_(int const ln, auto const& map,
+                                       std::vector<Box_t> const& old_cells, double const t)
+{
+    using damn::amr::LevelRegion;
+    using Patch_t     = solver::MHDModel<opts>::Patch_t;
+    auto constexpr gw = Patch_t::field_ghost_width;
+    auto const fine   = static_cast<std::size_t>(ln);
+    auto const make   = [&](auto const& p) { return make_patch_(models_.mhd, ln, p.box); };
+    auto& ld          = models_.mhd.levels[ln];
+    ld                = n_ranks_ > 1 ? damn::mpi::regrid(map, std::move(ld), make)
+                                     : damn::amr::regrid(map, std::move(ld), make);
+    link_level_(ln);
+    auto& l     = levels_[fine];
+    l.coarse_t  = t;
+    l.coarse_dt = 0; // the coarser level's data at t
+
+    using MaskedField = amr::Masked<amr::FieldRefiner, dimension>;
+    MaskedField const masked{{}, &old_cells};
+    std::vector<damn::amr::LevelPair> pairs{{"rho", "rho", ""}, {"Etot", "Etot", ""}};
+    for (auto const& p : amr::vector_pairs("rhoV", "rhoV"))
+        pairs.push_back(p);
+    refine_(fine, masked, LevelRegion::Interior, pairs);
+    refine_(fine, masked, LevelRegion::Interior, amr::vector_pairs("B", "B"));
+    for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
+    {
+        auto& B          = ld.data[i]->states[0].B.grids;
+        auto bx          = amr::field_resource<gw>(B[0]);
+        auto by          = amr::field_resource<gw>(B[1]);
+        auto bz          = amr::field_resource<gw>(B[2]);
+        auto const cells = ld.patches[i].box;
+        for (auto const& region : masked.uncovered(cells, [](auto const& b) { return b; }))
+            amr::divergence_free_touch_up(std::array{&bx, &by, &bz}, cells, region,
+                                          damn::amr::mesh_size(hierarchy_, ln));
+    }
+    MHDLevel{*this, fine}.fill_state_ghosts(0, t);
+    prepare_step_(ln, t);
+}
+
+// a new level ln (regrid_), from the coarser level
+template<auto opts>
+void Simulator<opts>::initialize_refined_level_(int const ln, double const t)
+{
+    auto const fine = static_cast<std::size_t>(ln);
+    if (models_.is_mhd(fine))
+    {
+        if constexpr (Models_t::mhd_on)
+            initialize_refined_mhd_(fine, t);
+    }
+    else if constexpr (Models_t::hybrid_on)
+        solver::hybrid::initialize_refined(models_.hybrid, level_services_(fine), t);
 }
 
 

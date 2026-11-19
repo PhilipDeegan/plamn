@@ -462,6 +462,13 @@ private:
     void regrid_after_step_(int ln, double t); // after_step_'s regrid, at a regrid point
     // keep_finer: the finer levels stay (each to be regridded onto its own boxes in turn)
     void regrid_level_(int ln, std::vector<Box_t> const& boxes, double t, bool keep_finer = false);
+    // regrid_level_'s data, the level's model's: where the old level was, moved; the new cells
+    //  (outside old_cells) refined from the coarser level, then the ghosts
+    void regrid_hybrid_data_(int ln, auto const& map, std::vector<Box_t> const& old_cells, double t,
+                             bool keep_finer);
+    void regrid_mhd_data_(int ln, auto const& map, std::vector<Box_t> const& old_cells, double t);
+    // a new level ln's data, from the coarser level (regrid_, initialization)
+    void initialize_refined_level_(int ln, double t);
 
     // level ghost fills (patch ghosts, then level ghosts from the coarser level at time t)
     void fill_magnetic_ghosts_(std::size_t ln, std::string const& key, double t);
@@ -574,7 +581,8 @@ private:
     Resources_t resources_;                            // what moves together, by name
     std::vector<std::vector<Box_t>> refinement_boxes_; // per level, in that level's cells
     // refinement="tagging": what to tag on, how to cluster, every how many level 0 steps
-    std::optional<amr::Tagging> tagging_;
+    std::optional<amr::Tagging> tagging_;     // hybrid levels' (hybrid_method); set: tagging on
+    std::optional<amr::Tagging> mhd_tagging_; // MHD levels' (mhd_method)
     damn::amr::ClusteringOptions<dimension> clustering_;
     std::vector<std::vector<Box_t>> clustered_; // per level: the boxes it was clustered to
     int regrid_interval_ = 2;                   // SAMRAI's for ratio 2 with time refinement
