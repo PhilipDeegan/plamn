@@ -14,6 +14,7 @@
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "plamn/core/numerics/godunov/hll.hpp"
+#include "plamn/core/numerics/constrained_transport/upwind_ct.hpp"
 
 #include <cstddef>
 #include <type_traits>
@@ -110,19 +111,24 @@ public:
     }
 
     // fluxes and E from states[s]: to primitive, Godunov per direction, to conservative (rhoV
-    //  and Etot from V and P again, as PHARE), constrained transport; then E's ghosts
+    //  and Etot from V and P again, as PHARE), constrained transport; then E's ghosts. A Hall
+    //  patch (Patch::hall, the build's): J every time (PHARE's needsCurrent), the Godunov faces
+    //  and the constrained transport with the Hall term (GodunovTransformer::hall,
+    //  UpwindCTTransformer::hall)
     void compute_fluxes(auto& level, std::size_t const s, double const t) const
     {
         level.per_patch([&](auto& p) {
-            auto constexpr static dim = std::decay_t<decltype(p.layout)>::dimension;
-            auto& u                   = p.states[s];
+            auto constexpr static dim  = std::decay_t<decltype(p.layout)>::dimension;
+            auto constexpr static hall = std::decay_t<decltype(p)>::hall;
+            auto& u                    = p.states[s];
             PrimitiveConservativeTransformer const pc{gamma_};
             GodunovTransformer<Reconstruction, Riemann> const godunov{gamma_};
 
             pc.to_primitive(p.layout, u.rho, u.rhoV, u.B, u.Etot, u.V, u.P);
-            if (eta_ > 0) // J = curl B, the dissipative E = eta J on E's domain box
-            {
+            if (hall or eta_ > 0) // J = curl B
                 AmpereTransformer{}(p.layout, u.B, p.J);
+            if (eta_ > 0) // the dissipative E = eta J on E's domain box
+            {
                 for (std::size_t c = 0; c < 3; ++c)
                     damn::core::for_each_point(
                         domain_box(p.layout, p.E_diss[c]),
@@ -131,16 +137,36 @@ public:
             mkn::kul::for_N<dim>([&](auto d) {
                 auto& f = p.fluxes[d];
                 auto& c = p.ct[d];
-                godunov.template operator()<d>(p.layout, u.rho, u.V, u.B, u.P, f.F_rho, f.F_rhoV,
-                                               f.F_B, f.F_Etot, c.vt, c.aL, c.aR, c.dL, c.dR);
+                if constexpr (hall)
+                {
+                    auto& h = p.hall_ct[d];
+                    godunov.template hall<d>(p.layout, u.rho, u.V, u.B, u.P, p.J, f.F_rho, f.F_rhoV,
+                                             f.F_B, f.F_Etot, c.vt, c.aL, c.aR, c.dL, c.dR, h.jt,
+                                             h.rhot);
+                }
+                else
+                    godunov.template operator()<d>(p.layout, u.rho, u.V, u.B, u.P, f.F_rho,
+                                                   f.F_rhoV, f.F_B, f.F_Etot, c.vt, c.aL, c.aR,
+                                                   c.dL, c.dR);
                 if (eta_ > 0)
                     dissipative_fluxes_<d>(p, u.B);
             });
             pc.to_conservative(p.layout, u.rho, u.V, u.B, u.P, u.rhoV, u.Etot);
             auto& [x, y, z] = p.ct;
-            UpwindCTTransformer<Reconstruction>{}(p.layout, u.B, x.vt, x.aL, x.aR, x.dL, x.dR, y.vt,
-                                                  y.aL, y.aR, y.dL, y.dR, z.vt, z.aL, z.aR, z.dL,
-                                                  z.dR, p.E);
+            if constexpr (hall)
+            {
+                auto const face = [&](auto const& c, auto const& h) { // Grid overloads operator&
+                    return CTFace{
+                        c.vt, c.aL, c.aR, c.dL, c.dR, std::addressof(h.jt), std::addressof(h.rhot)};
+                };
+                auto& [hx, hy, hz] = p.hall_ct;
+                UpwindCTTransformer<Reconstruction>{}.hall(p.layout, u.B, face(x, hx), face(y, hy),
+                                                           face(z, hz), p.E);
+            }
+            else
+                UpwindCTTransformer<Reconstruction>{}(p.layout, u.B, x.vt, x.aL, x.aR, x.dL, x.dR,
+                                                      y.vt, y.aL, y.aR, y.dL, y.dR, z.vt, z.aL,
+                                                      z.aR, z.dL, z.dR, p.E);
             if (eta_ > 0) // E += the dissipative E, every component on its domain box
                 for (std::size_t c = 0; c < 3; ++c)
                     damn::core::for_each_point(domain_box(p.layout, p.E[c]), [&](auto const& ijk) {

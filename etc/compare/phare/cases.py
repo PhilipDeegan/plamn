@@ -85,6 +85,9 @@ CASES = {
                          boxes=((10, 29),), steps=8, pops=[]),
     "mhd_hll_L1": dict(mhd_advance=True, riemann="HLL", boxes=((10, 29),), steps=8, pops=[]),
     "mhd_hlld_L1": dict(mhd_advance=True, riemann="HLLD", boxes=((10, 29),), steps=8, pops=[]),
+    # Hall MHD (the Hall term in the fluxes and the constrained transport; PHARE's whistler cw: 0)
+    "mhd_hall_L0": dict(mhd_advance=True, hall=True, boxes=(), steps=8, pops=[]),
+    "mhd_hall_L1": dict(mhd_advance=True, hall=True, boxes=((10, 29),), steps=8, pops=[]),
     # HLLD on the cells' values (no reconstruction: PHARE's res/sim/all.txt has this one)
     "mhd_hlld_constant_L1": dict(mhd_advance=True, reconstruction="Constant", limiter="None",
                                  riemann="HLLD", boxes=((10, 29),), steps=8, pops=[]),
@@ -402,7 +405,7 @@ def _advance_mhd_1d(ph, out, case, largest_patch_size, fmt, fine_dump):
         limiter=case.get("limiter", "VanLeer"),
         riemann=case.get("riemann", "Rusanov"),
         mhd_timestepper="TVDRK2",
-        hall=False,
+        hall=case.get("hall", False),
         model_options=["MHDModel"],
     )
     L = sim.simulation_domain()[0]

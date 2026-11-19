@@ -39,17 +39,15 @@ struct GodunovFace
     NO_DISCARD GodunovFaceResult hall(auto const& ijk, auto const& rho, auto const& V,
                                       auto const& B, auto const& P, auto const& J) const DAMN_ALL
     {
-        using enum MHDQuantity::Scalar;
+        // not "using enum MHDQuantity::Scalar": its rho would hide the rho field
+        using Q             = MHDQuantity::Scalar;
         auto const [uL, uR] = states_<dir>(ijk, rho, V, B, P);
         auto const [jxL, jxR]
-            = Reconstruction::template center_reconstruct<dir, Jx, MHDQuantity::Scalar::rho>(J[0],
-                                                                                             ijk);
+            = Reconstruction::template center_reconstruct<dir, Q::Jx, Q::rho>(J[0], ijk);
         auto const [jyL, jyR]
-            = Reconstruction::template center_reconstruct<dir, Jy, MHDQuantity::Scalar::rho>(J[1],
-                                                                                             ijk);
+            = Reconstruction::template center_reconstruct<dir, Q::Jy, Q::rho>(J[1], ijk);
         auto const [jzL, jzR]
-            = Reconstruction::template center_reconstruct<dir, Jz, MHDQuantity::Scalar::rho>(J[2],
-                                                                                             ijk);
+            = Reconstruction::template center_reconstruct<dir, Q::Jz, Q::rho>(J[2], ijk);
         FaceCurrents const j{{jxL, jyL, jzL}, {jxR, jyR, jzR}};
         return Riemann::template solve<dir>(gamma, uL, uR, &j);
     }

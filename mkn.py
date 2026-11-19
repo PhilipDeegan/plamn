@@ -119,6 +119,8 @@ def main(argv):
     parser.add_argument("--reconstruction", nargs="+", default=["Linear"], choices=RECONSTRUCTIONS)
     parser.add_argument("--limiter", nargs="+", default=["VanLeer"], choices=LIMITERS)
     parser.add_argument("--riemann", nargs="+", default=["Rusanov"], choices=RIEMANNS)
+    parser.add_argument("--hall", nargs="+", default=["false"], choices=["false", "true"],
+                        help="--mhd: Hall MHD modules (true), ideal (false), or both")
     parser.add_argument("--no-etc", action="store_true", help="don't build py_etc")
     parser.add_argument("--jobs", type=int, default=8, help="mkn -t (CI: 4)")
     parser.add_argument(
@@ -179,10 +181,12 @@ def main(argv):
         return 1
 
     if args.mhd:
-        for dim, layout, allocator, reconstruction, limiter, riemann in itertools.product(
-            args.dim, args.layout, args.allocator, args.reconstruction, args.limiter, args.riemann
+        for dim, layout, allocator, reconstruction, limiter, riemann, hall in itertools.product(
+            args.dim, args.layout, args.allocator, args.reconstruction, args.limiter,
+            args.riemann, args.hall,
         ):
-            name = mhd_module_name(dim, layout, allocator, reconstruction, limiter, riemann)
+            hall = hall == "true"
+            name = mhd_module_name(dim, layout, allocator, reconstruction, limiter, riemann, hall)
             defines = [
                 f"-DPLAMN_SIM_DIM={dim}",
                 "-DPLAMN_SIM_INTERP=0",
@@ -192,6 +196,7 @@ def main(argv):
                 f"-DPLAMN_SIM_RECONSTRUCTION={reconstruction}",
                 f"-DPLAMN_SIM_LIMITER={limiter}",
                 f"-DPLAMN_SIM_RIEMANN={riemann}",
+                f"-DPLAMN_SIM_HALL={'true' if hall else 'false'}",
                 f"-DPLAMN_SIM_MODULE={name}",
             ] + scoping
             if mkn("py_sim", extra, args.jobs, defines, out=name, own_dir=True):

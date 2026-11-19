@@ -43,6 +43,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <vector>
 #include <utility>
 
@@ -93,6 +94,18 @@ struct MHDPatch
     using State_t  = core::MHDState<Grid_t, VecField>;
     using Fluxes_t = core::MHDFaceFluxes<Grid_t, VecField>;
     using CT_t     = core::MHDFaceCT<Grid_t, VecField>;
+
+    // Hall MHD (the build's opts.Hall): the faces' current and rho averages (jt, rhot) the
+    //  constrained transport reads, per face direction; in no other build
+    auto static constexpr hall = opts.Hall;
+    struct HallCT
+    {
+        VecField jt;
+        Grid_t rhot;
+    };
+    struct NoHall
+    {
+    };
 
     // states[s]: a scheme's states, made at the patch's making
     struct States
@@ -177,6 +190,12 @@ struct MHDPatch
             for (auto* g : {&c.aL, &c.aR, &c.dL, &c.dR})
                 fn(*g);
         }
+        if constexpr (hall)
+            for (auto& h : hall_ct)
+            {
+                vector(h.jt);
+                fn(h.rhot);
+            }
     }
 
     Layout_t layout;
@@ -198,8 +217,9 @@ struct MHDPatch
                                      fluxes_("sum_y", S::ScalarFlux_y, V::VecFlux_y),
                                      fluxes_("sum_z", S::ScalarFlux_z, V::VecFlux_z)};
     VecField flux_sum_E{"E_sum", layout, V::E, 0.};
-    // resistive MHD (MHDSteps: eta > 0): J = curl B, the dissipative E = eta J
+    // resistive MHD (MHDSteps: eta > 0): J = curl B, the dissipative E = eta J; Hall: J too
     VecField J{"J", layout, V::J, 0.}, E_diss{"E_diss", layout, V::E, 0.};
+    std::conditional_t<hall, std::array<HallCT, 3>, NoHall> hall_ct = hall_ct_();
 
     // a face's fluxes' grids: F_rho, F_rhoV (x y z), F_B (x y z), F_Etot
     static std::vector<Grid_t*> flux_grids(Fluxes_t& f)
@@ -223,6 +243,21 @@ private:
         return Fluxes_t{
             Grid_t{"F_rho_" + d, layout, sf, 0.}, VecField{"F_rhoV_" + d, layout, vf, 0.},
             VecField{"F_B_" + d, layout, vf, 0.}, Grid_t{"F_Etot_" + d, layout, sf, 0.}};
+    }
+    auto hall_ct_() const
+    {
+        if constexpr (hall)
+        {
+            auto const one = [&](std::string const& d, S const sf, V const vf) {
+                return HallCT{VecField{"ct_jt_" + d, layout, vf, 0.},
+                              Grid_t{"ct_rhot_" + d, layout, sf, 0.}};
+            };
+            return std::array{one("x", S::ScalarFlux_x, V::VecFlux_x),
+                              one("y", S::ScalarFlux_y, V::VecFlux_y),
+                              one("z", S::ScalarFlux_z, V::VecFlux_z)};
+        }
+        else
+            return NoHall{};
     }
     CT_t ct_(std::string const& d, S const sf, V const vf) const
     {

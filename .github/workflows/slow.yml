@@ -80,6 +80,7 @@ jobs:
         KLOG=3 ./mkn.py --mhd --no-etc --jobs 4 --diag-doubles --reconstruction WENOZ \
           --limiter None -- -q -x res/mkn/mpi
         KLOG=3 ./mkn.py --mhd --no-etc --jobs 4 --diag-doubles --riemann HLL HLLD -- -q -x res/mkn/mpi
+        KLOG=3 ./mkn.py --mhd --no-etc --jobs 4 --diag-doubles --hall true -- -q -x res/mkn/mpi
 
     - uses: actions/checkout@v4
       with:
@@ -90,7 +91,7 @@ jobs:
     - name: PHARE's 1D hybrid and MHD modules
       run: |
         set -ex
-        printf '1,1,2\n1,Linear,VanLeer,Rusanov,false\n1,WENOZ,None,Rusanov,false\n1,Linear,VanLeer,HLL,false\n1,Linear,VanLeer,HLLD,false\n' > "$PWD/phare_permutations.txt"
+        printf '1,1,2\n1,Linear,VanLeer,Rusanov,false\n1,WENOZ,None,Rusanov,false\n1,Linear,VanLeer,HLL,false\n1,Linear,VanLeer,HLLD,false\n1,Linear,VanLeer,Rusanov,true\n' > "$PWD/phare_permutations.txt"
         mkdir -p phare/build && cd phare/build
         cmake .. --fresh -DSAMRAI_ROOT=/usr/local -DCMAKE_BUILD_TYPE=Release \
               -DdevMode=OFF -Dasan=OFF -Dbench=OFF -Dtest=OFF -DPHARE_EXE=OFF \
@@ -99,7 +100,7 @@ jobs:
               -DCMAKE_CXX_FLAGS="-O3 -DPHARE_DIAG_DOUBLES=1"
         cmake --build . -j 4 --target cpp_etc dictator cpp_1_1_2 cpp_1_Linear_VanLeer_Rusanov_false \
           cpp_1_WENOZ_None_Rusanov_false cpp_1_Linear_VanLeer_HLL_false \
-          cpp_1_Linear_VanLeer_HLLD_false
+          cpp_1_Linear_VanLeer_HLLD_false cpp_1_Linear_VanLeer_Rusanov_true
 
     - name: PHARE vs plamn, 1D hybrid, 2 levels, 2000 steps
       env:
@@ -173,6 +174,15 @@ jobs:
       run: >-
         python3 etc/compare/phare/compare_physics.py --case mhd_hlld_L1 --ndim 1 --steps 8
         --ref "$PHARE_DIR" --cmp plamn --all-times --json compare/mhd_hlld_L1.json
+
+    - name: PHARE vs plamn, 1D Hall MHD on 2 levels, 8 steps
+      if: always()
+      env:
+        PHARE_DIR: ${{ github.workspace }}/phare
+        LADDER_OUT: ${{ github.workspace }}/compare
+      run: >-
+        python3 etc/compare/phare/compare_physics.py --case mhd_hall_L1 --ndim 1 --steps 8
+        --ref "$PHARE_DIR" --cmp plamn --all-times --json compare/mhd_hall_L1.json
 
     - name: PHARE vs plamn, 1D MHD tagged on 2 levels, regrids, 40 steps
       if: always()

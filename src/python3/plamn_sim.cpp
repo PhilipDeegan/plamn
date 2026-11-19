@@ -45,6 +45,9 @@
 #if !defined(PLAMN_SIM_RIEMANN)
 #define PLAMN_SIM_RIEMANN MHDOff
 #endif
+#if !defined(PLAMN_SIM_HALL)
+#define PLAMN_SIM_HALL false
+#endif
 #if !defined(PLAMN_SIM_MODULE)
 #define PLAMN_SIM_MODULE plamn_cpp_1_1_2_AoSMapped_CPU
 #endif
@@ -59,7 +62,8 @@ auto constexpr opts = plamn::SimOpts{
     .alloc_mode          = damn::AllocatorMode::PLAMN_SIM_ALLOCATOR,
     .reconstruction_type = plamn::MHDOpts::ReconstructionType::PLAMN_SIM_RECONSTRUCTION,
     .slope_limiter_type  = plamn::MHDOpts::SlopeLimiterType::PLAMN_SIM_LIMITER,
-    .riemann_solver_type = plamn::MHDOpts::RiemannSolverType::PLAMN_SIM_RIEMANN};
+    .riemann_solver_type = plamn::MHDOpts::RiemannSolverType::PLAMN_SIM_RIEMANN,
+    .Hall                = PLAMN_SIM_HALL};
 static_assert(opts.mhd_axes_consistent(),
               "plamn: MHD reconstruction, limiter, riemann: all or none");
 using Simulator = plamn::Simulator<opts>;
