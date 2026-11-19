@@ -59,10 +59,13 @@ class Plotter:
 
     def __init__(self, cpp, quantities, save, interp="nearest"):
         import matplotlib
+        import matplotlib.pyplot as plt
 
         if save or not os.environ.get("DISPLAY"):
-            matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
+            plt.switch_backend("Agg")
+        elif matplotlib.get_backend().lower() == "agg":
+            # an input may have chosen Agg (pyphare's NO_GUI(), e.g. PHARE's harris_2d.py)
+            plt.switch_backend("TkAgg")
 
         self.plt, self.cpp, self.quantities, self.save = plt, cpp, quantities, save
         self.interp = interp
