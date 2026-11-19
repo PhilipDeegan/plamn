@@ -89,6 +89,19 @@ TEST(Models, mhdLevelsBelowHybridOnes)
     EXPECT_EQ(owner(models, 2), 'm');
 }
 
+TEST(Models, truncateDropsEveryModelsLevels)
+{
+    Models<both> models;
+    models.mhd.levels[0];
+    models.hybrid.levels[1];
+    models.hybrid.levels[2];
+    models.truncate(1);
+    EXPECT_EQ(models.mhd.levels.size(), 1u);
+    EXPECT_TRUE(models.hybrid.levels.empty());
+    models.truncate(0);
+    EXPECT_TRUE(models.mhd.levels.empty());
+}
+
 TEST(Models, levelsOfADisabledModelRefused)
 {
     Models<hybrid_only> hybrid;

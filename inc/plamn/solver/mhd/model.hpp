@@ -1,13 +1,15 @@
 #ifndef PLAMN_SOLVER_MHD_MODEL_HPP
 #define PLAMN_SOLVER_MHD_MODEL_HPP
 
-// the MHD model of a simulation: what its levels' advance needs that is not the levels' data
+// the MHD model of a simulation: its patch data per level number, for the levels it is active
+//  on, and what its levels' advance needs that is not the levels' data
 //  (pyphare's MHDModel input: simulation/algo/fv_method, simulation/algo/time_integrator_type,
 //  simulation/grid/domain_boundaries): the heat capacity ratio, the time integration scheme
 //  (Euler, TVDRK2, TVDRK3, SSPRK4_5: a run time choice), resistivity and hyper resistivity, Hall,
 //  and the physical boundaries' conditions. The reconstruction (and its slope limiter) is the
 //  simulation's compile time options'. Empty if the build does not enable it
 
+#include "damn/amr/level_data.hpp"
 #include "damn/core/def.hpp"
 
 #include "plamn/core/boundary/boundary.hpp"
@@ -15,11 +17,14 @@
 #include "plamn/core/models/quantities/mhd_quantities.hpp"
 #include "plamn/core/numerics/reconstructions/linear.hpp"
 #include "plamn/initializer/data_provider.hpp"
+#include "plamn/simulator/mhd_patch.hpp"
 #include "plamn/solver/model_def.hpp"
 
 #include "dict.hpp"
 
 #include <cstddef>
+#include <map>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -70,6 +75,10 @@ struct MHDModel<opts, true>
 {
     using Reconstruction = mhd::Reconstruction_t<opts>;
     using Quantity       = core::MHDQuantity;
+    using Patch_t        = simulator::MHDPatch<opts>;
+    using LevelData_t    = damn::amr::LevelData<opts.dimension, std::unique_ptr<Patch_t>>;
+
+    std::map<int, LevelData_t> levels; // the levels the model is active on
 
     double gamma                       = 5. / 3.;
     MHDOpts::TimeIntegratorType scheme = MHDOpts::TimeIntegratorType::TVDRK2;
@@ -79,6 +88,12 @@ struct MHDModel<opts, true>
     core::BoundaryManager<Quantity> boundaries{};
 
     NO_DISCARD std::size_t n_states() const { return mhd::n_states(scheme); }
+
+    // the levels from n on gone
+    void truncate(std::size_t const n)
+    {
+        levels.erase(levels.lower_bound(static_cast<int>(n)), levels.end());
+    }
 
     // from the input's simulation dict
     NO_DISCARD static MHDModel from(initializer::Dict const& sim)

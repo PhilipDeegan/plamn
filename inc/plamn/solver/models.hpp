@@ -78,8 +78,7 @@ struct Models
     // the levels from n on gone
     void truncate(std::size_t const n)
     {
-        if constexpr (hybrid_on)
-            hybrid.truncate(n);
+        for_each([&](auto& model) { model.truncate(n); });
     }
 
     // the levels each model owns, from the input's simulation dict (max_levels: its

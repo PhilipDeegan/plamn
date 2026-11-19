@@ -34,6 +34,8 @@ template<auto opts>
 struct MHDStack<opts, true>
 {
     using Model_t          = MHDModel<opts>;
+    using Patch_t          = Model_t::Patch_t;
+    using LevelData_t      = Model_t::LevelData_t;
     using Reconstruction_t = Model_t::Reconstruction;
 };
 
