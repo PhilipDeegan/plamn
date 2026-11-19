@@ -94,8 +94,9 @@ typename Simulator<opts>::Layout_t Simulator<opts>::layout_of_(int const ln, Box
 template<auto opts>
 auto Simulator<opts>::make_patch_(int const ln, Box_t const& box) const
 {
-    return solver::hybrid::make_patch(hybrid_, layout_of_(ln, box), dict_["simulation"],
-                                      solver::hybrid::surroundings(hybrid_, hierarchy_, ln, box));
+    return solver::hybrid::make_patch(
+        models_.hybrid, layout_of_(ln, box), dict_["simulation"],
+        solver::hybrid::surroundings(models_.hybrid, hierarchy_, ln, box));
 }
 
 template<auto opts>
@@ -162,11 +163,11 @@ void Simulator<opts>::initialize()
         pretag_boxes = pretag_();
 
     make_level_(0, {hierarchy_.domain});
-    solver::hybrid::initialize_root(hybrid_, level_services_(0), dict_["simulation"]);
+    solver::hybrid::initialize_root(models_.hybrid, level_services_(0), dict_["simulation"]);
     for (std::size_t ln = 1; ln <= refinement_boxes_.size(); ++ln)
     {
         make_level_(static_cast<int>(ln), refinement_boxes_[ln - 1]);
-        solver::hybrid::initialize_refined(hybrid_, level_services_(ln), startTime_);
+        solver::hybrid::initialize_refined(models_.hybrid, level_services_(ln), startTime_);
     }
     // tagging: each new level from the tags of the one under it, as long as some are (pretag:
     //  those boxes are known already)
@@ -182,7 +183,7 @@ void Simulator<opts>::initialize()
             clustered_[ln + 1] = boxes;
             make_level_(ln + 1, boxes);
             solver::hybrid::initialize_refined(
-                hybrid_, level_services_(static_cast<std::size_t>(ln) + 1), startTime_);
+                models_.hybrid, level_services_(static_cast<std::size_t>(ln) + 1), startTime_);
         }
     // every level's E and B at t0, for the finer levels' time interpolation
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
@@ -215,7 +216,8 @@ std::vector<std::vector<typename Simulator<opts>::Box_t>> Simulator<opts>::preta
         if (level_boxes.empty())
             break;
         make_level_(ln + 1, level_boxes);
-        solver::hybrid::refine_magnetic(hybrid_, level_services_(static_cast<std::size_t>(ln) + 1));
+        solver::hybrid::refine_magnetic(models_.hybrid,
+                                        level_services_(static_cast<std::size_t>(ln) + 1));
         fill_magnetic_ghosts_(ln + 1, "EM_B", startTime_);
         boxes.push_back(std::move(level_boxes));
     }

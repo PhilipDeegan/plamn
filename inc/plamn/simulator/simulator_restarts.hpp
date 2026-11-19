@@ -123,9 +123,9 @@ void Simulator<opts>::write_restart_(std::string const& dir)
     }
 
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
-        solver::hybrid::restart_writing(hybrid_, level_services_(ln), /*writing=*/true);
+        solver::hybrid::restart_writing(models_.hybrid, level_services_(ln), /*writing=*/true);
 
-    auto const names = solver::hybrid::restart_names(hybrid_);
+    auto const names = solver::hybrid::restart_names(models_.hybrid);
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
     {
         auto const group = "/level" + std::to_string(ln);
@@ -134,7 +134,7 @@ void Simulator<opts>::write_restart_(std::string const& dir)
     for (std::size_t ln = 0; ln < clustered_.size(); ++ln)
         write_boxes(file, "/clustered" + std::to_string(ln), clustered_[ln]);
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
-        solver::hybrid::restart_writing(hybrid_, level_services_(ln), /*writing=*/false);
+        solver::hybrid::restart_writing(models_.hybrid, level_services_(ln), /*writing=*/false);
 #else
     throw std::runtime_error("plamn Simulator: restarts need HDF5 (damn_hdf5): " + dir);
 #endif
@@ -162,7 +162,7 @@ void Simulator<opts>::load_restart_()
             file.read_attribute<std::uint64_t>("/restart", "rebalance_steps_to_next_check"));
     }
 
-    auto const names    = solver::hybrid::restart_names(hybrid_);
+    auto const names    = solver::hybrid::restart_names(models_.hybrid);
     auto const n_levels = file.read_attribute<int>("/restart", "levels");
     for (int ln = 0; ln < n_levels; ++ln)
     {
@@ -189,7 +189,7 @@ void Simulator<opts>::rebuild_after_load_()
 {
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
     {
-        solver::hybrid::restart_loaded(hybrid_, level_services_(ln));
+        solver::hybrid::restart_loaded(models_.hybrid, level_services_(ln));
         prepare_step_(static_cast<int>(ln), currentTime_);
     }
 }

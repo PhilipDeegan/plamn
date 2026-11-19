@@ -22,6 +22,7 @@
 #include "plamn/core/numerics/ohm/ohm_transformer.hpp"
 #include "plamn/core/numerics/stable_dt/whistler.hpp"
 #include "plamn/core/numerics/particles_synchronised_mover/particles_synchronised_mover_def.hpp"
+#include "plamn/solver/models.hpp"
 
 #include "phlop/timing/scope.hpp"
 
@@ -31,6 +32,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -39,8 +41,19 @@
 
 namespace plamn
 {
-// PHARE's MultiPhysicsIntegrator::computeStableDt: a level's dt as a level 0 one, times the
-//  substeps of each coarser level (the time ratio per level)
+template<auto opts>
+void Simulator<opts>::step_model_(std::size_t const ln, auto&& hybrid)
+{
+    models_.visit(ln, [&](auto& model) {
+        if constexpr (solver::is_hybrid_model_v<std::remove_cvref_t<decltype(model)>>)
+            hybrid(model);
+        else
+            throw std::runtime_error("plamn: MHD levels are not in the simulator yet");
+    });
+}
+
+// PHARE's MultiPhysicsIntegrator::computeStableDt: a level's dt (its model's bound) as a level 0
+//  one, times the substeps of each coarser level (the time ratio per level)
 template<auto opts>
 double Simulator<opts>::stable_dt_(Timestepper::CFL const& cfl)
 {
@@ -51,9 +64,11 @@ double Simulator<opts>::stable_dt_(Timestepper::CFL const& cfl)
         if (ln > 0)
             to_0 *= time_ratio();
         double level = std::numeric_limits<double>::max();
-        per_patch_(ln, [&](auto& patch) {
-            level = std::min(
-                level, core::whistler_dt(patch.layout, patch.massDensity, patch.emB, cfl.wave));
+        step_model_(ln, [&](auto&) {
+            per_patch_(ln, [&](auto& patch) {
+                level = std::min(
+                    level, core::whistler_dt(patch.layout, patch.massDensity, patch.emB, cfl.wave));
+            });
         });
         dt0 = std::min(dt0, level * to_0);
     }
@@ -115,20 +130,23 @@ void Simulator<opts>::advance_level_(int const level_number, double const t, dou
     auto const ln = static_cast<std::size_t>(level_number);
     level_steps_.resize(std::max(level_steps_.size(), ln + 1));
     ++level_steps_[ln];
-    solver::advance(hybrid_, level_services_(ln), t, dt);
+    step_model_(ln, [&](auto& model) { solver::advance(model, level_services_(ln), t, dt); });
     if (ln + 1 == levels_.size()) // the finest; coarser ones after their synchronization
         fine_dump_(ln, t + dt);
 
     // the finest level's share of the coarser level's reflux, per substep: the time average of
     //  E over them (coarser finer levels accumulate theirs when synchronized)
     if (ln > 0 and ln + 1 == levels_.size())
-        solver::hybrid::accumulate_flux_sum(level_services_(ln), 1. / time_ratio());
+        step_model_(ln, [&](auto&) {
+            solver::hybrid::accumulate_flux_sum(level_services_(ln), 1. / time_ratio());
+        });
 }
 
 template<auto opts>
 void Simulator<opts>::prepare_step_(int const ln, double)
 {
-    solver::hybrid::prepare_step(hybrid_, level_services_(static_cast<std::size_t>(ln)));
+    auto const l = static_cast<std::size_t>(ln);
+    step_model_(l, [&](auto& model) { solver::hybrid::prepare_step(model, level_services_(l)); });
 }
 
 // the coarser level is at coarse_t + coarse_dt
@@ -142,19 +160,21 @@ void Simulator<opts>::first_step_(int const level_number, double, double const c
     auto& l          = levels_[ln];
     l.coarse_t       = coarse_t;
     l.coarse_dt      = coarse_dt;
-    solver::hybrid::first_step(hybrid_, level_services_(ln));
+    step_model_(ln, [&](auto& model) { solver::hybrid::first_step(model, level_services_(ln)); });
 }
 
 template<auto opts>
 void Simulator<opts>::last_step_(int const ln)
 {
-    solver::hybrid::last_step(hybrid_, level_services_(static_cast<std::size_t>(ln)));
+    auto const l = static_cast<std::size_t>(ln);
+    step_model_(l, [&](auto& model) { solver::hybrid::last_step(model, level_services_(l)); });
 }
 
 template<auto opts>
 void Simulator<opts>::synchronize_(int const ln, double const t)
 {
-    solver::hybrid::synchronize(hybrid_, level_services_(static_cast<std::size_t>(ln)), t);
+    auto const l = static_cast<std::size_t>(ln);
+    step_model_(l, [&](auto& model) { solver::hybrid::synchronize(model, level_services_(l), t); });
     fine_dump_(static_cast<std::size_t>(ln) - 1, t);
 }
 

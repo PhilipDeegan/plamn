@@ -18,6 +18,7 @@
 #include "plamn/core/numerics/ohm/ohm.hpp"
 #include "plamn/initializer/data_provider.hpp"
 #include "plamn/simulator/simulator_def.hpp"
+#include "plamn/solver/models.hpp"
 
 #include "dict.hpp"
 #include "mpi.h"
@@ -122,6 +123,9 @@ void Simulator<opts>::setup_()
 
     // finer levels: the user's refinement boxes (cells of the coarser level), refined
     hierarchy_.max_levels = cppdict::get_value(dict_, "simulation/AMR/max_nbr_levels", 1);
+    models_.set_levels(sim, hierarchy_.max_levels);
+    if constexpr (solver::Models<opts>::mhd_on)
+        models_.mhd = solver::MHDModel<opts>::from(sim);
     if (hierarchy_.max_levels > 1 and amr.contains("refinement")
         and amr["refinement"].contains("tagging")
         and amr["refinement"]["tagging"].contains("threshold"))
@@ -227,10 +231,10 @@ void Simulator<opts>::setup_()
         rebalance_check_.emplace(check);
     }
 
-    hybrid_.ohm.emplace(core::OhmInfo::FROM(sim["algo"]["ohm"]));
+    models_.hybrid.ohm.emplace(core::OhmInfo::FROM(sim["algo"]["ohm"]));
 
     register_resources_();
-    solver::hybrid::setup_computed(hybrid_, [&](std::string const& key, auto const& names) {
+    solver::hybrid::setup_computed(models_.hybrid, [&](std::string const& key, auto const& names) {
         resources_[key] = damn::amr::same_names(names);
     });
     setup_restarts_();
@@ -264,7 +268,7 @@ void Simulator<opts>::register_resources_()
     for (std::size_t i = 0; i < nbr_pops; ++i)
     {
         auto const name = ions["pop" + std::to_string(i)]["name"].template to<std::string>();
-        hybrid_.population_names.push_back(name);
+        models_.hybrid.population_names.push_back(name);
 
         // every population's moments in one exchange, as PHARE
         add("IonPopBorderSum", components(name + "_flux"));
@@ -282,7 +286,8 @@ void Simulator<opts>::register_resources_()
 template<auto opts>
 std::vector<double> Simulator<opts>::box_weights_(int const ln, std::vector<Box_t> const& boxes)
 {
-    auto const count = solver::hybrid::initial_particle_counter(hybrid_, dict_["simulation"]);
+    auto const count
+        = solver::hybrid::initial_particle_counter(models_.hybrid, dict_["simulation"]);
     std::vector<double> weights(boxes.size(), 0.);
     for (std::size_t k = static_cast<std::size_t>(rank_); k < boxes.size();
          k += static_cast<std::size_t>(n_ranks_))

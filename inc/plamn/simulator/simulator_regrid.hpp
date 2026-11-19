@@ -95,11 +95,11 @@ std::vector<double> Simulator<opts>::particle_weights_(int const ln,
     auto const fine = static_cast<std::size_t>(ln);
     // the level's own particles, where it is
     if (fine < levels_.size())
-        solver::hybrid::add_particles(hybrid_, level_services_(fine), boxes, weights);
+        solver::hybrid::add_particles(models_.hybrid, level_services_(fine), boxes, weights);
     // where it is not (yet): the coarser level's particles, split
     if (ln > 0)
         solver::hybrid::add_split_particles(
-            hybrid_, level_services_(fine - 1), boxes, hierarchy_.ratio,
+            models_.hybrid, level_services_(fine - 1), boxes, hierarchy_.ratio,
             fine < levels_.size() ? hierarchy_.levels[ln].patches
                                   : std::vector<damn::amr::Patch<dimension>>{},
             weights);
@@ -167,7 +167,7 @@ void Simulator<opts>::rebalance_(double const t)
         for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
         {
             ld.data[i]->rebox(
-                solver::hybrid::surroundings(hybrid_, hierarchy_, 0, ld.patches[i].box));
+                solver::hybrid::surroundings(models_.hybrid, hierarchy_, 0, ld.patches[i].box));
             for (auto& pop : ld.data[i]->ions)
                 pop.patchGhostParticles().clear();
         }
@@ -219,7 +219,7 @@ void Simulator<opts>::regrid_(double const t, int const from, bool const always)
         else
         {
             make_level_(ln + 1, boxes);
-            solver::hybrid::initialize_refined(hybrid_, level_services_(fine), startTime_);
+            solver::hybrid::initialize_refined(models_.hybrid, level_services_(fine), startTime_);
             prepare_step_(ln + 1, t);
         }
     }
@@ -266,7 +266,8 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
     ld              = n_ranks_ > 1 ? damn::mpi::regrid(map, std::move(ld), make)
                                    : damn::amr::regrid(map, std::move(ld), make);
     for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
-        ld.data[i]->rebox(solver::hybrid::surroundings(hybrid_, hierarchy_, ln, ld.patches[i].box));
+        ld.data[i]->rebox(
+            solver::hybrid::surroundings(models_.hybrid, hierarchy_, ln, ld.patches[i].box));
     link_level_(ln);
     l.coarse_t  = t;
     l.coarse_dt = 0; // the coarser level's data at t
@@ -297,14 +298,14 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
         }
     });
     using MaskedSplit = amr::Masked<amr::ParticleSplitter<Splitter_t>, dimension>;
-    for (auto const& name : hybrid_.population_names)
+    for (auto const& name : models_.hybrid.population_names)
         refine_(fine, MaskedSplit{{}, &old_cells}, LevelRegion::Interior,
                 {{name + "_domain", name + "_domain", ""}});
 
     // ghosts: patch ghosts from the new neighbours, level ghosts from the coarser level now
     fill_magnetic_ghosts_(fine, "EM_B", t);
     fill_electric_ghosts_(fine, "EM_E", t);
-    for (auto const& name : hybrid_.population_names)
+    for (auto const& name : models_.hybrid.population_names)
         refine_(fine, amr::ParticleSplitter<Splitter_t>{}, LevelRegion::LevelGhosts,
                 {{name + "_domain", name + "_level_ghost_old", ""}});
     solver::hybrid::own_level_ghosts(level_services_(fine), /*new_ghosts=*/false);
@@ -312,12 +313,12 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
         for (auto& pop : patch.ions)
             pop.levelGhostParticles() = pop.levelGhostParticlesOld();
     });
-    solver::hybrid::sort_refined_particles(hybrid_, level_services_(fine));
+    solver::hybrid::sort_refined_particles(models_.hybrid, level_services_(fine));
 
     if (!keep_finer)
-        solver::hybrid::refined_moments(hybrid_, level_services_(fine));
+        solver::hybrid::refined_moments(models_.hybrid, level_services_(fine));
     else
-        solver::hybrid::moved_moments(hybrid_, level_services_(fine));
+        solver::hybrid::moved_moments(models_.hybrid, level_services_(fine));
     prepare_step_(ln, t);
 }
 

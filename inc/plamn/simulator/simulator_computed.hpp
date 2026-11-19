@@ -29,8 +29,8 @@ template<auto opts>
 typename Simulator<opts>::Computed_t const&
 Simulator<opts>::computed_for_(std::string const& key) const
 {
-    auto const it = hybrid_.computed.find(key);
-    if (it == hybrid_.computed.end())
+    auto const it = models_.hybrid.computed.find(key);
+    if (it == models_.hybrid.computed.end())
         throw std::runtime_error("plamn: no computed quantity " + key);
     return it->second;
 }
@@ -38,7 +38,7 @@ Simulator<opts>::computed_for_(std::string const& key) const
 template<auto opts>
 bool Simulator<opts>::is_computed(std::string const& key) const
 {
-    return hybrid_.computed.contains(key);
+    return models_.hybrid.computed.contains(key);
 }
 
 template<auto opts>

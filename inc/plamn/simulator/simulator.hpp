@@ -46,6 +46,7 @@
 #include "plamn/solver/hybrid/model.hpp"
 #include "plamn/solver/hybrid/patches.hpp"
 #include "plamn/solver/hybrid/restarts.hpp"
+#include "plamn/solver/models.hpp"
 #include "plamn/solver/stacks.hpp"
 #include "plamn/amr/load_balancing.hpp"
 #include "plamn/core/def.hpp"
@@ -323,19 +324,21 @@ private:
         std::chrono::steady_clock::time_point start;
     } restarts_;
 
-    // the hybrid model: its levels' patch data
-    solver::HybridModel<opts> hybrid_;
+    // the models and the levels each owns (their levels' patch data)
+    solver::Models<opts> models_;
     // level ln's patch data (made if new)
     NO_DISCARD LevelData_t& data_(std::size_t const ln)
     {
-        return hybrid_.levels[static_cast<int>(ln)];
+        return models_.hybrid.levels[static_cast<int>(ln)];
     }
     // the levels from n on gone, with their data; the levels to n made (no data yet)
     void resize_levels_(std::size_t const n)
     {
         levels_.resize(n);
-        hybrid_.truncate(n);
+        models_.truncate(n);
     }
+    // hybrid(the hybrid model) if it owns level ln; MHD levels: not stepped by the simulator yet
+    void step_model_(std::size_t ln, auto&& hybrid);
 
     // one patch's work, for every local patch of level ln
     void per_patch_(std::size_t const ln, auto&& fn)

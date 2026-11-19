@@ -65,10 +65,10 @@ void Simulator<opts>::setup_diagnostics_()
     diagnostics_.dir               = get("filePath", std::string{"phare_output"});
     diagnostics_.overwrite         = get("mode", std::string{}) == "overwrite";
     diagnostics_.fine_dump_lvl_max = get("fine_dump_lvl_max", 0);
-    diagnostics_.quantities        = solver::hybrid::diagnostic_quantities(hybrid_);
+    diagnostics_.quantities        = solver::hybrid::diagnostic_quantities(models_.hybrid);
     for (auto const& d : diagnostics_.list) // unknown quantities: at setup, not at a dump
         if (d.type == "particle")
-            std::ignore = solver::hybrid::particle_population(hybrid_, d.quantity);
+            std::ignore = solver::hybrid::particle_population(models_.hybrid, d.quantity);
         else if (!is_computed(d.quantity))
             std::ignore = diagnostic::quantity_for(diagnostics_.quantities, d.quantity);
 }
@@ -131,7 +131,7 @@ void Simulator<opts>::dump_vtkhdf_(diagnostic::Diagnostic& diag, double const ti
     {
         // the number of components, from any patch's accessor (a rank may have none)
         std::size_t local = 0;
-        for (auto const& [ln, ld] : hybrid_.levels)
+        for (auto const& [ln, ld] : models_.hybrid.levels)
             if (!ld.data.empty())
             {
                 with_fields(*ld.data[0], [&](auto const& f) { local = f.size(); });
@@ -163,8 +163,8 @@ void Simulator<opts>::dump_vtkhdf_(diagnostic::Diagnostic& diag, double const ti
         file->write_attribute("/", "domain_box", upper);
         file->write_attribute("/", "periodicities", periodic);
         auto const& ions = dict_["simulation"]["ions"];
-        for (std::size_t i = 0; i < hybrid_.population_names.size(); ++i)
-            if (diag.quantity.starts_with("/ions/pop/" + hybrid_.population_names[i] + "/"))
+        for (std::size_t i = 0; i < models_.hybrid.population_names.size(); ++i)
+            if (diag.quantity.starts_with("/ions/pop/" + models_.hybrid.population_names[i] + "/"))
             {
                 auto const& pop = ions["pop" + std::to_string(i)];
                 file->write_attribute("/", "pop_mass", pop["mass"].template to<double>());
@@ -282,7 +282,7 @@ void Simulator<opts>::dump_phareh5_(diagnostic::Diagnostic& diag, double const t
 
         if (particles)
         {
-            auto const pop         = solver::hybrid::particle_population(hybrid_, diag.quantity);
+            auto const pop = solver::hybrid::particle_population(models_.hybrid, diag.quantity);
             bool const level_ghost = diag.quantity.ends_with("/levelGhost");
             std::vector<ph5::ParticleColumns<dimension>> columns;
             for (std::size_t i = 0; i < n_local; ++i)
@@ -395,8 +395,8 @@ void Simulator<opts>::dump_phareh5_(diagnostic::Diagnostic& diag, double const t
     file->write_attribute("/", "origin", origin);
     file->write_attribute("/", "periodicities", periodic);
     auto const& ions = dict_["simulation"]["ions"];
-    for (std::size_t i = 0; i < hybrid_.population_names.size(); ++i)
-        if (diag.quantity.starts_with("/ions/pop/" + hybrid_.population_names[i] + "/"))
+    for (std::size_t i = 0; i < models_.hybrid.population_names.size(); ++i)
+        if (diag.quantity.starts_with("/ions/pop/" + models_.hybrid.population_names[i] + "/"))
         {
             auto const& pop = ions["pop" + std::to_string(i)];
             file->write_attribute("/", "pop_mass", pop["mass"].template to<double>());
