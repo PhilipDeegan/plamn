@@ -22,7 +22,7 @@ per drawing (the finest mesh's cell centres and values, or with --interp none ea
 points where no finer level has any, sized by level). In its window: P pauses the run (every
 rank waits) and plays it, N runs it to the next drawing while paused, 1-7 slices, 0 the whole
 cloud, W/A/S/D/R/F and the arrows move, the mouse as mathplot's. --arrows [W] (with --view3d):
-B as arrows too, each the mean over a block of W cells (10 by default: 10^3 in 3D) of the
+B as arrows too, each the mean over a block of W cells (5 by default: 5^3 in 3D) of the
 finest mesh, at the block's centre; the slices show the arrows of the blocks they cross.
 """
 
@@ -52,9 +52,9 @@ def cli_args_parser():
     parser.add_argument("--view3d", nargs="?", const="", default=None,
                         help="the first quantity in plamn's view3d program (PATH, else "
                         "$PLAMN_VIEW3D, else etc/view3d's build: python3 res/build_3d_view.py)")
-    parser.add_argument("--arrows", type=int, nargs="?", const=10, default=0,
+    parser.add_argument("--arrows", type=int, nargs="?", const=5, default=0,
                         help="with --view3d: B as arrows, each the mean over a block of W "
-                        "finest cells per direction (10)")
+                        "finest cells per direction (5)")
     parser.add_argument("--cmap", default="Spectral_r",
                         help="2D colour map (pyphare's hierarchy plots: Spectral_r)")
     return parser
