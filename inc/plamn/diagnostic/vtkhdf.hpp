@@ -42,6 +42,7 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace plamn::diagnostic
@@ -51,7 +52,9 @@ struct Diagnostic
     std::string type, quantity;
     std::vector<double> timestamps{};
     std::size_t flush_every = 1, next = 0, dumps = 0;
-    std::vector<std::pair<std::string, std::string>> attributes{}; // phareh5's /py_attrs
+    // phareh5's /py_attrs: strings, but pyphare's heat_capacity_ratio (a double, as PHARE's MHD
+    //  writer reads it)
+    std::vector<std::pair<std::string, std::variant<std::string, double>>> attributes{};
 };
 
 // pyphare's diagnostics plamn writes: electromag and fluid, particle (phareh5 only)
@@ -80,8 +83,12 @@ NO_DISCARD inline std::vector<Diagnostic> diagnostics_from(initializer::Dict con
                 for (std::size_t i = 0; i < d["n_attributes"].template to<std::size_t>(); ++i)
                 {
                     auto const at = "attribute_" + std::to_string(i);
-                    diag.attributes.emplace_back(d[at + "_key"].template to<std::string>(),
-                                                 d[at + "_value"].template to<std::string>());
+                    auto const& value = d[at + "_value"];
+                    auto const key    = d[at + "_key"].template to<std::string>();
+                    if (auto const* number = std::get_if<double>(&value.data))
+                        diag.attributes.emplace_back(key, *number);
+                    else
+                        diag.attributes.emplace_back(key, std::get<std::string>(value.data));
                 }
             out.push_back(diag);
         }

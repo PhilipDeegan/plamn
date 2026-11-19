@@ -44,6 +44,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace plamn
@@ -459,7 +460,7 @@ void Simulator<opts>::dump_phareh5_(diagnostic::Diagnostic& diag, double const t
             }
     }
     for (auto const& [key, value] : diag.attributes)
-        file->write_attribute("/py_attrs", key, value);
+        std::visit([&](auto const& v) { file->write_attribute("/py_attrs", key, v); }, value);
 
     // PHARE's flush_every: closed every flush_every dumps (0: never), reopened at the next
     if (++diag.dumps; diag.flush_every != 0 and diag.dumps % diag.flush_every == 0)

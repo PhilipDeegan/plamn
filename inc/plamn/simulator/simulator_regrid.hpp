@@ -161,7 +161,6 @@ void Simulator<opts>::rebalance_(double const t)
 
         auto const map  = damn::amr::make_regrid_map(old0, hierarchy_.levels[0], rank_,
                                                      damn::amr::periodic_shifts(hierarchy_, 0));
-        auto& l         = levels_[0];
         auto& ld        = data_(0);
         ld              = damn::mpi::regrid(map, std::move(ld), [&](auto const& p) {
             return make_patch_(models_.hybrid, 0, p.box);

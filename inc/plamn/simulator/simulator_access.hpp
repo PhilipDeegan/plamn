@@ -64,14 +64,16 @@ std::vector<double> Simulator<opts>::all_domain_values(std::string const& name,
     if (n_ranks_ == 1)
         return mine;
 
-    auto& ld = data_(ln);
     // every rank's values and per patch sizes (a rank may have no patch)
     std::vector<int> sizes; // of my patches, in my level order
-    for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
-        damn::amr::with_resource(ld.data[i], name, [&](auto& r) {
-            if constexpr (damn::amr::BoxData<std::decay_t<decltype(r)>, dimension>)
-                sizes.push_back(static_cast<int>(domain_box(r, ld.patches[i].box).size()));
-        });
+    models_.visit(ln, [&](auto& model) {
+        auto& ld = model.levels[static_cast<int>(ln)];
+        for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
+            damn::amr::with_resource(ld.data[i], name, [&](auto& r) {
+                if constexpr (damn::amr::BoxData<std::decay_t<decltype(r)>, dimension>)
+                    sizes.push_back(static_cast<int>(domain_box(r, ld.patches[i].box).size()));
+            });
+    });
 
     auto const gather = [&]<typename T>(std::vector<T> const& v, MPI_Datatype const type) {
         int const n = static_cast<int>(v.size());
@@ -109,23 +111,25 @@ std::vector<double> Simulator<opts>::all_domain_values(std::string const& name,
 template<auto opts>
 std::vector<double> Simulator<opts>::level_values(std::string const& name, std::size_t const ln)
 {
-    auto& ld = data_(ln);
     std::vector<int> points; // dimension per point
     std::vector<double> values;
-    for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
-    {
-        auto const& cells = ld.patches[i].box;
-        bool const found  = damn::amr::with_resource(ld.data[i], name, [&](auto& r) {
-            if constexpr (damn::amr::BoxData<std::decay_t<decltype(r)>, dimension>)
-                damn::core::for_each_point(domain_box(r, cells), [&](auto const& p) {
-                    for (std::size_t d = 0; d < dimension; ++d)
-                        points.push_back(p[d]);
-                    values.push_back(value(r, cells, p));
-                });
-        });
-        if (!found)
-            throw std::runtime_error("plamn Simulator: no resource " + name);
-    }
+    models_.visit(ln, [&](auto& model) {
+        auto& ld = model.levels[static_cast<int>(ln)];
+        for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
+        {
+            auto const& cells = ld.patches[i].box;
+            bool const found  = damn::amr::with_resource(ld.data[i], name, [&](auto& r) {
+                if constexpr (damn::amr::BoxData<std::decay_t<decltype(r)>, dimension>)
+                    damn::core::for_each_point(domain_box(r, cells), [&](auto const& p) {
+                        for (std::size_t d = 0; d < dimension; ++d)
+                            points.push_back(p[d]);
+                        values.push_back(value(r, cells, p));
+                    });
+            });
+            if (!found)
+                throw std::runtime_error("plamn Simulator: no resource " + name);
+        }
+    });
     if (n_ranks_ > 1)
     {
         auto const gather = [&]<typename T>(std::vector<T> const& v, MPI_Datatype const type) {
