@@ -99,6 +99,7 @@ NB_MODULE(PLAMN_SIM_MODULE, m)
         .def("to_str", &Simulator::to_str)
         .def("domain_box", &Simulator::domainBox)
         .def("cell_width", &Simulator::cellWidth)
+        .def("flush_diagnostics", &Simulator::flush_diagnostics)
         .def("dump_diagnostics", &Simulator::dump_diagnostics, nb::arg("timestamp"),
              nb::arg("timestep"))
         .def("dump_restarts", &Simulator::dump_restarts, nb::arg("timestamp"), nb::arg("timestep"))

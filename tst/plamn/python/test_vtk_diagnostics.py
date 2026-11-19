@@ -42,7 +42,7 @@ TENSOR = ["xx", "xy", "xz", "yy", "yz", "zz"]
 VX, VY, VTH = (0.5, 1.0), 0.1, 0.3  # per population (order of populations), all, all
 
 
-def simulation(out, box=((10, 10), (19, 19))):
+def simulation(out, box=((10, 10), (19, 19)), flush_every=1):
     ph.global_vars.sim = None
     ph.clearDict()
     sim = ph.Simulation(
@@ -90,16 +90,16 @@ def simulation(out, box=((10, 10), (19, 19))):
     ph.ElectronModel(closure="isothermal", Te=0.12)
     timestamps = np.array([0.0, timestep])
     for q in ["E", "B"]:
-        ph.ElectromagDiagnostics(quantity=q, write_timestamps=timestamps, flush_every=1)
+        ph.ElectromagDiagnostics(quantity=q, write_timestamps=timestamps, flush_every=flush_every)
     for q in FLUID:
-        ph.FluidDiagnostics(quantity=q, write_timestamps=timestamps, flush_every=1)
+        ph.FluidDiagnostics(quantity=q, write_timestamps=timestamps, flush_every=flush_every)
     for name in populations:
         for q in POP:
             ph.FluidDiagnostics(
                 quantity=q,
                 write_timestamps=timestamps,
                 population_name=name,
-                flush_every=1,
+                flush_every=flush_every,
             )
     return sim
 
@@ -327,6 +327,20 @@ class VtkDiagnosticsTest(unittest.TestCase):
             n_boxes = f["VTKHDF/Steps/Level1/NumberOfAMRBox"][:]
             if plamn.etc.mpi_size() > 1:
                 self.assertLess(int(n_boxes.max()), plamn.etc.mpi_size())
+
+    def test_flush_diagnostics(self):
+        """flush_every 0: the files stay open between dumps; flush_diagnostics closes them (as
+        pyphare's Simulator.run does at its end), the next dump reopens and appends"""
+        import h5py
+
+        sim = simulation(self.out, flush_every=0)
+        self.simulator = ph.Simulator(sim, log_to_file=False).setup().initialize()
+        self.simulator.cpp_sim.flush_diagnostics()  # after t0's dump
+        self.simulator.advance()
+        self.simulator.cpp_sim.flush_diagnostics()
+        plamn.etc.mpi_barrier()
+        with h5py.File(Path(self.out) / "EM_B.vtkhdf", "r") as f:
+            self.assertEqual(f["VTKHDF/Steps"].attrs["NSteps"], 2)
 
     def test_unsupported_quantity_raises(self):
         """pyphare accepts no quantity plamn does not write: one set past its checks"""

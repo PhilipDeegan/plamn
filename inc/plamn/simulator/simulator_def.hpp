@@ -45,6 +45,8 @@ public:
     {
         return false; // overriding optional
     }
+    // closes the diagnostic files flush_every left open (pyphare's Simulator.run, at its end)
+    virtual void flush_diagnostics() {} // overriding optional
     virtual bool dump_restarts(double /*timestamp*/, double /*timestep*/)
     {
         return false; // overriding optional

@@ -161,6 +161,13 @@ public:
     double advance() override;
     bool dump_restarts(double timestamp, double timestep) override;    // simulator_restarts.hpp
     bool dump_diagnostics(double timestamp, double timestep) override; // simulator_diagnostics
+    // the files flush_every left open, closed; the next dump reopens them (PHARE's)
+    void flush_diagnostics() override
+    {
+#if DAMN_HAS_HIGHFIVE
+        diagnostics_.files.clear();
+#endif
+    }
 
     // computed quantities by key (simulator_computed.hpp): compute is collective when the
     //  quantity sums borders
