@@ -97,6 +97,17 @@ CASES = {
     "mhd_tagged_1d": dict(mhd_advance=True, tagging=0.008, boxes=(), steps=40, pops=[]),
 }
 
+# the expected agreement with PHARE (compare_physics.py --tolerance: fails above it): the
+#  difference relative to the largest |value| at the k-th time compared, min(cap, start *
+#  growth**k): tight first (a bug shows at once), looser as round off grows. The MHD cases agree
+#  to round off (2026-11-19, double diagnostics: identical at t0, at most 3.4e-14 after 1000
+#  steps): 10x that and more. Not the hybrid ones (particle noise) nor mhd_shock_tagged_1d
+#  (NaN in PHARE itself)
+MHD_TOLERANCE = (1e-13, 1.25, 1e-11)
+for _name, _case in CASES.items():
+    if (_case.get("mhd_advance") or _case.get("mhd_shock")) and _name != "mhd_shock_tagged_1d":
+        _case.setdefault("tolerance", MHD_TOLERANCE)
+
 
 def _diag_options(out, fmt, fine_dump):
     """the regular dumps; with fine_dump, also each fine level at the end of its substeps

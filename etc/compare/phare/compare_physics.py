@@ -83,6 +83,10 @@ def composite(path, component, time=None, qty="B"):
             lo = np.array(p.attrs["lower"])
             hi = np.array(p.attrs["upper"])
             n = hi - lo + 1
+            if p[ds].dtype != np.float64:  # float diagnostics: 1e-8 "differences" from storage
+                raise SystemExit(
+                    f"{path}: {ds} is {p[ds].dtype}: comparing needs double precision diagnostics "
+                    "(plamn: ./mkn.py --diag-doubles, PHARE: -DPHARE_DIAG_DOUBLES=1)")
             v = p[ds][:]
             sl = tuple(slice(G, G + n[d]) for d in range(ndim))
             cells = v[sl]
@@ -138,6 +142,11 @@ def main(argv=None):
     p.add_argument("--all-times", action="store_true", help="B and E at every dump time")
     p.add_argument("--json", default=None, help="the rows written to this file too")
     p.add_argument(
+        "--tolerance", nargs=3, type=float, default=None, metavar=("START", "GROWTH", "CAP"),
+        help="fail where a relative difference at the k-th time compared exceeds "
+        "min(CAP, START * GROWTH**k) (default: the case's tolerance, else none: print only)",
+    )
+    p.add_argument(
         "--quantities", nargs="+", default=None,
         help="B, E, rho, V, P (default: B, and E with --all-times; an MHD case: B rho V P)",
     )
@@ -188,7 +197,28 @@ def main(argv=None):
     if not all(np.isfinite(r["max_diff"]) for r in report):
         print("a difference is not finite: a run blew up or wrote NaN")
         return 1
-    return 0
+    tolerance = a.tolerance or cases.CASES[a.case].get("tolerance")
+    return 1 if tolerance and not within(report, *tolerance) else 0
+
+
+def within(report, start, growth, cap):
+    """every row's relative difference within the staggered tolerance: at the k-th time compared
+    min(cap, start * growth**k), tight first (a bug shows at once), looser as round off grows"""
+    times = sorted({r["t"] for r in report})
+    ok = True
+    for r in report:
+        k = times.index(r["t"])
+        allowed = min(cap, start * growth**k)
+        if r["max_diff"] > allowed:
+            print(f"FAIL {r['quantity']} t {r['t']:g} (time {k}): {r['max_diff']:.2e} > "
+                  f"{allowed:.2e} allowed")
+            ok = False
+    worst = max(report, key=lambda r: r["max_diff"] / min(cap, start * growth ** times.index(r["t"])))
+    k = times.index(worst["t"])
+    print(f"tolerance {start:g} x {growth:g}^k (cap {cap:g}): "
+          f"{'pass' if ok else 'FAIL'}, closest {worst['quantity']} t {worst['t']:g}: "
+          f"{worst['max_diff']:.2e} of {min(cap, start * growth**k):.2e}")
+    return ok
 
 
 if __name__ == "__main__":
