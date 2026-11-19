@@ -17,6 +17,7 @@
 // write per rank (damn::hdf5::vtkhdf::append_level). Scopes: dump, convert, write per level
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
+#include "plamn/core/numerics/primitive_conservative/primitive_conservative_transformer.hpp"
 #include "damn/amr/hierarchy.hpp"
 #include "damn/core/exec/thread_pool.hpp"
 #include "damn/core/logger.hpp"
@@ -38,6 +39,8 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <cstdint>
+#include <type_traits>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -65,16 +68,32 @@ void Simulator<opts>::setup_diagnostics_()
     diagnostics_.dir               = get("filePath", std::string{"phare_output"});
     diagnostics_.overwrite         = get("mode", std::string{}) == "overwrite";
     diagnostics_.fine_dump_lvl_max = get("fine_dump_lvl_max", 0);
-    if constexpr (!Models_t::hybrid_on)
-        throw std::runtime_error("plamn: MHD diagnostics are not in the simulator yet");
-    else
-    {
+    if constexpr (Models_t::mhd_on)
+        models_.mhd.quantities
+            = diagnostic::mhd_quantities<typename solver::MHDModel<opts>::Patch_t>();
+    if constexpr (Models_t::hybrid_on)
         models_.hybrid.quantities = solver::hybrid::diagnostic_quantities(models_.hybrid);
-        for (auto const& d : diagnostics_.list) // unknown quantities: at setup, not at a dump
-            if (d.type == "particle")
-                std::ignore = solver::hybrid::particle_population(models_.hybrid, d.quantity);
-            else if (!is_computed(d.quantity))
-                std::ignore = diagnostic::quantity_for(models_.hybrid.quantities, d.quantity);
+    // unknown quantities: at setup, not at a dump, for each model owning levels
+    for (auto const& d : diagnostics_.list)
+    {
+        if constexpr (Models_t::mhd_on)
+            if (models_.mhd_levels > 0)
+            {
+                if (d.type == "particle")
+                    throw std::runtime_error("plamn diagnostics: no particles on MHD levels");
+                if (!diagnostics_.phareh5)
+                    throw std::runtime_error(
+                        "plamn diagnostics: MHD levels in pharevtkhdf not yet");
+                std::ignore = diagnostic::quantity_for(models_.mhd.quantities, d.quantity);
+            }
+        if constexpr (Models_t::hybrid_on)
+            if (models_.mhd_levels < hierarchy_.max_levels)
+            {
+                if (d.type == "particle")
+                    std::ignore = solver::hybrid::particle_population(models_.hybrid, d.quantity);
+                else if (!is_computed(d.quantity))
+                    std::ignore = diagnostic::quantity_for(models_.hybrid.quantities, d.quantity);
+            }
     }
 }
 
@@ -105,13 +124,10 @@ void Simulator<opts>::fine_dump_(std::size_t const ln, double const time)
 template<auto opts>
 void Simulator<opts>::dump_(diagnostic::Diagnostic& diag, double const time, int const only)
 {
-    if constexpr (Models_t::hybrid_on) // none set up otherwise (setup_diagnostics_)
-    {
-        if (diagnostics_.phareh5)
-            dump_phareh5_(diag, time, only);
-        else
-            dump_vtkhdf_(diag, time, only);
-    }
+    if (diagnostics_.phareh5)
+        dump_phareh5_(diag, time, only);
+    else if constexpr (Models_t::hybrid_on) // MHD levels: phareh5 only (setup_diagnostics_)
+        dump_vtkhdf_(diag, time, only);
 }
 
 template<auto opts>
@@ -236,23 +252,30 @@ void Simulator<opts>::dump_vtkhdf_(diagnostic::Diagnostic& diag, double const ti
 template<auto opts>
 void Simulator<opts>::dump_phareh5_(diagnostic::Diagnostic& diag, double const time, int const only)
 {
-    using Patch_t = solver::HybridModel<opts>::Patch_t;
     DAMN_LOG_SCOPE(1, "Simulator::dump_phareh5_");
 #if DAMN_HAS_HIGHFIVE
     using namespace damn::hdf5;
     namespace ph5     = diagnostic::phareh5;
     using Float       = Diagnostics::Float;
-    auto constexpr gw = Patch_t::field_ghost_width;
-    auto constexpr G  = ph5::field_ghosts<interp_order>;
 
-    bool const particles    = diag.type == "particle";
-    bool const is_computed_ = !particles and is_computed(diag.quantity);
-    auto const with_fields  = [&](Patch_t& patch, auto&& fn) {
-        if (is_computed_)
+    bool const particles = diag.type == "particle";
+    // fn(the quantity's fields on a patch of the model's); the model's members through it (a
+    //  disabled model's are not there)
+    auto const with_fields = [&](auto& model, auto& patch, auto&& fn) {
+        if constexpr (solver::is_mhd_model_v<std::remove_cvref_t<decltype(model)>>)
+        {
+            if (diag.quantity == "/mhd/V" or diag.quantity == "/mhd/P") // from the conservative
+            {
+                auto& u = patch.states[0];
+                core::PrimitiveConservativeTransformer{model.gamma}.to_primitive(
+                    patch.layout, u.rho, u.rhoV, u.B, u.Etot, u.V, u.P);
+            }
+            fn(diagnostic::quantity_for(model.quantities, diag.quantity)(patch));
+        }
+        else if (model.computed.contains(diag.quantity))
             fn(computed(patch, diag.quantity));
         else
-            fn(diagnostic::quantity_for(models_.hybrid.quantities,
-                                        diag.quantity)(simulator::view(patch)));
+            fn(diagnostic::quantity_for(model.quantities, diag.quantity)(simulator::view(patch)));
     };
     // datasets: the quantity's last path element, then _x.. (vectors), _xx.. (tensors)
     auto const name           = diag.quantity.substr(diag.quantity.rfind('/') + 1);
@@ -280,112 +303,131 @@ void Simulator<opts>::dump_phareh5_(diagnostic::Diagnostic& diag, double const t
     int const last      = only >= 0 ? only : static_cast<int>(levels_.size()) - 1;
     for (int ln = first; ln <= last and static_cast<std::size_t>(ln) < levels_.size(); ++ln)
     {
-        if (is_computed_)
-            compute(static_cast<std::size_t>(ln), diag.quantity);
-        auto& ld            = data_(ln);
-        auto const n_local  = ld.data.size();
-        auto const n_slots  = damn::mpi::max(n_local);
-        auto const patch_at = [&](std::size_t const i) {
-            auto const& p = ld.patches[i];
-            return ph5::patch_path(time_key, ln, p.rank, p.id);
-        };
+        models_.visit(static_cast<std::size_t>(ln), [&](auto& model) {
+            using Model_t = std::remove_cvref_t<decltype(model)>;
+            using Patch_t = Model_t::Patch_t;
+            // the fields' points written: PHARE's ghost box (hybrid: per interp order; MHD: the
+            //  patch's)
+            auto constexpr gw = Patch_t::field_ghost_width;
+            auto constexpr G  = [] {
+                if constexpr (solver::is_mhd_model_v<Model_t>)
+                    return std::uint32_t{gw};
+                else
+                    return ph5::field_ghosts<interp_order>;
+            }();
+            if constexpr (solver::is_hybrid_model_v<Model_t>)
+                if (!particles and is_computed(diag.quantity))
+                    compute(static_cast<std::size_t>(ln), diag.quantity);
+            auto& ld            = model.levels[ln];
+            auto const n_local  = ld.data.size();
+            auto const n_slots  = damn::mpi::max(n_local);
+            auto const patch_at = [&](std::size_t const i) {
+                auto const& p = ld.patches[i];
+                return ph5::patch_path(time_key, ln, p.rank, p.id);
+            };
 
-        if (particles)
-        {
-            auto const pop = solver::hybrid::particle_population(models_.hybrid, diag.quantity);
-            bool const level_ghost = diag.quantity.ends_with("/levelGhost");
-            std::vector<ph5::ParticleColumns<dimension>> columns;
-            for (std::size_t i = 0; i < n_local; ++i)
+            if (particles)
             {
-                auto const& p = ld.data[i]->ions[pop];
-                columns.push_back(ph5::particle_columns(level_ghost ? p.levelGhostParticles()
-                                                                    : p.domainParticles()));
+                if constexpr (solver::is_hybrid_model_v<Model_t>)
+                {
+                    auto const pop = solver::hybrid::particle_population(model, diag.quantity);
+                    bool const level_ghost = diag.quantity.ends_with("/levelGhost");
+                    std::vector<ph5::ParticleColumns<dimension>> columns;
+                    for (std::size_t i = 0; i < n_local; ++i)
+                    {
+                        auto const& p = ld.data[i]->ions[pop];
+                        columns.push_back(ph5::particle_columns(
+                            level_ghost ? p.levelGhostParticles() : p.domainParticles()));
+                    }
+                    using Shape = std::vector<std::size_t>;
+                    for (std::size_t i = 0; i < n_slots; ++i)
+                    {
+                        bool const mine     = i < n_local;
+                        std::size_t const n = mine ? columns[i].n : 0;
+                        auto const at       = mine ? patch_at(i) + "/" : std::string{};
+                        auto const shape
+                            = [&](std::size_t const cols) { return n ? Shape{n, cols} : Shape{0}; };
+                        file->template create_data_set_per_mpi<double>(n ? at + "weight" : "",
+                                                                       shape(1));
+                        file->template create_data_set_per_mpi<int>(n ? at + "iCell" : "",
+                                                                    shape(dimension));
+                        file->template create_data_set_per_mpi<double>(n ? at + "delta" : "",
+                                                                       shape(dimension));
+                        file->template create_data_set_per_mpi<double>(n ? at + "v" : "", shape(3));
+                        file->write_attributes_per_mpi(
+                            mine ? patch_at(i) : "", "ghosts",
+                            std::size_t{ph5::particle_ghosts<interp_order>});
+                    }
+                    for (std::size_t i = 0; i < n_local; ++i)
+                        if (auto const& c = columns[i]; c.n)
+                        {
+                            auto const at = patch_at(i) + "/";
+                            file->write_data_set_flat(at + "weight", c.weight.data());
+                            file->write_data_set_flat(at + "iCell", c.iCell.data());
+                            file->write_data_set_flat(at + "delta", c.delta.data());
+                            file->write_data_set_flat(at + "v", c.v.data());
+                        }
+                }
             }
-            using Shape = std::vector<std::size_t>;
+            else
+            {
+                // every component of every local patch, its shape and values
+                std::size_t components = 0;
+                for (std::size_t i = 0; i < n_local and components == 0; ++i)
+                    with_fields(model, *ld.data[i], [&](auto const& f) { components = f.size(); });
+                components = damn::mpi::max(components);
+                std::vector<std::vector<std::vector<std::size_t>>> shapes(n_local);
+                std::vector<std::vector<std::vector<Float>>> values(n_local);
+                for (std::size_t i = 0; i < n_local; ++i)
+                    with_fields(model, *ld.data[i], [&](auto const& grids) {
+                        shapes[i].resize(grids.size());
+                        values[i].resize(grids.size());
+                        for (std::size_t c = 0; c < grids.size(); ++c)
+                            ph5::field_values<gw, G>(*grids[c], ld.patches[i].box, shapes[i][c],
+                                                     values[i][c]);
+                    });
+                for (std::size_t i = 0; i < n_slots; ++i)
+                    for (std::size_t c = 0; c < components; ++c)
+                    {
+                        bool const mine = i < n_local;
+                        auto const at   = mine ? patch_at(i) + "/" + component_name(c, components)
+                                               : std::string{};
+                        file->template create_data_set_per_mpi<Float>(
+                            at, mine ? shapes[i][c] : std::vector<std::size_t>(dimension, 0));
+                        file->write_attributes_per_mpi(at, "ghosts", std::size_t{G});
+                    }
+                for (std::size_t i = 0; i < n_local; ++i)
+                    for (std::size_t c = 0; c < components; ++c)
+                        file->write_data_set_flat(patch_at(i) + "/" + component_name(c, components),
+                                                  values[i][c].data());
+            }
+
+            // the patches' attributes (PHARE's getPatchProperties)
             for (std::size_t i = 0; i < n_slots; ++i)
             {
-                bool const mine     = i < n_local;
-                std::size_t const n = mine ? columns[i].n : 0;
-                auto const at       = mine ? patch_at(i) + "/" : std::string{};
-                auto const shape
-                    = [&](std::size_t const cols) { return n ? Shape{n, cols} : Shape{0}; };
-                file->template create_data_set_per_mpi<double>(n ? at + "weight" : "", shape(1));
-                file->template create_data_set_per_mpi<int>(n ? at + "iCell" : "",
-                                                            shape(dimension));
-                file->template create_data_set_per_mpi<double>(n ? at + "delta" : "",
-                                                               shape(dimension));
-                file->template create_data_set_per_mpi<double>(n ? at + "v" : "", shape(3));
-                file->write_attributes_per_mpi(mine ? patch_at(i) : "", "ghosts",
-                                               std::size_t{ph5::particle_ghosts<interp_order>});
+                bool const mine = i < n_local;
+                auto const at   = mine ? patch_at(i) : std::string{};
+                std::vector<int> lower(dimension), upper(dimension);
+                std::vector<std::uint32_t> cells(dimension);
+                std::vector<double> origin(dimension);
+                if (mine)
+                {
+                    auto const& layout = ld.data[i]->layout;
+                    for (std::size_t d = 0; d < dimension; ++d)
+                    {
+                        lower[d]  = layout.cells.lower[d];
+                        upper[d]  = layout.cells.upper[d];
+                        cells[d]  = static_cast<std::uint32_t>(upper[d] - lower[d] + 1);
+                        origin[d] = layout.origin[d];
+                    }
+                }
+                file->write_attributes_per_mpi(at, "origin", origin);
+                file->write_attributes_per_mpi(at, "nbrCells", cells);
+                file->write_attributes_per_mpi(at, "lower", lower);
+                file->write_attributes_per_mpi(at, "upper", upper);
+                file->write_attributes_per_mpi(at, "mpi_rank", static_cast<std::size_t>(rank_));
             }
-            for (std::size_t i = 0; i < n_local; ++i)
-                if (auto const& c = columns[i]; c.n)
-                {
-                    auto const at = patch_at(i) + "/";
-                    file->write_data_set_flat(at + "weight", c.weight.data());
-                    file->write_data_set_flat(at + "iCell", c.iCell.data());
-                    file->write_data_set_flat(at + "delta", c.delta.data());
-                    file->write_data_set_flat(at + "v", c.v.data());
-                }
-        }
-        else
-        {
-            // every component of every local patch, its shape and values
-            std::size_t components = 0;
-            for (std::size_t i = 0; i < n_local and components == 0; ++i)
-                with_fields(*ld.data[i], [&](auto const& f) { components = f.size(); });
-            components = damn::mpi::max(components);
-            std::vector<std::vector<std::vector<std::size_t>>> shapes(n_local);
-            std::vector<std::vector<std::vector<Float>>> values(n_local);
-            for (std::size_t i = 0; i < n_local; ++i)
-                with_fields(*ld.data[i], [&](auto const& grids) {
-                    shapes[i].resize(grids.size());
-                    values[i].resize(grids.size());
-                    for (std::size_t c = 0; c < grids.size(); ++c)
-                        ph5::field_values<gw, G>(*grids[c], ld.patches[i].box, shapes[i][c],
-                                                 values[i][c]);
-                });
-            for (std::size_t i = 0; i < n_slots; ++i)
-                for (std::size_t c = 0; c < components; ++c)
-                {
-                    bool const mine = i < n_local;
-                    auto const at
-                        = mine ? patch_at(i) + "/" + component_name(c, components) : std::string{};
-                    file->template create_data_set_per_mpi<Float>(
-                        at, mine ? shapes[i][c] : std::vector<std::size_t>(dimension, 0));
-                    file->write_attributes_per_mpi(at, "ghosts", std::size_t{G});
-                }
-            for (std::size_t i = 0; i < n_local; ++i)
-                for (std::size_t c = 0; c < components; ++c)
-                    file->write_data_set_flat(patch_at(i) + "/" + component_name(c, components),
-                                              values[i][c].data());
-        }
-
-        // the patches' attributes (PHARE's getPatchProperties)
-        for (std::size_t i = 0; i < n_slots; ++i)
-        {
-            bool const mine = i < n_local;
-            auto const at   = mine ? patch_at(i) : std::string{};
-            std::vector<int> lower(dimension), upper(dimension);
-            std::vector<std::uint32_t> cells(dimension);
-            std::vector<double> origin(dimension);
-            if (mine)
-            {
-                auto const& layout = ld.data[i]->layout;
-                for (std::size_t d = 0; d < dimension; ++d)
-                {
-                    lower[d]  = layout.cells.lower[d];
-                    upper[d]  = layout.cells.upper[d];
-                    cells[d]  = static_cast<std::uint32_t>(upper[d] - lower[d] + 1);
-                    origin[d] = layout.origin[d];
-                }
-            }
-            file->write_attributes_per_mpi(at, "origin", origin);
-            file->write_attributes_per_mpi(at, "nbrCells", cells);
-            file->write_attributes_per_mpi(at, "lower", lower);
-            file->write_attributes_per_mpi(at, "upper", upper);
-            file->write_attributes_per_mpi(at, "mpi_rank", static_cast<std::size_t>(rank_));
-        }
+        });
     }
 
     // the file's attributes (PHARE's fileAttributes_, the population's, the diagnostic's)
@@ -404,15 +446,18 @@ void Simulator<opts>::dump_phareh5_(diagnostic::Diagnostic& diag, double const t
     file->write_attribute("/", "cell_width", cell_width);
     file->write_attribute("/", "origin", origin);
     file->write_attribute("/", "periodicities", periodic);
-    auto const& ions = dict_["simulation"]["ions"];
-    for (std::size_t i = 0; i < models_.hybrid.population_names.size(); ++i)
-        if (diag.quantity.starts_with("/ions/pop/" + models_.hybrid.population_names[i] + "/"))
-        {
-            auto const& pop = ions["pop" + std::to_string(i)];
-            file->write_attribute("/", "pop_mass", pop["mass"].template to<double>());
-            file->write_attribute("/", "pop_charge",
-                                  pop["particle_initializer"]["charge"].template to<double>());
-        }
+    if constexpr (Models_t::hybrid_on)
+    {
+        auto const& ions = dict_["simulation"]["ions"];
+        for (std::size_t i = 0; i < models_.hybrid.population_names.size(); ++i)
+            if (diag.quantity.starts_with("/ions/pop/" + models_.hybrid.population_names[i] + "/"))
+            {
+                auto const& pop = ions["pop" + std::to_string(i)];
+                file->write_attribute("/", "pop_mass", pop["mass"].template to<double>());
+                file->write_attribute("/", "pop_charge",
+                                      pop["particle_initializer"]["charge"].template to<double>());
+            }
+    }
     for (auto const& [key, value] : diag.attributes)
         file->write_attribute("/py_attrs", key, value);
 

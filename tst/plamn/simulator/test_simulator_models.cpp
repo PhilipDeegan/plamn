@@ -10,6 +10,8 @@
 #include "plamn/simulator/simulator_def.hpp"
 
 #include "gtest/gtest.h"
+#include "highfive/H5File.hpp"
+#include <mpi.h>
 
 #include "damn/core/memory/span.hpp"
 #include "plamn/core/boundary/boundary_defs.hpp"
@@ -18,7 +20,9 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <algorithm>
 #include <memory>
+#include <utility>
 #include <numbers>
 #include <numeric>
 #include <stdexcept>
@@ -137,6 +141,61 @@ TEST(SimulatorModels, mhdMassStaysBetweenWalls)
     EXPECT_NEAR(total(), mass, 1e-12 * mass);
 }
 
+// phareh5 files of an MHD level, PHARE's MHD diagnostics' (/mhd/<quantity>, B as /EM_B): per
+//  patch the field on its ghost box (the domain in the middle), V converted from the
+//  conservative state
+TEST(SimulatorModels, mhdDiagnosticsAsPhare)
+{
+    auto input            = mhd_input({"MHDModel"}, function(wave), 8);
+    auto& diags           = input["simulation"]["diagnostics"];
+    std::string const dir = ::testing::TempDir() + "plamn_mhd_diags";
+    diags["format"]       = std::string{"phareh5"};
+    diags["filePath"]     = dir;
+    diags["mode"]         = std::string{"overwrite"};
+    auto const add = [&](std::string const& type, std::size_t const n, std::string const& q) {
+        auto& d               = diags[type][type + std::to_string(n)];
+        d["quantity"]         = q;
+        d["write_timestamps"] = std::vector<double>{0.};
+    };
+    add("mhd", 0, "/mhd/rho");
+    add("mhd", 1, "/mhd/V");
+    add("electromag", 0, "/EM_B");
+    Simulator<mhd_only> sim{input};
+    sim.initialize();
+    ASSERT_TRUE(sim.dump_diagnostics(0., .01));
+
+    // dataset name -> its domain values, patch by patch (in level order: 1D, one rank)
+    auto const read = [&](std::string const& file_name, std::string const& name) {
+        HighFive::File file{dir + "/" + file_name, HighFive::File::ReadOnly};
+        auto const level = file.getGroup("/t/0.0000000000/pl0");
+        std::vector<std::pair<int, std::vector<double>>> patches;
+        for (auto const& p : level.listObjectNames())
+        {
+            auto const patch = level.getGroup(p);
+            auto const lower = patch.getAttribute("lower").read<std::vector<int>>()[0];
+            auto const n     = patch.getAttribute("nbrCells").read<std::vector<std::uint32_t>>()[0];
+            auto const all   = patch.getDataSet(name).read<std::vector<double>>();
+            auto const ghosts = (all.size() - n) / 2; // cell centred: n domain values
+            patches.emplace_back(
+                lower, std::vector<double>(all.begin() + ghosts, all.begin() + ghosts + n));
+        }
+        std::ranges::sort(patches);
+        std::vector<double> values;
+        for (auto const& [lower, v] : patches)
+            values.insert(values.end(), v.begin(), v.end());
+        return values;
+    };
+    auto const rho = read("mhd_rho.h5", "rho");
+    ASSERT_EQ(rho.size(), cells);
+    auto const expected = sim.domain_values("rho");
+    for (std::size_t i = 0; i < cells; ++i)
+        EXPECT_FLOAT_EQ(rho[i], expected[i]); // written as float (PLAMN_DIAG_DOUBLES 0)
+    for (auto const vy : read("mhd_V.h5", "V_y"))
+        EXPECT_NEAR(vy, .2, 1e-6);
+    for (auto const bz : read("EM_B.h5", "EM_B_z"))
+        EXPECT_NEAR(bz, .2, 1e-6);
+}
+
 TEST(SimulatorModels, modelsTheBuildLacksRefused)
 {
     EXPECT_THROW((Simulator<mhd_only>{mhd_input({"HybridModel"}, constant(1.))}),
@@ -145,8 +204,12 @@ TEST(SimulatorModels, modelsTheBuildLacksRefused)
 
 } // namespace plamn
 
+// MPI: the diagnostics' files are parallel HDF5's
 int main(int argc, char** argv)
 {
+    MPI_Init(&argc, &argv);
     ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
+    int const result = RUN_ALL_TESTS();
+    MPI_Finalize();
+    return result;
 }

@@ -61,7 +61,7 @@ NO_DISCARD inline std::vector<Diagnostic> diagnostics_from(initializer::Dict con
     if (!dict["simulation"].contains("diagnostics"))
         return out;
     auto const& diags = dict["simulation"]["diagnostics"];
-    for (auto const* type : {"electromag", "fluid", "particle"})
+    for (auto const* type : {"electromag", "fluid", "mhd", "particle"})
     {
         if (!diags.contains(type))
             continue;

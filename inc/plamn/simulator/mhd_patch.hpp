@@ -40,11 +40,12 @@ namespace plamn::simulator
 template<auto opts>
 struct MHDPatch
 {
-    using Types    = core::PLAMN_Types<opts>::MHD;
-    using Layout_t = Types::Layout_t;
-    using Grid_t   = Types::Grid_t;
-    using S        = core::MHDQuantity::Scalar;
-    using V        = core::MHDQuantity::Vector;
+    using Types      = core::PLAMN_Types<opts>::MHD;
+    using Layout_t   = Types::Layout_t;
+    using Grid_t     = Types::Grid_t;
+    using field_type = Grid_t; // what diagnostics read (diagnostic/quantities.hpp)
+    using S          = core::MHDQuantity::Scalar;
+    using V          = core::MHDQuantity::Vector;
 
     auto static constexpr dimension         = Layout_t::dimension;
     auto static constexpr field_ghost_width = Layout_t::ghost_width;

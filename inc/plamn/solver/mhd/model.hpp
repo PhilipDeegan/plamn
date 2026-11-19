@@ -15,6 +15,7 @@
 #include "plamn/core/boundary/boundary.hpp"
 #include "plamn/core/models/options/mhd_options_def.hpp"
 #include "plamn/core/models/quantities/mhd_quantities.hpp"
+#include "plamn/diagnostic/quantities.hpp"
 #include "plamn/core/numerics/reconstructions/linear.hpp"
 #include "plamn/initializer/data_provider.hpp"
 #include "plamn/simulator/mhd_patch.hpp"
@@ -79,6 +80,7 @@ struct MHDModel<opts, true>
     using LevelData_t    = damn::amr::LevelData<opts.dimension, std::unique_ptr<Patch_t>>;
 
     std::map<int, LevelData_t> levels; // the levels the model is active on
+    std::map<std::string, diagnostic::Accessor<Patch_t>> quantities{}; // diagnostics' fields
 
     double gamma                       = 5. / 3.;
     MHDOpts::TimeIntegratorType scheme = MHDOpts::TimeIntegratorType::TVDRK2;

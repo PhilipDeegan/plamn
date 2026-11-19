@@ -4,6 +4,7 @@
 // a diagnostic quantity's fields on a patch (PHARE's diagnostics' accessors), whatever the format
 //   hybrid_quantities(population_names)  quantity -> its fields on a hybrid patch's view,
 //                                        components in file order
+//   mhd_quantities<Patch>()              the same on an MHD patch
 //   quantity_for(quantities, quantity)   an unknown quantity throws
 
 #include "damn/core/def.hpp"
@@ -14,6 +15,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <utility>
 
 namespace plamn::diagnostic
 {
@@ -44,6 +46,29 @@ hybrid_quantities(std::vector<std::string> const& population_names)
             = [i](View const& v) { return Fields{&v.populations[i].charge_density}; };
         q[pop + "/flux"] = [i, vec](View const& v) { return vec(v.populations[i].flux); };
     }
+    return q;
+}
+
+// quantity -> its grids on an MHD patch (simulator::MHDPatch), its advanced state's (PHARE's
+//  MHDDiagnosticWriter /mhd/..., B and E as the electromag's). V and P: as the patch has them, the
+//  writer converts the conservative state to them first (PHARE's compute)
+template<typename Patch>
+NO_DISCARD std::map<std::string, Accessor<Patch>> mhd_quantities()
+{
+    using Fields = std::vector<typename Patch::field_type const*>;
+    // std::addressof: Grid overloads operator&
+    auto const vec = [](auto const& vf) {
+        return Fields{std::addressof(vf.grids[0]), std::addressof(vf.grids[1]),
+                      std::addressof(vf.grids[2])};
+    };
+    std::map<std::string, Accessor<Patch>> q;
+    q["/mhd/rho"]  = [](Patch const& p) { return Fields{std::addressof(p.states[0].rho)}; };
+    q["/mhd/rhoV"] = [=](Patch const& p) { return vec(p.states[0].rhoV); };
+    q["/mhd/Etot"] = [](Patch const& p) { return Fields{std::addressof(p.states[0].Etot)}; };
+    q["/mhd/V"]    = [=](Patch const& p) { return vec(p.states[0].V); };
+    q["/mhd/P"]    = [](Patch const& p) { return Fields{std::addressof(p.states[0].P)}; };
+    q["/EM_B"]     = [=](Patch const& p) { return vec(p.states[0].B); };
+    q["/EM_E"]     = [=](Patch const& p) { return vec(p.E); };
     return q;
 }
 
