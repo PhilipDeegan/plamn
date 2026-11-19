@@ -10,7 +10,8 @@ quantity, on the finest level's mesh (--interp nearest, the default, or linear):
 points where no finer level has any, interpolated onto the finest cell centres over the whole
 domain (as pyphare's merged fields: flat_finest_field, then make_interpolator). --interp none:
 each level as it is: 1D, a line per level (finer levels marked); 2D, an image per level, finer
-levels over coarser ones. --save DIR: a PNG per drawing (DIR/<step>.png), no window. Quantities are resource
+levels over coarser ones. 2D colour map: --cmap (Spectral_r, as pyphare's hierarchy plots).
+--save DIR: a PNG per drawing (DIR/<step>.png), no window. Quantities are resource
 names (Simulator.level_field): by default the hybrid model's B and E (EM_B_x, ...), the MHD
 model's rho, P, rhoV_x, B_y, B_z. Under MPI every rank gathers, rank 0 draws.
 """
@@ -36,6 +37,8 @@ def cli_args_parser():
     parser.add_argument("--quantities", nargs="+", default=None, help="resource names to draw")
     parser.add_argument("--interp", default="nearest", choices=["nearest", "linear", "none"],
                         help="onto the finest mesh (none: each level as it is)")
+    parser.add_argument("--cmap", default="Spectral_r",
+                        help="2D colour map (pyphare's hierarchy plots: Spectral_r)")
     return parser
 
 
@@ -57,7 +60,7 @@ def is_mhd(sim):
 class Plotter:
     """draws the quantities of a running simulation (rank 0)"""
 
-    def __init__(self, cpp, quantities, save, interp="nearest"):
+    def __init__(self, cpp, quantities, save, interp="nearest", cmap="Spectral_r"):
         import matplotlib
         import matplotlib.pyplot as plt
 
@@ -68,7 +71,7 @@ class Plotter:
             plt.switch_backend("TkAgg")
 
         self.plt, self.cpp, self.quantities, self.save = plt, cpp, quantities, save
-        self.interp = interp
+        self.interp, self.cmap = interp, cmap
         self.draw = cpp.rank() == 0
         self.dx = cpp.cell_width()
         self.ndim = len(self.dx)
@@ -109,13 +112,13 @@ class Plotter:
             ax.clear()
             if self.interp != "none":
                 x, v = finest(levels, self.dx, self.cpp.domain_box(), self.interp)
-                mappable = self.draw_finest(ax, x, v, len(levels))
+                mappable = self.draw_finest(ax, x, v, len(levels), self.cmap)
                 if mappable is not None:
                     self.colorbars[ax] = ax.figure.colorbar(mappable, ax=ax)
             elif self.ndim == 1:
                 self.draw_1d(ax, levels)
             else:
-                mappable = self.draw_2d(ax, levels)
+                mappable = self.draw_2d(ax, levels, self.cmap)
                 if mappable is not None:
                     self.colorbars[ax] = ax.figure.colorbar(mappable, ax=ax)
             ax.set_title(name)
@@ -128,7 +131,7 @@ class Plotter:
             self.plt.pause(0.05)
 
     @staticmethod
-    def draw_finest(ax, x, v, n_levels):
+    def draw_finest(ax, x, v, n_levels, cmap=None):
         """the finest mesh's values: 1D a line, 2D an image; the image, for a colourbar"""
         label = f"{n_levels} level{'s' * (n_levels > 1)} on the finest mesh"
         if len(x) == 1:
@@ -138,7 +141,7 @@ class Plotter:
         dx, dy = (c[1] - c[0] if len(c) > 1 else 1.0 for c in x)
         extent = [x[0][0] - dx / 2, x[0][-1] + dx / 2, x[1][0] - dy / 2, x[1][-1] + dy / 2]
         mappable = ax.imshow(v.T, origin="lower", extent=extent, aspect="auto",
-                             interpolation="nearest")
+                             interpolation="nearest", cmap=cmap)
         ax.set_xlabel(label, fontsize="small")
         return mappable
 
@@ -150,7 +153,7 @@ class Plotter:
             ax.legend(fontsize="small")
 
     @staticmethod
-    def draw_2d(ax, levels):
+    def draw_2d(ax, levels, cmap=None):
         """an image per level over its points' bounding box (NaN where it has none), the axes
         over all of them (each image would set them to its own); the last image, for a
         colourbar"""
@@ -172,7 +175,7 @@ class Plotter:
             extent = [lo[0] - spacing[0] / 2, hi[0] + spacing[0] / 2,
                       lo[1] - spacing[1] / 2, hi[1] + spacing[1] / 2]
             mappable = ax.imshow(image.T, origin="lower", extent=extent, vmin=vmin, vmax=vmax,
-                                 aspect="auto", interpolation="nearest")
+                                 aspect="auto", interpolation="nearest", cmap=cmap)
             extents.append(extent)
         if extents:
             e = np.asarray(extents)
@@ -248,7 +251,7 @@ def main(argv=None):
     simulator = ph.Simulator(sim, log_to_file=False).setup().initialize()
     cpp = simulator.cpp_sim
     quantities = args.quantities or (MHD_QUANTITIES if is_mhd(sim) else HYBRID_QUANTITIES)
-    plot = Plotter(cpp, quantities, args.save, args.interp) if args.watch else None
+    plot = Plotter(cpp, quantities, args.save, args.interp, args.cmap) if args.watch else None
     step = 0
     if plot:
         plot(step)
