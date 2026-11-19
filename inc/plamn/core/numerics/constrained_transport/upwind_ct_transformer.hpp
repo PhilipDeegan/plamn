@@ -84,6 +84,27 @@ public:
                         dRz, E);
     }
 
+    // Hall: as operator(), E_hall (the faces' jt, rhot read); x, y, z: each face direction's
+    //  CTFace with its jt, rhot set; untiled fields only (tiles / GPU: not yet)
+    template<typename Face>
+    void hall(auto const& layout, auto const& B, Face const& x, Face const& y, Face const& z,
+              auto& E) const
+    {
+        static_assert(not is_field_tile_set_v<std::decay_t<decltype(x.aL)>>,
+                      "plamn: Hall MHD on tiles: not yet");
+        auto constexpr static dim = std::decay_t<decltype(layout)>::dimension;
+        mkn::kul::for_N<3>([&](auto c) {
+            if constexpr (CT::template has_equation<c, dim>)
+                eval_on_box(
+                    E[c], box_for(layout, E[c]),
+                    [] DAMN_ALL(auto const& ijk, auto const& B_, auto const& x_, auto const& y_,
+                                auto const& z_, auto& Ec) {
+                        Ec(ijk) = CT::template E_hall<decltype(c)::value, dim>(ijk, B_, x_, y_, z_);
+                    },
+                    B, x, y, z, E[c]);
+        });
+    }
+
     // one tile of the tiled fields, eg as one task of a thread pool; the arguments as
     //  operator()'s, without the layout: B, x's, y's, z's CT fields, E
     template<typename... Args>
