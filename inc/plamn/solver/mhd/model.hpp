@@ -16,6 +16,7 @@
 #include "plamn/core/models/options/mhd_options_def.hpp"
 #include "plamn/core/models/quantities/mhd_quantities.hpp"
 #include "plamn/diagnostic/quantities.hpp"
+#include "plamn/core/numerics/godunov/hll.hpp"
 #include "plamn/core/numerics/reconstructions/constant.hpp"
 #include "plamn/core/numerics/reconstructions/linear.hpp"
 #include "plamn/core/numerics/reconstructions/mp5.hpp"
@@ -44,8 +45,6 @@ namespace mhd
     {
         using R = MHDOpts::ReconstructionType;
         using L = MHDOpts::SlopeLimiterType;
-        static_assert(opts.riemann_solver_type == MHDOpts::RiemannSolverType::Rusanov,
-                      "plamn: only the Rusanov Riemann solver is ported");
         if constexpr (opts.reconstruction_type == R::Constant)
             return core::ConstantReconstruction<>{};
         else if constexpr (opts.reconstruction_type == R::Linear)
@@ -72,6 +71,22 @@ namespace mhd
     template<auto opts>
     using Reconstruction_t = decltype(reconstruction<opts>());
 
+    // the Riemann solver of the simulation's options
+    template<auto opts>
+    auto constexpr riemann()
+    {
+        using S = MHDOpts::RiemannSolverType;
+        static_assert(opts.riemann_solver_type == S::Rusanov or opts.riemann_solver_type == S::HLL,
+                      "plamn: the Rusanov and HLL Riemann solvers are ported (HLLD: not yet)");
+        if constexpr (opts.riemann_solver_type == S::HLL)
+            return core::HLLRiemann{};
+        else
+            return core::RusanovRiemann{};
+    }
+
+    template<auto opts>
+    using Riemann_t = decltype(riemann<opts>());
+
     // the states (the advanced one and the stages) a scheme uses
     NO_DISCARD inline std::size_t n_states(MHDOpts::TimeIntegratorType const scheme)
     {
@@ -95,6 +110,7 @@ template<auto opts>
 struct MHDModel<opts, true>
 {
     using Reconstruction = mhd::Reconstruction_t<opts>;
+    using Riemann        = mhd::Riemann_t<opts>;
     using Quantity       = core::MHDQuantity;
     using Patch_t        = simulator::MHDPatch<opts>;
     using LevelData_t    = damn::amr::LevelData<opts.dimension, std::unique_ptr<Patch_t>>;

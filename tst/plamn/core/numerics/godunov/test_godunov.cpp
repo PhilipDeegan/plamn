@@ -43,6 +43,38 @@ TEST(GodunovPoint, linear_reconstruction)
     EXPECT_DOUBLE_EQ(r2, 1.);
 }
 
+// HLL (PHARE's): equal states give the physical flux; a face every wave crosses one way (both
+//  speeds of one sign) takes the upwind flux and, the clipped speeds, upwind CT inputs
+TEST(GodunovPoint, hll_consistency_and_upwinding)
+{
+    MHDPrimitive const u{1.2, {.3, -.2, .1}, {.7, .4, -.5}, .9};
+    mkn::kul::for_N<3>([&](auto dir) {
+        auto const r = hll<dir>(gamma_, u, u);
+        auto const f = ideal_mhd_flux<dir>(gamma_, u);
+        EXPECT_DOUBLE_EQ(r.F.rho, f.rho);
+        EXPECT_DOUBLE_EQ(r.F.Etot, f.Etot);
+        for (std::size_t c = 0; c < 3; ++c)
+        {
+            EXPECT_DOUBLE_EQ(r.F.rhoV[c], f.rhoV[c]);
+            EXPECT_DOUBLE_EQ(r.F.B[c], f.B[c]);
+            EXPECT_NEAR(r.vt[c], u.V[c], 1e-15);
+        }
+    });
+
+    // faster than every wave along x, to the right: the left state's flux, CT all from the left
+    MHDPrimitive const fast_l{1., {10., .1, 0.}, {1., .2, .1}, .5};
+    MHDPrimitive const fast_r{.5, {9., -.1, .2}, {1., -.3, .1}, .2};
+    auto const r = hll<0>(gamma_, fast_l, fast_r);
+    auto const f = ideal_mhd_flux<0>(gamma_, fast_l);
+    EXPECT_EQ(r.F.rho, f.rho);
+    EXPECT_EQ(r.F.Etot, f.Etot);
+    EXPECT_DOUBLE_EQ(r.uct_coefs[0], 1.); // sr (1 / sr): to the last bits, as PHARE's
+    EXPECT_EQ(r.uct_coefs[1], 0.);
+    EXPECT_EQ(r.uct_coefs[2], 0.);
+    for (std::size_t c = 0; c < 3; ++c)
+        EXPECT_DOUBLE_EQ(r.vt[c], fast_l.V[c]);
+}
+
 TEST(GodunovPoint, rusanov_consistency)
 {
     // equal left and right states: no dissipation, the physical flux

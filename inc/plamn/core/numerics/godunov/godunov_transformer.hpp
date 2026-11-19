@@ -8,6 +8,7 @@
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
 #include "plamn/core/numerics/godunov/godunov_face.hpp"
+#include "plamn/core/numerics/godunov/hll.hpp"
 
 #include <array>
 #include <cstddef>
@@ -39,10 +40,10 @@ struct GodunovTile
 //  with getGrow), as PHARE's Godunov::operator() for one direction
 //  untiled: the patch's fields, or one tile's views (on_tile)
 //  tiled:   every tile of the patch, CPU tile by tile, GPU one launch with a block per tile
-template<typename Reconstruction>
+template<typename Reconstruction, typename Riemann = RusanovRiemann>
 class GodunovTransformer
 {
-    using Face_t = GodunovFace<Reconstruction>;
+    using Face_t = GodunovFace<Reconstruction, Riemann>;
 
 public:
     explicit GodunovTransformer(double const gamma)

@@ -13,6 +13,7 @@
 #include "plamn/core/numerics/primitive_conservative/primitive_conservative_transformer.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/geometry/point.hpp"
+#include "plamn/core/numerics/godunov/hll.hpp"
 
 #include <cstddef>
 #include <type_traits>
@@ -96,7 +97,7 @@ namespace detail
 
 // the steps the integrators are made of (PHARE's ComputeFluxes, EulerUsingComputedFlux,
 //  BaseMHDTimestepper's butcher sums, RKUtils), each over the level
-template<typename Reconstruction>
+template<typename Reconstruction, typename Riemann = RusanovRiemann>
 class MHDSteps
 {
 public:
@@ -116,7 +117,7 @@ public:
             auto constexpr static dim = std::decay_t<decltype(p.layout)>::dimension;
             auto& u                   = p.states[s];
             PrimitiveConservativeTransformer const pc{gamma_};
-            GodunovTransformer<Reconstruction> const godunov{gamma_};
+            GodunovTransformer<Reconstruction, Riemann> const godunov{gamma_};
 
             pc.to_primitive(p.layout, u.rho, u.rhoV, u.B, u.Etot, u.V, u.P);
             if (eta_ > 0) // J = curl B, the dissipative E = eta J on E's domain box
@@ -300,11 +301,11 @@ private:
 
 
 // the integrators: operator()(level, t0, t1) advances every patch's states[0] from t0 to t1
-template<typename Reconstruction>
+template<typename Reconstruction, typename Riemann = RusanovRiemann>
 struct EulerIntegrator
 {
     static constexpr std::size_t n_states = 1;
-    MHDSteps<Reconstruction> steps;
+    MHDSteps<Reconstruction, Riemann> steps;
 
     void operator()(auto& level, double const t0, double const t1) const
     {
@@ -314,17 +315,17 @@ struct EulerIntegrator
     }
 };
 
-template<typename Reconstruction>
+template<typename Reconstruction, typename Riemann = RusanovRiemann>
 struct TVDRK2Integrator
 {
     static constexpr std::size_t n_states = 2;
     static constexpr auto w0              = 0.5;
     static constexpr auto w1              = 0.5;
-    MHDSteps<Reconstruction> steps;
+    MHDSteps<Reconstruction, Riemann> steps;
 
     void operator()(auto& level, double const t0, double const t1) const
     {
-        using S = MHDSteps<Reconstruction>;
+        using S = MHDSteps<Reconstruction, Riemann>;
         steps.reset_butcher(level);
         steps.euler(level, 0, 1, t1, t1 - t0);
         steps.accumulate_butcher(level, w0);
@@ -334,7 +335,7 @@ struct TVDRK2Integrator
     }
 };
 
-template<typename Reconstruction>
+template<typename Reconstruction, typename Riemann = RusanovRiemann>
 struct TVDRK3Integrator
 {
     static constexpr std::size_t n_states = 3;
@@ -342,11 +343,11 @@ struct TVDRK3Integrator
     static constexpr auto w01             = 0.25;
     static constexpr auto w10             = 1. / 3.;
     static constexpr auto w11             = 2. / 3.;
-    MHDSteps<Reconstruction> steps;
+    MHDSteps<Reconstruction, Riemann> steps;
 
     void operator()(auto& level, double const t0, double const t1) const
     {
-        using S       = MHDSteps<Reconstruction>;
+        using S       = MHDSteps<Reconstruction, Riemann>;
         using P       = std::pair<double, std::size_t>;
         auto const dt = t1 - t0;
         steps.reset_butcher(level);
@@ -363,7 +364,7 @@ struct TVDRK3Integrator
     }
 };
 
-template<typename Reconstruction>
+template<typename Reconstruction, typename Riemann = RusanovRiemann>
 struct SSPRK4_5Integrator
 {
     static constexpr std::size_t n_states = 5;
@@ -386,11 +387,11 @@ struct SSPRK4_5Integrator
     static constexpr double c2            = w11 * c1 + w12;
     static constexpr double c3            = w21 * c2 + w22;
     static constexpr double c4            = w31 * c3 + w32;
-    MHDSteps<Reconstruction> steps;
+    MHDSteps<Reconstruction, Riemann> steps;
 
     void operator()(auto& level, double const t0, double const t1) const
     {
-        using S       = MHDSteps<Reconstruction>;
+        using S       = MHDSteps<Reconstruction, Riemann>;
         using P       = std::pair<double, std::size_t>;
         auto const dt = t1 - t0;
         steps.reset_butcher(level);

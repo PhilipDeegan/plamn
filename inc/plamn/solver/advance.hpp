@@ -20,18 +20,19 @@ namespace plamn::solver
 template<auto opts>
 void advance(MHDModel<opts> const& model, auto& level, double const t0, double const t1)
 {
-    using R = MHDModel<opts>::Reconstruction;
-    core::MHDSteps<R> const steps{model.gamma, model.resistivity};
+    using R  = MHDModel<opts>::Reconstruction;
+    using RS = MHDModel<opts>::Riemann;
+    core::MHDSteps<R, RS> const steps{model.gamma, model.resistivity};
     switch (model.scheme)
     {
         case MHDOpts::TimeIntegratorType::Euler:
-            return core::EulerIntegrator<R>{steps}(level, t0, t1);
+            return core::EulerIntegrator<R, RS>{steps}(level, t0, t1);
         case MHDOpts::TimeIntegratorType::TVDRK2:
-            return core::TVDRK2Integrator<R>{steps}(level, t0, t1);
+            return core::TVDRK2Integrator<R, RS>{steps}(level, t0, t1);
         case MHDOpts::TimeIntegratorType::TVDRK3:
-            return core::TVDRK3Integrator<R>{steps}(level, t0, t1);
+            return core::TVDRK3Integrator<R, RS>{steps}(level, t0, t1);
         case MHDOpts::TimeIntegratorType::SSPRK4_5:
-            return core::SSPRK4_5Integrator<R>{steps}(level, t0, t1);
+            return core::SSPRK4_5Integrator<R, RS>{steps}(level, t0, t1);
         default: throw std::runtime_error("plamn: no MHD time integration scheme");
     }
 }
