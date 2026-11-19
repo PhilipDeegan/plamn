@@ -33,6 +33,11 @@ class WatchTest(unittest.TestCase):
     def test_hybrid(self):
         self.check("alfven1d", steps=10, every=5, quantities=["EM_B_y", "EM_B_z"])
 
+    def test_view3d_missing_says_how_to_build(self):
+        with self.assertRaises(FileNotFoundError) as e:
+            watch.main(["mhd_tube", "--watch", "1", "--view3d", "/no/view3d"])
+        self.assertIn("res/build_3d_view.py", str(e.exception))
+
     def test_levels_as_they_are(self):
         self.check("alfven1d", steps=10, every=10, quantities=["EM_B_y"], interp="none")
 

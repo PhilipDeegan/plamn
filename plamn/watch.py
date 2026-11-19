@@ -16,7 +16,8 @@ names (Simulator.level_field): by default the hybrid model's B and E (EM_B_x, ..
 model's rho, P, rhoV_x, B_y, B_z. Under MPI every rank gathers, rank 0 draws.
 
 --view3d [PATH]: instead of matplotlib, the first quantity in plamn's mathplot viewer (view3d, a
-separate program: PATH, else $PLAMN_VIEW3D), any dimension: rank 0 starts it and writes it a frame
+separate program, etc/view3d: PATH, else $PLAMN_VIEW3D, else its build, made by
+python3 res/build_3d_view.py), any dimension: rank 0 starts it and writes it a frame
 per drawing (the finest mesh's cell centres and values, or with --interp none each level's
 points where no finer level has any, sized by level). In its window: P pauses the run (every
 rank waits) and plays it, N runs it to the next drawing while paused, 1-7 slices, 0 the whole
@@ -46,9 +47,9 @@ def cli_args_parser():
     parser.add_argument("--quantities", nargs="+", default=None, help="resource names to draw")
     parser.add_argument("--interp", default="nearest", choices=["nearest", "linear", "none"],
                         help="onto the finest mesh (none: each level as it is)")
-    parser.add_argument("--view3d", nargs="?", const=os.environ.get("PLAMN_VIEW3D", ""),
-                        default=None, help="the first quantity in plamn's view3d program (PATH, "
-                        "else $PLAMN_VIEW3D)")
+    parser.add_argument("--view3d", nargs="?", const="", default=None,
+                        help="the first quantity in plamn's view3d program (PATH, else "
+                        "$PLAMN_VIEW3D, else etc/view3d's build: python3 res/build_3d_view.py)")
     parser.add_argument("--cmap", default="Spectral_r",
                         help="2D colour map (pyphare's hierarchy plots: Spectral_r)")
     return parser
@@ -255,6 +256,19 @@ def finest(levels, dx, domain_box, interp="nearest"):
     return x, np.where(np.isfinite(linear), linear, nearest)
 
 
+VIEW3D_BUILD = Path(__file__).resolve().parent.parent / "etc/view3d/bin/view3d/plamn.view3d"
+
+
+def view3d_path(path=""):
+    """the viewer: path, $PLAMN_VIEW3D, or etc/view3d's build; missing: how to build it"""
+    path = path or os.environ.get("PLAMN_VIEW3D", "") or str(VIEW3D_BUILD)
+    if not Path(path).is_file():
+        raise FileNotFoundError(
+            f"--view3d: no viewer at {path}. To build it (clang >= 20, mathplot):\n"
+            "    python3 res/build_3d_view.py      (from the plamn root)")
+    return path
+
+
 class View3D:
     """a quantity in plamn's view3d program (mathplot): rank 0 starts it and writes it a frame
     per drawing on its stdin (its format: "PLMF", title, t, step, n, xyz f32[3n], value f32[n],
@@ -269,8 +283,7 @@ class View3D:
         self.root = cpp.rank() == 0
         self.proc, self.paused, self.step_once, self.pending = None, False, False, b""
         if self.root:
-            if not path:
-                raise ValueError("--view3d: no viewer (give its path, or set PLAMN_VIEW3D)")
+            path = view3d_path(path)
             r, w = os.pipe()
             self.proc = subprocess.Popen([path, "--control-fd", str(w)], stdin=subprocess.PIPE,
                                          pass_fds=(w,))
@@ -351,6 +364,8 @@ class View3D:
 
 def main(argv=None):
     args = cli_args_parser().parse_args(argv)
+    if args.view3d is not None and args.watch:  # every rank, before any collective call
+        args.view3d = view3d_path(args.view3d)
     import plamn.backend.phare as ph
 
     ph.global_vars.sim = None

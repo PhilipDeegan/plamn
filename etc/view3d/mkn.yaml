@@ -1,0 +1,39 @@
+#! build -x ../../res/mkn/clang_modules -R
+# view3d: a live 3D view of a running simulation (python3 -m plamn <input> --view3d), on
+#  sebsjames/mathplot (C++20 modules, clang >= 20 only) at tpp/mathplot. Build with
+#  python3 res/build_3d_view.py (from the plamn root): mathplot cloned if missing, then mkn's dry
+#  run's commands with the modules precompiled in import order (maiken builds files
+#  independently). GLFW from mkn.gl.
+
+name: plamn.view3d
+parent: view3d
+
+property:
+  mathplot: ../../tpp/mathplot
+
+profile:
+- name: base
+  dep: mkn.gl
+  # mathplot's own cmake flag (clang). MPLOT_FONTS_DIR (the fonts its VisualFaceAsm.cpp
+  #  embeds, a quoted string mkn's args lose) comes from res/build_3d_view.py
+  arg: -fconstexpr-steps=500000000
+  lib: freetype
+  inc: |
+    ${mathplot}
+    ${mathplot}/include
+    ${mathplot}/maths
+    ${mathplot}/json/include
+    /usr/include/freetype2
+  src: |
+    ${mathplot}/mplot
+    ${mathplot}/maths/sm
+    ${mathplot}/json/src/modules
+
+- name: view3d
+  parent: base
+  main: view3d.cpp
+
+# mathplot's own first example: the toolchain alone
+- name: hello
+  parent: base
+  main: ${mathplot}/examples/helloworld.cpp
