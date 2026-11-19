@@ -21,7 +21,9 @@ python3 res/build_3d_view.py), any dimension: rank 0 starts it and writes it a f
 per drawing (the finest mesh's cell centres and values, or with --interp none each level's
 points where no finer level has any, sized by level). In its window: P pauses the run (every
 rank waits) and plays it, N runs it to the next drawing while paused, 1-7 slices, 0 the whole
-cloud, W/A/S/D/R/F and the arrows move, the mouse as mathplot's.
+cloud, W/A/S/D/R/F and the arrows move, the mouse as mathplot's. --arrows [W] (with --view3d):
+B as arrows too, each the mean over a block of W cells (10 by default: 10^3 in 3D) of the
+finest mesh, at the block's centre; the slices show the arrows of the blocks they cross.
 """
 
 import argparse
@@ -50,6 +52,9 @@ def cli_args_parser():
     parser.add_argument("--view3d", nargs="?", const="", default=None,
                         help="the first quantity in plamn's view3d program (PATH, else "
                         "$PLAMN_VIEW3D, else etc/view3d's build: python3 res/build_3d_view.py)")
+    parser.add_argument("--arrows", type=int, nargs="?", const=10, default=0,
+                        help="with --view3d: B as arrows, each the mean over a block of W "
+                        "finest cells per direction (10)")
     parser.add_argument("--cmap", default="Spectral_r",
                         help="2D colour map (pyphare's hierarchy plots: Spectral_r)")
     return parser
@@ -275,10 +280,11 @@ class View3D:
     radius f32[n]); it writes "pause" / "play" / "step" lines back on a pipe (--control-fd).
     wait() (collective) holds every rank while it is paused"""
 
-    def __init__(self, cpp, quantity, path, interp="nearest"):
+    def __init__(self, cpp, quantity, path, interp="nearest", arrows=0, vector="EM_B"):
         import numpy as np
 
         self.cpp, self.quantity, self.interp = cpp, quantity, interp
+        self.arrows, self.vector = arrows, vector
         self.dx = np.asarray(cpp.cell_width(), dtype=float)
         self.root = cpp.rank() == 0
         self.proc, self.paused, self.step_once, self.pending = None, False, False, b""
@@ -313,13 +319,47 @@ class View3D:
             np.asarray(radius, "<f4").tobytes(),
         ])
 
+    def arrows_record(self, components):
+        """the vector field's block means on the finest mesh (rank 0): a "PLMV" record"""
+        import numpy as np
+
+        w = self.arrows
+        means, centres = [], None
+        for levels in components:
+            x, v = finest(levels, self.dx, self.cpp.domain_box(), "nearest")
+            v = np.asarray(v)
+            nb = [max(1, len(xd) // w) for xd in x]  # whole blocks per direction
+            ww = [len(xd) // n for xd, n in zip(x, nb)]
+            v = v[tuple(slice(0, n * k) for n, k in zip(nb, ww))]
+            shape = [d for n, k in zip(nb, ww) for d in (n, k)]
+            means.append(v.reshape(shape).mean(axis=tuple(range(1, 2 * len(nb), 2))).ravel())
+            if centres is None:
+                c = [xd[: n * k].reshape(n, k).mean(1) for xd, n, k in zip(x, nb, ww)]
+                centres = np.stack(np.meshgrid(*c, indexing="ij"), -1).reshape(-1, len(c))
+                half = 0.5 * min(k * (xd[1] - xd[0]) if len(xd) > 1 else 1.0
+                                 for xd, k in zip(x, ww))
+        n = len(means[0])
+        xyz, vec = np.zeros((n, 3)), np.zeros((n, 3))
+        xyz[:, : centres.shape[1]] = centres
+        for c, m in enumerate(means):
+            vec[:, c] = m
+        return b"".join([
+            b"PLMV", struct.pack("<Q", n), np.asarray(xyz, "<f4").tobytes(),
+            np.asarray(vec, "<f4").tobytes(), np.full(n, half, "<f4").tobytes(),
+        ])
+
     def __call__(self, step):
-        """every rank: the levels gathered, rank 0 sends the frame"""
+        """every rank: the levels gathered, rank 0 sends the frame (and the arrows)"""
         self.levels = level_fields(self.cpp, self.quantity)
+        components = []
+        if self.arrows:
+            components = [level_fields(self.cpp, f"{self.vector}_{c}") for c in "xyz"]
         if self.proc is None:
             return
         try:
             self.proc.stdin.write(self.frame(step))
+            if components:
+                self.proc.stdin.write(self.arrows_record(components))
             self.proc.stdin.flush()
         except (BrokenPipeError, OSError):  # its window closed: the run goes on without it
             self.proc = None
@@ -383,7 +423,8 @@ def main(argv=None):
     quantities = args.quantities or (MHD_QUANTITIES if is_mhd(sim) else HYBRID_QUANTITIES)
     view = None
     if args.view3d is not None and args.watch:
-        view = View3D(cpp, quantities[0], args.view3d, args.interp)
+        view = View3D(cpp, quantities[0], args.view3d, args.interp, args.arrows,
+                      "B" if is_mhd(sim) else "EM_B")
     plot = None
     if args.watch and view is None:
         plot = Plotter(cpp, quantities, args.save, args.interp, args.cmap)

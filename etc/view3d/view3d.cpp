@@ -11,6 +11,12 @@
 //   f32[3n]  x y z per point
 //   f32[n]   value per point
 //   f32[n]   radius per point (half its level's cell width)
+// and optionally, after it, the frame's arrows (a vector field averaged over blocks of cells):
+//   char[4]  "PLMV"
+//   u64      n arrows
+//   f32[3n]  x y z per arrow (its block's centre)
+//   f32[3n]  the vector
+//   f32[n]   half the block's width (slices: an arrow is in a plane its block crosses)
 // After EOF the last frame stays until the window is closed.
 //
 // moving around: the mouse as mathplot's (primary drag rotates, secondary drag translates, the
@@ -22,6 +28,9 @@
 //  once): 1/2/3 the plane normal to x/y/z, 4/5/6 two of them (xy, xz, yz), 7 all three, 8/9
 //  move them down / up a finest cell, 0 the whole cloud (and the planes back to the middle).
 //  Slices draw every point in them (the instance cap only bites the whole cloud).
+//
+// arrows: mathplot's QuiverVisual over the balls, length by magnitude (the longest a block's
+//  width), colour by magnitude; filtered by the slices too.
 //
 // P: play / pause, N: one more frame while paused. With --control-fd N (the watcher's pipe) the
 //  viewer writes "pause" / "play" / "step" lines there and the simulation waits while paused;
@@ -46,11 +55,13 @@
 #include <thread>
 
 #include <stdio.h> // fdopen
+#include <variant>
 #include <vector>
 
 import mplot.colourmap;
 import mplot.visual;
 import mplot.instancedscattervisual;
+import mplot.quivervisual;
 import mplot.keys;
 
 constexpr int glver = mplot::gl::version_4_3; // instancing: SSBOs
@@ -61,6 +72,11 @@ struct Frame
     double t           = 0;
     std::uint64_t step = 0;
     std::vector<float> xyz, value, radius;
+};
+
+struct Arrows
+{
+    std::vector<float> xyz, vec, half;
 };
 
 // mathplot's Visual with first person keys (its own keys are Ctrl-something, kept)
@@ -168,11 +184,33 @@ bool read(std::FILE* in, T* out, std::size_t const n = 1)
     return n == 0 or std::fread(out, sizeof(T), n, in) == n;
 }
 
-std::optional<Frame> read_frame(std::FILE* in)
+std::optional<Arrows> read_arrows(std::FILE* in)
+{
+    Arrows a;
+    std::uint64_t n = 0;
+    if (!read(in, &n))
+        return std::nullopt;
+    a.xyz.resize(3 * n);
+    a.vec.resize(3 * n);
+    a.half.resize(n);
+    if (!read(in, a.xyz.data(), 3 * n) or !read(in, a.vec.data(), 3 * n)
+        or !read(in, a.half.data(), n))
+        return std::nullopt;
+    return a;
+}
+
+// the next frame or arrows (a "PLMF" or "PLMV" record); nothing at EOF
+std::optional<std::variant<Frame, Arrows>> read_record(std::FILE* in)
 {
     std::array<char, 4> magic{};
     if (!read(in, magic.data(), 4))
         return std::nullopt; // EOF
+    if (magic == std::array<char, 4>{'P', 'L', 'M', 'V'})
+    {
+        if (auto a = read_arrows(in))
+            return std::variant<Frame, Arrows>{std::move(*a)};
+        return std::nullopt;
+    }
     if (magic != std::array<char, 4>{'P', 'L', 'M', 'F'})
         throw std::runtime_error("view3d: not a frame (magic)");
     Frame f;
@@ -189,7 +227,7 @@ std::optional<Frame> read_frame(std::FILE* in)
     if (!read(in, f.xyz.data(), 3 * n) or !read(in, f.value.data(), n)
         or !read(in, f.radius.data(), n))
         return std::nullopt;
-    return f;
+    return std::variant<Frame, Arrows>{std::move(f)};
 }
 } // namespace
 
@@ -201,15 +239,20 @@ int main(int argc, char** argv)
             control_fd = std::stoi(argv[i + 1]);
 
     std::mutex mutex;
-    std::optional<Frame> latest; // the reader's newest, taken by the drawing loop
+    std::optional<Frame> latest;         // the reader's newest, taken by the drawing loop
+    std::optional<Arrows> latest_arrows; // a frame's arrows: always taken (they come with it,
+                                         //  before the watcher waits for P)
     std::atomic<bool> eof{false};
     std::thread reader{[&] {
         try
         {
-            while (auto f = read_frame(stdin))
+            while (auto r = read_record(stdin))
             {
                 std::lock_guard lock{mutex};
-                latest = std::move(*f);
+                if (auto* f = std::get_if<Frame>(&*r))
+                    latest = std::move(*f);
+                else
+                    latest_arrows = std::move(std::get<Arrows>(*r));
             }
         }
         catch (std::exception const& e)
@@ -243,10 +286,13 @@ int main(int argc, char** argv)
     sm::vvec<float> alpha, scale;
 
     std::optional<Frame> current; // the frame drawn: redrawn on a key (slices) too
+    std::optional<Arrows> current_arrows;
+    mplot::VisualModel<glver>* quiver = nullptr; // the arrows' model, remade with them
+    std::vector<sm::vec<float>> qcoords, qvecs;  // its data (it keeps pointers to them)
     bool first = true;
     while (!v.readyToFinish())
     {
-        bool fresh = false;
+        bool fresh = false, fresh_arrows = false;
         {
             std::lock_guard lock{mutex};
             if (latest and (!v.paused or v.step_once))
@@ -256,10 +302,50 @@ int main(int argc, char** argv)
                 latest.reset();
                 fresh = true;
             }
+            if (latest_arrows)
+            {
+                current_arrows.swap(latest_arrows);
+                latest_arrows.reset();
+                fresh_arrows = true;
+            }
         }
-        if (current and (fresh or v.dirty))
+        bool const dirty = v.dirty;
+        v.dirty          = false;
+        if (current_arrows and (fresh_arrows or dirty))
         {
-            v.dirty          = false;
+            // the arrows in the shown planes (their block crosses one), or all of them
+            auto const& a = *current_arrows;
+            qcoords.clear();
+            qvecs.clear();
+            float longest = 0;
+            for (std::size_t i = 0; i < a.half.size(); ++i)
+            {
+                bool in = v.planes == 0;
+                for (std::size_t c = 0; c < 3 and !in; ++c)
+                    in = (v.planes & (1u << c))
+                         and std::abs(a.xyz[3 * i + c] - v.pos[c]) < a.half[i];
+                if (!in)
+                    continue;
+                qcoords.push_back({a.xyz[3 * i], a.xyz[3 * i + 1], a.xyz[3 * i + 2]});
+                qvecs.push_back({a.vec[3 * i], a.vec[3 * i + 1], a.vec[3 * i + 2]});
+                longest = std::max(longest, 2 * a.half[i]);
+            }
+            if (quiver)
+                v.removeVisualModel(quiver);
+            quiver = nullptr;
+            if (!qcoords.empty())
+            {
+                auto q = std::make_unique<mplot::QuiverVisual<float, glver>>(
+                    &qcoords, sm::vec<float>{}, &qvecs, mplot::ColourMapType::Greyscale);
+                q->set_parent(v.get_id());
+                q->quiver_length_gain    = longest; // the longest arrow: a block's width
+                q->quiver_thickness_gain = 0.05f;
+                q->finalize();
+                quiver = v.addVisualModel(q);
+            }
+        }
+        if (current and (fresh or dirty))
+        {
             auto const& f    = *current;
             auto const total = f.value.size();
             float lo = 0, hi = 1;
