@@ -55,6 +55,10 @@ void Simulator<opts>::compute(std::size_t const ln, std::string const& key)
 {
     DAMN_LOG_SCOPE(1, "Simulator::compute");
     auto const& c = computed_for_(key);
+    if (models_.hybrid.requested.insert(key).second) // first asked for: grids on every patch
+        for (auto& [l, level] : models_.hybrid.levels)
+            for (auto& patch : level.data)
+                std::ignore = computed(*patch, key);
     per_patch_(ln, [&](auto& patch) { c.local(patch, computed(patch, key)); });
     if (!c.border_sum.empty())
         copy_(ln, damn::amr::sum_borders, c.border_sum);

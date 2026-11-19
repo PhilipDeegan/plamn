@@ -22,6 +22,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -49,6 +50,10 @@ struct HybridModel<opts, true>
     using Grid_t     = Patch_t::Grid_t;
     using Computed_t = Computed<Patch_t, Grid_t, core::HybridQuantity::Scalar>;
     std::map<std::string, Computed_t> computed{}; // by key (solver/hybrid/computed.hpp)
+    // the computed quantities asked for so far: their scratch grids on every patch (made
+    //  with them, make_patch), the others on none. The diagnostics' at setup, any other at its
+    //  first compute (Simulator::compute: on every patch then, collective)
+    std::set<std::string> requested{};
     using View_t = decltype(simulator::view(std::declval<Patch_t&>())); // what diagnostics read
     std::map<std::string, diagnostic::Accessor<View_t>> quantities{};   // diagnostics' fields
     Mover_t mover{};

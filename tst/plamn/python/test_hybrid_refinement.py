@@ -196,11 +196,12 @@ def harris(
     return out
 
 
-def drift(load_balancer, steps=120, patch=(10, 10), diag_dir=None):
+def drift(load_balancer, steps=120, patch=(10, 10), diag_dir=None, before_step=None):
     """level 0's rank imbalance (max / mean - 1 of the particles per rank) after each step, and
     B at the end: uniform protons and a drifting beam blob, refinement="tagging" (2 levels).
     diag_dir: the beam's pressure tensor (a computed quantity: scratch grids on the patches it
-    is computed on) dumped there at t0, before the rebalances move patches between ranks
+    is computed on) dumped there at t0, before the rebalances move patches between ranks.
+    before_step(simulator, k): called before step k
     """
     ph.global_vars.sim = None
     ph.clearDict()
@@ -263,6 +264,8 @@ def drift(load_balancer, steps=120, patch=(10, 10), diag_dir=None):
         per_rank = np.asarray(cpp.particle_counts_per_rank(0), dtype=float)
         imbalance.append(per_rank.max() / per_rank.mean() - 1)
         if k < steps:
+            if before_step:
+                before_step(simulator, k)
             simulator.advance()
     B = np.concatenate([np.asarray(cpp.level_values(f"EM_B_{q}", 0)) for q in "xyz"])
     simulator.reset()
@@ -389,6 +392,24 @@ class HybridRefinementTest(unittest.TestCase):
         plamn.etc.mpi_barrier()
         if plamn.etc.mpi_rank() == 0:
             shutil.rmtree(d, ignore_errors=True)
+        self.assertLess(lb["imbalance"][40], max(lb["imbalance"]))
+        self.assertTrue(np.isfinite(lb["B"]).all())
+
+    def test_load_balancing_moves_quantities_computed_mid_run(self):
+        """a computed quantity first asked for mid run (the DataWrangler's momentum tensor of
+        the beam, at step 5): its scratch grids made then on every patch of every rank, so the
+        rebalance at step 30 moves patches that all hold them"""
+        ph.startMPI()
+        if plamn.etc.mpi_size() < 2:
+            self.skipTest("one rank: nothing to balance (--tags mpi runs it on 3)")
+
+        def momentum_tensor(simulator, k):
+            if k == 5:
+                level = simulator.data_wrangler().getPatchLevel(0)
+                for pd in level.getMomentumTensor("xx", "beam"):
+                    self.assertTrue(np.isfinite(np.asarray(pd.data)).all())
+
+        lb = drift(dict(every=30, tol=0.05), steps=40, before_step=momentum_tensor)
         self.assertLess(lb["imbalance"][40], max(lb["imbalance"]))
         self.assertTrue(np.isfinite(lb["B"]).all())
 
