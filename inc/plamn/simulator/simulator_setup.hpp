@@ -120,8 +120,11 @@ void Simulator<opts>::setup_()
     // finer levels: the user's refinement boxes (cells of the coarser level), refined
     hierarchy_.max_levels = cppdict::get_value(dict_, "simulation/AMR/max_nbr_levels", 1);
     models_.set_levels(sim, hierarchy_.max_levels);
-    if constexpr (solver::Models<opts>::mhd_on)
+    if constexpr (Models_t::mhd_on)
+    {
         models_.mhd = solver::MHDModel<opts>::from(sim);
+        register_mhd_resources_();
+    }
     if (hierarchy_.max_levels > 1 and amr.contains("refinement")
         and amr["refinement"].contains("tagging")
         and amr["refinement"]["tagging"].contains("threshold"))
@@ -241,6 +244,22 @@ void Simulator<opts>::setup_hybrid_()
     solver::hybrid::setup_computed(models_.hybrid, [&](std::string const& key, auto const& names) {
         resources_[key] = damn::amr::same_names(names);
     });
+}
+
+template<auto opts>
+void Simulator<opts>::register_mhd_resources_()
+{
+    using Patch_t = solver::MHDModel<opts>::Patch_t;
+    for (std::size_t s = 0; s < models_.mhd.n_states(); ++s)
+    {
+        std::vector<std::string> names{Patch_t::state_name("rho", s),
+                                       Patch_t::state_name("Etot", s)};
+        for (auto const* v : {"rhoV", "B"})
+            for (auto const* c : {"_x", "_y", "_z"})
+                names.push_back(Patch_t::state_name(v, s) + c);
+        resources_[mhd_state_key(s)] = damn::amr::same_names(names);
+    }
+    resources_["MHD_E"] = damn::amr::same_names({"E_x", "E_y", "E_z"});
 }
 
 // what moves between patches, named as for_each_resource(HybridPatch) names it

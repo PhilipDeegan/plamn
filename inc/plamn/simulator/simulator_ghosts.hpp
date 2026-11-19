@@ -28,6 +28,8 @@
 #include <type_traits>
 #include <vector>
 #include <cstdint>
+#include "damn/amr/physical_boundary.hpp"
+#include "plamn/core/boundary/physical_boundaries.hpp"
 
 namespace damn::core
 {
@@ -148,6 +150,42 @@ void Simulator<opts>::touch_up_level_ghosts_(std::size_t const ln, std::string c
             amr::divergence_free_touch_up(std::array{&B[0], &B[1], &B[2]}, ld.patches[i].box,
                                           region, dx);
     }
+}
+
+template<auto opts>
+void Simulator<opts>::mhd_physical_boundaries_(std::size_t const ln, auto&& fn)
+{
+    auto constexpr gw = solver::MHDModel<opts>::Patch_t::field_ghost_width;
+    auto& ld          = models_.mhd.levels[static_cast<int>(ln)];
+    for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
+    {
+        auto regions = damn::amr::physical_boundary_regions(hierarchy_, static_cast<int>(ln),
+                                                            ld.patches[i].box, gw);
+        if (!regions.empty())
+            fn(*ld.data[i], std::move(regions));
+    }
+}
+
+// the coarser level's at t (refined levels): not yet
+template<auto opts>
+void Simulator<opts>::fill_mhd_state_ghosts_(std::size_t const ln, std::size_t const s, double)
+{
+    copy_(ln, damn::amr::fill_ghosts, mhd_state_key(s));
+    mhd_physical_boundaries_(ln, [&](auto& patch, auto regions) {
+        auto& u = patch.states[s];
+        core::fill_physical_boundaries(models_.mhd.boundaries, std::move(regions), patch.layout,
+                                       u.rho, u.Etot, u.rhoV, u.B);
+    });
+}
+
+template<auto opts>
+void Simulator<opts>::fill_mhd_electric_ghosts_(std::size_t const ln, double)
+{
+    copy_(ln, damn::amr::fill_ghosts, "MHD_E");
+    mhd_physical_boundaries_(ln, [&](auto& patch, auto regions) {
+        core::fill_physical_boundaries(models_.mhd.boundaries, std::move(regions), patch.layout,
+                                       patch.E);
+    });
 }
 
 } // namespace plamn

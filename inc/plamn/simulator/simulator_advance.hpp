@@ -22,6 +22,7 @@
 #include "plamn/core/numerics/ohm/ohm_transformer.hpp"
 #include "plamn/core/numerics/stable_dt/whistler.hpp"
 #include "plamn/core/numerics/particles_synchronised_mover/particles_synchronised_mover_def.hpp"
+#include "plamn/solver/advance.hpp"
 #include "plamn/solver/models.hpp"
 
 #include "phlop/timing/scope.hpp"
@@ -48,7 +49,7 @@ void Simulator<opts>::step_model_(std::size_t const ln, auto&& hybrid)
         if constexpr (solver::is_hybrid_model_v<std::remove_cvref_t<decltype(model)>>)
             hybrid(model);
         else
-            throw std::runtime_error("plamn: MHD levels are not in the simulator yet");
+            throw std::runtime_error("plamn: MHD refined levels are not in the simulator yet");
     });
 }
 
@@ -64,11 +65,14 @@ double Simulator<opts>::stable_dt_(Timestepper::CFL const& cfl)
         if (ln > 0)
             to_0 *= time_ratio();
         double level = std::numeric_limits<double>::max();
-        step_model_(ln, [&](auto&) {
-            per_patch_(ln, [&](auto& patch) {
-                level = std::min(
-                    level, core::whistler_dt(patch.layout, patch.massDensity, patch.emB, cfl.wave));
-            });
+        models_.visit(ln, [&](auto& model) {
+            if constexpr (solver::is_mhd_model_v<std::remove_cvref_t<decltype(model)>>)
+                throw std::runtime_error("plamn: adaptive time steps of MHD levels not yet");
+            else
+                per_patch_(ln, [&](auto& patch) {
+                    level = std::min(level, core::whistler_dt(patch.layout, patch.massDensity,
+                                                              patch.emB, cfl.wave));
+                });
         });
         dt0 = std::min(dt0, level * to_0);
     }
@@ -139,7 +143,15 @@ void Simulator<opts>::advance_level_(int const level_number, double const t, dou
     auto const ln = static_cast<std::size_t>(level_number);
     level_steps_.resize(std::max(level_steps_.size(), ln + 1));
     ++level_steps_[ln];
-    step_model_(ln, [&](auto& model) { solver::advance(model, level_services_(ln), t, dt); });
+    models_.visit(ln, [&](auto& model) {
+        if constexpr (solver::is_mhd_model_v<std::remove_cvref_t<decltype(model)>>)
+        {
+            MHDLevel level{*this, ln};
+            solver::advance(model, level, t, t + dt);
+        }
+        else
+            solver::advance(model, level_services_(ln), t, dt);
+    });
     if (ln + 1 == levels_.size()) // the finest; coarser ones after their synchronization
         fine_dump_(ln, t + dt);
 
@@ -155,7 +167,11 @@ template<auto opts>
 void Simulator<opts>::prepare_step_(int const ln, double)
 {
     auto const l = static_cast<std::size_t>(ln);
-    step_model_(l, [&](auto& model) { solver::hybrid::prepare_step(model, level_services_(l)); });
+    models_.visit(l, [&](auto& model) {
+        if constexpr (solver::is_hybrid_model_v<std::remove_cvref_t<decltype(model)>>)
+            solver::hybrid::prepare_step(model, level_services_(l));
+        // MHD: nothing kept for a finer level yet (MHD refined levels: not yet)
+    });
 }
 
 // the coarser level is at coarse_t + coarse_dt

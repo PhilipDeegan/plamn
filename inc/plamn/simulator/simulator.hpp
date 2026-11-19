@@ -49,6 +49,7 @@
 #include "plamn/solver/hybrid/model.hpp"
 #include "plamn/solver/hybrid/patches.hpp"
 #include "plamn/solver/hybrid/restarts.hpp"
+#include "plamn/solver/mhd/initialize.hpp"
 #include "plamn/solver/models.hpp"
 #include "plamn/solver/stacks.hpp"
 #include "plamn/amr/load_balancing.hpp"
@@ -278,6 +279,7 @@ private:
     void setup_();
     void setup_hybrid_(); // the hybrid model's ohm, populations, resources, computed quantities
     void initialize_hybrid_(); // every level hybrid
+    void initialize_mhd_();    // level 0 MHD, alone
 
     // computed quantities, the models' (simulator_computed.hpp)
     auto const& computed_for_(std::string const& key) const;
@@ -345,15 +347,18 @@ private:
             fn(*patch);
     }
 
-    // copies key's resources between the patches of level ln, see register_resources_
+    // copies key's resources between the patches of level ln (its model's), see
+    //  register_resources_
     void copy_(std::size_t const ln, auto const how, std::string const& key)
     {
         auto& l = levels_[ln];
-        auto& ld = data_(ln);
-        if (n_ranks_ > 1)
-            damn::mpi::copy(how, l.neighbours, resources_.at(key), ld);
-        else
-            damn::amr::copy(how, l.neighbours, resources_.at(key), ld);
+        models_.visit(ln, [&](auto& model) {
+            auto& ld = model.levels[static_cast<int>(ln)];
+            if (n_ranks_ > 1)
+                damn::mpi::copy(how, l.neighbours, resources_.at(key), ld);
+            else
+                damn::amr::copy(how, l.neighbours, resources_.at(key), ld);
+        });
     }
 
     // from level ln - 1 into level ln
@@ -393,15 +398,23 @@ private:
     void rebalance_(double t); // level 0 onto new owners, then each finer level
 
     void register_resources_();
+    // the MHD states' (conservative) and E's resources: MHDState_<s>, MHD_E
+    void register_mhd_resources_();
+    NO_DISCARD static std::string mhd_state_key(std::size_t const s)
+    {
+        return "MHDState_" + std::to_string(s);
+    }
     // level ln's patches from its boxes (that level's cells): chopped into the largest patch
     //  size, partitioned along the Hilbert curve by the particles they will hold
     NO_DISCARD damn::amr::Level<dimension> level_of_(int ln, std::vector<Box_t> const& boxes);
     void make_level_(int ln, std::vector<Box_t> const& boxes);
     void allocate_level_(int ln); // the patch data of hierarchy_'s level ln, linked
     void link_level_(int ln);     // neighbours, map to the coarser level, level ghost cells
+    void link_hybrid_level_(int ln);
+    void link_mhd_level_(int ln);
     // a patch of level ln (its cells): its particle ghost box among the level's other patches
     NO_DISCARD auto layout_of_(int ln, Box_t const& box) const;
-    NO_DISCARD auto make_patch_(int ln, Box_t const& box) const; // the model's
+    NO_DISCARD auto make_patch_(auto const& model, int ln, Box_t const& box) const;
     // the boxes of level ln + 1 from level ln's tagged cells (collective)
     NO_DISCARD std::vector<Box_t> cluster_(int ln);
     NO_DISCARD std::vector<std::vector<Box_t>> pretag_();
@@ -477,6 +490,29 @@ private:
         }
     };
     NO_DISCARD LevelServices level_services_(std::size_t const ln) { return {*this, ln}; }
+
+    // what the MHD model's advance uses of a level (solver/advance.hpp)
+    struct MHDLevel
+    {
+        Simulator& self;
+        std::size_t ln;
+
+        void per_patch(auto&& fn)
+        {
+            for (auto& patch : self.models_.mhd.levels[static_cast<int>(ln)].data)
+                fn(*patch);
+        }
+        void fill_state_ghosts(std::size_t const s, double const t)
+        {
+            self.fill_mhd_state_ghosts_(ln, s, t);
+        }
+        void fill_electric_ghosts(double const t) { self.fill_mhd_electric_ghosts_(ln, t); }
+    };
+    // patch ghosts, then the physical boundaries' (simulator_ghosts.hpp)
+    void fill_mhd_state_ghosts_(std::size_t ln, std::size_t s, double t);
+    void fill_mhd_electric_ghosts_(std::size_t ln, double t);
+    // fn(patch, its physical boundary regions) for every local patch of MHD level ln
+    void mhd_physical_boundaries_(std::size_t ln, auto&& fn);
 
     // damn::amr::advance's hooks, see damn/amr/time_refinement.hpp
     void advance_level_(int ln, double t, double dt);

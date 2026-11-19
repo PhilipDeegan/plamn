@@ -60,11 +60,18 @@ Simulator<opts>::level_of_(int const ln, std::vector<Box_t> const& boxes)
     for (auto const& box : boxes)
         for (auto const& b : damn::amr::chop_evenly(box, size, ln > 0 ? hierarchy_.ratio : 1))
             patches.push_back(b);
+    auto const weights = [&]() {
+        if constexpr (Models_t::hybrid_on)
+            if (!models_.is_mhd(static_cast<std::size_t>(ln)))
+                return isInitialized_ ? particle_weights_(ln, patches) : box_weights_(ln, patches);
+        std::vector<double> cells; // MHD: the work is per cell
+        for (auto const& p : patches)
+            cells.push_back(static_cast<double>(p.size()));
+        return cells;
+    };
     return damn::amr::make_level(
         ln, patches,
-        damn::amr::partition(
-            patches, isInitialized_ ? particle_weights_(ln, patches) : box_weights_(ln, patches),
-            damn::amr::node_share_capacity(topology_)));
+        damn::amr::partition(patches, weights(), damn::amr::node_share_capacity(topology_)));
 }
 
 template<auto opts>
@@ -78,9 +85,11 @@ template<auto opts>
 void Simulator<opts>::allocate_level_(int const ln)
 {
     resize_levels_(static_cast<std::size_t>(ln) + 1);
-    auto& ld = data_(ln);
-    ld       = damn::amr::allocate(hierarchy_.levels[ln], rank_,
-                                   [&](auto const& p) { return make_patch_(ln, p.box); });
+    models_.visit(static_cast<std::size_t>(ln), [&](auto& model) {
+        model.levels[ln] = damn::amr::allocate(hierarchy_.levels[ln], rank_, [&](auto const& p) {
+            return make_patch_(model, ln, p.box);
+        });
+    });
     link_level_(ln);
 }
 
@@ -93,15 +102,45 @@ auto Simulator<opts>::layout_of_(int const ln, Box_t const& box) const
 }
 
 template<auto opts>
-auto Simulator<opts>::make_patch_(int const ln, Box_t const& box) const
+auto Simulator<opts>::make_patch_(auto const& model, int const ln, Box_t const& box) const
 {
-    return solver::hybrid::make_patch(
-        models_.hybrid, layout_of_(ln, box), dict_["simulation"],
-        solver::hybrid::surroundings(models_.hybrid, hierarchy_, ln, box));
+    using Model_t = std::remove_cvref_t<decltype(model)>;
+    if constexpr (solver::is_mhd_model_v<Model_t>)
+    {
+        using Patch_t  = Model_t::Patch_t;
+        using Layout_t = Patch_t::Layout_t;
+        return std::make_unique<Patch_t>(Layout_t{box, damn::amr::mesh_size(hierarchy_, ln),
+                                                  damn::amr::position(hierarchy_, ln, box.lower),
+                                                  ln},
+                                         model.n_states());
+    }
+    else
+        return solver::hybrid::make_patch(model, layout_of_(ln, box), dict_["simulation"],
+                                          solver::hybrid::surroundings(model, hierarchy_, ln, box));
 }
 
 template<auto opts>
 void Simulator<opts>::link_level_(int const ln)
+{
+    if constexpr (Models_t::mhd_on)
+        if (models_.is_mhd(static_cast<std::size_t>(ln)))
+            return link_mhd_level_(ln);
+    if constexpr (Models_t::hybrid_on)
+        link_hybrid_level_(ln);
+}
+
+// the level's neighbours, as far as its fields reach outside a patch: ghosts plus primal nodes
+template<auto opts>
+void Simulator<opts>::link_mhd_level_(int const ln)
+{
+    auto constexpr gw      = solver::MHDModel<opts>::Patch_t::field_ghost_width;
+    levels_[ln].neighbours = damn::amr::make_neighbours(hierarchy_, ln, rank_, topology_, gw + 1);
+    if (ln > 0)
+        throw std::runtime_error("plamn: MHD refined levels are not in the simulator yet");
+}
+
+template<auto opts>
+void Simulator<opts>::link_hybrid_level_(int const ln)
 {
     using Patch_t     = solver::HybridModel<opts>::Patch_t;
     using Splitter_t  = solver::HybridModel<opts>::Splitter_t;
@@ -143,10 +182,32 @@ void Simulator<opts>::initialize()
     DAMN_LOG_SCOPE(1, "Simulator::initialize");
     if (isInitialized_)
         throw std::runtime_error("plamn Simulator already initialized");
-    if (models_.mhd_levels > 0)
-        throw std::runtime_error("plamn: MHD levels are not in the simulator yet");
+    if constexpr (Models_t::mhd_on)
+        if (models_.mhd_levels > 0)
+            return initialize_mhd_();
     if constexpr (Models_t::hybrid_on)
         initialize_hybrid_();
+}
+
+// level 0 from the user's functions (MHD alone, one level: MHD refinement and coupling to hybrid
+//  levels not yet)
+template<auto opts>
+void Simulator<opts>::initialize_mhd_()
+{
+    if (!restarts_.load_path.empty())
+        throw std::runtime_error("plamn: MHD restarts are not in the simulator yet");
+    if (hierarchy_.max_levels > 1)
+        throw std::runtime_error("plamn: MHD refined levels are not in the simulator yet");
+    make_level_(0, {hierarchy_.domain});
+    MHDLevel level{*this, 0};
+    level.per_patch([&](auto& patch) {
+        solver::mhd::initialize_state(models_.mhd, patch, dict_["simulation"]);
+    });
+    level.fill_state_ghosts(0, startTime_);
+    currentTime_ = startTime_;
+    timestepper_.start_at(startTime_);
+    dt_            = timestepper_.next([&](auto const& cfl) { return stable_dt_(cfl); });
+    isInitialized_ = true;
 }
 
 template<auto opts>

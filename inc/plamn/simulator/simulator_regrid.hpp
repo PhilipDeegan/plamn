@@ -163,8 +163,9 @@ void Simulator<opts>::rebalance_(double const t)
                                                      damn::amr::periodic_shifts(hierarchy_, 0));
         auto& l         = levels_[0];
         auto& ld        = data_(0);
-        ld              = damn::mpi::regrid(map, std::move(ld),
-                                            [&](auto const& p) { return make_patch_(0, p.box); });
+        ld              = damn::mpi::regrid(map, std::move(ld), [&](auto const& p) {
+            return make_patch_(models_.hybrid, 0, p.box);
+        });
         for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
         {
             ld.data[i]->rebox(
@@ -263,7 +264,7 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
     auto const map = damn::amr::make_regrid_map(old_level, hierarchy_.levels[ln], rank_,
                                                 damn::amr::periodic_shifts(hierarchy_, ln));
 
-    auto const make = [&](auto const& p) { return make_patch_(ln, p.box); };
+    auto const make = [&](auto const& p) { return make_patch_(models_.hybrid, ln, p.box); };
     auto& l = levels_[fine];
     auto& ld        = data_(fine);
     ld              = n_ranks_ > 1 ? damn::mpi::regrid(map, std::move(ld), make)

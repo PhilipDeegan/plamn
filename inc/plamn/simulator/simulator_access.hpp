@@ -37,20 +37,22 @@ namespace plamn
 template<auto opts>
 std::vector<double> Simulator<opts>::domain_values(std::string const& name, std::size_t const ln)
 {
-    auto& ld = data_(ln);
     std::vector<double> values;
-    for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
-    {
-        auto const& cells = ld.patches[i].box;
-        bool const found  = damn::amr::with_resource(ld.data[i], name, [&](auto& r) {
-            if constexpr (damn::amr::BoxData<std::decay_t<decltype(r)>, dimension>)
-                damn::core::for_each_point(domain_box(r, cells), [&](auto const& p) {
-                    values.push_back(value(r, cells, p));
-                });
-        });
-        if (!found)
-            throw std::runtime_error("plamn Simulator: no resource " + name);
-    }
+    models_.visit(ln, [&](auto& model) {
+        auto& ld = model.levels[static_cast<int>(ln)];
+        for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
+        {
+            auto const& cells = ld.patches[i].box;
+            bool const found  = damn::amr::with_resource(ld.data[i], name, [&](auto& r) {
+                if constexpr (damn::amr::BoxData<std::decay_t<decltype(r)>, dimension>)
+                    damn::core::for_each_point(domain_box(r, cells), [&](auto const& p) {
+                        values.push_back(value(r, cells, p));
+                    });
+            });
+            if (!found)
+                throw std::runtime_error("plamn Simulator: no resource " + name);
+        }
+    });
     return values;
 }
 
