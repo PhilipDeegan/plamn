@@ -117,6 +117,62 @@ TEST(GodunovPoint, hlld_consistency_upwinding_and_contact)
     EXPECT_GT(std::abs(hll<0>(gamma_, cl, cr).F.rho - .5), 1e-3); // HLL diffuses it
 }
 
+// Hall (PHARE's hall_contribution_): no current, the ideal flux; else the ideal plus
+//  (J x B) / rho in the induction flux and (B.J B_n - B.B J_n) / rho in the energy flux. The
+//  Riemann solvers given zero face currents give their ideal results, and average the
+//  currents and rho as they do V (Rusanov: the mean; HLL, HLLD: the clipped speeds' weights)
+TEST(GodunovPoint, hall_flux_and_face_currents)
+{
+    MHDPrimitive const u{1.2, {.3, -.2, .1}, {.7, .4, -.5}, .9};
+    std::array<double, 3> const J{.2, -.3, .5};
+    mkn::kul::for_N<3>([&](auto dir) {
+        auto const ideal = ideal_mhd_flux<dir>(gamma_, u);
+        auto const none  = hall_mhd_flux<dir>(gamma_, u, {0., 0., 0.});
+        auto const hall  = hall_mhd_flux<dir>(gamma_, u, J);
+        EXPECT_EQ(none.Etot, ideal.Etot);
+        auto const& B = u.B;
+        std::array<double, 3> const JxB{J[1] * B[2] - J[2] * B[1], J[2] * B[0] - J[0] * B[2],
+                                        J[0] * B[1] - J[1] * B[0]};
+        double const BdotJ = B[0] * J[0] + B[1] * J[1] + B[2] * J[2];
+        double const BdotB = B[0] * B[0] + B[1] * B[1] + B[2] * B[2];
+        // F_B[c] += (E_hall x n)[c], E_hall = (J x B) / rho: the c != dir components
+        for (std::size_t c = 0; c < 3; ++c)
+            EXPECT_EQ(none.B[c], ideal.B[c]);
+        EXPECT_EQ(hall.B[dir], ideal.B[dir]);
+        std::size_t const t0 = dir == 0 ? 1 : 0, t1 = dir == 2 ? 1 : 2;
+        double const sign = (dir == 1) ? -1. : 1.; // the cyclic order of (dir, t0, t1)
+        EXPECT_NEAR(hall.B[t0] - ideal.B[t0], -sign * JxB[t1] / u.rho, 1e-15);
+        EXPECT_NEAR(hall.B[t1] - ideal.B[t1], sign * JxB[t0] / u.rho, 1e-15);
+        EXPECT_NEAR(hall.Etot - ideal.Etot, (BdotJ * B[dir] - BdotB * J[dir]) / u.rho, 1e-14);
+        EXPECT_EQ(hall.rho, ideal.rho);
+    });
+
+    MHDPrimitive const uL{1., {.1, .2, -.1}, {1., .5, .3}, 1.};
+    MHDPrimitive const uR{.8, {-.2, .1, .3}, {1., -.4, .2}, .7};
+    FaceCurrents const zero{{0., 0., 0.}, {0., 0., 0.}};
+    FaceCurrents const j{{.1, .2, .3}, {-.3, .1, .4}};
+    auto const same = [](GodunovFaceResult const& a, GodunovFaceResult const& b) {
+        EXPECT_EQ(a.F.rho, b.F.rho);
+        EXPECT_EQ(a.F.Etot, b.F.Etot);
+        for (std::size_t c = 0; c < 3; ++c)
+            EXPECT_EQ(a.F.B[c], b.F.B[c]);
+    };
+    same(rusanov<0>(gamma_, uL, uR, &zero), rusanov<0>(gamma_, uL, uR));
+    same(hll<0>(gamma_, uL, uR, &zero), hll<0>(gamma_, uL, uR));
+    same(hlld<0>(gamma_, uL, uR, &zero), hlld<0>(gamma_, uL, uR));
+
+    auto const r = rusanov<0>(gamma_, uL, uR, &j);
+    EXPECT_EQ(r.rhot, 0.5 * (uL.rho + uR.rho));
+    EXPECT_EQ(r.jt[2], 0.5 * (j.L[2] + j.R[2]));
+    for (auto const& h : {hll<0>(gamma_, uL, uR, &j), hlld<0>(gamma_, uL, uR, &j)})
+    {
+        // the same weights as vt: vt's from V gives them back
+        double const wL = (h.vt[0] - uR.V[0]) / (uL.V[0] - uR.V[0]);
+        EXPECT_NEAR(h.rhot, wL * uL.rho + (1 - wL) * uR.rho, 1e-14);
+        EXPECT_NEAR(h.jt[1], wL * j.L[1] + (1 - wL) * j.R[1], 1e-14);
+    }
+}
+
 TEST(GodunovPoint, rusanov_consistency)
 {
     // equal left and right states: no dissipation, the physical flux

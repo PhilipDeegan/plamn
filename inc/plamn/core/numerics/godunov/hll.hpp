@@ -21,8 +21,8 @@
 namespace plamn::core
 {
 template<std::size_t dir>
-NO_DISCARD GodunovFaceResult hll(double const gamma, MHDPrimitive const& uL,
-                                 MHDPrimitive const& uR) DAMN_ALL
+NO_DISCARD GodunovFaceResult hll(double const gamma, MHDPrimitive const& uL, MHDPrimitive const& uR,
+                                 FaceCurrents const* const j = nullptr) DAMN_ALL
 {
     auto const b2   = [](auto const& B) { return B[0] * B[0] + B[1] * B[1] + B[2] * B[2]; };
     auto const cfL  = fast_magnetosonic(gamma, uL.rho, uL.B[dir], b2(uL.B), uL.P);
@@ -31,8 +31,8 @@ NO_DISCARD GodunovFaceResult hll(double const gamma, MHDPrimitive const& uL,
     auto const VR   = uR.V[dir];
     auto const SL   = std::min(VL - cfL, VR - cfR);
     auto const SR   = std::max(VL + cfL, VR + cfR);
-    auto const fL   = ideal_mhd_flux<dir>(gamma, uL);
-    auto const fR   = ideal_mhd_flux<dir>(gamma, uR);
+    auto const fL   = j ? hall_mhd_flux<dir>(gamma, uL, j->L) : ideal_mhd_flux<dir>(gamma, uL);
+    auto const fR   = j ? hall_mhd_flux<dir>(gamma, uR, j->R) : ideal_mhd_flux<dir>(gamma, uR);
     auto const cL   = to_conservative(gamma, uL);
     auto const cR   = to_conservative(gamma, uR);
     auto const flux = [&](double const ul, double const ur, double const fl, double const fr) {
@@ -60,6 +60,12 @@ NO_DISCARD GodunovFaceResult hll(double const gamma, MHDPrimitive const& uL,
     r.uct_coefs    = {sr * inv, -sl * inv, d, d};
     for (std::size_t c = 0; c < 3; ++c)
         r.vt[c] = (sr * uL.V[c] - sl * uR.V[c]) * inv;
+    if (j) // PHARE's riemann_averaging with the clipped speeds
+    {
+        for (std::size_t c = 0; c < 3; ++c)
+            r.jt[c] = (sr * j->L[c] - sl * j->R[c]) * inv;
+        r.rhot = (sr * uL.rho - sl * uR.rho) * inv;
+    }
     return r;
 }
 
@@ -67,9 +73,10 @@ struct RusanovRiemann
 {
     template<std::size_t dir>
     NO_DISCARD static GodunovFaceResult solve(double const gamma, MHDPrimitive const& uL,
-                                              MHDPrimitive const& uR) DAMN_ALL
+                                              MHDPrimitive const& uR,
+                                              FaceCurrents const* const j = nullptr) DAMN_ALL
     {
-        return rusanov<dir>(gamma, uL, uR);
+        return rusanov<dir>(gamma, uL, uR, j);
     }
 };
 
@@ -77,9 +84,10 @@ struct HLLRiemann
 {
     template<std::size_t dir>
     NO_DISCARD static GodunovFaceResult solve(double const gamma, MHDPrimitive const& uL,
-                                              MHDPrimitive const& uR) DAMN_ALL
+                                              MHDPrimitive const& uR,
+                                              FaceCurrents const* const j = nullptr) DAMN_ALL
     {
-        return hll<dir>(gamma, uL, uR);
+        return hll<dir>(gamma, uL, uR, j);
     }
 };
 

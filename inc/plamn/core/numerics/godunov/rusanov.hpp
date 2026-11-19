@@ -36,11 +36,21 @@ struct GodunovFaceResult
     MHDConservative F;
     std::array<double, 3> vt;        // transverse velocity: average of the left / right V
     std::array<double, 4> uct_coefs; // aL, aR (advective), dL, dR (diffusive)
+    std::array<double, 3> jt{};      // Hall: the current's average (as vt), for the CT
+    double rhot = 0;                 // Hall: rho's average, for the CT
+};
+
+// Hall: the current reconstructed to the face, left and right (PHARE's jL, jR); a Riemann
+//  solver given them uses the Hall flux (hall_mhd_flux) and averages them (jt, rhot)
+struct FaceCurrents
+{
+    std::array<double, 3> L, R;
 };
 
 template<std::size_t dir>
 NO_DISCARD GodunovFaceResult rusanov(double const gamma, MHDPrimitive const& uL,
-                                     MHDPrimitive const& uR) DAMN_ALL
+                                     MHDPrimitive const& uR,
+                                     FaceCurrents const* const j = nullptr) DAMN_ALL
 {
     auto const b2  = [](auto const& B) { return B[0] * B[0] + B[1] * B[1] + B[2] * B[2]; };
     auto const cfL = fast_magnetosonic(gamma, uL.rho, uL.B[dir], b2(uL.B), uL.P);
@@ -49,8 +59,8 @@ NO_DISCARD GodunovFaceResult rusanov(double const gamma, MHDPrimitive const& uL,
     auto const sR  = std::abs(uR.V[dir]) + cfR;
     auto const S   = sL > sR ? sL : sR;
 
-    auto const fL = ideal_mhd_flux<dir>(gamma, uL);
-    auto const fR = ideal_mhd_flux<dir>(gamma, uR);
+    auto const fL = j ? hall_mhd_flux<dir>(gamma, uL, j->L) : ideal_mhd_flux<dir>(gamma, uL);
+    auto const fR = j ? hall_mhd_flux<dir>(gamma, uR, j->R) : ideal_mhd_flux<dir>(gamma, uR);
     auto const cL = to_conservative(gamma, uL);
     auto const cR = to_conservative(gamma, uR);
 
@@ -68,6 +78,12 @@ NO_DISCARD GodunovFaceResult rusanov(double const gamma, MHDPrimitive const& uL,
     }
     r.F.Etot    = flux(fL.Etot, fR.Etot, cL.Etot, cR.Etot);
     r.uct_coefs = {0.5, 0.5, 0.5 * S, 0.5 * S};
+    if (j) // PHARE's riemann_averaging: 0.5 (L + R)
+    {
+        for (std::size_t c = 0; c < 3; ++c)
+            r.jt[c] = 0.5 * (j->L[c] + j->R[c]);
+        r.rhot = 0.5 * (uL.rho + uR.rho);
+    }
     return r;
 }
 

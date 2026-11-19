@@ -28,7 +28,8 @@ namespace plamn::core
 {
 template<std::size_t dir>
 NO_DISCARD GodunovFaceResult hlld(double const gamma, MHDPrimitive const& uL,
-                                  MHDPrimitive const& uR) DAMN_ALL
+                                  MHDPrimitive const& uR,
+                                  FaceCurrents const* const j = nullptr) DAMN_ALL
 {
     std::size_t constexpr t0 = dir == 0 ? 1 : 0; // the transverse directions, in order
     std::size_t constexpr t1 = dir == 2 ? 1 : 2;
@@ -83,6 +84,12 @@ NO_DISCARD GodunovFaceResult hlld(double const gamma, MHDPrimitive const& uL,
         }
         for (std::size_t c = 0; c < 3; ++c)
             r.vt[c] = (sr * uL.V[c] - sl * uR.V[c]) * inv;
+        if (j) // PHARE's riemann_averaging with the clipped speeds
+        {
+            for (std::size_t c = 0; c < 3; ++c)
+                r.jt[c] = (sr * j->L[c] - sl * j->R[c]) * inv;
+            r.rhot = (sr * uL.rho - sl * uR.rho) * inv;
+        }
     }
 
     // the intermediate states (hlld_intermediate_states_)
@@ -94,8 +101,8 @@ NO_DISCARD GodunovFaceResult hlld(double const gamma, MHDPrimitive const& uL,
     auto const etotR            = eos_p_to_etot(gamma, uR.rho, vxR, vyR, vzR, bxR, byR, bzR, uR.P);
     auto const p_tot_L = uL.P + 0.5 * (uL.B[0] * uL.B[0] + uL.B[1] * uL.B[1] + uL.B[2] * uL.B[2]);
     auto const p_tot_R = uR.P + 0.5 * (uR.B[0] * uR.B[0] + uR.B[1] * uR.B[1] + uR.B[2] * uR.B[2]);
-    auto const fL      = ideal_mhd_flux<dir>(gamma, uL);
-    auto const fR      = ideal_mhd_flux<dir>(gamma, uR);
+    auto const fL      = j ? hall_mhd_flux<dir>(gamma, uL, j->L) : ideal_mhd_flux<dir>(gamma, uL);
+    auto const fR      = j ? hall_mhd_flux<dir>(gamma, uR, j->R) : ideal_mhd_flux<dir>(gamma, uR);
 
     auto const B_hll = [&](std::size_t const t) {
         return (SR * uR.B[t] - SL * uL.B[t] + fL.B[t] - fR.B[t]) / (SR - SL);
@@ -216,9 +223,10 @@ struct HLLDRiemann
 {
     template<std::size_t dir>
     NO_DISCARD static GodunovFaceResult solve(double const gamma, MHDPrimitive const& uL,
-                                              MHDPrimitive const& uR) DAMN_ALL
+                                              MHDPrimitive const& uR,
+                                              FaceCurrents const* const j = nullptr) DAMN_ALL
     {
-        return hlld<dir>(gamma, uL, uR);
+        return hlld<dir>(gamma, uL, uR, j);
     }
 };
 
