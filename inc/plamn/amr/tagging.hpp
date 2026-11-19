@@ -20,9 +20,9 @@
 //                        + reltol (|a-| + 2 |a0| + |a+|) + abstol, the indicator
 //                        sqrt(sum n^2 / sum D^2) (reach 1)
 //
-//   tagging_from(dict): the input's simulation/AMR/refinement/tagging: hybrid_method "default"
-//   or "lohner-per-direction", Q<i>/name and Q<i>/threshold (or B at threshold), params/reltol
-//   and params/abstol
+//   tagging_from(dict, method_key): the input's simulation/AMR/refinement/tagging: a model's
+//   method (hybrid_method, mhd_method) "default" or "lohner-per-direction", Q<i>/name and
+//   Q<i>/threshold (or B at threshold), params/reltol and params/abstol
 
 #include "damn/core/geometry/box_spans.hpp"
 
@@ -198,23 +198,26 @@ struct Tagging
     std::vector<TaggedQuantity> quantities;
 };
 
-// hybrid: B, Bx, By, Bz
+// B, Bx, By, Bz: the components' names, model free (B_x...: an MHD level's resources; a hybrid
+//  level's are EM_B_x...)
 NO_DISCARD inline std::vector<std::string> tagged_components(std::string const& name)
 {
     if (name == "B")
-        return {"EM_B_x", "EM_B_y", "EM_B_z"};
+        return {"B_x", "B_y", "B_z"};
     if (name == "Bx" or name == "By" or name == "Bz")
-        return {std::string{"EM_B_"} + name[1]};
+        return {std::string{"B_"} + name[1]};
     throw std::runtime_error("plamn tagging: " + name
                              + " is not a quantity to tag on (B, Bx, By, Bz)");
 }
 
-// the input's simulation/AMR/refinement/tagging node
-NO_DISCARD inline Tagging tagging_from(auto const& tagging)
+// the input's simulation/AMR/refinement/tagging node, the method of a model's levels by
+//  method_key (PHARE's TaggerFactory: hybrid_method, mhd_method)
+NO_DISCARD inline Tagging tagging_from(auto const& tagging,
+                                       std::string const& method_key = "hybrid_method")
 {
     Tagging t;
-    auto const method = tagging.contains("hybrid_method")
-                            ? tagging["hybrid_method"].template to<std::string>()
+    auto const method = tagging.contains(method_key)
+                            ? tagging[method_key].template to<std::string>()
                             : std::string{"default"};
     if (method == "default")
         t.criterion = DefaultCriterion{};

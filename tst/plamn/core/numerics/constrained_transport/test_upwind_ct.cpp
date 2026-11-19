@@ -141,7 +141,7 @@ using Dims_t = testing::Types<TestParam<1>, TestParam<2>, TestParam<3>>;
 TYPED_TEST_SUITE(UpwindCTTest, Dims_t, );
 
 // a uniform state with symmetric coefficients (aL = aR = 1/2, dL = dR): the dissipative terms
-//  cancel and E = -v x B, for every component with an equation; in 1D E_x, E_y are left as is
+//  cancel and E = -v x B, for every component with an equation; in 1D E_x is left as is
 TYPED_TEST(UpwindCTTest, ideal_ohm_uniform)
 {
     using Patch_t             = CTPatch<TypeParam::dim>;

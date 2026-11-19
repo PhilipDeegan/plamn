@@ -10,10 +10,7 @@
 //   due(diagnostic, t, dt)               PHARE's schedule: a timestamp within dt of t (as
 //                                        floats), past ones caught up
 //   file_name(quantity)                  /ions/pop/protons/flux -> ions_pop_protons_flux.vtkhdf
-//   hybrid_quantities(population_names)  quantity -> its fields on a patch (PHARE's VTKHDF
-//   diagnostics'
-//                                        accessors), components in file order; an unknown
-//                                        quantity throws (quantity_for)
+//   hybrid_quantities, quantity_for      (diagnostic/quantities.hpp)
 //   primal_into(PrimalInto{field, cells, out, n_components, component})
 //                                        a patch's field on the primal nodes of its cells, x
 //                                        fastest, written straight into its rows: dual directions
@@ -28,6 +25,7 @@
 #include "damn/hdf5/vtkhdf.hpp"
 
 #include "plamn/amr/resources.hpp"
+#include "plamn/diagnostic/quantities.hpp" // IWYU pragma: export
 #include "plamn/initializer/data_provider.hpp"
 #include "plamn/core/data/grid/layout_defs.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
@@ -44,6 +42,7 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace plamn::diagnostic
@@ -53,7 +52,9 @@ struct Diagnostic
     std::string type, quantity;
     std::vector<double> timestamps{};
     std::size_t flush_every = 1, next = 0, dumps = 0;
-    std::vector<std::pair<std::string, std::string>> attributes{}; // phareh5's /py_attrs
+    // phareh5's /py_attrs: strings, but pyphare's heat_capacity_ratio (a double, as PHARE's MHD
+    //  writer reads it)
+    std::vector<std::pair<std::string, std::variant<std::string, double>>> attributes{};
 };
 
 // pyphare's diagnostics plamn writes: electromag and fluid, particle (phareh5 only)
@@ -63,7 +64,7 @@ NO_DISCARD inline std::vector<Diagnostic> diagnostics_from(initializer::Dict con
     if (!dict["simulation"].contains("diagnostics"))
         return out;
     auto const& diags = dict["simulation"]["diagnostics"];
-    for (auto const* type : {"electromag", "fluid", "particle"})
+    for (auto const* type : {"electromag", "fluid", "mhd", "particle"})
     {
         if (!diags.contains(type))
             continue;
@@ -82,8 +83,12 @@ NO_DISCARD inline std::vector<Diagnostic> diagnostics_from(initializer::Dict con
                 for (std::size_t i = 0; i < d["n_attributes"].template to<std::size_t>(); ++i)
                 {
                     auto const at = "attribute_" + std::to_string(i);
-                    diag.attributes.emplace_back(d[at + "_key"].template to<std::string>(),
-                                                 d[at + "_value"].template to<std::string>());
+                    auto const& value = d[at + "_value"];
+                    auto const key    = d[at + "_key"].template to<std::string>();
+                    if (auto const* number = std::get_if<double>(&value.data))
+                        diag.attributes.emplace_back(key, *number);
+                    else
+                        diag.attributes.emplace_back(key, std::get<std::string>(value.data));
                 }
             out.push_back(diag);
         }
@@ -112,48 +117,6 @@ NO_DISCARD inline std::string file_name(std::string const& quantity)
     return name + ".vtkhdf";
 }
 
-// a quantity's fields in a patch's view (simulator::HybridPatchView), components in file order
-//  (x y z; xx xy xz yy yz zz); the pointers into the view
-template<typename View>
-using Accessor = std::function<std::vector<typename View::field_type const*>(View const&)>;
-
-template<typename View>
-NO_DISCARD std::map<std::string, Accessor<View>>
-hybrid_quantities(std::vector<std::string> const& population_names)
-{
-    using Field    = View::field_type;
-    using Fields   = std::vector<Field const*>;
-    auto const vec = [](auto const& vf) { return Fields{&vf[0], &vf[1], &vf[2]}; };
-    std::map<std::string, Accessor<View>> q;
-    q["/EM_B"]                = [=](View const& v) { return vec(v.em.B); };
-    q["/EM_E"]                = [=](View const& v) { return vec(v.em.E); };
-    q["/ions/charge_density"] = [](View const& v) { return Fields{&v.charge_density}; };
-    q["/ions/mass_density"]   = [](View const& v) { return Fields{&v.mass_density}; };
-    q["/ions/bulkVelocity"]   = [=](View const& v) { return vec(v.bulk_velocity); };
-    q["/ions/charge_flux"]    = [=](View const& v) { return vec(v.charge_flux); };
-    for (std::size_t i = 0; i < population_names.size(); ++i)
-    {
-        auto const pop      = "/ions/pop/" + population_names[i];
-        q[pop + "/density"] = [i](View const& v) { return Fields{&v.populations[i].density}; };
-        q[pop + "/charge_density"]
-            = [i](View const& v) { return Fields{&v.populations[i].charge_density}; };
-        q[pop + "/flux"] = [i, vec](View const& v) { return vec(v.populations[i].flux); };
-    }
-    return q;
-}
-
-template<typename View>
-NO_DISCARD Accessor<View> const&
-quantity_for(std::map<std::string, Accessor<View>> const& quantities, std::string const& quantity)
-{
-    auto const it = quantities.find(quantity);
-    if (it == quantities.end())
-        throw std::runtime_error("plamn diagnostics: unsupported quantity " + quantity);
-    return it->second;
-}
-
-
-// a patch's field, its cells, where its rows go and which column it is
 template<typename Field, typename Float>
 struct PrimalInto
 {

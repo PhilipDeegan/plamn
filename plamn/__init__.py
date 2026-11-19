@@ -45,17 +45,33 @@ def cpp_lib(sim):
     # tiling_gpu's does. Without them in the simulation, plamn's defaults
     layout = getattr(sim, "model_layout", None) or "AoSMapped"
     allocator = getattr(sim, "allocator", None) or "CPU"
-    sim_id = (
-        f"{sim.ndim}_{sim.interp_order}_{sim.refined_particle_nbr}_{layout}_{allocator}"
-    )
+    if not getattr(sim, "interp_order", None) and getattr(sim, "mhd_timestepper", None):
+        # MHD only: pyphare's MHD id (the scheme is a run time choice). No particles: the
+        #  layout only picks the grids, untiled for all but the tile set layouts (pyphare branches
+        #  differ in an MHD simulation's default: AoS, AoSMapped): plamn's AoS module
+        if getattr(sim, "hall", False):
+            raise ModuleNotFoundError("plamn: Hall MHD is not ported yet")
+        if "TS" not in layout:
+            layout = "AoS"
+        choices = (sim.reconstruction, sim.limiter, sim.riemann)
+        sim_id = f"{sim.ndim}_{layout}_{allocator}_" + "_".join(choices) + "_false"
+        build = (
+            f"./mkn.py --mhd --dim {sim.ndim} --layout {layout} --allocator {allocator}"
+            f" --reconstruction {choices[0]} --limiter {choices[1]} --riemann {choices[2]}"
+        )
+    else:
+        sim_id = (
+            f"{sim.ndim}_{sim.interp_order}_{sim.refined_particle_nbr}_{layout}_{allocator}"
+        )
+        build = (
+            f"./mkn.py --dim {sim.ndim} --interp {sim.interp_order}"
+            f" --refined {sim.refined_particle_nbr} --layout {layout} --allocator {allocator}"
+        )
     name = f"plamn.plamn_cpp_{sim_id}"
     try:
         return importlib.import_module(name)
     except ModuleNotFoundError as e:
-        raise ModuleNotFoundError(
-            f"{name} is not built: ./mkn.py --dim {sim.ndim} --interp {sim.interp_order}"
-            f" --refined {sim.refined_particle_nbr} --layout {layout} --allocator {allocator}"
-        ) from e
+        raise ModuleNotFoundError(f"{name} is not built: {build}") from e
 
 
 def _patch_density_background():
@@ -87,6 +103,38 @@ def _patch_density_background():
             dp.add_double(path, model[pop].get("density_background", 0.0))
 
     hybrid._populate_populations = populate_with_background
+
+
+def set_tag_boxes(sim, tag_boxes):
+    """levels made at initialization from tag_boxes ({level: boxes}, levels from 1, each in its
+    own level's cells: pyphare Boxes or (lower, upper) pairs, e.g. Tagger(sim).tag()) instead of
+    from their coarser level's tags (refinement="tagging"); each must be nested in its coarser
+    level (the simulator checks)"""
+    if sim.refinement != "tagging":
+        raise ValueError('tag boxes need refinement="tagging"')
+    from plamn.amr import _box
+
+    sim._plamn_tag_boxes = {
+        int(ln): [_box(b) for b in boxes] for ln, boxes in tag_boxes.items() if int(ln) > 0
+    }
+
+
+def _patch_tag_boxes():
+    from pyphare.pharein.initialize import general
+
+    populate_amr = general.populate_amr
+
+    def populate_amr_with_tag_boxes(dp, sim):
+        populate_amr(dp, sim)
+        for ln, boxes in sorted((getattr(sim, "_plamn_tag_boxes", None) or {}).items()):
+            path = f"simulation/AMR/refinement/tagging/tag_boxes/L{ln}/"
+            dp.add_int(path + "nbr_boxes", len(boxes))
+            for i, (lower, upper) in enumerate(boxes):
+                for d, k in enumerate("xyz"[: len(lower)]):
+                    dp.add_int(path + f"B{i}/lower/{k}", lower[d])
+                    dp.add_int(path + f"B{i}/upper/{k}", upper[d])
+
+    general.populate_amr = populate_amr_with_tag_boxes
 
 
 def _patch_layout_for():
@@ -133,6 +181,47 @@ def _finalize_mpi():
 _patched = False
 
 
+def _patch_enum_int():
+    """pyphare's DictPopulator.add_enum_int, its enum member names matched without case: pyphare
+    branches differ (tiling_gpu: as given, "TVDRK2"; wrangler: lower cased, "tvdrk2"), plamn.etc's
+    enums are named as the C++ (TVDRK2, VanLeer, AoSMapped)"""
+    from pyphare.pharein.initialize.dict_populator import DictPopulator
+
+    def add_enum_int(self, path, enum_name, member_name):
+        enum_cls = getattr(etc, enum_name)
+        members = {name.lower(): member for name, member in enum_cls.__members__.items()}
+        member = members.get(str(member_name).lower())
+        if member is None:
+            raise ValueError(
+                f"{enum_name}: unknown value '{member_name}',"
+                f" expected one of {list(enum_cls.__members__)}"
+            )
+        self.add_int(path, int(member.value))
+
+    DictPopulator.add_enum_int = add_enum_int
+
+
+def _patch_live_simulators():
+    """plamn's simulators hold no process wide state (PHARE's SAMRAI statics): several may be
+    live side by side (the restart tests run one from another's restart, both advanced). A
+    pyphare that allows one live simulator per process (wrangler: _replace_live_simulator raises
+    while the previous one has not reached its final time, else resets it) keeps its record of
+    the last one set up, nothing else"""
+    import weakref
+
+    from pyphare.simulator import simulator
+
+    if not hasattr(simulator.Simulator, "_replace_live_simulator"):
+        return
+
+    def replace_live_simulator(self):
+        from pyphare.simulator import _simulator
+
+        _simulator.obj = weakref.ref(self)
+
+    simulator.Simulator._replace_live_simulator = replace_live_simulator
+
+
 def patch():
     """idempotent: test classes call it from setUpClass (nothing runs at import)"""
     global _patched
@@ -153,7 +242,10 @@ def patch():
     cpp.cpp_lib = cpp_lib
 
     _patch_layout_for()
+    _patch_enum_int()
+    _patch_live_simulators()
     _patch_density_background()
+    _patch_tag_boxes()
 
     # restart directories: 10 digits each side of the point, as the C++ restart_path_for_time
     #  (pyphare's 5 decimals cannot tell small steps apart); keep_last deletes by this name

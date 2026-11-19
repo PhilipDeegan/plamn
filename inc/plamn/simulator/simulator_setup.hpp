@@ -18,6 +18,7 @@
 #include "plamn/core/numerics/ohm/ohm.hpp"
 #include "plamn/initializer/data_provider.hpp"
 #include "plamn/simulator/simulator_def.hpp"
+#include "plamn/solver/models.hpp"
 
 #include "dict.hpp"
 #include "mpi.h"
@@ -78,10 +79,6 @@ void Simulator<opts>::setup_()
             Pool::INSTANCE().configure(pools, threads);
     }
 
-    auto const models = sim["models"].template to<std::vector<std::string>>();
-    if (models != std::vector<std::string>{"HybridModel"})
-        throw std::runtime_error("plamn Simulator: only HybridModel for now");
-
     timestepper_ = Timestepper::FROM(dict_);
     dt_          = timestepper_.dt();
     timeStepNbr_ = cppdict::get_value(dict_, "simulation/time_step_nbr", 0);
@@ -122,11 +119,19 @@ void Simulator<opts>::setup_()
 
     // finer levels: the user's refinement boxes (cells of the coarser level), refined
     hierarchy_.max_levels = cppdict::get_value(dict_, "simulation/AMR/max_nbr_levels", 1);
+    models_.set_levels(sim, hierarchy_.max_levels);
+    if constexpr (Models_t::mhd_on)
+    {
+        models_.mhd = solver::MHDModel<opts>::from(sim);
+        register_mhd_resources_();
+    }
     if (hierarchy_.max_levels > 1 and amr.contains("refinement")
         and amr["refinement"].contains("tagging")
         and amr["refinement"]["tagging"].contains("threshold"))
     {
         tagging_.emplace(amr::tagging_from(amr["refinement"]["tagging"]));
+        if constexpr (Models_t::mhd_on)
+            mhd_tagging_.emplace(amr::tagging_from(amr["refinement"]["tagging"], "mhd_method"));
         clustering_.tag_buffer = cppdict::get_value(dict_, "simulation/AMR/tag_buffer", 1);
         if (amr.contains("nesting_buffer"))
             clustering_.nesting_buffer
@@ -161,6 +166,50 @@ void Simulator<opts>::setup_()
         }
     }
 
+    // tag boxes supplied (e.g. pyphare's Tagger(sim).tag()): each level's boxes (L1, L2..., in
+    //  their own level's cells), the levels made from them at initialization instead of from
+    //  their coarser level's tags; each nested in its coarser level
+    if (tagging_ and amr["refinement"]["tagging"].contains("tag_boxes"))
+    {
+        auto const& levels = amr["refinement"]["tagging"]["tag_boxes"];
+        for (int ln = 1; ln < hierarchy_.max_levels; ++ln)
+        {
+            auto const key = "L" + std::to_string(ln);
+            if (!levels.contains(key))
+                break;
+            auto const& level = levels[key];
+            auto& boxes       = supplied_tag_boxes_.emplace_back();
+            for (int b = 0, n = level["nbr_boxes"].template to<int>(); b < n; ++b)
+            {
+                auto const& box = level["B" + std::to_string(b)];
+                Box_t& fine     = boxes.emplace_back();
+                for (std::size_t i = 0; i < dimension; ++i)
+                {
+                    fine.lower[i] = box["lower"][xyz[i]].template to<int>();
+                    fine.upper[i] = box["upper"][xyz[i]].template to<int>();
+                }
+            }
+            auto const& coarser
+                = ln == 1 ? std::vector<Box_t>{hierarchy_.domain} : supplied_tag_boxes_[ln - 2];
+            for (auto const& fine : boxes)
+            {
+                std::vector<Box_t> outside{damn::core::coarsen(fine, hierarchy_.ratio)};
+                for (auto const& c : coarser)
+                {
+                    std::vector<Box_t> rest;
+                    for (auto const& o : outside)
+                        for (auto const& r : o.remove(c))
+                            rest.push_back(r);
+                    outside = std::move(rest);
+                }
+                if (!outside.empty())
+                    throw std::runtime_error("plamn Simulator: a supplied tag box of level "
+                                             + std::to_string(ln)
+                                             + " is not nested in its coarser level");
+            }
+        }
+    }
+
     if (tagging_ and amr.contains("loadbalancing"))
     {
         auto const& lb = amr["loadbalancing"];
@@ -183,12 +232,48 @@ void Simulator<opts>::setup_()
         rebalance_check_.emplace(check);
     }
 
-    ohm_info_.emplace(core::OhmInfo::FROM(sim["algo"]["ohm"]));
-
-    register_resources_();
-    setup_computed_();
+    if constexpr (Models_t::hybrid_on)
+        setup_hybrid_();
     setup_restarts_();
     setup_diagnostics_();
+}
+
+template<auto opts>
+void Simulator<opts>::setup_hybrid_()
+{
+    models_.hybrid.ohm.emplace(core::OhmInfo::FROM(dict_["simulation"]["algo"]["ohm"]));
+    register_resources_();
+    solver::hybrid::setup_computed(models_.hybrid, [&](std::string const& key, auto const& names) {
+        resources_[key] = damn::amr::same_names(names);
+    });
+}
+
+template<auto opts>
+void Simulator<opts>::register_mhd_resources_()
+{
+    using Patch_t = solver::MHDModel<opts>::Patch_t;
+    for (std::size_t s = 0; s < models_.mhd.n_states(); ++s)
+    {
+        std::vector<std::string> names{Patch_t::state_name("rho", s),
+                                       Patch_t::state_name("Etot", s)};
+        for (auto const* v : {"rhoV", "B"})
+            for (auto const* c : {"_x", "_y", "_z"})
+                names.push_back(Patch_t::state_name(v, s) + c);
+        resources_[mhd_state_key(s)] = damn::amr::same_names(names);
+    }
+    resources_["MHD_E"] = damn::amr::same_names({"E_x", "E_y", "E_z"});
+    // a reflux's step fluxes and E, their patch ghosts refilled after (PHARE's
+    //  patchGhostRefluxedAlgo_)
+    std::vector<std::string> reflux{"butcherE_x", "butcherE_y", "butcherE_z"};
+    for (std::size_t d = 0; d < dimension; ++d)
+    {
+        std::string const x{"xyz"[d]};
+        for (auto const* f : {"F_rho_butcher_", "F_Etot_butcher_"})
+            reflux.push_back(f + x);
+        for (auto const* c : {"_x", "_y", "_z"})
+            reflux.push_back("F_rhoV_butcher_" + x + c);
+    }
+    resources_["MHDReflux"] = damn::amr::same_names(reflux);
 }
 
 // what moves between patches, named as for_each_resource(HybridPatch) names it
@@ -218,7 +303,7 @@ void Simulator<opts>::register_resources_()
     for (std::size_t i = 0; i < nbr_pops; ++i)
     {
         auto const name = ions["pop" + std::to_string(i)]["name"].template to<std::string>();
-        population_names_.push_back(name);
+        models_.hybrid.population_names.push_back(name);
 
         // every population's moments in one exchange, as PHARE
         add("IonPopBorderSum", components(name + "_flux"));
@@ -236,18 +321,8 @@ void Simulator<opts>::register_resources_()
 template<auto opts>
 std::vector<double> Simulator<opts>::box_weights_(int const ln, std::vector<Box_t> const& boxes)
 {
-    auto const& ions    = dict_["simulation"]["ions"];
-    auto const nbr_pops = ions["nbrPopulations"].template to<std::size_t>();
-
-    using Initializers = Patch_t::Types::ParticleInitializerFactory_t;
-    std::vector<decltype(Initializers::create(ions["pop0"]["particle_initializer"]))> initializers;
-    for (std::size_t i = 0; i < nbr_pops; ++i)
-    {
-        auto const& pop = ions["pop" + std::to_string(i)];
-        initializers.push_back(Initializers::create(pop["particle_initializer"],
-                                                    pop["name"].template to<std::string>()));
-    }
-
+    auto const count
+        = solver::hybrid::initial_particle_counter(models_.hybrid, dict_["simulation"]);
     std::vector<double> weights(boxes.size(), 0.);
     for (std::size_t k = static_cast<std::size_t>(rank_); k < boxes.size();
          k += static_cast<std::size_t>(n_ranks_))
@@ -261,11 +336,7 @@ std::vector<double> Simulator<opts>::box_weights_(int const ln, std::vector<Box_
         auto const count_ln = ln > 0 ? ln - 1 : ln;
         auto const box      = ln > 0 ? damn::core::coarsen(boxes[k], hierarchy_.ratio) : boxes[k];
         double const per    = ln > 0 ? static_cast<double>(opts.nbRefinedPart) : 1.;
-        Layout_t const layout{box, damn::amr::mesh_size(hierarchy_, count_ln),
-                              damn::amr::position(hierarchy_, count_ln, box.lower), count_ln};
-        for (auto const& initializer : initializers)
-            w += per * static_cast<double>(initializer->nbrParticles(layout));
-        weights[k] = w;
+        weights[k]          = w + per * count(layout_of_(count_ln, box));
     }
     if (n_ranks_ > 1)
         MPI_Allreduce(MPI_IN_PLACE, weights.data(), static_cast<int>(weights.size()), MPI_DOUBLE,

@@ -58,10 +58,11 @@ namespace
             }
         }
 
+        // the tagged components by their model free names (B_x...: tagged_components)
         auto resources()
         {
             return [this](std::string const& name) {
-                return field_resource<gw>(name == "EM_B_x" ? x : name == "EM_B_y" ? y : z);
+                return field_resource<gw>(name == "B_x" ? x : name == "B_y" ? y : z);
             };
         }
     };

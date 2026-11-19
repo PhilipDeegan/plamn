@@ -5,6 +5,10 @@ the finest level's grid, and the two composites are compared.
 
   python3 etc/compare/phare/compare_physics.py [--case harris_2d] [--ndim 2] [--steps 10]
                                                [--ref next] [--cmp plamn] [--np 1]
+                                               [--all-times] [--json FILE]
+
+--all-times: B and E at every dump time (a long run: how the two codes drift apart), --json: the
+rows written to FILE too.
 
 The composite: each level's B at cell centres (a primal direction averaged over the cell's two
 nodes), the coarsest level everywhere, each finer level linearly interpolated from the one under
@@ -26,19 +30,49 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 
-def composite(path, component, time=None):
-    """(the finest grid's B component at cell centres, time, number of levels)"""
+# the MHD quantities (PHARE's MHDDiagnostics /mhd/<qty>), cell centred: scalars, or V (vector)
+MHD_SCALARS = ("rho", "P")
+MHD_VECTORS = ("V",)
+
+
+def components(qty):
+    return [""] if qty in MHD_SCALARS else list("xyz")
+
+
+def field(qty, component, ndim):
+    """(file, dataset, primal directions) of a quantity's component"""
+    if qty in MHD_SCALARS:
+        return f"mhd_{qty}.h5", qty, []
+    if qty in MHD_VECTORS:
+        return f"mhd_{qty}.h5", f"{qty}_{component}", []
+    # Yee: B_c primal along c, E_c dual along c and primal across
+    d_c = "xyz".index(component)
+    if qty == "B":
+        primal = [d_c] if d_c < ndim else []
+    else:
+        primal = [d for d in range(ndim) if d != d_c]
+    return f"EM_{qty}.h5", f"EM_{qty}_{component}", primal
+
+
+def dump_times(path, qty="B"):
+    import h5py
+
+    with h5py.File(Path(path) / field(qty, components(qty)[0], 1)[0], "r") as f:
+        return sorted(f["/t"].keys(), key=float)
+
+
+def composite(path, component, time=None, qty="B"):
+    """(the finest grid's quantity component at cell centres, time, number of levels)"""
     import h5py
     from scipy.ndimage import map_coordinates
 
-    f = h5py.File(Path(path) / "EM_B.h5", "r")
+    f = h5py.File(Path(path) / field(qty, component, 1)[0], "r")
     times = sorted(f["/t"].keys(), key=float)
     t = times[-1] if time is None else time
     g = f[f"/t/{t}"]
     levels = sorted((k for k in g.keys() if k.startswith("pl")), key=lambda k: int(k[2:]))
-    ds = f"EM_B_{component}"
     ndim = len(g[levels[0]][next(iter(g[levels[0]]))].attrs["lower"])
-    primal = ["xyz".index(component)] if "xyz".index(component) < ndim else []
+    _, ds, primal = field(qty, component, ndim)
 
     def level_cells(ln, shape):
         a = np.full(shape, np.nan)
@@ -72,11 +106,11 @@ def composite(path, component, time=None):
     return comp, float(t), len(levels)
 
 
-def compare(ref, cmp, ndim):
+def compare(ref, cmp, ndim, qty="B", time=None):
     rows = []
-    for c in "xyz":
-        a, ta, la = composite(ref, c)
-        b, tb, lb = composite(cmp, c)
+    for c in components(qty):
+        a, ta, la = composite(ref, c, time, qty)
+        b, tb, lb = composite(cmp, c, time, qty)
         if a.shape != b.shape:  # a code with fewer levels: up to the finer one
             from scipy.ndimage import zoom
 
@@ -87,7 +121,8 @@ def compare(ref, cmp, ndim):
         scale = max(np.max(np.abs(a)), 1e-300)
         d = np.abs(a - b)
         at = np.unravel_index(np.argmax(d), d.shape)
-        rows.append((c, ta, tb, la, lb, scale, d.max() / scale, np.sqrt(np.mean(d**2)) / scale, at))
+        rows.append((qty + c, ta, tb, la, lb, scale, d.max() / scale,
+                     np.sqrt(np.mean(d**2)) / scale, at))
     return rows
 
 
@@ -100,6 +135,12 @@ def main(argv=None):
     p.add_argument("--cmp", default="plamn")
     p.add_argument("--np", type=int, default=1, help="MPI ranks per run")
     p.add_argument("--no-run", action="store_true", help="compare the runs already there")
+    p.add_argument("--all-times", action="store_true", help="B and E at every dump time")
+    p.add_argument("--json", default=None, help="the rows written to this file too")
+    p.add_argument(
+        "--quantities", nargs="+", default=None,
+        help="B, E, rho, V, P (default: B, and E with --all-times; an MHD case: B rho V P)",
+    )
     a = p.parse_args(argv)
 
     import os
@@ -119,11 +160,35 @@ def main(argv=None):
         for code in (a.ref, a.cmp):
             test_ladder.run(code, a.case, out[code], None, steps=a.steps)
 
-    print(f"{a.case} {a.ndim}D, {a.steps} steps, {cases.PPC} ppc: {a.ref} vs {a.cmp}, final B on the"
-          " finest grid")
-    for c, ta, tb, la, lb, scale, dmax, drms, at in compare(out[a.ref], out[a.cmp], a.ndim):
-        print(f"  B{c}: t {ta:g}/{tb:g}, levels {la}/{lb}, max|B| {scale:.3g}, "
-              f"max diff {dmax:.2e}, rms diff {drms:.2e} (relative), largest at {tuple(int(i) for i in at)}")
+    quantities = a.quantities
+    if quantities is None:
+        if cases.CASES[a.case].get("mhd_shock") or cases.CASES[a.case].get("mhd_advance"):
+            quantities = ["B", "rho", "V", "P"]
+        else:
+            quantities = ["B", "E"] if a.all_times else ["B"]
+    times = dump_times(out[a.ref], quantities[0]) if a.all_times else [None]
+    what = " ".join(quantities) + (" at every dump" if a.all_times else ", final")
+    print(f"{a.case} {a.ndim}D, {a.steps} steps, {cases.PPC} ppc: {a.ref} vs {a.cmp}, {what} on the"
+          " finest grid (differences relative to the largest |value|)")
+    report = []
+    for t in times:
+        for qty in quantities:
+            for c, ta, tb, la, lb, scale, dmax, drms, at in compare(
+                out[a.ref], out[a.cmp], a.ndim, qty, t
+            ):
+                print(f"  {c}: t {ta:g}/{tb:g}, levels {la}/{lb}, max|{c}| {scale:.3g}, "
+                      f"max diff {dmax:.2e}, rms diff {drms:.2e}, largest at "
+                      f"{tuple(int(i) for i in at)}")
+                report.append(dict(quantity=c, t=ta, levels=[la, lb], scale=scale,
+                                   max_diff=dmax, rms_diff=drms))
+    if a.json:
+        import json
+
+        Path(a.json).write_text(json.dumps(report, indent=1))
+    if not all(np.isfinite(r["max_diff"]) for r in report):
+        print("a difference is not finite: a run blew up or wrote NaN")
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@
 #include "plamn/initializer/data_provider.hpp"
 #include "plamn/simulator/restart_paths.hpp"
 #include "plamn/simulator/simulator_def.hpp"
+#include "plamn/core/models/options/mhd_options_def.hpp"
 #include "plamn/core/numerics/ohm/ohm.hpp"
 #include "plamn/core/boundary/boundary_defs.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
@@ -238,6 +239,34 @@ NB_MODULE(plamn_etc, m)
         .value("reflective", plamn::core::BoundaryType::Reflective)
         .value("super_magnetofast_inflow", plamn::core::BoundaryType::SuperMagnetofastInflow)
         .value("open", plamn::core::BoundaryType::Open);
+
+    // the MHD choices, by pyphare's names (pharein/initialize/mhd.py writes their values)
+    {
+        using namespace plamn::MHDOpts;
+        nb::enum_<TimeIntegratorType>(m, "TimeIntegratorType", nb::is_arithmetic())
+            .value("MHDOff", TimeIntegratorType::MHDOff)
+            .value("Euler", TimeIntegratorType::Euler)
+            .value("TVDRK2", TimeIntegratorType::TVDRK2)
+            .value("TVDRK3", TimeIntegratorType::TVDRK3)
+            .value("SSPRK4_5", TimeIntegratorType::SSPRK4_5);
+        nb::enum_<ReconstructionType>(m, "ReconstructionType", nb::is_arithmetic())
+            .value("MHDOff", ReconstructionType::MHDOff)
+            .value("Constant", ReconstructionType::Constant)
+            .value("Linear", ReconstructionType::Linear)
+            .value("WENO3", ReconstructionType::WENO3)
+            .value("WENOZ", ReconstructionType::WENOZ)
+            .value("MP5", ReconstructionType::MP5);
+        nb::enum_<SlopeLimiterType>(m, "SlopeLimiterType", nb::is_arithmetic())
+            .value("MHDOff", SlopeLimiterType::MHDOff)
+            .value("None", SlopeLimiterType::None)
+            .value("VanLeer", SlopeLimiterType::VanLeer)
+            .value("MinMod", SlopeLimiterType::MinMod);
+        nb::enum_<RiemannSolverType>(m, "RiemannSolverType", nb::is_arithmetic())
+            .value("MHDOff", RiemannSolverType::MHDOff)
+            .value("Rusanov", RiemannSolverType::Rusanov)
+            .value("HLL", RiemannSolverType::HLL)
+            .value("HLLD", RiemannSolverType::HLLD);
+    }
 
     nb::enum_<plamn::TimeStepType>(m, "TimeStepType", nb::is_arithmetic())
         .value("constant", plamn::TimeStepType::constant)

@@ -60,15 +60,14 @@ NO_DISCARD inline std::string file_name(std::string const& quantity)
     return name + ".h5";
 }
 
-// PHARE's core::to_string_with_precision(t, 10): fixed, the last digit 0
+// what PHARE's core::to_string_with_precision(t, 10) returns: fixed, 10 decimals (it zeroes the
+//  last digit of a copy, then returns the stream's string: every digit kept)
 NO_DISCARD inline std::string time_key(double const t)
 {
     std::ostringstream out;
     out.precision(10);
     out << std::fixed << t;
-    auto key   = out.str();
-    key.back() = '0';
-    return key;
+    return out.str();
 }
 
 NO_DISCARD inline std::string patch_path(std::string const& time, int const level, int const rank,

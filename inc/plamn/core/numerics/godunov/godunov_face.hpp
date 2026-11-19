@@ -4,6 +4,7 @@
 #include "damn/core/def/damn_config.hpp"
 #include "plamn/core/models/quantities/mhd_quantities.hpp"
 #include "plamn/core/numerics/godunov/mhd_point_state.hpp"
+#include "plamn/core/numerics/godunov/hll.hpp"
 #include "plamn/core/numerics/godunov/rusanov.hpp"
 #include "damn/core/def.hpp"
 
@@ -18,7 +19,7 @@
 namespace plamn::core
 {
 
-template<typename Reconstruction>
+template<typename Reconstruction, typename Riemann = RusanovRiemann>
 struct GodunovFace
 {
     double gamma;
@@ -40,7 +41,7 @@ struct GodunovFace
         transverse_<dir, (dir + 1) % 3>(B, ijk, uL, uR);
         transverse_<dir, (dir + 2) % 3>(B, ijk, uL, uR);
 
-        return rusanov<dir>(gamma, uL, uR);
+        return Riemann::template solve<dir>(gamma, uL, uR);
     }
 
     // the face's result into the direction's flux and constrained transport fields

@@ -57,8 +57,8 @@ auto constexpr opts = plamn::SimOpts{.dimension     = dim,
                                      .layout_mode   = plamn::core::LayoutMode::AoSMapped,
                                      .alloc_mode    = damn::AllocatorMode::CPU};
 using Simulator     = plamn::Simulator<opts>;
-using Patch         = Simulator::Patch_t;
-using Grid          = Simulator::Grid_t;
+using Patch         = plamn::solver::HybridModel<opts>::Patch_t;
+using Grid          = plamn::solver::HybridModel<opts>::Grid_t;
 using Box           = damn::core::Box<int, dim>;
 using Point         = damn::core::Point<int, dim>;
 

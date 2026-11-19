@@ -28,6 +28,8 @@
 #include <type_traits>
 #include <vector>
 #include <cstdint>
+#include "damn/amr/physical_boundary.hpp"
+#include "plamn/core/boundary/physical_boundaries.hpp"
 
 namespace damn::core
 {
@@ -110,12 +112,12 @@ void Simulator<opts>::check_set_(std::size_t const ln, std::string const& key,
     if constexpr (!DAMN_DEBUG)
         return;
 
-    auto& l           = levels_[ln];
+    auto& ld          = data_(ln);
     auto const domain = damn::amr::level_domain(hierarchy_, static_cast<int>(ln));
-    for (std::size_t i = 0; i < damn::amr::size(l.data); ++i)
+    for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
         for (auto const* c : {"_x", "_y", "_z"})
-            damn::amr::with_resource(l.data.data[i], key + c, [&](auto const& r) {
-                auto const& cells = l.data.patches[i].box;
+            damn::amr::with_resource(ld.data[i], key + c, [&](auto const& r) {
+                auto const& cells = ld.patches[i].box;
                 auto const at
                     = simulator::detail::first_unset(r, cells, domain, hierarchy_.periodic);
                 if (!at)
@@ -130,22 +132,81 @@ void Simulator<opts>::check_set_(std::size_t const ln, std::string const& key,
 template<auto opts>
 void Simulator<opts>::touch_up_level_ghosts_(std::size_t const ln, std::string const& key)
 {
-    auto constexpr gw = Patch_t::field_ghost_width;
-    auto& l           = levels_[ln];
-    auto const dx     = damn::amr::mesh_size(hierarchy_, static_cast<int>(ln));
-    for (std::size_t i = 0; i < damn::amr::size(l.data); ++i)
+    auto& l       = levels_[ln];
+    auto const dx = damn::amr::mesh_size(hierarchy_, static_cast<int>(ln));
+    models_.visit(ln, [&](auto& model) {
+        using Patch_t  = std::remove_cvref_t<decltype(model)>::Patch_t;
+        using Resource = amr::FieldResource<typename Patch_t::Grid_t, Patch_t::field_ghost_width>;
+        auto& ld       = model.levels[static_cast<int>(ln)];
+        for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
+        {
+            std::vector<Resource> B;
+            for (auto const* c : {"_x", "_y", "_z"})
+                damn::amr::with_resource(ld.data[i], key + c, [&](auto& r) {
+                    if constexpr (std::is_same_v<std::decay_t<decltype(r)>, Resource>)
+                        B.push_back(r);
+                });
+            for (auto const& region : l.level_ghost_cells[i])
+                amr::divergence_free_touch_up(std::array{&B[0], &B[1], &B[2]}, ld.patches[i].box,
+                                              region, dx);
+        }
+    });
+}
+
+template<auto opts>
+void Simulator<opts>::mhd_physical_boundaries_(std::size_t const ln, auto&& fn)
+{
+    auto constexpr gw = solver::MHDModel<opts>::Patch_t::field_ghost_width;
+    auto& ld          = models_.mhd.levels[static_cast<int>(ln)];
+    for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
     {
-        std::vector<amr::FieldResource<typename Patch_t::Grid_t, gw>> B;
-        for (auto const* c : {"_x", "_y", "_z"})
-            damn::amr::with_resource(l.data.data[i], key + c, [&](auto& r) {
-                if constexpr (std::is_same_v<std::decay_t<decltype(r)>,
-                                             amr::FieldResource<typename Patch_t::Grid_t, gw>>)
-                    B.push_back(r);
-            });
-        for (auto const& region : l.level_ghost_cells[i])
-            amr::divergence_free_touch_up(std::array{&B[0], &B[1], &B[2]}, l.data.patches[i].box,
-                                          region, dx);
+        auto regions = damn::amr::physical_boundary_regions(hierarchy_, static_cast<int>(ln),
+                                                            ld.patches[i].box, gw);
+        if (!regions.empty())
+            fn(*ld.data[i], std::move(regions));
     }
+}
+
+// patch ghosts, level ghosts (from the coarser level at t), then the physical boundaries'
+template<auto opts>
+void Simulator<opts>::fill_mhd_state_ghosts_(std::size_t const ln, std::size_t const s,
+                                             double const t)
+{
+    copy_(ln, damn::amr::fill_ghosts, mhd_state_key(s));
+    if (ln > 0)
+        refine_mhd_level_ghosts_(ln, s, t);
+    mhd_physical_boundaries_(ln, [&](auto& patch, auto regions) {
+        auto& u = patch.states[s];
+        core::fill_physical_boundaries(models_.mhd.boundaries, std::move(regions), patch.layout,
+                                       u.rho, u.Etot, u.rhoV, u.B);
+    });
+}
+
+template<auto opts>
+void Simulator<opts>::fill_mhd_electric_ghosts_(std::size_t const ln, double)
+{
+    copy_(ln, damn::amr::fill_ghosts, "MHD_E");
+    mhd_physical_boundaries_(ln, [&](auto& patch, auto regions) {
+        core::fill_physical_boundaries(models_.mhd.boundaries, std::move(regions), patch.layout,
+                                       patch.E);
+    });
+}
+
+template<auto opts>
+void Simulator<opts>::refine_mhd_level_ghosts_(std::size_t const ln, std::size_t const s,
+                                               double const t)
+{
+    using Patch_t    = solver::MHDModel<opts>::Patch_t;
+    auto const name  = [&](std::string const& q) { return Patch_t::state_name(q, s); };
+    auto const alpha = alpha_(ln, t);
+    std::vector<damn::amr::LevelPair> pairs{{"rho_old", name("rho"), "rho"},
+                                            {"Etot_old", name("Etot"), "Etot"}};
+    for (auto const& p : amr::vector_pairs("rhoV_old", name("rhoV"), "rhoV"))
+        pairs.push_back(p);
+    refine_(ln, amr::FieldRefiner{}, damn::amr::LevelRegion::LevelGhosts, pairs, alpha);
+    refine_(ln, amr::FieldRefiner{}, damn::amr::LevelRegion::LevelGhosts,
+            amr::vector_pairs("B_old", name("B"), "B"), alpha);
+    touch_up_level_ghosts_(ln, name("B"));
 }
 
 } // namespace plamn

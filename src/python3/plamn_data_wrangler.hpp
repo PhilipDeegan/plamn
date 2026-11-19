@@ -24,6 +24,7 @@
 
 #include "plamn/core/data/particles/particle_components.hpp"
 #include "plamn/core/data/vecfield/vecfield_component.hpp"
+#include "plamn/solver/hybrid/model.hpp"
 
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
@@ -73,7 +74,7 @@ template<typename Simulator>
 class [[gnu::visibility("hidden")]] HybridPatchLevel
 {
     auto static constexpr dim = Simulator::dimension;
-    using Patch_t             = Simulator::Patch_t;
+    using Patch_t             = plamn::solver::HybridModel<Simulator::options>::Patch_t;
     using Particles_t         = Patch_t::Particles_t;
 
 public:
@@ -331,7 +332,7 @@ void declare_data_wrangler(nb::module_& m)
     auto constexpr dim = Simulator::dimension;
     using DW           = DataWrangler<Simulator>;
     using Level        = DW::Level_t;
-    using Particles_t  = Simulator::Patch_t::Particles_t;
+    using Particles_t  = plamn::solver::HybridModel<Simulator::options>::Patch_t::Particles_t;
     using Particle_t   = plamn::core::Particle<dim>;
 
     nb::class_<Particle_t>(m, "Particle")

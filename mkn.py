@@ -9,10 +9,14 @@
     ./mkn.py --sync-pools                 # damn's thread pools run tasks on the calling thread
     ./mkn.py --dim 2 --diag-doubles       # diagnostics in double precision, as PHARE_DIAG_DOUBLES=1
     ./mkn.py --dim 2 --cell-jump 1        # PHARE's ghost widths (particles may move 1 cell a step)
+    ./mkn.py --mhd                        # MHD only, 1D: plamn_cpp_1_AoS_CPU_Linear_VanLeer_Rusanov_false
+    ./mkn.py --mhd --limiter VanLeer MinMod   # every combination of the MHD choices
 
 The permutation is set with compile definitions (PLAMN_SIM_*, see src/python3/plamn_sim.cpp)
 and the module named as plamn looks for it: plamn_cpp_<dim>_<interp>_<refined>_<layout>_<alloc>,
-pyphare's simulator id. Run from the plamn root; py_etc is built once first unless --no-etc.
+pyphare's simulator id; MHD only (--mhd, no hybrid: interp 0), pyphare's MHD id
+plamn_cpp_<dim>_<layout>_<alloc>_<reconstruction>_<limiter>_<riemann>_<hall> (the time
+integration scheme is a run time choice). Run from the plamn root; py_etc is built once first unless --no-etc.
 The modules use MPI: built with res/mkn/mpi's settings (mpicxx) unless -x is given after --.
 
 Scopes (DAMN_LOG_SCOPE(level, "name")) up to --log-level (default 2) are phlop scopes; what each
@@ -50,6 +54,20 @@ ALLOCATORS = ["CPU", "GPU_UNIFIED"]
 
 def module_name(dim, interp, refined, layout, allocator):
     return f"plamn_cpp_{dim}_{interp}_{refined}_{layout}_{allocator}"
+
+
+def mhd_module_name(dim, layout, allocator, reconstruction, limiter, riemann, hall=False):
+    """pyphare's simulator id of an MHD only simulation (pyphare/cpp/__init__.py)"""
+    return (
+        f"plamn_cpp_{dim}_{layout}_{allocator}_{reconstruction}_{limiter}_{riemann}_"
+        + ("true" if hall else "false")
+    )
+
+
+# the MHD choices ported (plamn::solver::mhd::reconstruction static_asserts the rest)
+RECONSTRUCTIONS = ["Constant", "Linear", "WENO3", "WENOZ", "MP5"]
+LIMITERS = ["VanLeer", "MinMod", "None"]  # None: the non linear reconstructions
+RIEMANNS = ["Rusanov", "HLL"]
 
 
 def has_name_option():
@@ -93,8 +111,14 @@ def main(argv):
     parser.add_argument(
         "--refined", type=int, default=None, help="default: pyphare's first valid one"
     )
-    parser.add_argument("--layout", nargs="+", default=["AoSMapped"], choices=LAYOUTS)
+    parser.add_argument(
+        "--layout", nargs="+", choices=LAYOUTS, help="default AoSMapped; --mhd: AoS (pyphare's)"
+    )
     parser.add_argument("--allocator", nargs="+", default=["CPU"], choices=ALLOCATORS)
+    parser.add_argument("--mhd", action="store_true", help="MHD only modules (no hybrid)")
+    parser.add_argument("--reconstruction", nargs="+", default=["Linear"], choices=RECONSTRUCTIONS)
+    parser.add_argument("--limiter", nargs="+", default=["VanLeer"], choices=LIMITERS)
+    parser.add_argument("--riemann", nargs="+", default=["Rusanov"], choices=RIEMANNS)
     parser.add_argument("--no-etc", action="store_true", help="don't build py_etc")
     parser.add_argument("--jobs", type=int, default=8, help="mkn -t (CI: 4)")
     parser.add_argument(
@@ -129,6 +153,8 @@ def main(argv):
     else:
         extra = []
     args = parser.parse_args(argv)
+    if args.layout is None:  # pyphare's: an MHD only simulation's model_layout is AoS
+        args.layout = ["AoS"] if args.mhd else ["AoSMapped"]
     if "-x" not in extra:
         extra += ["-x", "res/mkn/mpi"]
 
@@ -151,6 +177,26 @@ def main(argv):
 
     if not args.no_etc and mkn("py_etc", extra, args.jobs):
         return 1
+
+    if args.mhd:
+        for dim, layout, allocator, reconstruction, limiter, riemann in itertools.product(
+            args.dim, args.layout, args.allocator, args.reconstruction, args.limiter, args.riemann
+        ):
+            name = mhd_module_name(dim, layout, allocator, reconstruction, limiter, riemann)
+            defines = [
+                f"-DPLAMN_SIM_DIM={dim}",
+                "-DPLAMN_SIM_INTERP=0",
+                "-DPLAMN_SIM_REFINED=0",
+                f"-DPLAMN_SIM_LAYOUT={layout}",
+                f"-DPLAMN_SIM_ALLOCATOR={allocator}",
+                f"-DPLAMN_SIM_RECONSTRUCTION={reconstruction}",
+                f"-DPLAMN_SIM_LIMITER={limiter}",
+                f"-DPLAMN_SIM_RIEMANN={riemann}",
+                f"-DPLAMN_SIM_MODULE={name}",
+            ] + scoping
+            if mkn("py_sim", extra, args.jobs, defines, out=name, own_dir=True):
+                return 1
+        return 0
 
     for dim, interp, layout, allocator in itertools.product(
         args.dim, args.interp, args.layout, args.allocator

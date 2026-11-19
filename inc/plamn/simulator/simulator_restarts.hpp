@@ -37,6 +37,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <filesystem>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -61,26 +62,6 @@ void Simulator<opts>::setup_restarts_()
     restarts_.load_path    = get("loadPath", std::string{});
     restarts_.restart_time = get("restart_time", 0.);
     std::sort(restarts_.elapsed.begin(), restarts_.elapsed.end());
-}
-
-template<auto opts>
-std::vector<std::string> Simulator<opts>::restart_names_() const
-{
-    std::vector<std::string> names;
-    for (auto const* em : {"EM_B", "EM_E"})
-        for (auto const* c : {"_x", "_y", "_z"})
-            names.push_back(std::string{em} + c);
-    // the totals a synchronization coarsened: not the populations' sum on a coarser level
-    names.push_back("ions_charge_density");
-    for (auto const* c : {"_x", "_y", "_z"})
-        names.push_back(std::string{"ions_charge_flux"} + c);
-    for (auto const& pop : population_names_)
-    {
-        names.push_back(pop + "_domain");
-        for (auto const* m : {"_density", "_charge_density", "_flux_x", "_flux_y", "_flux_z"})
-            names.push_back(pop + m);
-    }
-    return names;
 }
 
 template<auto opts>
@@ -141,27 +122,24 @@ void Simulator<opts>::write_restart_(std::string const& dir)
                              static_cast<std::uint64_t>(rebalance_check_->steps_to_next_check));
     }
 
-    // SoAVXChunked: the particles written without the domains' gaps, laid out again after, as
-    //  loading does (the same memory order then on both sides of a restart)
-    auto const compacting = [&](bool const compact) {
-        if constexpr (Patch_t::Particles_t::layout_mode == core::LayoutMode::SoAVXChunked)
-            for (std::size_t ln = 0; ln < levels_.size(); ++ln)
-                per_patch_(ln, [&](auto& patch) {
-                    for (auto& pop : patch.ions)
-                        compact ? pop.domainParticles().compact() : pop.domainParticles().sort();
-                });
+    // each level by its model: what it stores, around the writing (hybrid: restart_writing)
+    auto const hybrid_writing = [&](std::size_t const ln, bool const writing) {
+        models_.visit(ln, [&](auto& model) {
+            if constexpr (solver::is_hybrid_model_v<std::remove_cvref_t<decltype(model)>>)
+                solver::hybrid::restart_writing(model, level_services_(ln), writing);
+        });
     };
-    compacting(true);
-
-    auto const names = restart_names_();
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
-    {
-        auto const group = "/level" + std::to_string(ln);
-        write_checkpoint(file, group, hierarchy_.levels[ln], levels_[ln].data, names);
-    }
+        hybrid_writing(ln, /*writing=*/true);
+    for (std::size_t ln = 0; ln < levels_.size(); ++ln)
+        models_.visit(ln, [&](auto& model) {
+            write_checkpoint(file, "/level" + std::to_string(ln), hierarchy_.levels[ln],
+                             model.levels[static_cast<int>(ln)], restart_names_(model));
+        });
     for (std::size_t ln = 0; ln < clustered_.size(); ++ln)
         write_boxes(file, "/clustered" + std::to_string(ln), clustered_[ln]);
-    compacting(false);
+    for (std::size_t ln = 0; ln < levels_.size(); ++ln)
+        hybrid_writing(ln, /*writing=*/false);
 #else
     throw std::runtime_error("plamn Simulator: restarts need HDF5 (damn_hdf5): " + dir);
 #endif
@@ -189,7 +167,6 @@ void Simulator<opts>::load_restart_()
             file.read_attribute<std::uint64_t>("/restart", "rebalance_steps_to_next_check"));
     }
 
-    auto const names    = restart_names_();
     auto const n_levels = file.read_attribute<int>("/restart", "levels");
     for (int ln = 0; ln < n_levels; ++ln)
     {
@@ -197,7 +174,10 @@ void Simulator<opts>::load_restart_()
         auto const stored = read_level<dimension>(file, group + "/level", ln);
         damn::amr::set_level(hierarchy_, stored.level);
         allocate_level_(ln);
-        read_checkpoint(file, group, hierarchy_.levels[ln], levels_[ln].data, names);
+        models_.visit(static_cast<std::size_t>(ln), [&](auto& model) {
+            read_checkpoint(file, group, hierarchy_.levels[ln], model.levels[ln],
+                            restart_names_(model));
+        });
     }
     clustered_.resize(static_cast<std::size_t>(file.read_attribute<int>("/restart", "clustered")));
     for (std::size_t ln = 0; ln < clustered_.size(); ++ln)
@@ -209,53 +189,23 @@ void Simulator<opts>::load_restart_()
 #endif
 }
 
-// what the running simulator holds between steps, from what was stored: the particles' maps,
-// the level ghost particles (split from the coarser level, as first_step_ does), the mass
-// density and bulk velocity (from the populations'), J (from B), and every level's old copies
+// what the running simulator holds between steps, from what was stored: the model's, and every
+// level's old copies
 template<auto opts>
 void Simulator<opts>::rebuild_after_load_()
 {
-    using damn::amr::LevelRegion;
-    auto const t = currentTime_;
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
     {
-        per_patch_(ln, [](auto& patch) {
-            for (auto& pop : patch.ions)
+        models_.visit(ln, [&](auto& model) {
+            if constexpr (solver::is_mhd_model_v<std::remove_cvref_t<decltype(model)>>)
             {
-                if constexpr (requires { pop.domainParticles().remap(); })
-                    pop.domainParticles().remap();
-                if constexpr (requires { pop.domainParticles().compact(); }) // SoAVXChunked
-                    pop.domainParticles().sort(); // the gaps as at initialization
+                MHDLevel level{*this, ln};
+                solver::mhd::restart_loaded(model, level, currentTime_);
             }
+            else
+                solver::hybrid::restart_loaded(model, level_services_(ln));
         });
-        if (ln > 0)
-        {
-            for (auto const& name : population_names_)
-                refine_(ln, amr::ParticleSplitter<Splitter_t>{}, LevelRegion::LevelGhosts,
-                        {{name + "_domain", name + "_level_ghost_old", ""}});
-            own_level_ghosts_(ln, /*new_ghosts=*/false);
-            per_patch_(ln, [](auto& patch) {
-                for (auto& pop : patch.ions)
-                    pop.levelGhostParticles() = pop.levelGhostParticlesOld();
-            });
-        }
-        // the mass density and bulk velocity from the populations' (stored); the charge
-        //  density and flux as stored (coarsened where a finer level was synchronized)
-        per_patch_(ln, [&](auto& patch) {
-            std::vector<std::vector<double>> stored;
-            auto const each = [&](auto&& fn) {
-                fn(patch.chargeDensity);
-                for (auto& c : patch.chargeFlux)
-                    fn(c);
-            };
-            each([&](auto const& g) { stored.emplace_back(g.data(), g.data() + g.size()); });
-            patch.ions.update();
-            std::size_t i = 0;
-            each([&](auto& g) { std::copy(stored[i].begin(), stored[i].end(), g.data()), ++i; });
-        });
-        per_patch_(
-            ln, [&](auto& patch) { core::AmpereTransformer{}(patch.layout, patch.em.B, patch.J); });
-        prepare_step_(static_cast<int>(ln), t);
+        prepare_step_(static_cast<int>(ln), currentTime_);
     }
 }
 

@@ -46,73 +46,6 @@
 // plamn::Simulator: tagging, clustering, regrid, load balancing
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
-namespace plamn::simulator::detail
-{
-// a patch's domain particles per cell, all populations
-template<std::size_t dim>
-struct CellCounts
-{
-    damn::core::Box<int, dim> cells;
-    std::vector<double> n = std::vector<double>(cells.size(), 0.);
-
-    NO_DISCARD std::size_t index(damn::core::Point<int, dim> const& c) const
-    {
-        std::size_t k = 0, stride = 1;
-        for (std::size_t d = 0; d < dim; ++d)
-        {
-            k += static_cast<std::size_t>(c[d] - cells.lower[d]) * stride;
-            stride *= static_cast<std::size_t>(cells.upper[d] - cells.lower[d] + 1);
-        }
-        return k;
-    }
-
-    // the particles in box's cells (those keep(cell) keeps)
-    NO_DISCARD double in(damn::core::Box<int, dim> const& box, auto&& keep) const
-    {
-        double sum = 0;
-        if (auto const overlap = box * cells)
-            damn::core::for_each_point(*overlap, [&](auto const& c) {
-                if (keep(c))
-                    sum += n[index(c)];
-            });
-        return sum;
-    }
-    NO_DISCARD double in(damn::core::Box<int, dim> const& box) const
-    {
-        return in(box, [](auto const&) { return true; });
-    }
-};
-
-template<typename Patch>
-NO_DISCARD auto cell_counts(Patch const& patch)
-{
-    auto constexpr dim = Patch::dimension;
-    CellCounts<dim> counts{patch.layout.cells};
-    for (auto const& pop : patch.ions)
-    {
-        auto const& particles = pop.domainParticles();
-        for (std::size_t p = 0; p < particles.size(); ++p)
-        {
-            damn::core::Point<int, dim> const c{particles[p].iCell()};
-            if (damn::core::isIn(c, counts.cells))
-                counts.n[counts.index(c)] += 1;
-        }
-    }
-    return counts;
-}
-
-// true if coarse cell c is refined into one of the patches (whole coarse cells)
-template<std::size_t dim>
-NO_DISCARD bool refined_into(damn::core::Point<int, dim> const& c, int const ratio,
-                             std::vector<damn::amr::Patch<dim>> const& patches)
-{
-    auto const fine = c * ratio;
-    for (auto const& p : patches)
-        if (damn::core::isIn(fine, p.box))
-            return true;
-    return false;
-}
-} // namespace plamn::simulator::detail
 
 namespace plamn
 {
@@ -120,26 +53,32 @@ template<auto opts>
 std::vector<typename Simulator<opts>::Box_t> Simulator<opts>::cluster_(int const ln)
 {
     DAMN_LOG_SCOPE(1, "Simulator::cluster_");
-    using Resource = amr::FieldResource<typename Patch_t::Grid_t, Patch_t::field_ghost_width>;
-    auto& l        = levels_[ln];
-    auto const dx  = damn::amr::mesh_size(hierarchy_, ln);
-
+    auto const dx = damn::amr::mesh_size(hierarchy_, ln);
     std::vector<damn::core::Point<int, dimension>> tagged;
-    for (std::size_t i = 0; i < damn::amr::size(l.data); ++i)
-    {
-        auto const resource = [&](std::string const& name) {
-            std::optional<Resource> r;
-            damn::amr::with_resource(l.data.data[i], name, [&](auto& x) {
-                if constexpr (std::is_same_v<std::decay_t<decltype(x)>, Resource>)
-                    r = x;
-            });
-            if (!r)
-                throw std::runtime_error("plamn Simulator: no field " + name + " to tag on");
-            return *r;
-        };
-        for (auto const& c : amr::tagged_cells(*tagging_, l.data.patches[i].box, dx, resource))
-            tagged.push_back(c);
-    }
+    models_.visit(static_cast<std::size_t>(ln), [&](auto& model) {
+        using Model_t   = std::remove_cvref_t<decltype(model)>;
+        using Patch_t   = Model_t::Patch_t;
+        using Resource  = amr::FieldResource<typename Patch_t::Grid_t, Patch_t::field_ghost_width>;
+        bool const mhd  = solver::is_mhd_model_v<Model_t>;
+        auto const& tag = mhd ? *mhd_tagging_ : *tagging_;
+        auto& ld        = model.levels[ln];
+        for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
+        {
+            auto const resource = [&](std::string const& component) {
+                auto const name = mhd ? component : "EM_" + component; // hybrid: EM_B_x...
+                std::optional<Resource> r;
+                damn::amr::with_resource(ld.data[i], name, [&](auto& x) {
+                    if constexpr (std::is_same_v<std::decay_t<decltype(x)>, Resource>)
+                        r = x;
+                });
+                if (!r)
+                    throw std::runtime_error("plamn Simulator: no field " + name + " to tag on");
+                return *r;
+            };
+            for (auto const& c : amr::tagged_cells(tag, ld.patches[i].box, dx, resource))
+                tagged.push_back(c);
+        }
+    });
     if (n_ranks_ > 1)
         return damn::mpi::cluster(hierarchy_, ln, tagged, clustering_);
     return damn::amr::cluster(
@@ -162,29 +101,14 @@ std::vector<double> Simulator<opts>::particle_weights_(int const ln,
     auto const fine = static_cast<std::size_t>(ln);
     // the level's own particles, where it is
     if (fine < levels_.size())
-        for (auto const& patch : levels_[fine].data.data)
-        {
-            auto const counts = simulator::detail::cell_counts(*patch);
-            for (std::size_t b = 0; b < boxes.size(); ++b)
-                weights[b] += counts.in(boxes[b]);
-        }
+        solver::hybrid::add_particles(models_.hybrid, level_services_(fine), boxes, weights);
     // where it is not (yet): the coarser level's particles, split
     if (ln > 0)
-    {
-        auto const old = fine < levels_.size() ? hierarchy_.levels[ln].patches
-                                               : std::vector<damn::amr::Patch<dimension>>{};
-        for (auto const& patch : levels_[fine - 1].data.data)
-        {
-            auto const counts = simulator::detail::cell_counts(*patch);
-            for (std::size_t b = 0; b < boxes.size(); ++b)
-                weights[b]
-                    += nbRefinedPart
-                       * counts.in(
-                           damn::core::coarsen(boxes[b], hierarchy_.ratio), [&](auto const& c) {
-                               return !simulator::detail::refined_into(c, hierarchy_.ratio, old);
-                           });
-        }
-    }
+        solver::hybrid::add_split_particles(
+            models_.hybrid, level_services_(fine - 1), boxes, hierarchy_.ratio,
+            fine < levels_.size() ? hierarchy_.levels[ln].patches
+                                  : std::vector<damn::amr::Patch<dimension>>{},
+            weights);
     if (n_ranks_ > 1)
         MPI_Allreduce(MPI_IN_PLACE, weights.data(), static_cast<int>(weights.size()), MPI_DOUBLE,
                       MPI_SUM, MPI_COMM_WORLD);
@@ -204,7 +128,7 @@ bool Simulator<opts>::should_rebalance_()
         // every rank's level 0 workload
         double const mine = lb_.mode == "homogeneous" ? [&] {
             double cells = 0;
-            for (auto const& p : levels_[0].data.patches)
+            for (auto const& p : data_(0).patches)
                 cells += static_cast<double>(p.box.size());
             return cells;
         }()
@@ -242,24 +166,22 @@ void Simulator<opts>::rebalance_(double const t)
 
         auto const map  = damn::amr::make_regrid_map(old0, hierarchy_.levels[0], rank_,
                                                      damn::amr::periodic_shifts(hierarchy_, 0));
-        auto const& sim = dict_["simulation"];
-        auto& l         = levels_[0];
-        l.data          = damn::mpi::regrid(map, std::move(l.data), [&](auto const& p) {
-            Layout_t const layout{p.box, damn::amr::mesh_size(hierarchy_, 0),
-                                  damn::amr::position(hierarchy_, 0, p.box.lower), 0};
-            return std::make_unique<Patch_t>(layout, sim, surroundings_(0, p.box));
+        auto& ld        = data_(0);
+        ld              = damn::mpi::regrid(map, std::move(ld), [&](auto const& p) {
+            return make_patch_(models_.hybrid, 0, p.box);
         });
-        for (std::size_t i = 0; i < damn::amr::size(l.data); ++i)
+        for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
         {
-            l.data.data[i]->rebox(surroundings_(0, l.data.patches[i].box));
-            for (auto& pop : l.data.data[i]->ions)
+            ld.data[i]->rebox(
+                solver::hybrid::surroundings(models_.hybrid, hierarchy_, 0, ld.patches[i].box));
+            for (auto& pop : ld.data[i]->ions)
                 pop.patchGhostParticles().clear();
         }
         link_level_(0);
         fill_magnetic_ghosts_(0, "EM_B", t);
         fill_electric_ghosts_(0, "EM_E", t);
         copy_(0, damn::amr::fill_ghosts, "IonPopMoments");
-        compute_moments_(0);
+        solver::hybrid::compute_moments(level_services_(0));
         prepare_step_(0, t);
     }
 
@@ -292,7 +214,7 @@ void Simulator<opts>::regrid_(double const t, int const from, bool const always)
             continue;
         if (boxes.empty())
         {
-            levels_.resize(fine);
+            resize_levels_(fine);
             clustered_.resize(fine);
             damn::amr::remove_finer_levels(hierarchy_, ln);
             break;
@@ -303,7 +225,7 @@ void Simulator<opts>::regrid_(double const t, int const from, bool const always)
         else
         {
             make_level_(ln + 1, boxes);
-            initialize_refined_(fine);
+            initialize_refined_level_(ln + 1, startTime_);
             prepare_step_(ln + 1, t);
         }
     }
@@ -320,9 +242,7 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
                                     bool const keep_finer)
 {
     DAMN_LOG_SCOPE(1, "Simulator::regrid_level_");
-    using damn::amr::LevelRegion;
-    auto const fine   = static_cast<std::size_t>(ln);
-    auto constexpr gw = Patch_t::field_ghost_width;
+    auto const fine = static_cast<std::size_t>(ln);
 
     // the old level's cells, periodic images included
     std::vector<Box_t> old_cells;
@@ -337,24 +257,40 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
     auto const finer = keep_finer ? std::vector<damn::amr::Level<dimension>>(
                                         hierarchy_.levels.begin() + ln + 1, hierarchy_.levels.end())
                                   : std::vector<damn::amr::Level<dimension>>{};
-    levels_.resize(keep_finer ? std::max(levels_.size(), fine + 1) : fine + 1);
+    resize_levels_(keep_finer ? std::max(levels_.size(), fine + 1) : fine + 1);
     damn::amr::set_level(hierarchy_, level_of_(ln, boxes)); // drops the finer: put back below
     for (auto const& level : finer)
         damn::amr::set_level(hierarchy_, level);
     auto const map = damn::amr::make_regrid_map(old_level, hierarchy_.levels[ln], rank_,
                                                 damn::amr::periodic_shifts(hierarchy_, ln));
 
-    auto const& sim = dict_["simulation"];
-    auto const make = [&](auto const& p) {
-        Layout_t const layout{p.box, damn::amr::mesh_size(hierarchy_, ln),
-                              damn::amr::position(hierarchy_, ln, p.box.lower), ln};
-        return std::make_unique<Patch_t>(layout, sim, surroundings_(ln, p.box));
-    };
+    if (models_.is_mhd(fine))
+    {
+        if constexpr (Models_t::mhd_on)
+            regrid_mhd_data_(ln, map, old_cells, t);
+    }
+    else if constexpr (Models_t::hybrid_on)
+        regrid_hybrid_data_(ln, map, old_cells, t, keep_finer);
+}
+
+template<auto opts>
+void Simulator<opts>::regrid_hybrid_data_(int const ln, auto const& map,
+                                          std::vector<Box_t> const& old_cells, double const t,
+                                          bool const keep_finer)
+{
+    using Patch_t    = solver::HybridModel<opts>::Patch_t;
+    using Splitter_t = solver::HybridModel<opts>::Splitter_t;
+    using damn::amr::LevelRegion;
+    auto const fine   = static_cast<std::size_t>(ln);
+    auto constexpr gw = Patch_t::field_ghost_width;
+    auto const make   = [&](auto const& p) { return make_patch_(models_.hybrid, ln, p.box); };
     auto& l = levels_[fine];
-    l.data  = n_ranks_ > 1 ? damn::mpi::regrid(map, std::move(l.data), make)
-                           : damn::amr::regrid(map, std::move(l.data), make);
-    for (std::size_t i = 0; i < damn::amr::size(l.data); ++i)
-        l.data.data[i]->rebox(surroundings_(ln, l.data.patches[i].box));
+    auto& ld          = data_(fine);
+    ld                = n_ranks_ > 1 ? damn::mpi::regrid(map, std::move(ld), make)
+                                     : damn::amr::regrid(map, std::move(ld), make);
+    for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
+        ld.data[i]->rebox(
+            solver::hybrid::surroundings(models_.hybrid, hierarchy_, ln, ld.patches[i].box));
     link_level_(ln);
     l.coarse_t  = t;
     l.coarse_dt = 0; // the coarser level's data at t
@@ -363,10 +299,10 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
     using MaskedField = amr::Masked<amr::FieldRefiner, dimension>;
     MaskedField const masked_field{{}, &old_cells};
     refine_(fine, masked_field, LevelRegion::Interior, amr::vector_pairs("EM_B", "EM_B"));
-    for (std::size_t i = 0; i < damn::amr::size(l.data); ++i)
+    for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
     {
-        auto& patch      = *l.data.data[i];
-        auto const cells = l.data.patches[i].box;
+        auto& patch      = *ld.data[i];
+        auto const cells = ld.patches[i].box;
         auto bx          = amr::field_resource<gw>(patch.emB[0]);
         auto by          = amr::field_resource<gw>(patch.emB[1]);
         auto bz          = amr::field_resource<gw>(patch.emB[2]);
@@ -385,70 +321,85 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
         }
     });
     using MaskedSplit = amr::Masked<amr::ParticleSplitter<Splitter_t>, dimension>;
-    for (auto const& name : population_names_)
+    for (auto const& name : models_.hybrid.population_names)
         refine_(fine, MaskedSplit{{}, &old_cells}, LevelRegion::Interior,
                 {{name + "_domain", name + "_domain", ""}});
 
     // ghosts: patch ghosts from the new neighbours, level ghosts from the coarser level now
     fill_magnetic_ghosts_(fine, "EM_B", t);
     fill_electric_ghosts_(fine, "EM_E", t);
-    for (auto const& name : population_names_)
+    for (auto const& name : models_.hybrid.population_names)
         refine_(fine, amr::ParticleSplitter<Splitter_t>{}, LevelRegion::LevelGhosts,
                 {{name + "_domain", name + "_level_ghost_old", ""}});
-    own_level_ghosts_(fine, /*new_ghosts=*/false);
+    solver::hybrid::own_level_ghosts(level_services_(fine), /*new_ghosts=*/false);
     per_patch_(fine, [](auto& patch) {
         for (auto& pop : patch.ions)
             pop.levelGhostParticles() = pop.levelGhostParticlesOld();
     });
-    sort_refined_particles_(fine);
+    solver::hybrid::sort_refined_particles(models_.hybrid, level_services_(fine));
 
     if (!keep_finer)
-        refined_moments_(fine);
+        solver::hybrid::refined_moments(models_.hybrid, level_services_(fine));
     else
-        moved_moments_(fine);
+        solver::hybrid::moved_moments(models_.hybrid, level_services_(fine));
     prepare_step_(ln, t);
 }
 
-
-// a level moved onto new owners (keep_finer: the same boxes, a rebalance): the moments moved
-//  with it are kept on the domain (under a finer level they are the finer level's, coarsened at
-//  the last synchronization: a deposit would replace them), the deposit of its particles only
-//  gives the ghost nodes the move does not bring (outside the level: level ghost deposits),
-//  then the patch borders from the neighbours, as level 0's rebalance
+// PHARE's MHDMessenger regrid (stateInitRefiners_): the advanced state moved where the old level
+//  was, refined from the coarser level elsewhere (B divergence free there), then its ghosts
 template<auto opts>
-void Simulator<opts>::moved_moments_(std::size_t const ln)
+void Simulator<opts>::regrid_mhd_data_(int const ln, auto const& map,
+                                       std::vector<Box_t> const& old_cells, double const t)
 {
-    auto const each_moment = [](auto& patch, auto&& fn) {
-        for (auto& pop : patch.populations)
-        {
-            fn(pop->density);
-            fn(pop->charge_density);
-            for (auto& f : pop->flux)
-                fn(f);
-        }
-    };
-    std::vector<std::vector<std::vector<double>>> kept; // per patch, per moment: its values
-    per_patch_(ln, [&](auto& patch) {
-        auto& mine = kept.emplace_back();
-        each_moment(patch,
-                    [&](auto const& f) { mine.emplace_back(f.data(), f.data() + f.size()); });
-    });
-    refined_moments_(ln); // the ghost nodes; the domain put back below
-    std::size_t i = 0;
-    per_patch_(ln, [&](auto& patch) {
-        std::size_t m = 0;
-        each_moment(patch, [&](auto& f) {
-            auto const& values = kept[i][m++];
-            damn::core::for_each_point(domain_box(patch.layout, f), [&](auto const& ijk) {
-                auto& v = f(ijk);
-                v       = values[static_cast<std::size_t>(&v - f.data())];
-            });
-        });
-        ++i;
-    });
-    copy_(ln, damn::amr::fill_ghosts, "IonPopMoments");
-    compute_moments_(ln);
+    using damn::amr::LevelRegion;
+    using Patch_t     = solver::MHDModel<opts>::Patch_t;
+    auto constexpr gw = Patch_t::field_ghost_width;
+    auto const fine   = static_cast<std::size_t>(ln);
+    auto const make   = [&](auto const& p) { return make_patch_(models_.mhd, ln, p.box); };
+    auto& ld          = models_.mhd.levels[ln];
+    ld                = n_ranks_ > 1 ? damn::mpi::regrid(map, std::move(ld), make)
+                                     : damn::amr::regrid(map, std::move(ld), make);
+    link_level_(ln);
+    auto& l     = levels_[fine];
+    l.coarse_t  = t;
+    l.coarse_dt = 0; // the coarser level's data at t
+
+    using MaskedField = amr::Masked<amr::FieldRefiner, dimension>;
+    MaskedField const masked{{}, &old_cells};
+    std::vector<damn::amr::LevelPair> pairs{{"rho", "rho", ""}, {"Etot", "Etot", ""}};
+    for (auto const& p : amr::vector_pairs("rhoV", "rhoV"))
+        pairs.push_back(p);
+    refine_(fine, masked, LevelRegion::Interior, pairs);
+    refine_(fine, masked, LevelRegion::Interior, amr::vector_pairs("B", "B"));
+    for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
+    {
+        auto& B          = ld.data[i]->states[0].B.grids;
+        auto bx          = amr::field_resource<gw>(B[0]);
+        auto by          = amr::field_resource<gw>(B[1]);
+        auto bz          = amr::field_resource<gw>(B[2]);
+        auto const cells = ld.patches[i].box;
+        for (auto const& region : masked.uncovered(cells, [](auto const& b) { return b; }))
+            amr::divergence_free_touch_up(std::array{&bx, &by, &bz}, cells, region,
+                                          damn::amr::mesh_size(hierarchy_, ln));
+    }
+    MHDLevel{*this, fine}.fill_state_ghosts(0, t);
+    prepare_step_(ln, t);
 }
+
+// a new level ln (regrid_), from the coarser level
+template<auto opts>
+void Simulator<opts>::initialize_refined_level_(int const ln, double const t)
+{
+    auto const fine = static_cast<std::size_t>(ln);
+    if (models_.is_mhd(fine))
+    {
+        if constexpr (Models_t::mhd_on)
+            initialize_refined_mhd_(fine, t);
+    }
+    else if constexpr (Models_t::hybrid_on)
+        solver::hybrid::initialize_refined(models_.hybrid, level_services_(fine), t);
+}
+
 
 } // namespace plamn
 

@@ -54,8 +54,43 @@ CASES = {
     "advance_L2_nested": dict(boxes=((1, 12), (6, 19)), steps=4),
     "harris_2d": dict(harris=True, steps=2),
     "ion_ion_beam_1d": dict(ion_ion_beam=True, steps=1, pops=["main", "beam"]),
+    # compare_physics.py --all-times (the slow CI's PHARE comparison): the beam on 2 levels, long
+    "beam_1d_long": dict(
+        ion_ion_beam=True,
+        steps=2000,
+        dump_every=100,
+        pops=["main", "beam"],
+        refinement_boxes={"L0": {"B0": [(50,), (110,)]}},
+    ),
     # compare_physics.py's (not a ladder step): 3 levels, tagging, final B composites
     "harris_3d": dict(harris3d=True, steps=2),
+    # compare_physics.py --all-times: PHARE's tests/functional/mhd_shock/shock_periodic.py (MHD
+    #  only, one level), dumps every 50 of its 400 steps
+    "mhd_shock_1d": dict(mhd_shock=True, steps=400, dump_every=50, pops=[]),
+    # PHARE's shock_with_boundaries.py: inflow (super magnetofast, the left state) at x lower,
+    #  open at x upper, the shock moving in at 1.05 the fastest wave; dumps every 100 of 1000 steps
+    "mhd_shock_walls_1d": dict(mhd_shock=True, walls=True, steps=1000, dump_every=100, pops=[]),
+    # the periodic shock on 2 levels, the finer where PHARE's default tagger (B) puts it, regrids
+    #  following the waves; dumps every 10 of 100 steps
+    "mhd_shock_tagged_1d": dict(mhd_shock=True, levels=2, steps=100, dump_every=10, pops=[]),
+    # PHARE's tests/simulator/advance/test_advance_mhd.py input (bump density, cosine B and V),
+    #  1D, the ported scheme (Linear, VanLeer, Rusanov, TVDRK2), no resistivity; one refinement
+    #  box: the refined level made from level 0 (init), then advanced
+    "mhd_advance_L0": dict(mhd_advance=True, boxes=(), steps=8, pops=[]),
+    # resistive (eta: the dissipative E in the constrained transport and the face fluxes)
+    "mhd_resistive_L0": dict(mhd_advance=True, eta=0.05, boxes=(), steps=8, pops=[]),
+    "mhd_resistive_L1": dict(mhd_advance=True, eta=0.05, boxes=((10, 29),), steps=8, pops=[]),
+    # the other reconstructions (PHARE's test_advance_mhd's own: WENOZ, no limiter)
+    "mhd_wenoz_L1": dict(mhd_advance=True, reconstruction="WENOZ", limiter="None",
+                         boxes=((10, 29),), steps=8, pops=[]),
+    "mhd_hll_L1": dict(mhd_advance=True, riemann="HLL", boxes=((10, 29),), steps=8, pops=[]),
+    "mhd_init_L1": dict(mhd_advance=True, boxes=((10, 29),), steps=0, pops=[]),
+    "mhd_advance_L1": dict(mhd_advance=True, boxes=((10, 29),), steps=8, pops=[]),
+    # the refined level against the periodic boundary (its ghosts wrap around)
+    "mhd_advance_L1_edge": dict(mhd_advance=True, boxes=((1, 10),), steps=8, pops=[]),
+    # tagged (PHARE's default tagger on B, a low threshold: the cosine B's steeper parts), 2
+    #  levels, regrids at PHARE's points
+    "mhd_tagged_1d": dict(mhd_advance=True, tagging=0.008, boxes=(), steps=40, pops=[]),
 }
 
 
@@ -156,7 +191,9 @@ def _ion_ion_beam_1d(ph, out, case, largest_patch_size, fmt, fine_dump):
         dl=0.2,
         hyper_resistivity=0.01,
         # the script's commented boxes: its uniform plasma tags nothing, one level otherwise
-        refinement_boxes={"L0": {"B0": [(50,), (110,)]}, "L1": {"B0": [(140,), (180,)]}},
+        refinement_boxes=case.get(
+            "refinement_boxes", {"L0": {"B0": [(50,), (110,)]}, "L1": {"B0": [(140,), (180,)]}}
+        ),
         diag_options=_diag_options(out, fmt, fine_dump),
     )
     def const(v):
@@ -177,7 +214,8 @@ def _ion_ion_beam_1d(ph, out, case, largest_patch_size, fmt, fine_dump):
     )
     ph.ElectronModel(closure="isothermal", Te=0.0)
     # no LoadBalancer (the script's auto nppc): PHARE refuses one with refinement boxes
-    _diagnostics(ph, 0.001 * np.arange(case["steps"] + 1), case["pops"], fmt)
+    every = case.get("dump_every", 1)
+    _diagnostics(ph, 0.001 * np.arange(0, case["steps"] + 1, every), case["pops"], fmt)
     return sim
 
 
@@ -325,6 +363,129 @@ def _harris_3d(ph, out, case, largest_patch_size, fmt, fine_dump):
     return sim
 
 
+def _advance_mhd_1d(ph, out, case, largest_patch_size, fmt, fine_dump):
+    """PHARE's test_advance_mhd model in 1D: 60 cells of 0.1, dt 0.001, every step dumped"""
+    cells, dl, dt = 60, 0.1, 0.001
+    sim = ph.Simulation(
+        time_step_nbr=max(case["steps"], 1),
+        time_step=dt,
+        cells=(cells,),
+        dl=(dl,),
+        **(
+            dict(refinement="tagging", max_nbr_levels=2, tagging_threshold=case["tagging"])
+            if case.get("tagging")
+            else dict(refinement_boxes=_boxes(1, *case["boxes"]) if case["boxes"] else {})
+        ),
+        largest_patch_size=largest_patch_size or 10,
+        diag_options=_diag_options(out, fmt, fine_dump),
+        strict=True,
+        nesting_buffer=1,
+        eta=case.get("eta", 0.0),
+        nu=0.0,
+        gamma=5.0 / 3.0,
+        reconstruction=case.get("reconstruction", "Linear"),
+        limiter=case.get("limiter", "VanLeer"),
+        riemann=case.get("riemann", "Rusanov"),
+        mhd_timestepper="TVDRK2",
+        hall=False,
+        model_options=["MHDModel"],
+    )
+    L = sim.simulation_domain()[0]
+
+    def density(x):
+        return 0.3 + np.exp(-((x - L / 2) ** 2))
+
+    def cosine(x):
+        return 0.1 * np.cos(2 * np.pi * x / L)
+
+    def const(v):
+        return lambda x: v + 0.0 * x
+
+    ph.MHDModel(density=density, vx=cosine, vy=cosine, vz=cosine, bx=const(1.0), by=cosine,
+                bz=cosine, p=const(1.0))
+    timestamps = dt * np.arange(case["steps"] + 1)
+    ph.ElectromagDiagnostics(quantity="B", write_timestamps=timestamps)
+    for q in ["rho", "V", "P"]:
+        ph.MHDDiagnostics(quantity=q, write_timestamps=timestamps)
+    return sim
+
+
+def _fast_speed(gamma, rho, p, bx, by):
+    """the fast magnetosonic speed along x (PHARE's mhd_shock common.State)"""
+    cs2, va2 = gamma * p / rho, (bx**2 + by**2) / rho
+    common = np.sqrt((cs2 + va2) ** 2 - 4.0 * cs2 * bx**2 / rho)
+    return np.sqrt((cs2 + va2 + common) / 2)
+
+
+def _mhd_shock_1d(ph, out, case, largest_patch_size, fmt):
+    """PHARE's tests/functional/mhd_shock (common.py config): 800 cells, B, rho, V, P every
+    dump_every steps. shock_periodic.py: dt 0.2, the discontinuity at the middle, at rest;
+    shock_with_boundaries.py (walls): inflow of the left state at x lower, open at x upper, the
+    discontinuity 10 cells in, moving at 1.05 the fastest wave, dt half the CFL limit"""
+    gamma, bx, ncells, dx = 5.0 / 3.0, 0.75, 800, 1.0
+    left = dict(rho=1.0, p=1.0, by=1.0)
+    right = dict(rho=0.125, p=0.1, by=-1.0)
+    extra = {}
+    if case.get("walls"):
+        cf_max = max(_fast_speed(gamma, s["rho"], s["p"], bx, s["by"]) for s in (left, right))
+        u = 1.05 * cf_max
+        dt = 0.5 * dx / (u + cf_max)
+        x0 = 10 * dx
+        extra["domain_boundaries"] = {
+            "xlower": {
+                "type": "super-magnetofast-inflow",
+                "velocity": u,
+                "density": left["rho"],
+                "pressure": left["p"],
+                "B": [bx, left["by"], 0.0],
+            },
+            "xupper": {"type": "open"},
+        }
+    else:
+        u, dt, x0 = 0.0, 0.2, ncells * dx / 2
+    sim = ph.Simulation(
+        smallest_patch_size=15,
+        largest_patch_size=largest_patch_size,
+        time_step=dt,
+        final_time=case["steps"] * dt,
+        cells=(ncells,),
+        dl=(dx,),
+        refinement="tagging",
+        max_mhd_level=case.get("levels", 1),
+        max_nbr_levels=case.get("levels", 1),
+        hyper_resistivity=0.0,
+        resistivity=0.0,
+        diag_options=_diag_options(out, fmt, False),
+        strict=True,
+        eta=0.0,
+        nu=0.0,
+        gamma=gamma,
+        reconstruction="Linear",
+        limiter="VanLeer",
+        riemann="Rusanov",
+        mhd_timestepper="TVDRK2",
+        hall=False,
+        model_options=["MHDModel"],
+        **extra,
+    )
+
+    def side(name):
+        return lambda x: np.where(x < x0, left[name], right[name])
+
+    def const(v):
+        return lambda x: v + 0.0 * x
+
+    ph.MHDModel(
+        density=side("rho"), vx=const(u), vy=const(0.0), vz=const(0.0),
+        bx=const(bx), by=side("by"), bz=const(0.0), p=side("p"),
+    )
+    timestamps = dt * np.arange(0, case["steps"] + 1, case["dump_every"])
+    ph.ElectromagDiagnostics(quantity="B", write_timestamps=timestamps)
+    for q in ["rho", "V", "P"]:
+        ph.MHDDiagnostics(quantity=q, write_timestamps=timestamps)
+    return sim
+
+
 def simulation(name, out, ndim=NDIM, largest_patch_size=None, fmt="pharevtkhdf", fine_dump=False):
     """Declares case ``name``'s input (pyphare.pharein) with diagnostics in ``out``, in
     format ``fmt``."""
@@ -339,4 +500,8 @@ def simulation(name, out, ndim=NDIM, largest_patch_size=None, fmt="pharevtkhdf",
         return _ion_ion_beam_1d(ph, out, case, largest_patch_size, fmt, fine_dump)
     if case.get("harris3d"):
         return _harris_3d(ph, out, case, largest_patch_size, fmt, fine_dump)
+    if case.get("mhd_shock"):
+        return _mhd_shock_1d(ph, out, case, largest_patch_size, fmt)
+    if case.get("mhd_advance"):
+        return _advance_mhd_1d(ph, out, case, largest_patch_size, fmt, fine_dump)
     return _advance_hybrid(ph, out, case, ndim, largest_patch_size, fmt, fine_dump)

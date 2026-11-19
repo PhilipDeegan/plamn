@@ -2,6 +2,7 @@ name: Slow
 
 # tests too long for every pull request: on merges to master and on demand, as gpu.yml
 #   test_plamn_core_slow   particle partitioning over ~17M particles (>10 min unoptimised)
+#   phare                  PHARE master and plamn on the same long runs: how far they differ
 # damn is private: checked out where mkn looks for it (tpp/damn) with a read-only deploy key
 
 concurrency:
@@ -52,3 +53,130 @@ jobs:
         curl -Lo mkn https://github.com/mkn/mkn/releases/download/latest/mkn_nix
         chmod +x mkn
         KLOG=3 ./mkn clean build test -dKOqp test_plamn_core_slow -W 9 -a "-Wno-unused-parameter -Wno-unused-variable -Wno-error=strict-aliasing" -x res/mkn/mpi -t 4
+
+  # PHARE master's 1D modules built as its CI builds them (cmake_ubuntu.yml: SAMRAI from the
+  #  image, double precision diagnostics), plamn's the same way, then the same input under both
+  #  (etc/compare/phare): the ion beam, 2 levels, 2000 steps, B and E compared every 100 steps;
+  #  then the MHD shocks (PHARE's tests/functional/mhd_shock: periodic, 400 steps; between an
+  #  inflow and an open boundary, 1000 steps), and PHARE's test_advance_mhd input on 2 levels
+  #  (a refinement box: level ghosts, reflux; tagged: regrids): MHD only, B rho V P at every
+  #  dump
+  phare:
+    runs-on: ubuntu-24.04
+    container: ghcr.io/pharchive/phare_dep/ubuntu:26.04
+    timeout-minutes: 240
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: ./.github/actions/setup
+      with:
+        damn-key: ${{ secrets.DAMN_DEPLOY_KEY }}
+        mkn: "true"
+
+    - name: plamn's 1D modules (hybrid, MHD)
+      run: |
+        KLOG=3 ./mkn.py --dim 1 --jobs 4 --diag-doubles -- -q -x res/mkn/mpi
+        KLOG=3 ./mkn.py --mhd --no-etc --jobs 4 --diag-doubles -- -q -x res/mkn/mpi
+        KLOG=3 ./mkn.py --mhd --no-etc --jobs 4 --diag-doubles --reconstruction WENOZ \
+          --limiter None -- -q -x res/mkn/mpi
+        KLOG=3 ./mkn.py --mhd --no-etc --jobs 4 --diag-doubles --riemann HLL -- -q -x res/mkn/mpi
+
+    - uses: actions/checkout@v4
+      with:
+        repository: PHAREHUB/PHARE
+        path: phare
+        submodules: recursive
+
+    - name: PHARE's 1D hybrid and MHD modules
+      run: |
+        set -ex
+        printf '1,1,2\n1,Linear,VanLeer,Rusanov,false\n1,WENOZ,None,Rusanov,false\n1,Linear,VanLeer,HLL,false\n' > "$PWD/phare_permutations.txt"
+        mkdir -p phare/build && cd phare/build
+        cmake .. --fresh -DSAMRAI_ROOT=/usr/local -DCMAKE_BUILD_TYPE=Release \
+              -DdevMode=OFF -Dasan=OFF -Dbench=OFF -Dtest=OFF -DPHARE_EXE=OFF \
+              -Dphare_configurator=ON \
+              -DPHARE_PERMUTATIONS="$GITHUB_WORKSPACE/phare_permutations.txt" \
+              -DCMAKE_CXX_FLAGS="-O3 -DPHARE_DIAG_DOUBLES=1"
+        cmake --build . -j 4 --target cpp_etc dictator cpp_1_1_2 cpp_1_Linear_VanLeer_Rusanov_false \
+          cpp_1_WENOZ_None_Rusanov_false cpp_1_Linear_VanLeer_HLL_false
+
+    - name: PHARE vs plamn, 1D hybrid, 2 levels, 2000 steps
+      env:
+        PHARE_DIR: ${{ github.workspace }}/phare
+        LADDER_PPC: "100"
+        LADDER_OUT: ${{ github.workspace }}/compare
+      run: >-
+        python3 etc/compare/phare/compare_physics.py --case beam_1d_long --ndim 1 --steps 2000
+        --ref "$PHARE_DIR" --cmp plamn --all-times --json compare/beam_1d_long.json
+
+    - name: PHARE vs plamn, 1D MHD shock, 400 steps
+      if: always()
+      env:
+        PHARE_DIR: ${{ github.workspace }}/phare
+        LADDER_OUT: ${{ github.workspace }}/compare
+      run: >-
+        python3 etc/compare/phare/compare_physics.py --case mhd_shock_1d --ndim 1 --steps 400
+        --ref "$PHARE_DIR" --cmp plamn --all-times --json compare/mhd_shock_1d.json
+
+    - name: PHARE vs plamn, 1D MHD shock between inflow and open boundaries, 1000 steps
+      if: always()
+      env:
+        PHARE_DIR: ${{ github.workspace }}/phare
+        LADDER_OUT: ${{ github.workspace }}/compare
+      run: >-
+        python3 etc/compare/phare/compare_physics.py --case mhd_shock_walls_1d --ndim 1
+        --steps 1000 --ref "$PHARE_DIR" --cmp plamn --all-times
+        --json compare/mhd_shock_walls_1d.json
+
+    - name: PHARE vs plamn, 1D MHD on 2 levels (refinement box), 8 steps
+      if: always()
+      env:
+        PHARE_DIR: ${{ github.workspace }}/phare
+        LADDER_OUT: ${{ github.workspace }}/compare
+      run: >-
+        python3 etc/compare/phare/compare_physics.py --case mhd_advance_L1 --ndim 1 --steps 8
+        --ref "$PHARE_DIR" --cmp plamn --all-times --json compare/mhd_advance_L1.json
+
+    - name: PHARE vs plamn, 1D resistive MHD on 2 levels, 8 steps
+      if: always()
+      env:
+        PHARE_DIR: ${{ github.workspace }}/phare
+        LADDER_OUT: ${{ github.workspace }}/compare
+      run: >-
+        python3 etc/compare/phare/compare_physics.py --case mhd_resistive_L1 --ndim 1 --steps 8
+        --ref "$PHARE_DIR" --cmp plamn --all-times --json compare/mhd_resistive_L1.json
+
+    - name: PHARE vs plamn, 1D MHD with WENOZ on 2 levels, 8 steps
+      if: always()
+      env:
+        PHARE_DIR: ${{ github.workspace }}/phare
+        LADDER_OUT: ${{ github.workspace }}/compare
+      run: >-
+        python3 etc/compare/phare/compare_physics.py --case mhd_wenoz_L1 --ndim 1 --steps 8
+        --ref "$PHARE_DIR" --cmp plamn --all-times --json compare/mhd_wenoz_L1.json
+
+    - name: PHARE vs plamn, 1D MHD with HLL on 2 levels, 8 steps
+      if: always()
+      env:
+        PHARE_DIR: ${{ github.workspace }}/phare
+        LADDER_OUT: ${{ github.workspace }}/compare
+      run: >-
+        python3 etc/compare/phare/compare_physics.py --case mhd_hll_L1 --ndim 1 --steps 8
+        --ref "$PHARE_DIR" --cmp plamn --all-times --json compare/mhd_hll_L1.json
+
+    - name: PHARE vs plamn, 1D MHD tagged on 2 levels, regrids, 40 steps
+      if: always()
+      env:
+        PHARE_DIR: ${{ github.workspace }}/phare
+        LADDER_OUT: ${{ github.workspace }}/compare
+      run: >-
+        python3 etc/compare/phare/compare_physics.py --case mhd_tagged_1d --ndim 1 --steps 40
+        --ref "$PHARE_DIR" --cmp plamn --all-times --json compare/mhd_tagged_1d.json
+
+    - if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: phare-compare
+        path: |
+          compare/*.json
+          compare/**/*.log

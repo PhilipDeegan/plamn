@@ -20,7 +20,9 @@ when whole patches are too coarse to balance (level 0 cut on blocks, damn::amr::
 """
 
 import os
+import shutil
 import unittest
+from pathlib import Path
 
 import numpy as np
 
@@ -91,6 +93,7 @@ def harris(
     levels=2,
     cells=(100, 100),
     patch=(25, 25),
+    tag_boxes=None,
 ):
     ph.global_vars.sim = None
     ph.clearDict()
@@ -164,6 +167,8 @@ def harris(
     ph.ElectronModel(closure="isothermal", Te=0.0)
     if load_balancer:
         ph.LoadBalancer(**load_balancer)
+    if tag_boxes:
+        plamn.set_tag_boxes(sim, tag_boxes)
     simulator = ph.Simulator(sim, log_to_file=False).setup().initialize()
     cpp = simulator.cpp_sim
     initial = [cpp.total_particle_count(ln) for ln in range(cpp.n_levels())]
@@ -183,14 +188,19 @@ def harris(
             for ln in range(cpp.n_levels())
         ],
         "measured": measured,
+        "boxes": {
+            ln: cpp.all_patch_boxes(ln) for ln in range(1, cpp.n_levels())
+        },
     }
     simulator.reset()
     return out
 
 
-def drift(load_balancer, steps=120, patch=(10, 10)):
+def drift(load_balancer, steps=120, patch=(10, 10), diag_dir=None):
     """level 0's rank imbalance (max / mean - 1 of the particles per rank) after each step, and
-    B at the end: uniform protons and a drifting beam blob, refinement="tagging" (2 levels)
+    B at the end: uniform protons and a drifting beam blob, refinement="tagging" (2 levels).
+    diag_dir: the beam's pressure tensor (a computed quantity: scratch grids on the patches it
+    is computed on) dumped there at t0, before the rebalances move patches between ranks
     """
     ph.global_vars.sim = None
     ph.clearDict()
@@ -204,6 +214,11 @@ def drift(load_balancer, steps=120, patch=(10, 10)):
         refinement="tagging",
         max_nbr_levels=2,
         strict=True,
+        **(
+            dict(diag_options={"format": "phareh5", "options": {"dir": diag_dir, "mode": "overwrite"}})
+            if diag_dir
+            else {}
+        ),
     )
     L = sim.simulation_domain()[0]
 
@@ -236,6 +251,9 @@ def drift(load_balancer, steps=120, patch=(10, 10)):
         beam=pop(blob, 3.0, 100, 2),
     )
     ph.ElectronModel(closure="isothermal", Te=0.0)
+    if diag_dir:
+        ph.FluidDiagnostics(quantity="pressure_tensor", write_timestamps=[0.0],
+                            population_name="beam")
     if load_balancer:
         ph.LoadBalancer(**load_balancer)
     simulator = ph.Simulator(sim, log_to_file=False).setup().initialize()
@@ -257,6 +275,17 @@ def init_fields(simulator):
     names = [f"EM_{v}_{q}" for v in "EB" for q in "xyz"] + ["protons_density"]
     return [
         np.concatenate([np.asarray(cpp.all_domain_values(n, ln)) for n in names])
+        for ln in range(cpp.n_levels())
+    ]
+
+
+def level_fields(simulator):
+    """every level's E, B and protons density at each of its points once, in point order: the
+    same for any patches"""
+    cpp = simulator.cpp_sim
+    names = [f"EM_{v}_{q}" for v in "EB" for q in "xyz"] + ["protons_density"]
+    return [
+        np.concatenate([np.asarray(cpp.level_values(n, ln)) for n in names])
         for ln in range(cpp.n_levels())
     ]
 
@@ -346,6 +375,23 @@ class HybridRefinementTest(unittest.TestCase):
         self.assertLess(lb["imbalance"][100], 0.15)
         self.assertLess(np.abs(lb["B"] - no["B"]).max(), 1e-12)
 
+    def test_load_balancing_moves_computed_quantities(self):
+        """a computed quantity (the beam's pressure tensor) dumped before the rebalances: its
+        scratch grids on every patch, so a patch moved to another rank unpacks what was packed
+        (they were only on the patches it was computed on: an unpack out of step, a crash)"""
+        ph.startMPI()
+        if plamn.etc.mpi_size() < 2:
+            self.skipTest("one rank: nothing to balance (--tags mpi runs it on 3)")
+        # one directory for every rank (a parallel HDF5 file), one per rank count (phlop runs the
+        #  1 and 3 rank cases at the same time)
+        d = Path("phare_outputs") / f"plamn_lb_computed_np{plamn.etc.mpi_size()}"
+        lb = drift(dict(every=30, tol=0.05), steps=40, diag_dir=str(d))
+        plamn.etc.mpi_barrier()
+        if plamn.etc.mpi_rank() == 0:
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertLess(lb["imbalance"][40], max(lb["imbalance"]))
+        self.assertTrue(np.isfinite(lb["B"]).all())
+
     def test_load_balancing_cuts_patches(self):
         """6 level 0 patches (20 x 30) for 3 ranks, the beam blob in one: partitioned whole at
         initialization the ranks are 0.25+ apart (a patch is too coarse a unit); each rebalance
@@ -383,6 +429,29 @@ class HybridRefinementTest(unittest.TestCase):
         for ln, (a, b) in enumerate(zip(off["measured"][0], on["measured"][0])):
             self.assertEqual(a.shape, b.shape, f"level {ln}")
             np.testing.assert_array_equal(a, b, f"level {ln}")
+
+    def test_supplied_tag_boxes_make_the_same_levels(self):
+        # the levels of a tagged initialization, supplied as tag boxes (as from Tagger(sim).tag()):
+        # the same values at every point of every level, the levels made before any particle
+        tagged = harris(0, tagging=True, levels=3, measure=level_fields)
+        supplied = harris(
+            0, tagging=True, levels=3, measure=level_fields, tag_boxes=tagged["boxes"]
+        )
+        self.assertEqual(supplied["levels"], 3)
+        self.assertEqual(supplied["initial"], tagged["initial"])
+        for ln, (a, b) in enumerate(zip(tagged["measured"][0], supplied["measured"][0])):
+            np.testing.assert_array_equal(a, b, f"level {ln}")
+
+    def test_supplied_tag_boxes_must_nest(self):
+        # pyphare's setup raises a ValueError from the simulator's error
+        with self.assertRaises(ValueError) as raised:
+            harris(
+                0,
+                tagging=True,
+                levels=3,
+                tag_boxes={1: [((0, 0), (9, 9))], 2: [((100, 100), (109, 109))]},
+            )
+        self.assertIn("not nested", str(raised.exception.__context__))
 
     def test_load_balancing_keeps_the_finer_levels(self):
         """three levels from the start (the sheets are tagged at initialization): a rebalance
