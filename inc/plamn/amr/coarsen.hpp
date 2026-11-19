@@ -8,7 +8,7 @@
 //                           2q, 2q + 1; dual: the mean of fine cells 2q and 2q + 1 (B)
 //   ElectricFieldCoarsener: per direction, primal: fine node 2q; dual: the mean of fine cells
 //                           2q and 2q + 1 (E; moments, all primal, are injected: PHARE's
-//                           MomentsCoarsener)
+//                           MomentsCoarsener; MHD face fluxes: PHARE's MHDFluxCoarsener)
 
 #include "damn/core/geometry/box_spans.hpp"
 
@@ -105,6 +105,9 @@ struct ElectricFieldCoarsener
 };
 
 using MomentsCoarsener = ElectricFieldCoarsener;
+// PHARE's MHDFluxCoarsener: a coarse face's flux, the mean of the fine faces on it (primal:
+//  injected, dual: the mean), the same per direction rule
+using MHDFluxCoarsener = ElectricFieldCoarsener;
 
 } // namespace plamn::amr
 

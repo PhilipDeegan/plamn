@@ -32,10 +32,11 @@ struct UpwindCT
     using R = Reconstruction;
 
     // E component c at ijk; x, y, z: the CT fields of each face direction (only those of the
-    //  directions < dim are read). In 1D only E_z has an equation (PHARE leaves E_x, E_y as
-    //  they are), in 2D and 3D every component
+    //  directions < dim are read). In 1D E_y and E_z have an equation (PHARE's
+    //  UpwindConstrainedTransport: E_x is left as it is, B_x does not change), in 2D and 3D
+    //  every component
     template<std::size_t c, std::size_t dim>
-    static constexpr bool has_equation = dim > 1 or c == 2;
+    static constexpr bool has_equation = dim > 1 or c != 0;
 
     template<std::size_t c, std::size_t dim>
     NO_DISCARD static double E(auto const& ijk, auto const& B, auto const& x, auto const& y,

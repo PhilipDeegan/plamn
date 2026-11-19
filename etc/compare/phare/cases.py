@@ -73,6 +73,7 @@ CASES = {
     # PHARE's tests/simulator/advance/test_advance_mhd.py input (bump density, cosine B and V),
     #  1D, the ported scheme (Linear, VanLeer, Rusanov, TVDRK2), no resistivity; one refinement
     #  box: the refined level made from level 0 (init), then advanced
+    "mhd_advance_L0": dict(mhd_advance=True, boxes=(), steps=8, pops=[]),
     "mhd_init_L1": dict(mhd_advance=True, boxes=((10, 29),), steps=0, pops=[]),
     "mhd_advance_L1": dict(mhd_advance=True, boxes=((10, 29),), steps=8, pops=[]),
 }

@@ -10,10 +10,13 @@
 //            the reflux redoes the step from it (PHARE's SolverMHD stateOld_)
 //   E        the constrained transport electric field of the last flux computation
 //   fluxes   per face direction, of the last flux computation; ct its upwind constrained
-//            transport inputs; butcher, butcherE the schemes' weighted sums of them
+//            transport inputs; butcher, butcherE the schemes' weighted sums of them (the step's
+//            fluxes and E, what a reflux replaces under a finer level)
+//   flux_sum, flux_sum_E  the step fluxes and E summed over the level's substeps in its coarser
+//            level's step (PHARE's SolverMHD fluxSum_, fluxSumE_), what its reflux coarsens
 //   storage: grids, named as their views. The states not filled (NaN in debug builds): the
 //            simulator writes them before reading them. The others 0, as PHARE's (its fields
-//            start zeroed): E's components without an equation (E_x, E_y in 1D) stay 0, and a
+//            start zeroed): E's component without an equation (E_x in 1D) stays 0, and a
 //            direction a lower dimension does not have has 0 fluxes
 //
 // not movable: the vector fields are views over their own grids; LevelData keeps patches behind
@@ -21,11 +24,12 @@
 //
 // for_each_resource names what damn's schedules may move (PHARE's MHD names for the advanced
 //  state): rho, rhoV_x..., B_x..., Etot, V_x..., P; a stage s > 0: rho_s<s>, rhoV_s<s>_x...;
-//  the old state: rho_old, rhoV_old_x..., B_old_x..., Etot_old; E_x... (the fluxes,
-//  constrained transport inputs and butcher sums never move)
+//  the old state: rho_old, rhoV_old_x..., B_old_x..., Etot_old; E_x...; per direction d < dim
+//  the refluxed step fluxes and their sums: F_rho_butcher_<d>, F_rhoV_butcher_<d>_x...,
+//  F_Etot_butcher_<d>, F_rho_sum_<d>...; butcherE_x..., E_sum_x... (the last fluxes and the
+//  constrained transport inputs never move)
 
 #include "damn/core/def.hpp"
-
 #include "plamn/amr/resources.hpp"
 #include "plamn/core/models/mhd_state.hpp"
 #include "plamn/core/models/quantities/mhd_quantities.hpp"
@@ -38,6 +42,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <utility>
 
 namespace plamn::simulator
 {
@@ -153,7 +158,8 @@ struct MHDPatch
         for_each_state_grid(old, fn);
         vector(E);
         vector(butcherE);
-        for (auto* faces : {&fluxes, &butcher})
+        vector(flux_sum_E);
+        for (auto* faces : {&fluxes, &butcher, &flux_sum})
             for (auto& f : *faces)
             {
                 fn(f.F_rho);
@@ -184,6 +190,26 @@ struct MHDPatch
     std::array<CT_t, 3> ct{ct_("x", S::ScalarFlux_x, V::VecFlux_x),
                            ct_("y", S::ScalarFlux_y, V::VecFlux_y),
                            ct_("z", S::ScalarFlux_z, V::VecFlux_z)};
+    std::array<Fluxes_t, 3> flux_sum{fluxes_("sum_x", S::ScalarFlux_x, V::VecFlux_x),
+                                     fluxes_("sum_y", S::ScalarFlux_y, V::VecFlux_y),
+                                     fluxes_("sum_z", S::ScalarFlux_z, V::VecFlux_z)};
+    VecField flux_sum_E{"E_sum", layout, V::E, 0.};
+
+    // a face's fluxes' grids: F_rho, F_rhoV (x y z), F_B (x y z), F_Etot
+    static std::vector<Grid_t*> flux_grids(Fluxes_t& f)
+    {
+        std::vector<Grid_t*> grids{std::addressof(f.F_rho)}; // Grid overloads operator&
+        for (auto* v : {&f.F_rhoV, &f.F_B})
+            for (auto& g : v->grids)
+                grids.push_back(std::addressof(g));
+        grids.push_back(std::addressof(f.F_Etot));
+        return grids;
+    }
+    static void for_each_flux_grid(Fluxes_t& f, auto&& fn)
+    {
+        for (auto* g : flux_grids(f))
+            fn(*g);
+    }
 
 private:
     Fluxes_t fluxes_(std::string const& d, S const sf, V const vf) const
@@ -228,6 +254,15 @@ void for_each_resource(MHDPatch<opts>& patch, auto&& fn)
     vector(patch.old.B);
     scalar(patch.old.Etot);
     vector(patch.E);
+    for (std::size_t d = 0; d < Patch::dimension; ++d)
+        for (auto* f : {&patch.butcher[d], &patch.flux_sum[d]})
+        {
+            scalar(f->F_rho);
+            vector(f->F_rhoV);
+            scalar(f->F_Etot);
+        }
+    vector(patch.butcherE);
+    vector(patch.flux_sum_E);
 }
 
 // LevelData holds patches by unique_ptr

@@ -239,6 +239,22 @@ TEST(SimulatorModels, mhdRestartContinuesTheRun)
     }
 }
 
+namespace
+{
+    // the input with a refined level over coarse cells lower..upper
+    initializer::Dict with_level_1(initializer::Dict input, int const lower, int const upper)
+    {
+        auto& amr               = input["simulation"]["AMR"];
+        amr["max_nbr_levels"]   = 2;
+        amr["max_mhd_level"]    = 2;
+        auto& box               = amr["refinement"]["boxes"]["L0"];
+        box["nbr_boxes"]        = 1;
+        box["B0"]["lower"]["x"] = lower;
+        box["B0"]["upper"]["x"] = upper;
+        return input;
+    }
+} // namespace
+
 // a refined MHD level from the coarser one (PHARE's MHDMessenger initLevel): its state
 //  refined, each fine cell pair meaning back to its coarse cell (FieldRefiner's dual stencil)
 TEST(SimulatorModels, mhdRefinedLevelFromTheCoarser)
@@ -262,6 +278,38 @@ TEST(SimulatorModels, mhdRefinedLevelFromTheCoarser)
         for (std::size_t i = 0; i < 16; ++i)
             EXPECT_NEAR(.5 * (fine[2 * i] + fine[2 * i + 1]), coarse[8 + i], 1e-14) << name;
     }
+}
+
+
+// a refined MHD level advanced in its coarser level's steps: substeps, level ghosts in time,
+//  the reflux (the coarser level's fluxes under it replaced by its sums): a periodic level 0
+//  keeps its mass, a uniform state stays
+TEST(SimulatorModels, mhdRefinedLevelAdvanced)
+{
+    {
+        Simulator<mhd_only> sim{with_level_1(mhd_input({"MHDModel"}, constant(1.3), 8), 8, 23)};
+        sim.initialize();
+        for (std::size_t i = 0; i < 5; ++i)
+            sim.advance();
+        for (std::size_t ln = 0; ln < 2; ++ln)
+            for (auto const rho : sim.level_values("rho", ln))
+                EXPECT_NEAR(rho, 1.3, 1e-13) << ln;
+    }
+    Simulator<mhd_only> sim{with_level_1(mhd_input({"MHDModel"}, function(wave), 8), 8, 23)};
+    sim.initialize();
+    auto const mass = [&]() {
+        auto const rho = sim.level_values("rho", 0);
+        return std::accumulate(rho.begin(), rho.end(), 0.);
+    };
+    double const m0 = mass();
+    for (std::size_t i = 0; i < 10; ++i)
+        sim.advance();
+    std::cout << "level 0 mass relative change " << (mass() - m0) / m0 << "\n";
+    EXPECT_NEAR(mass(), m0, 1e-13 * m0);
+    auto const fine = sim.level_values("rho", 1);
+    ASSERT_EQ(fine.size(), 32u);
+    for (auto const rho : fine)
+        EXPECT_TRUE(std::isfinite(rho));
 }
 
 TEST(SimulatorModels, modelsTheBuildLacksRefused)

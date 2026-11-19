@@ -50,6 +50,7 @@
 #include "plamn/solver/hybrid/patches.hpp"
 #include "plamn/solver/hybrid/restarts.hpp"
 #include "plamn/solver/mhd/initialize.hpp"
+#include "plamn/solver/mhd/level_steps.hpp"
 #include "plamn/solver/mhd/restarts.hpp"
 #include "plamn/solver/models.hpp"
 #include "plamn/solver/stacks.hpp"
@@ -260,6 +261,8 @@ private:
         //  cells (B's touch up region)
         std::vector<std::vector<Box_t>> level_ghost_cells;
         double coarse_t = 0, coarse_dt = 0; // the coarser level's step this level subcycles in
+        double old_t
+            = 0; // the start of its step (prepare_step): an MHD reflux redoes it from there
     };
 
     // damn::amr::advance's hooks
@@ -353,8 +356,8 @@ private:
         levels_.resize(n);
         models_.truncate(n);
     }
-    // hybrid(the hybrid model) if it owns level ln; MHD levels: not stepped by the simulator yet
-    void step_model_(std::size_t ln, auto&& hybrid);
+    // hybrid(the hybrid model) or mhd(the MHD model, its level), whichever owns level ln
+    void step_model_(std::size_t ln, auto&& hybrid, auto&& mhd);
 
     // one patch's work, for every local patch of level ln
     void per_patch_(std::size_t const ln, auto&& fn)
@@ -539,6 +542,17 @@ private:
             self.fill_mhd_state_ghosts_(ln, s, t);
         }
         void fill_electric_ghosts(double const t) { self.fill_mhd_electric_ghosts_(ln, t); }
+
+        // with the coarser level (solver/mhd/level_steps.hpp)
+        NO_DISCARD std::size_t number() const { return ln; }
+        NO_DISCARD MHDLevel coarser() const { return {self, ln - 1}; }
+        void coarsen(auto const& op, std::vector<damn::amr::LevelPair> const& pairs)
+        {
+            self.coarsen_(ln, op, pairs);
+        }
+        void copy(auto const how, std::string const& key) { self.copy_(ln, how, key); }
+        NO_DISCARD double old_time() const { return self.levels_[ln].old_t; }
+        NO_DISCARD int time_ratio() const { return self.time_ratio(); }
     };
     // patch ghosts, then the physical boundaries' (simulator_ghosts.hpp)
     void fill_mhd_state_ghosts_(std::size_t ln, std::size_t s, double t);

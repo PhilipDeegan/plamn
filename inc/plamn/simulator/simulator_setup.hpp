@@ -260,6 +260,18 @@ void Simulator<opts>::register_mhd_resources_()
         resources_[mhd_state_key(s)] = damn::amr::same_names(names);
     }
     resources_["MHD_E"] = damn::amr::same_names({"E_x", "E_y", "E_z"});
+    // a reflux's step fluxes and E, their patch ghosts refilled after (PHARE's
+    //  patchGhostRefluxedAlgo_)
+    std::vector<std::string> reflux{"butcherE_x", "butcherE_y", "butcherE_z"};
+    for (std::size_t d = 0; d < dimension; ++d)
+    {
+        std::string const x{"xyz"[d]};
+        for (auto const* f : {"F_rho_butcher_", "F_Etot_butcher_"})
+            reflux.push_back(f + x);
+        for (auto const* c : {"_x", "_y", "_z"})
+            reflux.push_back("F_rhoV_butcher_" + x + c);
+    }
+    resources_["MHDReflux"] = damn::amr::same_names(reflux);
 }
 
 // what moves between patches, named as for_each_resource(HybridPatch) names it

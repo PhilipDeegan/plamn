@@ -43,13 +43,13 @@
 namespace plamn
 {
 template<auto opts>
-void Simulator<opts>::step_model_(std::size_t const ln, auto&& hybrid)
+void Simulator<opts>::step_model_(std::size_t const ln, auto&& hybrid, auto&& mhd)
 {
     models_.visit(ln, [&](auto& model) {
         if constexpr (solver::is_hybrid_model_v<std::remove_cvref_t<decltype(model)>>)
             hybrid(model);
         else
-            throw std::runtime_error("plamn: MHD refined levels are not in the simulator yet");
+            mhd(model, MHDLevel{*this, ln});
     });
 }
 
@@ -158,15 +158,21 @@ void Simulator<opts>::advance_level_(int const level_number, double const t, dou
     // the finest level's share of the coarser level's reflux, per substep: the time average of
     //  E over them (coarser finer levels accumulate theirs when synchronized)
     if (ln > 0 and ln + 1 == levels_.size())
-        step_model_(ln, [&](auto&) {
-            solver::hybrid::accumulate_flux_sum(level_services_(ln), 1. / time_ratio());
-        });
+        step_model_(
+            ln,
+            [&](auto&) {
+                solver::hybrid::accumulate_flux_sum(level_services_(ln), 1. / time_ratio());
+            },
+            [&](auto& model, auto level) {
+                solver::mhd::accumulate_flux_sum(model, level, 1. / time_ratio());
+            });
 }
 
 template<auto opts>
-void Simulator<opts>::prepare_step_(int const ln, double)
+void Simulator<opts>::prepare_step_(int const ln, double const t)
 {
-    auto const l = static_cast<std::size_t>(ln);
+    auto const l     = static_cast<std::size_t>(ln);
+    levels_[l].old_t = t;
     models_.visit(l, [&](auto& model) {
         if constexpr (solver::is_hybrid_model_v<std::remove_cvref_t<decltype(model)>>)
             solver::hybrid::prepare_step(model, level_services_(l));
@@ -198,21 +204,27 @@ void Simulator<opts>::first_step_(int const level_number, double, double const c
     auto& l          = levels_[ln];
     l.coarse_t       = coarse_t;
     l.coarse_dt      = coarse_dt;
-    step_model_(ln, [&](auto& model) { solver::hybrid::first_step(model, level_services_(ln)); });
+    step_model_(
+        ln, [&](auto& model) { solver::hybrid::first_step(model, level_services_(ln)); },
+        [](auto& model, auto level) { solver::mhd::first_step(model, level); });
 }
 
 template<auto opts>
 void Simulator<opts>::last_step_(int const ln)
 {
     auto const l = static_cast<std::size_t>(ln);
-    step_model_(l, [&](auto& model) { solver::hybrid::last_step(model, level_services_(l)); });
+    step_model_(
+        l, [&](auto& model) { solver::hybrid::last_step(model, level_services_(l)); },
+        [](auto&, auto) {}); // MHD: nothing (PHARE's MHDMessenger lastStep)
 }
 
 template<auto opts>
 void Simulator<opts>::synchronize_(int const ln, double const t)
 {
     auto const l = static_cast<std::size_t>(ln);
-    step_model_(l, [&](auto& model) { solver::hybrid::synchronize(model, level_services_(l), t); });
+    step_model_(
+        l, [&](auto& model) { solver::hybrid::synchronize(model, level_services_(l), t); },
+        [&](auto& model, auto level) { solver::mhd::synchronize(model, level, t); });
     fine_dump_(static_cast<std::size_t>(ln) - 1, t);
 }
 
