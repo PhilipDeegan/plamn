@@ -111,8 +111,16 @@ std::vector<double> Simulator<opts>::all_domain_values(std::string const& name,
 template<auto opts>
 std::vector<double> Simulator<opts>::level_values(std::string const& name, std::size_t const ln)
 {
+    return level_field(name, ln).values;
+}
+
+template<auto opts>
+typename Simulator<opts>::LevelField Simulator<opts>::level_field(std::string const& name,
+                                                                  std::size_t const ln)
+{
     std::vector<int> points; // dimension per point
     std::vector<double> values;
+    std::array<int, dimension> dual{}; // 1: dual along that direction (0 on a rank without patch)
     models_.visit(ln, [&](auto& model) {
         auto& ld = model.levels[static_cast<int>(ln)];
         for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
@@ -120,11 +128,16 @@ std::vector<double> Simulator<opts>::level_values(std::string const& name, std::
             auto const& cells = ld.patches[i].box;
             bool const found  = damn::amr::with_resource(ld.data[i], name, [&](auto& r) {
                 if constexpr (damn::amr::BoxData<std::decay_t<decltype(r)>, dimension>)
+                {
+                    auto const centering = core::centering<dimension>(*r.field);
+                    for (std::size_t d = 0; d < dimension; ++d)
+                        dual[d] = centering[d] == core::QtyCentering::dual;
                     damn::core::for_each_point(domain_box(r, cells), [&](auto const& p) {
                         for (std::size_t d = 0; d < dimension; ++d)
                             points.push_back(p[d]);
                         values.push_back(value(r, cells, p));
                     });
+                }
             });
             if (!found)
                 throw std::runtime_error("plamn Simulator: no resource " + name);
@@ -132,6 +145,8 @@ std::vector<double> Simulator<opts>::level_values(std::string const& name, std::
     });
     if (n_ranks_ > 1)
     {
+        MPI_Allreduce(MPI_IN_PLACE, dual.data(), static_cast<int>(dimension), MPI_INT, MPI_MAX,
+                      MPI_COMM_WORLD);
         auto const gather = [&]<typename T>(std::vector<T> const& v, MPI_Datatype const type) {
             int const n = static_cast<int>(v.size());
             std::vector<int> counts(n_ranks_), displs(n_ranks_);
@@ -154,10 +169,16 @@ std::vector<double> Simulator<opts>::level_values(std::string const& name, std::
             p[d] = points[k * dimension + d];
         by_point.emplace(p, values[k]); // the first patch's
     }
-    std::vector<double> out;
-    out.reserve(by_point.size());
+    LevelField out;
+    out.values.reserve(by_point.size());
+    out.points.reserve(by_point.size() * dimension);
     for (auto const& [p, v] : by_point)
-        out.push_back(v);
+    {
+        out.points.insert(out.points.end(), p.begin(), p.end());
+        out.values.push_back(v);
+    }
+    for (std::size_t d = 0; d < dimension; ++d)
+        out.dual[d] = dual[d] != 0;
     return out;
 }
 

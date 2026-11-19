@@ -16,6 +16,7 @@
 
 #include <nanobind/stl/pair.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/unique_ptr.h>
 #include <memory>
@@ -108,6 +109,14 @@ NB_MODULE(PLAMN_SIM_MODULE, m)
         .def("all_domain_values", &Simulator::all_domain_values, nb::arg("name"),
              nb::arg("level") = 0)
         .def("level_values", &Simulator::level_values, nb::arg("name"), nb::arg("level") = 0)
+        .def(
+            "level_field", // (points: dimension ints per point, values, dual per direction)
+            [](Simulator& self, std::string const& name, std::size_t const level) {
+                auto f = self.level_field(name, level);
+                return std::make_tuple(std::move(f.points), std::move(f.values),
+                                       std::vector<bool>(f.dual.begin(), f.dual.end()));
+            },
+            nb::arg("name"), nb::arg("level") = 0)
         .def("rank", &Simulator::rank)
         .def(
             "all_patch_count",

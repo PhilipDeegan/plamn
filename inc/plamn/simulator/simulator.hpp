@@ -239,6 +239,16 @@ public:
     // every rank's domain values of level ln, one per point (a point patches share once), in
     //  point order: the same for any decomposition (collective)
     NO_DISCARD std::vector<double> level_values(std::string const& name, std::size_t ln = 0);
+    // level_values with where each value is: the points' indices in the level's AMR index space
+    //  (dimension per point, the same order), and per direction whether the field is dual there
+    //  (a point at (index + 1/2) cells) or primal (at index cells): what a plot needs (collective)
+    struct LevelField
+    {
+        std::vector<int> points;
+        std::vector<double> values;
+        std::array<bool, dimension> dual{};
+    };
+    NO_DISCARD LevelField level_field(std::string const& name, std::size_t ln = 0);
 
     // per level, on rank 0 (collective, "" on other ranks), as PHARE's Simulator::summary:
     //   lvl:<n> (<patches>,<cells>,<patch ghost cells>,<level ghost cells>) parts(<particles>),
