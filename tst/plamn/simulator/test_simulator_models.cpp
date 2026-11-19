@@ -6,6 +6,7 @@
 
 #include "plamn/core/models/options/mhd_options_def.hpp"
 #include "plamn/initializer/data_provider.hpp"
+#include "plamn/simulator/restart_paths.hpp"
 #include "plamn/simulator/simulator.hpp"
 #include "plamn/simulator/simulator_def.hpp"
 
@@ -22,6 +23,8 @@
 #include <cstdint>
 #include <algorithm>
 #include <memory>
+#include <iostream>
+#include <cstdlib>
 #include <utility>
 #include <numbers>
 #include <numeric>
@@ -194,6 +197,46 @@ TEST(SimulatorModels, mhdDiagnosticsAsPhare)
         EXPECT_NEAR(vy, .2, 1e-6);
     for (auto const bz : read("EM_B.h5", "EM_B_z"))
         EXPECT_NEAR(bz, .2, 1e-6);
+}
+
+// a restart of an MHD level: its conservative state, the run from it as the run that wrote it.
+//  Not bit for bit: the time restarts from the restart's (PHARE's: start + the steps since), so
+//  the step's t1 - t0 differs from the uninterrupted run's in its last bits
+TEST(SimulatorModels, mhdRestartContinuesTheRun)
+{
+    std::string const dir = ::testing::TempDir() + "plamn_mhd_restarts";
+    auto input            = mhd_input({"MHDModel"}, function(wave), 8);
+    double const dt       = .01;
+    double const t_write  = 5 * dt;
+
+    input["simulation"]["restarts"]["filePath"]         = dir;
+    input["simulation"]["restarts"]["write_timestamps"] = std::vector<double>{t_write};
+    Simulator<mhd_only> first{input};
+    first.initialize();
+    for (std::size_t i = 0; i < 5; ++i)
+        first.advance();
+    ASSERT_TRUE(first.dump_restarts(first.currentTime(), dt));
+    for (std::size_t i = 0; i < 5; ++i)
+        first.advance();
+
+    auto from                                      = mhd_input({"MHDModel"}, function(wave), 8);
+    from["simulation"]["restarts"]["loadPath"]     = simulator::restart_dir_for_time(dir, t_write);
+    from["simulation"]["restarts"]["restart_time"] = t_write;
+    Simulator<mhd_only> second{from};
+    second.initialize();
+    EXPECT_DOUBLE_EQ(second.currentTime(), t_write);
+    for (std::size_t i = 0; i < 5; ++i)
+        second.advance();
+    for (auto const* name : {"rho", "rhoV_x", "B_y", "Etot"})
+    {
+        auto const a = first.domain_values(name), b = second.domain_values(name);
+        ASSERT_EQ(a.size(), b.size());
+        double max = 0;
+        for (std::size_t i = 0; i < a.size(); ++i)
+            max = std::max(max, std::abs(a[i] - b[i]) / std::max(1., std::abs(a[i])));
+        std::cout << name << ": max relative difference " << max << "\n";
+        EXPECT_LT(max, 1e-13) << name;
+    }
 }
 
 TEST(SimulatorModels, modelsTheBuildLacksRefused)

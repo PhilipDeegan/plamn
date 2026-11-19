@@ -194,17 +194,20 @@ void Simulator<opts>::initialize()
 template<auto opts>
 void Simulator<opts>::initialize_mhd_()
 {
-    if (!restarts_.load_path.empty())
-        throw std::runtime_error("plamn: MHD restarts are not in the simulator yet");
     if (hierarchy_.max_levels > 1)
         throw std::runtime_error("plamn: MHD refined levels are not in the simulator yet");
-    make_level_(0, {hierarchy_.domain});
-    MHDLevel level{*this, 0};
-    level.per_patch([&](auto& patch) {
-        solver::mhd::initialize_state(models_.mhd, patch, dict_["simulation"]);
-    });
-    level.fill_state_ghosts(0, startTime_);
-    currentTime_ = startTime_;
+    if (!restarts_.load_path.empty()) // pyphare's restart_time: the level from the file
+        load_restart_();
+    else
+    {
+        make_level_(0, {hierarchy_.domain});
+        MHDLevel level{*this, 0};
+        level.per_patch([&](auto& patch) {
+            solver::mhd::initialize_state(models_.mhd, patch, dict_["simulation"]);
+        });
+        level.fill_state_ghosts(0, startTime_);
+        currentTime_ = startTime_;
+    }
     timestepper_.start_at(startTime_);
     dt_            = timestepper_.next([&](auto const& cfl) { return stable_dt_(cfl); });
     isInitialized_ = true;

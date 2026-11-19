@@ -50,6 +50,7 @@
 #include "plamn/solver/hybrid/patches.hpp"
 #include "plamn/solver/hybrid/restarts.hpp"
 #include "plamn/solver/mhd/initialize.hpp"
+#include "plamn/solver/mhd/restarts.hpp"
 #include "plamn/solver/models.hpp"
 #include "plamn/solver/stacks.hpp"
 #include "plamn/amr/load_balancing.hpp"
@@ -313,6 +314,14 @@ private:
     // restarts, see simulator_restarts.hpp
     void setup_restarts_();
     void write_restart_(std::string const& dir);
+    // the resources a restart stores of a level of the model's
+    NO_DISCARD static auto restart_names_(auto const& model)
+    {
+        if constexpr (solver::is_mhd_model_v<std::remove_cvref_t<decltype(model)>>)
+            return solver::mhd::restart_names(model);
+        else
+            return solver::hybrid::restart_names(model);
+    }
     void load_restart_();
     void rebuild_after_load_();
     struct Restarts

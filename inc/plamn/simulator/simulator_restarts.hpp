@@ -91,10 +91,7 @@ bool Simulator<opts>::dump_restarts(double const timestamp, double const timeste
     }
     if (!due)
         return false;
-    if constexpr (!Models_t::hybrid_on)
-        throw std::runtime_error("plamn: MHD restarts are not in the simulator yet");
-    else
-        write_restart_(simulator::restart_dir_for_time(restarts_.dir, timestamp));
+    write_restart_(simulator::restart_dir_for_time(restarts_.dir, timestamp));
     return true;
 }
 
@@ -125,19 +122,24 @@ void Simulator<opts>::write_restart_(std::string const& dir)
                              static_cast<std::uint64_t>(rebalance_check_->steps_to_next_check));
     }
 
+    // each level by its model: what it stores, around the writing (hybrid: restart_writing)
+    auto const hybrid_writing = [&](std::size_t const ln, bool const writing) {
+        models_.visit(ln, [&](auto& model) {
+            if constexpr (solver::is_hybrid_model_v<std::remove_cvref_t<decltype(model)>>)
+                solver::hybrid::restart_writing(model, level_services_(ln), writing);
+        });
+    };
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
-        solver::hybrid::restart_writing(models_.hybrid, level_services_(ln), /*writing=*/true);
-
-    auto const names = solver::hybrid::restart_names(models_.hybrid);
+        hybrid_writing(ln, /*writing=*/true);
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
-    {
-        auto const group = "/level" + std::to_string(ln);
-        write_checkpoint(file, group, hierarchy_.levels[ln], data_(ln), names);
-    }
+        models_.visit(ln, [&](auto& model) {
+            write_checkpoint(file, "/level" + std::to_string(ln), hierarchy_.levels[ln],
+                             model.levels[static_cast<int>(ln)], restart_names_(model));
+        });
     for (std::size_t ln = 0; ln < clustered_.size(); ++ln)
         write_boxes(file, "/clustered" + std::to_string(ln), clustered_[ln]);
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
-        solver::hybrid::restart_writing(models_.hybrid, level_services_(ln), /*writing=*/false);
+        hybrid_writing(ln, /*writing=*/false);
 #else
     throw std::runtime_error("plamn Simulator: restarts need HDF5 (damn_hdf5): " + dir);
 #endif
@@ -165,7 +167,6 @@ void Simulator<opts>::load_restart_()
             file.read_attribute<std::uint64_t>("/restart", "rebalance_steps_to_next_check"));
     }
 
-    auto const names    = solver::hybrid::restart_names(models_.hybrid);
     auto const n_levels = file.read_attribute<int>("/restart", "levels");
     for (int ln = 0; ln < n_levels; ++ln)
     {
@@ -173,7 +174,10 @@ void Simulator<opts>::load_restart_()
         auto const stored = read_level<dimension>(file, group + "/level", ln);
         damn::amr::set_level(hierarchy_, stored.level);
         allocate_level_(ln);
-        read_checkpoint(file, group, hierarchy_.levels[ln], data_(ln), names);
+        models_.visit(static_cast<std::size_t>(ln), [&](auto& model) {
+            read_checkpoint(file, group, hierarchy_.levels[ln], model.levels[ln],
+                            restart_names_(model));
+        });
     }
     clustered_.resize(static_cast<std::size_t>(file.read_attribute<int>("/restart", "clustered")));
     for (std::size_t ln = 0; ln < clustered_.size(); ++ln)
@@ -192,7 +196,15 @@ void Simulator<opts>::rebuild_after_load_()
 {
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
     {
-        solver::hybrid::restart_loaded(models_.hybrid, level_services_(ln));
+        models_.visit(ln, [&](auto& model) {
+            if constexpr (solver::is_mhd_model_v<std::remove_cvref_t<decltype(model)>>)
+            {
+                MHDLevel level{*this, ln};
+                solver::mhd::restart_loaded(model, level, currentTime_);
+            }
+            else
+                solver::hybrid::restart_loaded(model, level_services_(ln));
+        });
         prepare_step_(static_cast<int>(ln), currentTime_);
     }
 }
