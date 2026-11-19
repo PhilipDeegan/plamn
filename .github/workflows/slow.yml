@@ -57,8 +57,8 @@ jobs:
   # PHARE master's 1D modules built as its CI builds them (cmake_ubuntu.yml: SAMRAI from the
   #  image, double precision diagnostics), plamn's the same way, then the same input under both
   #  (etc/compare/phare): the ion beam, 2 levels, 2000 steps, B and E compared every 100 steps;
-  #  then the MHD shock (PHARE's tests/functional/mhd_shock, periodic): MHD only, one level, 400
-  #  steps, B rho V P compared every 50
+  #  then the MHD shocks (PHARE's tests/functional/mhd_shock: periodic, 400 steps; between an
+  #  inflow and an open boundary, 1000 steps): MHD only, one level, B rho V P at every dump
   phare:
     runs-on: ubuntu-24.04
     container: ghcr.io/pharchive/phare_dep/ubuntu:26.04
@@ -111,6 +111,16 @@ jobs:
       run: >-
         python3 etc/compare/phare/compare_physics.py --case mhd_shock_1d --ndim 1 --steps 400
         --ref "$PHARE_DIR" --cmp plamn --all-times --json compare/mhd_shock_1d.json
+
+    - name: PHARE vs plamn, 1D MHD shock between inflow and open boundaries, 1000 steps
+      if: always()
+      env:
+        PHARE_DIR: ${{ github.workspace }}/phare
+        LADDER_OUT: ${{ github.workspace }}/compare
+      run: >-
+        python3 etc/compare/phare/compare_physics.py --case mhd_shock_walls_1d --ndim 1
+        --steps 1000 --ref "$PHARE_DIR" --cmp plamn --all-times
+        --json compare/mhd_shock_walls_1d.json
 
     - if: always()
       uses: actions/upload-artifact@v4

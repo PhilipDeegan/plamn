@@ -67,6 +67,9 @@ CASES = {
     # compare_physics.py --all-times: PHARE's tests/functional/mhd_shock/shock_periodic.py (MHD
     #  only, one level), dumps every 50 of its 400 steps
     "mhd_shock_1d": dict(mhd_shock=True, steps=400, dump_every=50, pops=[]),
+    # PHARE's shock_with_boundaries.py: inflow (super magnetofast, the left state) at x lower,
+    #  open at x upper, the shock moving in at 1.05 the fastest wave; dumps every 100 of 1000 steps
+    "mhd_shock_walls_1d": dict(mhd_shock=True, walls=True, steps=1000, dump_every=100, pops=[]),
 }
 
 
@@ -339,20 +342,46 @@ def _harris_3d(ph, out, case, largest_patch_size, fmt, fine_dump):
     return sim
 
 
+def _fast_speed(gamma, rho, p, bx, by):
+    """the fast magnetosonic speed along x (PHARE's mhd_shock common.State)"""
+    cs2, va2 = gamma * p / rho, (bx**2 + by**2) / rho
+    common = np.sqrt((cs2 + va2) ** 2 - 4.0 * cs2 * bx**2 / rho)
+    return np.sqrt((cs2 + va2 + common) / 2)
+
+
 def _mhd_shock_1d(ph, out, case, largest_patch_size, fmt):
-    """PHARE's tests/functional/mhd_shock (common.py config, shock_periodic.py's run): 800 cells,
-    dt 0.2, the discontinuity at the middle, at rest; B, rho, V, P every dump_every steps"""
-    gamma, bx, ncells, dt = 5.0 / 3.0, 0.75, 800, 0.2
+    """PHARE's tests/functional/mhd_shock (common.py config): 800 cells, B, rho, V, P every
+    dump_every steps. shock_periodic.py: dt 0.2, the discontinuity at the middle, at rest;
+    shock_with_boundaries.py (walls): inflow of the left state at x lower, open at x upper, the
+    discontinuity 10 cells in, moving at 1.05 the fastest wave, dt half the CFL limit"""
+    gamma, bx, ncells, dx = 5.0 / 3.0, 0.75, 800, 1.0
     left = dict(rho=1.0, p=1.0, by=1.0)
     right = dict(rho=0.125, p=0.1, by=-1.0)
-    x0 = ncells / 2
+    extra = {}
+    if case.get("walls"):
+        cf_max = max(_fast_speed(gamma, s["rho"], s["p"], bx, s["by"]) for s in (left, right))
+        u = 1.05 * cf_max
+        dt = 0.5 * dx / (u + cf_max)
+        x0 = 10 * dx
+        extra["domain_boundaries"] = {
+            "xlower": {
+                "type": "super-magnetofast-inflow",
+                "velocity": u,
+                "density": left["rho"],
+                "pressure": left["p"],
+                "B": [bx, left["by"], 0.0],
+            },
+            "xupper": {"type": "open"},
+        }
+    else:
+        u, dt, x0 = 0.0, 0.2, ncells * dx / 2
     sim = ph.Simulation(
         smallest_patch_size=15,
         largest_patch_size=largest_patch_size,
         time_step=dt,
         final_time=case["steps"] * dt,
         cells=(ncells,),
-        dl=(1.0,),
+        dl=(dx,),
         refinement="tagging",
         max_mhd_level=1,
         max_nbr_levels=1,
@@ -369,6 +398,7 @@ def _mhd_shock_1d(ph, out, case, largest_patch_size, fmt):
         mhd_timestepper="TVDRK2",
         hall=False,
         model_options=["MHDModel"],
+        **extra,
     )
 
     def side(name):
@@ -378,7 +408,7 @@ def _mhd_shock_1d(ph, out, case, largest_patch_size, fmt):
         return lambda x: v + 0.0 * x
 
     ph.MHDModel(
-        density=side("rho"), vx=const(0.0), vy=const(0.0), vz=const(0.0),
+        density=side("rho"), vx=const(u), vy=const(0.0), vz=const(0.0),
         bx=const(bx), by=side("by"), bz=const(0.0), p=side("p"),
     )
     timestamps = dt * np.arange(0, case["steps"] + 1, case["dump_every"])
