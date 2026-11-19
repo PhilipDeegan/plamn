@@ -20,7 +20,9 @@ when whole patches are too coarse to balance (level 0 cut on blocks, damn::amr::
 """
 
 import os
+import shutil
 import unittest
+from pathlib import Path
 
 import numpy as np
 
@@ -194,9 +196,11 @@ def harris(
     return out
 
 
-def drift(load_balancer, steps=120, patch=(10, 10)):
+def drift(load_balancer, steps=120, patch=(10, 10), diag_dir=None):
     """level 0's rank imbalance (max / mean - 1 of the particles per rank) after each step, and
-    B at the end: uniform protons and a drifting beam blob, refinement="tagging" (2 levels)
+    B at the end: uniform protons and a drifting beam blob, refinement="tagging" (2 levels).
+    diag_dir: the beam's pressure tensor (a computed quantity: scratch grids on the patches it
+    is computed on) dumped there at t0, before the rebalances move patches between ranks
     """
     ph.global_vars.sim = None
     ph.clearDict()
@@ -210,6 +214,11 @@ def drift(load_balancer, steps=120, patch=(10, 10)):
         refinement="tagging",
         max_nbr_levels=2,
         strict=True,
+        **(
+            dict(diag_options={"format": "phareh5", "options": {"dir": diag_dir, "mode": "overwrite"}})
+            if diag_dir
+            else {}
+        ),
     )
     L = sim.simulation_domain()[0]
 
@@ -242,6 +251,9 @@ def drift(load_balancer, steps=120, patch=(10, 10)):
         beam=pop(blob, 3.0, 100, 2),
     )
     ph.ElectronModel(closure="isothermal", Te=0.0)
+    if diag_dir:
+        ph.FluidDiagnostics(quantity="pressure_tensor", write_timestamps=[0.0],
+                            population_name="beam")
     if load_balancer:
         ph.LoadBalancer(**load_balancer)
     simulator = ph.Simulator(sim, log_to_file=False).setup().initialize()
@@ -362,6 +374,23 @@ class HybridRefinementTest(unittest.TestCase):
         self.assertGreater(max(no["imbalance"]), 0.4)
         self.assertLess(lb["imbalance"][100], 0.15)
         self.assertLess(np.abs(lb["B"] - no["B"]).max(), 1e-12)
+
+    def test_load_balancing_moves_computed_quantities(self):
+        """a computed quantity (the beam's pressure tensor) dumped before the rebalances: its
+        scratch grids on every patch, so a patch moved to another rank unpacks what was packed
+        (they were only on the patches it was computed on: an unpack out of step, a crash)"""
+        ph.startMPI()
+        if plamn.etc.mpi_size() < 2:
+            self.skipTest("one rank: nothing to balance (--tags mpi runs it on 3)")
+        # one directory for every rank (a parallel HDF5 file), one per rank count (phlop runs the
+        #  1 and 3 rank cases at the same time)
+        d = Path("phare_outputs") / f"plamn_lb_computed_np{plamn.etc.mpi_size()}"
+        lb = drift(dict(every=30, tol=0.05), steps=40, diag_dir=str(d))
+        plamn.etc.mpi_barrier()
+        if plamn.etc.mpi_rank() == 0:
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertLess(lb["imbalance"][40], max(lb["imbalance"]))
+        self.assertTrue(np.isfinite(lb["B"]).all())
 
     def test_load_balancing_cuts_patches(self):
         """6 level 0 patches (20 x 30) for 3 ranks, the beam blob in one: partitioned whole at

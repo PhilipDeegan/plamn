@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <tuple>
 #include <vector>
 #include <format>
 #include <utility>
@@ -107,11 +108,18 @@ NO_DISCARD auto surroundings(HybridModel<opts> const&, damn::amr::Hierarchy<dim>
 
 // sim: the input's "simulation"
 template<auto opts>
-NO_DISCARD auto make_patch(HybridModel<opts> const&, auto const& layout, auto const& sim,
+NO_DISCARD auto make_patch(HybridModel<opts> const& model, auto const& layout, auto const& sim,
                            auto const& surroundings)
 {
     using Patch_t = HybridModel<opts>::Patch_t;
-    return std::make_unique<Patch_t>(layout, sim, surroundings);
+    auto patch    = std::make_unique<Patch_t>(layout, sim, surroundings);
+    // every computed quantity's scratch grids from the start: every patch then holds the same
+    //  resources, whatever was computed where (a level moved between ranks, regrid or
+    //  rebalance, packs and unpacks every resource of a patch in order)
+    for (auto const& [key, computed] : model.computed)
+        for (auto const& [name, qty] : computed.grids)
+            std::ignore = patch->scratch_grid(name, qty);
+    return patch;
 }
 
 // layout -> the particles the populations' initial functions put in its cells (populated

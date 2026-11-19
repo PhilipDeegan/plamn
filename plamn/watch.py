@@ -63,6 +63,7 @@ class Plotter:
         self.draw = cpp.rank() == 0
         self.dx = cpp.cell_width()
         self.ndim = len(self.dx)
+        self.colorbars = {}  # per axes, removed at each redraw (else they stack up)
         if self.draw:
             cols = min(3, len(quantities))
             rows = math.ceil(len(quantities) / cols)
@@ -94,11 +95,15 @@ class Plotter:
         if not self.draw:
             return
         for ax, name, levels in zip(self.axes, self.quantities, data):
+            if ax in self.colorbars:
+                self.colorbars.pop(ax).remove()
             ax.clear()
             if self.ndim == 1:
                 self.draw_1d(ax, levels)
             else:
-                self.draw_2d(ax, levels)
+                mappable = self.draw_2d(ax, levels)
+                if mappable is not None:
+                    self.colorbars[ax] = ax.figure.colorbar(mappable, ax=ax)
             ax.set_title(name)
         self.fig.suptitle(f"t = {self.cpp.currentTime():.6g}, step {step}")
         self.fig.tight_layout()
@@ -117,11 +122,14 @@ class Plotter:
 
     @staticmethod
     def draw_2d(ax, levels):
-        """an image per level over its points' bounding box (NaN where it has none)"""
+        """an image per level over its points' bounding box (NaN where it has none), the axes
+        over all of them (each image would set them to its own); the last image, for a
+        colourbar"""
         import numpy as np
 
         values = np.concatenate([v for _, v in levels])
         vmin, vmax = (values.min(), values.max()) if values.size else (0, 1)
+        mappable, extents = None, []
         for x, v in levels:
             if not v.size:
                 continue
@@ -136,8 +144,12 @@ class Plotter:
                       lo[1] - spacing[1] / 2, hi[1] + spacing[1] / 2]
             mappable = ax.imshow(image.T, origin="lower", extent=extent, vmin=vmin, vmax=vmax,
                                  aspect="auto", interpolation="nearest")
-        if values.size:
-            ax.figure.colorbar(mappable, ax=ax)
+            extents.append(extent)
+        if extents:
+            e = np.asarray(extents)
+            ax.set_xlim(e[:, 0].min(), e[:, 1].max())
+            ax.set_ylim(e[:, 2].min(), e[:, 3].max())
+        return mappable
 
 
 def main(argv=None):
