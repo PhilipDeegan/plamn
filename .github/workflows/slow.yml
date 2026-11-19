@@ -83,7 +83,8 @@ jobs:
       with:
         damn-key: ${{ secrets.DAMN_DEPLOY_KEY }}
         mkn: "true"
-    - run: KLOG=3 ./mkn.py ${{ matrix.args }} --jobs 4 --diag-doubles -- -q -x res/mkn/mpi
+    # --optimise 3: no -march=native (built on one runner, run on another: SIGILL otherwise)
+    - run: KLOG=3 ./mkn.py ${{ matrix.args }} --jobs 4 --optimise 3 --diag-doubles -- -q -x res/mkn/mpi
     - uses: actions/upload-artifact@v4
       with:
         name: plamn-${{ matrix.name }}

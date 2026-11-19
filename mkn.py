@@ -78,6 +78,11 @@ def has_name_option():
         return False
 
 
+# mkn's -O: bare is level 9 (-O3 and -march=native -mtune=native: this machine's CPU only);
+#  --optimise N for modules run elsewhere (CI artifacts: built on one runner, run on another)
+OPTIMISE = ["-O"]
+
+
 def mkn(profile, extra, jobs, defines=(), out=None, own_dir=False):
     # mkn rebuilds by timestamps, not compile arguments: each permutation builds in its own
     # directory (-N), or, with an mkn without -N, in a cleaned bin/<profile> (ccache keeps it
@@ -85,7 +90,7 @@ def mkn(profile, extra, jobs, defines=(), out=None, own_dir=False):
     cmd = ["mkn"]
     if own_dir and not has_name_option():
         cmd += ["clean"]
-    cmd += ["build", "-p", profile, "-dKO", "-t", str(jobs)]
+    cmd += ["build", "-p", profile, "-dK", *OPTIMISE, "-t", str(jobs)]
     if own_dir and has_name_option():
         cmd += ["-N", out]
     if out:
@@ -123,6 +128,9 @@ def main(argv):
                         help="--mhd: Hall MHD modules (true), ideal (false), or both")
     parser.add_argument("--no-etc", action="store_true", help="don't build py_etc")
     parser.add_argument("--jobs", type=int, default=8, help="mkn -t (CI: 4)")
+    parser.add_argument("--optimise", type=int, default=None,
+                        help="mkn -O N (default: bare -O, level 9: -march=native, this CPU only; "
+                        "3: portable, for modules run on other machines)")
     parser.add_argument(
         "--scope-print",
         action="store_true",
@@ -155,6 +163,8 @@ def main(argv):
     else:
         extra = []
     args = parser.parse_args(argv)
+    if args.optimise is not None:
+        OPTIMISE[:] = ["-O", str(args.optimise)]
     if args.layout is None:  # pyphare's: an MHD only simulation's model_layout is AoS
         args.layout = ["AoS"] if args.mhd else ["AoSMapped"]
     if "-x" not in extra:
