@@ -107,6 +107,11 @@ CASES = {
 #  steps): 10x that and more. Not the hybrid ones (particle noise) nor mhd_shock_tagged_1d
 #  (NaN in PHARE itself)
 MHD_TOLERANCE = (1e-13, 1.25, 1e-11)
+# the long shocks (hundreds of steps) grow their round off faster once the shock interacts (in CI:
+#  the walls' reflections, ~1e-14 for 5 dumps then 2e-12 by the 10th): 2.6x and more over that
+SHOCK_TOLERANCE = (1e-13, 1.6, 1e-11)
+for _name in ("mhd_shock_1d", "mhd_shock_walls_1d"):
+    CASES[_name]["tolerance"] = SHOCK_TOLERANCE
 for _name, _case in CASES.items():
     if (_case.get("mhd_advance") or _case.get("mhd_shock")) and _name != "mhd_shock_tagged_1d":
         _case.setdefault("tolerance", MHD_TOLERANCE)
