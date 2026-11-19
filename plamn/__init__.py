@@ -201,6 +201,27 @@ def _patch_enum_int():
     DictPopulator.add_enum_int = add_enum_int
 
 
+def _patch_live_simulators():
+    """plamn's simulators hold no process wide state (PHARE's SAMRAI statics): several may be
+    live side by side (the restart tests run one from another's restart, both advanced). A
+    pyphare that allows one live simulator per process (wrangler: _replace_live_simulator raises
+    while the previous one has not reached its final time, else resets it) keeps its record of
+    the last one set up, nothing else"""
+    import weakref
+
+    from pyphare.simulator import simulator
+
+    if not hasattr(simulator.Simulator, "_replace_live_simulator"):
+        return
+
+    def replace_live_simulator(self):
+        from pyphare.simulator import _simulator
+
+        _simulator.obj = weakref.ref(self)
+
+    simulator.Simulator._replace_live_simulator = replace_live_simulator
+
+
 def patch():
     """idempotent: test classes call it from setUpClass (nothing runs at import)"""
     global _patched
@@ -222,6 +243,7 @@ def patch():
 
     _patch_layout_for()
     _patch_enum_int()
+    _patch_live_simulators()
     _patch_density_background()
     _patch_tag_boxes()
 
