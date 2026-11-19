@@ -92,7 +92,9 @@ void Simulator<opts>::setup_diagnostics_()
             {
                 if (d.type == "particle")
                     std::ignore = solver::hybrid::particle_population(models_.hybrid, d.quantity);
-                else if (!is_computed(d.quantity))
+                else if (is_computed(d.quantity)) // its scratch grids on every patch
+                    models_.hybrid.requested.insert(d.quantity);
+                else
                     std::ignore = diagnostic::quantity_for(models_.hybrid.quantities, d.quantity);
             }
     }

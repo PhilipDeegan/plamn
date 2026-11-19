@@ -23,6 +23,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <memory>
 
 namespace plamn::core
 {
@@ -62,10 +63,13 @@ struct CTPatch
             , dL{"dL", layout, sf}
             , dR{"dR", layout, sf}
             , vt{"vt", layout, vf}
+            , jt{"jt", layout, vf}
+            , rhot{"rhot", layout, sf}
         {
         }
         Grid_t aL, aR, dL, dR;
-        VecField_t vt;
+        VecField_t vt, jt; // jt, rhot: Hall's
+        Grid_t rhot;
     };
 
     explicit CTPatch(Layout_t const& layout_)
@@ -179,6 +183,60 @@ TYPED_TEST(UpwindCTTest, ideal_ohm_uniform)
         });
         EXPECT_GT(n, 0u);
     });
+}
+
+
+// Hall: the same uniform state with a uniform current J and density rho on the faces: E_hall
+//  = -v x B + (J x B) / rho (the Hall electric field), in every dimension
+TYPED_TEST(UpwindCTTest, hall_ohm_uniform)
+{
+    using Patch_t             = CTPatch<TypeParam::dim>;
+    auto constexpr static dim = Patch_t::dim;
+    if constexpr (not is_tiled(Patch_t::layout_mode))
+    {
+        TestLayout<typename Patch_t::Layout_t> const layout{cells};
+        Patch_t p{layout};
+        std::array<double, 3> const v{.3, -.2, .5}, b{.7, .4, -.6}, j{.2, .9, -.4};
+        double const rho    = 1.6;
+        auto const constant = [](double const c) { return [c](auto const&) { return c; }; };
+        for (std::size_t c = 0; c < 3; ++c)
+        {
+            fill(p, p.B[c], constant(b[c]));
+            fill(p, p.E[c], constant(42.));
+        }
+        for (auto& face : p.f)
+        {
+            fill(p, face.aL, constant(.5));
+            fill(p, face.aR, constant(.5));
+            fill(p, face.dL, constant(1.3));
+            fill(p, face.dR, constant(1.3));
+            fill(p, face.rhot, constant(rho));
+            for (std::size_t c = 0; c < 3; ++c)
+            {
+                fill(p, face.vt[c], constant(v[c]));
+                fill(p, face.jt[c], constant(j[c]));
+            }
+        }
+        auto const face = [](auto const& f) {
+            // std::addressof: Grid overloads operator&
+            return CTFace{
+                f.vt, f.aL, f.aR, f.dL, f.dR, std::addressof(f.jt), std::addressof(f.rhot)};
+        };
+        CT_t{}.hall(p.layout, p.B, face(p.f[0]), face(p.f[1]), face(p.f[2]), p.E);
+
+        auto const cross = [](auto const& a, auto const& c) {
+            return std::array{a[1] * c[2] - a[2] * c[1], a[2] * c[0] - a[0] * c[2],
+                              a[0] * c[1] - a[1] * c[0]};
+        };
+        auto const vxB = cross(v, b), JxB = cross(j, b);
+        mkn::kul::for_N<3>([&](auto c) {
+            double const expect
+                = UpwindCT<Linear_t>::template has_equation<c, dim> ? -vxB[c] + JxB[c] / rho : 42.;
+            damn::core::for_each_point(CT_t::box_for(layout, p.E[c]), [&](auto const& ijk) {
+                EXPECT_NEAR(p.E[c](ijk), expect, 1e-14) << "E[" << c << "]";
+            });
+        });
+    }
 }
 
 

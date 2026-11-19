@@ -85,6 +85,27 @@ public:
                 on_tile<dir>(ti, rho, V, B, P, F_rho, F_rhoV, F_B, F_Etot, vt, aL, aR, dL, dR);
     }
 
+    // Hall: as operator(), J in, the faces' current and rho averages (jt, rhot) out for the
+    //  constrained transport; untiled fields only (the tiled / GPU paths: not yet)
+    template<std::size_t dir, typename Field, typename VecField>
+    void hall(auto const& layout, Field const& rho, VecField const& V, VecField const& B,
+              Field const& P, VecField const& J, Field& F_rho, VecField& F_rhoV, VecField& F_B,
+              Field& F_Etot, VecField& vt, Field& aL, Field& aR, Field& dL, Field& dR, VecField& jt,
+              Field& rhot) const
+    {
+        static_assert(not is_field_tile_set_v<Field>, "plamn: Hall MHD on tiles: not yet");
+        eval_on_box(
+            F_rho, box_for<dir>(layout, F_rho),
+            [] DAMN_ALL(auto const& ijk, auto const& face, auto const& rho_, auto const& V_,
+                        auto const& B_, auto const& P_, auto const& J_, auto& jt_, auto& rhot_,
+                        auto&... out) {
+                auto const r = face.template hall<dir>(ijk, rho_, V_, B_, P_, J_);
+                Face_t::store(ijk, r, out...);
+                Face_t::store_hall(ijk, r, jt_, rhot_);
+            },
+            face_, rho, V, B, P, J, jt, rhot, F_rho, F_rhoV, F_B, F_Etot, vt, aL, aR, dL, dR);
+    }
+
     // one tile of the tiled fields, eg as one task of a thread pool
     template<std::size_t dir>
     void on_tile(std::size_t const tile_idx, auto const& rho, auto const& V, auto const& B,

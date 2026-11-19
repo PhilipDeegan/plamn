@@ -33,6 +33,11 @@ class WatchTest(unittest.TestCase):
     def test_hybrid(self):
         self.check("alfven1d", steps=10, every=5, quantities=["EM_B_y", "EM_B_z"])
 
+    def test_view3d_missing_says_how_to_build(self):
+        with self.assertRaises(FileNotFoundError) as e:
+            watch.main(["mhd_tube", "--watch", "1", "--view3d", "/no/view3d"])
+        self.assertIn("res/build_3d_view.py", str(e.exception))
+
     def test_levels_as_they_are(self):
         self.check("alfven1d", steps=10, every=10, quantities=["EM_B_y"], interp="none")
 
@@ -63,6 +68,37 @@ class FinestTest(unittest.TestCase):
             # coarse cells 3..5 covered (nodes 3..6 too: the fine level has them)
             self.assertTrue(((coarse < 3) | (coarse > 6)).all(), (dual, coarse))
             self.assertEqual((v != x[:, 0]).sum(), len(levels[1][0]))
+
+    def test_flat_finest_levels(self):
+        """with_level: each kept point's level (view3d sizes its balls by it)"""
+        levels = two_levels(lambda x: x[:, 0], [10], [(3, 5)])
+        x, v, lv = watch.flat_finest(levels, [1.0], with_level=True)
+        np.testing.assert_array_equal(lv == 1, v != x[:, 0])  # level 1: fn + 1
+        self.assertEqual((lv == 1).sum(), len(levels[1][0]))
+
+    def test_arrows_block_means(self):
+        """view3d's arrows: B over blocks of W cells, at the blocks' centres (a PLMV record)"""
+        import struct
+
+        class Cpp:
+            def domain_box(self):
+                return [[0, 0, 0], [19, 19, 19]]
+
+        x = np.stack(np.meshgrid(*[np.arange(20) + 0.5] * 3, indexing="ij"), -1).reshape(-1, 3)
+        components = [[(x, x[:, 0])], [(x, 2 * x[:, 1])], [(x, 0 * x[:, 2])]]
+        view = watch.View3D.__new__(watch.View3D)  # no viewer started
+        view.cpp, view.dx, view.arrows = Cpp(), np.ones(3), 10
+        record = view.arrows_record(components)
+        self.assertEqual(record[:4], b"PLMV")
+        (n,) = struct.unpack("<Q", record[4:12])
+        self.assertEqual(n, 8)
+        data = np.frombuffer(record[12:], "<f4")
+        xyz, vec, half = data[: 3 * n].reshape(n, 3), data[3 * n : 6 * n].reshape(n, 3), data[6 * n :]
+        np.testing.assert_allclose(vec[:, 0], xyz[:, 0])
+        np.testing.assert_allclose(vec[:, 1], 2 * xyz[:, 1])
+        np.testing.assert_allclose(vec[:, 2], 0)
+        np.testing.assert_allclose(half, 5)
+        self.assertEqual(sorted(set(xyz[:, 0])), [5.0, 15.0])
 
     def test_1d(self):
         levels = two_levels(lambda x: x[:, 0], [10], [(3, 5)])

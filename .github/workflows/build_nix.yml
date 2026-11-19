@@ -48,7 +48,7 @@ jobs:
         KLOG=3 ./mkn.py --dim 1 2 --jobs 4 -- -q -x res/mkn/mpi
         -W 9 -a "-Wno-unused-parameter -Wno-unused-variable -Wno-error=strict-aliasing"
     - run: >-
-        KLOG=3 ./mkn.py --mhd --no-etc --jobs 4 -- -q -x res/mkn/mpi
+        KLOG=3 ./mkn.py --mhd --no-etc --jobs 4 --hall false true -- -q -x res/mkn/mpi
         -W 9 -a "-Wno-unused-parameter -Wno-unused-variable -Wno-error=strict-aliasing"
     - uses: actions/checkout@v4
       with:

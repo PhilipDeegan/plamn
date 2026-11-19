@@ -17,7 +17,6 @@
 
 #include "damn/amr/copy.hpp"
 #include "damn/core/logger.hpp"
-
 #include "plamn/core/data/field/field_algorithm.hpp"
 #include "plamn/core/numerics/ampere/ampere_transformer.hpp"
 #include "plamn/core/numerics/faraday/faraday_transformer.hpp"
@@ -27,8 +26,8 @@
 #include "plamn/core/numerics/particles_synchronised_mover/particles_synchronised_mover_def.hpp"
 #include "plamn/simulator/level_accessor.hpp"
 #include "plamn/solver/hybrid/model.hpp"
-
 #include "phlop/timing/scope.hpp"
+#include "damn/core/def.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -205,19 +204,26 @@ void advance(HybridModel<opts>& model, auto&& level, double const t, double cons
         DAMN_LOG_SCOPE(1, "Simulator::predictor1_");
         d::faraday_ampere_ohm<&Patch_t::emPred>(model, level, E, "EMPred_B", t, dt);
     }
+    DAMN_SUPER_DEBUG_DO(level.sums("predictor1", t);)
     d::average<opts>(level, t, dt);
+    DAMN_SUPER_DEBUG_DO(level.sums("average1", t);)
     d::move_ions(model, level, t, dt, core::UpdaterMode::domain_only);
+    DAMN_SUPER_DEBUG_DO(level.sums("moments1", t);)
     {
         DAMN_LOG_SCOPE(1, "Simulator::predictor2_");
         d::faraday_ampere_ohm<&Patch_t::emPred>(model, level, Eavg, "EMPred_B", t, dt);
     }
+    DAMN_SUPER_DEBUG_DO(level.sums("predictor2", t);)
     d::average<opts>(level, t, dt);
+    DAMN_SUPER_DEBUG_DO(level.sums("average2", t);)
     d::move_ions(model, level, t, dt, core::UpdaterMode::all);
+    DAMN_SUPER_DEBUG_DO(level.sums("moments2", t);)
     {
         DAMN_LOG_SCOPE(1, "Simulator::corrector_");
         d::faraday_ampere_ohm<&Patch_t::em>(model, level, Eavg, "EM_B", t, dt);
         level.fill_electric_ghosts("EM_E", t + dt);
     }
+    DAMN_SUPER_DEBUG_DO(level.sums("corrector", t);)
 }
 
 } // namespace plamn::solver

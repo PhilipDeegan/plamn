@@ -84,6 +84,13 @@ CASES = {
     "mhd_wenoz_L1": dict(mhd_advance=True, reconstruction="WENOZ", limiter="None",
                          boxes=((10, 29),), steps=8, pops=[]),
     "mhd_hll_L1": dict(mhd_advance=True, riemann="HLL", boxes=((10, 29),), steps=8, pops=[]),
+    "mhd_hlld_L1": dict(mhd_advance=True, riemann="HLLD", boxes=((10, 29),), steps=8, pops=[]),
+    # Hall MHD (the Hall term in the fluxes and the constrained transport; PHARE's whistler cw: 0)
+    "mhd_hall_L0": dict(mhd_advance=True, hall=True, boxes=(), steps=8, pops=[]),
+    "mhd_hall_L1": dict(mhd_advance=True, hall=True, boxes=((10, 29),), steps=8, pops=[]),
+    # HLLD on the cells' values (no reconstruction: PHARE's res/sim/all.txt has this one)
+    "mhd_hlld_constant_L1": dict(mhd_advance=True, reconstruction="Constant", limiter="None",
+                                 riemann="HLLD", boxes=((10, 29),), steps=8, pops=[]),
     "mhd_init_L1": dict(mhd_advance=True, boxes=((10, 29),), steps=0, pops=[]),
     "mhd_advance_L1": dict(mhd_advance=True, boxes=((10, 29),), steps=8, pops=[]),
     # the refined level against the periodic boundary (its ghosts wrap around)
@@ -92,6 +99,22 @@ CASES = {
     #  levels, regrids at PHARE's points
     "mhd_tagged_1d": dict(mhd_advance=True, tagging=0.008, boxes=(), steps=40, pops=[]),
 }
+
+# the expected agreement with PHARE (compare_physics.py --tolerance: fails above it): the
+#  difference relative to the largest |value| at the k-th time compared, min(cap, start *
+#  growth**k): tight first (a bug shows at once), looser as round off grows. The MHD cases agree
+#  to round off (2026-11-19, double diagnostics: identical at t0, at most 3.4e-14 after 1000
+#  steps): 10x that and more. Not the hybrid ones (particle noise) nor mhd_shock_tagged_1d
+#  (NaN in PHARE itself)
+MHD_TOLERANCE = (1e-13, 1.25, 1e-11)
+# the long shocks (hundreds of steps) grow their round off faster once the shock interacts (in CI:
+#  the walls' reflections, ~1e-14 for 5 dumps then 2e-12 by the 10th): 2.6x and more over that
+SHOCK_TOLERANCE = (1e-13, 1.6, 1e-11)
+for _name in ("mhd_shock_1d", "mhd_shock_walls_1d"):
+    CASES[_name]["tolerance"] = SHOCK_TOLERANCE
+for _name, _case in CASES.items():
+    if (_case.get("mhd_advance") or _case.get("mhd_shock")) and _name != "mhd_shock_tagged_1d":
+        _case.setdefault("tolerance", MHD_TOLERANCE)
 
 
 def _diag_options(out, fmt, fine_dump):
@@ -387,7 +410,7 @@ def _advance_mhd_1d(ph, out, case, largest_patch_size, fmt, fine_dump):
         limiter=case.get("limiter", "VanLeer"),
         riemann=case.get("riemann", "Rusanov"),
         mhd_timestepper="TVDRK2",
-        hall=False,
+        hall=case.get("hall", False),
         model_options=["MHDModel"],
     )
     L = sim.simulation_domain()[0]

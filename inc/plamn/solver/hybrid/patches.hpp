@@ -113,11 +113,11 @@ NO_DISCARD auto make_patch(HybridModel<opts> const& model, auto const& layout, a
 {
     using Patch_t = HybridModel<opts>::Patch_t;
     auto patch    = std::make_unique<Patch_t>(layout, sim, surroundings);
-    // every computed quantity's scratch grids from the start: every patch then holds the same
-    //  resources, whatever was computed where (a level moved between ranks, regrid or
-    //  rebalance, packs and unpacks every resource of a patch in order)
-    for (auto const& [key, computed] : model.computed)
-        for (auto const& [name, qty] : computed.grids)
+    // the requested computed quantities' scratch grids from the start: every patch then holds
+    //  the same resources, whatever was computed where (a level moved between ranks, regrid or
+    //  rebalance, packs and unpacks every resource of a patch in order); none for the others
+    for (auto const& key : model.requested)
+        for (auto const& [name, qty] : model.computed.at(key).grids)
             std::ignore = patch->scratch_grid(name, qty);
     return patch;
 }

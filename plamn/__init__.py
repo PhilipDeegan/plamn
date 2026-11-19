@@ -49,15 +49,15 @@ def cpp_lib(sim):
         # MHD only: pyphare's MHD id (the scheme is a run time choice). No particles: the
         #  layout only picks the grids, untiled for all but the tile set layouts (pyphare branches
         #  differ in an MHD simulation's default: AoS, AoSMapped): plamn's AoS module
-        if getattr(sim, "hall", False):
-            raise ModuleNotFoundError("plamn: Hall MHD is not ported yet")
+        hall = "true" if getattr(sim, "hall", False) else "false"
         if "TS" not in layout:
             layout = "AoS"
         choices = (sim.reconstruction, sim.limiter, sim.riemann)
-        sim_id = f"{sim.ndim}_{layout}_{allocator}_" + "_".join(choices) + "_false"
+        sim_id = f"{sim.ndim}_{layout}_{allocator}_" + "_".join(choices) + f"_{hall}"
         build = (
             f"./mkn.py --mhd --dim {sim.ndim} --layout {layout} --allocator {allocator}"
             f" --reconstruction {choices[0]} --limiter {choices[1]} --riemann {choices[2]}"
+            f" --hall {hall}"
         )
     else:
         sim_id = (

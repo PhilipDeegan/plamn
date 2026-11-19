@@ -67,7 +67,7 @@ def mhd_module_name(dim, layout, allocator, reconstruction, limiter, riemann, ha
 # the MHD choices ported (plamn::solver::mhd::reconstruction static_asserts the rest)
 RECONSTRUCTIONS = ["Constant", "Linear", "WENO3", "WENOZ", "MP5"]
 LIMITERS = ["VanLeer", "MinMod", "None"]  # None: the non linear reconstructions
-RIEMANNS = ["Rusanov", "HLL"]
+RIEMANNS = ["Rusanov", "HLL", "HLLD"]
 
 
 def has_name_option():
@@ -78,6 +78,11 @@ def has_name_option():
         return False
 
 
+# mkn's -O: bare is level 9 (-O3 and -march=native -mtune=native: this machine's CPU only);
+#  --optimise N for modules run elsewhere (CI artifacts: built on one runner, run on another)
+OPTIMISE = ["-O"]
+
+
 def mkn(profile, extra, jobs, defines=(), out=None, own_dir=False):
     # mkn rebuilds by timestamps, not compile arguments: each permutation builds in its own
     # directory (-N), or, with an mkn without -N, in a cleaned bin/<profile> (ccache keeps it
@@ -85,7 +90,7 @@ def mkn(profile, extra, jobs, defines=(), out=None, own_dir=False):
     cmd = ["mkn"]
     if own_dir and not has_name_option():
         cmd += ["clean"]
-    cmd += ["build", "-p", profile, "-dKO", "-t", str(jobs)]
+    cmd += ["build", "-p", profile, "-dK", *OPTIMISE, "-t", str(jobs)]
     if own_dir and has_name_option():
         cmd += ["-N", out]
     if out:
@@ -119,8 +124,13 @@ def main(argv):
     parser.add_argument("--reconstruction", nargs="+", default=["Linear"], choices=RECONSTRUCTIONS)
     parser.add_argument("--limiter", nargs="+", default=["VanLeer"], choices=LIMITERS)
     parser.add_argument("--riemann", nargs="+", default=["Rusanov"], choices=RIEMANNS)
+    parser.add_argument("--hall", nargs="+", default=["false"], choices=["false", "true"],
+                        help="--mhd: Hall MHD modules (true), ideal (false), or both")
     parser.add_argument("--no-etc", action="store_true", help="don't build py_etc")
     parser.add_argument("--jobs", type=int, default=8, help="mkn -t (CI: 4)")
+    parser.add_argument("--optimise", type=int, default=None,
+                        help="mkn -O N (default: bare -O, level 9: -march=native, this CPU only; "
+                        "3: portable, for modules run on other machines)")
     parser.add_argument(
         "--scope-print",
         action="store_true",
@@ -153,6 +163,8 @@ def main(argv):
     else:
         extra = []
     args = parser.parse_args(argv)
+    if args.optimise is not None:
+        OPTIMISE[:] = ["-O", str(args.optimise)]
     if args.layout is None:  # pyphare's: an MHD only simulation's model_layout is AoS
         args.layout = ["AoS"] if args.mhd else ["AoSMapped"]
     if "-x" not in extra:
@@ -179,10 +191,12 @@ def main(argv):
         return 1
 
     if args.mhd:
-        for dim, layout, allocator, reconstruction, limiter, riemann in itertools.product(
-            args.dim, args.layout, args.allocator, args.reconstruction, args.limiter, args.riemann
+        for dim, layout, allocator, reconstruction, limiter, riemann, hall in itertools.product(
+            args.dim, args.layout, args.allocator, args.reconstruction, args.limiter,
+            args.riemann, args.hall,
         ):
-            name = mhd_module_name(dim, layout, allocator, reconstruction, limiter, riemann)
+            hall = hall == "true"
+            name = mhd_module_name(dim, layout, allocator, reconstruction, limiter, riemann, hall)
             defines = [
                 f"-DPLAMN_SIM_DIM={dim}",
                 "-DPLAMN_SIM_INTERP=0",
@@ -192,6 +206,7 @@ def main(argv):
                 f"-DPLAMN_SIM_RECONSTRUCTION={reconstruction}",
                 f"-DPLAMN_SIM_LIMITER={limiter}",
                 f"-DPLAMN_SIM_RIEMANN={riemann}",
+                f"-DPLAMN_SIM_HALL={'true' if hall else 'false'}",
                 f"-DPLAMN_SIM_MODULE={name}",
             ] + scoping
             if mkn("py_sim", extra, args.jobs, defines, out=name, own_dir=True):
