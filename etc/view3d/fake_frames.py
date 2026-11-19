@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """synthetic frames for view3d (its stdin format, view3d.cpp): a blob turning in a 16^3
-level 0, a level 1 box over its middle, one frame per 0.1 s.
+level 0, a level 1 box over its middle, one frame per 0.1 s, with arrows (a swirl about the
+blob, one per 4^3 block of level 0).
 
     python3 etc/view3d/fake_frames.py | etc/view3d/bin/view3d/plamn.view3d
 """
@@ -24,6 +25,14 @@ def frame(title, t, step, xyz, value, radius):
     ])
 
 
+def arrows(xyz, vec, half):
+    return b"".join([
+        b"PLMV", struct.pack("<Q", len(xyz)),
+        np.asarray(xyz, "<f4").tobytes(), np.asarray(vec, "<f4").tobytes(),
+        np.full(len(xyz), half, "<f4").tobytes(),
+    ])
+
+
 def level(n, lo, hi, dx):
     c = [np.arange(l, h) * dx + dx / 2 for l, h in zip(lo, hi)]
     return np.stack(np.meshgrid(*c, indexing="ij"), -1).reshape(-1, 3)
@@ -41,6 +50,10 @@ def main():
         centre = np.array([8 + 4 * np.cos(a), 8 + 4 * np.sin(a), 8.0])
         value = np.exp(-np.sum((pts - centre) ** 2, axis=1) / 8) - 0.3
         out.write(frame("fake blob", 0.1 * step, step, pts, value, rad))
+        blocks = level(4, (0, 0, 0), (4, 4, 4), 4.0)  # block centres, 4 cells wide
+        d = blocks - centre
+        swirl = np.stack([-d[:, 1], d[:, 0], 0 * d[:, 2]], -1) * np.exp(-np.sum(d**2, 1) / 32)[:, None]
+        out.write(arrows(blocks, swirl, 2.0))
         out.flush()
         time.sleep(0.1)
 

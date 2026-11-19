@@ -32,6 +32,8 @@
 // arrows: mathplot's QuiverVisual over the balls, length by magnitude (the longest a block's
 //  width), colour by magnitude; filtered by the slices too.
 //
+// B: the balls shown / hidden, V: the arrows shown / hidden (kept over new frames).
+//
 // P: play / pause, N: one more frame while paused. With --control-fd N (the watcher's pipe) the
 //  viewer writes "pause" / "play" / "step" lines there and the simulation waits while paused;
 //  without one, pausing just keeps the current frame.
@@ -88,7 +90,8 @@ struct Viewer : mplot::Visual<glver>
     // slices: the planes shown (bit c: normal to axis c, 0: the whole cloud), where, and how
     //  far 8/9 move them (a finest cell); dirty: redraw the current frame
     bool paused = false, step_once = false;
-    std::FILE* control = nullptr; // the watcher's pipe (--control-fd), if any
+    bool balls = true, arrows = true; // B, V: shown
+    std::FILE* control = nullptr;     // the watcher's pipe (--control-fd), if any
     void tell(char const* const what)
     {
         if (control)
@@ -128,6 +131,12 @@ struct Viewer : mplot::Visual<glver>
         float const d = step * ((mods & mplot::keymod::shift) ? 10.f : 1.f);
         if (mods & mplot::keymod::shift and (key == k::left or key == k::right))
             return; // mathplot's: the selected model's opacity
+        if ((key == k::b or key == k::v) and action == mplot::keyaction::press)
+        {
+            (key == k::b ? balls : arrows) ^= true;
+            dirty = true;
+            return;
+        }
         if (key == k::p and action == mplot::keyaction::press)
         {
             paused = !paused;
@@ -333,7 +342,7 @@ int main(int argc, char** argv)
             if (quiver)
                 v.removeVisualModel(quiver);
             quiver = nullptr;
-            if (!qcoords.empty())
+            if (!qcoords.empty() and v.arrows)
             {
                 auto q = std::make_unique<mplot::QuiverVisual<float, glver>>(
                     &qcoords, sm::vec<float>{}, &qvecs, mplot::ColourMapType::Greyscale);
@@ -407,6 +416,8 @@ int main(int argc, char** argv)
                 alpha[k]      = v.planes ? 1.f : 0.05f + 0.95f * std::abs(2 * u - 1);
                 scale[k]      = f.radius[i];
             }
+            if (!v.balls) // hidden: none drawn (the title still counts them)
+                xyz.clear(), colours.clear(), alpha.clear(), scale.clear();
             points->set_instance_data(xyz, colours, alpha, scale);
 
             std::string where;
