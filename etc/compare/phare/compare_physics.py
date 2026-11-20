@@ -111,7 +111,10 @@ def composite(path, component, time=None, qty="B"):
 
 
 def compare(ref, cmp, ndim, qty="B", time=None):
-    rows = []
+    """per component: differences relative to the largest |value| of the quantity, all its
+    components (a component that is zero, as Bz in a 2D-like harris at t=0, is then not
+    roundoff over roundoff)"""
+    pairs = []
     for c in components(qty):
         a, ta, la = composite(ref, c, time, qty)
         b, tb, lb = composite(cmp, c, time, qty)
@@ -122,10 +125,13 @@ def compare(ref, cmp, ndim, qty="B", time=None):
                 a = zoom(a, b.shape[0] / a.shape[0], order=1, mode="grid-wrap")
             else:
                 b = zoom(b, a.shape[0] / b.shape[0], order=1, mode="grid-wrap")
-        scale = max(np.max(np.abs(a)), 1e-300)
+        pairs.append((c, a, b, ta, tb, la, lb))
+    scale = max(max(np.max(np.abs(a)) for _, a, *_ in pairs), 1e-300)
+    rows = []
+    for c, a, b, ta, tb, la, lb in pairs:
         d = np.abs(a - b)
         at = np.unravel_index(np.argmax(d), d.shape)
-        rows.append((qty + c, ta, tb, la, lb, scale, d.max() / scale,
+        rows.append((qty + c, ta, tb, la, lb, np.max(np.abs(a)), d.max() / scale,
                      np.sqrt(np.mean(d**2)) / scale, at))
     return rows
 
@@ -162,7 +168,7 @@ def main(argv=None):
     base = Path(test_ladder.setting("LADDER_OUT", test_ladder.PLAMN / "phare_outputs" / "compare"))
     import cases
 
-    base = base / f"physics_{a.case}_{a.steps}_ppc{cases.PPC}"
+    base = base / f"physics_{a.case}_{a.steps}_ppc{cases.ppc(a.case)}"
     out = {code: base / Path(code).name for code in (a.ref, a.cmp)}
     if not a.no_run:
         os.environ["LADDER_NDIM"] = str(a.ndim)
@@ -177,8 +183,8 @@ def main(argv=None):
             quantities = ["B", "E"] if a.all_times else ["B"]
     times = dump_times(out[a.ref], quantities[0]) if a.all_times else [None]
     what = " ".join(quantities) + (" at every dump" if a.all_times else ", final")
-    print(f"{a.case} {a.ndim}D, {a.steps} steps, {cases.PPC} ppc: {a.ref} vs {a.cmp}, {what} on the"
-          " finest grid (differences relative to the largest |value|)")
+    print(f"{a.case} {a.ndim}D, {a.steps} steps, {cases.ppc(a.case)} ppc: {a.ref} vs {a.cmp}, {what} on the"
+          " finest grid (differences relative to the quantity's largest |value|)")
     report = []
     for t in times:
         for qty in quantities:

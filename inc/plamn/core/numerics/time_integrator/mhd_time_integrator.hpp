@@ -10,12 +10,16 @@
 #include "plamn/core/numerics/faraday/faraday_transformer.hpp"
 #include "plamn/core/numerics/finite_volume/finite_volume_euler_transformer.hpp"
 #include "plamn/core/numerics/godunov/godunov_transformer.hpp"
+#include "plamn/core/numerics/differential_operators.hpp"
+#include "plamn/core/numerics/ohm/ohm.hpp"
 #include "plamn/core/numerics/primitive_conservative/primitive_conservative_transformer.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "plamn/core/numerics/godunov/hll.hpp"
 #include "plamn/core/numerics/constrained_transport/upwind_ct.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <type_traits>
 #include <utility>
@@ -102,11 +106,13 @@ template<typename Reconstruction, typename Riemann = RusanovRiemann>
 class MHDSteps
 {
 public:
-    // eta: the resistivity (0: ideal); with it, J and the dissipative E (eta J) are the patch's
-    //  (J, E_diss), as PHARE's ComputeFluxes (DissipativeElectricField)
-    explicit MHDSteps(double const gamma, double const eta = 0)
+    // dissipation: the resistivity eta, the hyper resistivity nu and its mode (0, 0: ideal); with
+    //  either, J and the dissipative E (eta J - nu' laplacian J) are the patch's (J, E_diss), as
+    //  PHARE's ComputeFluxes (DissipativeElectricField)
+    explicit MHDSteps(double const gamma,
+                      OhmInfo const& dissipation = {0., 0., HyperMode::constant})
         : gamma_{gamma}
-        , eta_{eta}
+        , diss_{dissipation}
     {
     }
 
@@ -125,15 +131,10 @@ public:
             GodunovTransformer<Reconstruction, Riemann> const godunov{gamma_};
 
             pc.to_primitive(p.layout, u.rho, u.rhoV, u.B, u.Etot, u.V, u.P);
-            if (hall or eta_ > 0) // J = curl B
+            if (hall or dissipative_()) // J = curl B
                 AmpereTransformer{}(p.layout, u.B, p.J);
-            if (eta_ > 0) // the dissipative E = eta J on E's domain box
-            {
-                for (std::size_t c = 0; c < 3; ++c)
-                    damn::core::for_each_point(
-                        domain_box(p.layout, p.E_diss[c]),
-                        [&](auto const& ijk) { p.E_diss[c](ijk) = eta_ * p.J[c](ijk); });
-            }
+            if (dissipative_())
+                dissipative_E_(p, u);
             mkn::kul::for_N<dim>([&](auto d) {
                 auto& f = p.fluxes[d];
                 auto& c = p.ct[d];
@@ -148,7 +149,7 @@ public:
                     godunov.template operator()<d>(p.layout, u.rho, u.V, u.B, u.P, f.F_rho,
                                                    f.F_rhoV, f.F_B, f.F_Etot, c.vt, c.aL, c.aR,
                                                    c.dL, c.dR);
-                if (eta_ > 0)
+                if (dissipative_())
                     dissipative_fluxes_<d>(p, u.B);
             });
             pc.to_conservative(p.layout, u.rho, u.V, u.B, u.P, u.rhoV, u.Etot);
@@ -167,7 +168,7 @@ public:
                 UpwindCTTransformer<Reconstruction>{}(p.layout, u.B, x.vt, x.aL, x.aR, x.dL, x.dR,
                                                       y.vt, y.aL, y.aR, y.dL, y.dR, z.vt, z.aL,
                                                       z.aR, z.dL, z.dR, p.E);
-            if (eta_ > 0) // E += the dissipative E, every component on its domain box
+            if (dissipative_()) // E += the dissipative E, every component on its domain box
                 for (std::size_t c = 0; c < 3; ++c)
                     damn::core::for_each_point(domain_box(p.layout, p.E[c]), [&](auto const& ijk) {
                         p.E[c](ijk) += p.E_diss[c](ijk);
@@ -273,7 +274,65 @@ public:
 
 private:
     double gamma_;
-    double eta_;
+    OhmInfo diss_;
+
+    bool dissipative_() const { return diss_.isResistive() or diss_.isHyperResistive(); }
+
+    // fn.template operator()<resistive, hyper, mode>(): the dissipation flags as compile time tags
+    //  (no branch on them per point), the mode only with hyper resistivity
+    void with_dissipation_(auto&& fn) const
+    {
+        auto const hyper = [&]<bool resistive>() {
+            if (not diss_.isHyperResistive())
+                return fn.template operator()<resistive, false, HyperMode::constant>();
+            if (diss_.hyper_mode == HyperMode::constant)
+                return fn.template operator()<resistive, true, HyperMode::constant>();
+            return fn.template operator()<resistive, true, HyperMode::spatial>();
+        };
+        if (diss_.isResistive())
+            return hyper.template operator()<true>();
+        return hyper.template operator()<false>();
+    }
+
+    // the dissipative E (PHARE's DissipativeElectricField) on each E component's domain box:
+    //  e = eta J - coef laplacian(J), coef nu (constant) or nu dx^2 (|B| / rho + 1) (spatial: dx
+    //  the smallest mesh size, B and rho projected onto the E component), in PHARE's order
+    void dissipative_E_(auto& p, auto const& u) const
+    {
+        using S       = MHDQuantity::Scalar;
+        using Layout  = std::decay_t<decltype(p.layout)>;
+        auto const dx = *std::min_element(p.layout.dx.begin(), p.layout.dx.end());
+        with_dissipation_([&]<bool resistive, bool hyper, HyperMode mode>() {
+            mkn::kul::for_N<3>([&](auto ci) {
+                auto constexpr static c  = ci();
+                auto constexpr static Ec = c == 0 ? S::Ex : c == 1 ? S::Ey : S::Ez;
+                auto& E                  = p.E_diss[c];
+                auto const& J            = p.J[c];
+                auto const coef          = [&](auto const& i) {
+                    if constexpr (mode == HyperMode::constant)
+                        return diss_.nu;
+                    else
+                    {
+                        auto const bx = project<S::Bx, Ec>(u.B[0], i);
+                        auto const by = project<S::By, Ec>(u.B[1], i);
+                        auto const bz = project<S::Bz, Ec>(u.B[2], i);
+                        auto const n  = project<S::rho, Ec>(u.rho, i);
+                        auto const b  = std::sqrt(bx * bx + by * by + bz * bz);
+                        return diss_.nu * dx * dx * (b / n + 1);
+                    }
+                };
+                damn::core::for_each_point(domain_box(p.layout, E), [&](auto const& ijk) {
+                    auto const i = index_<Layout::dimension>(ijk);
+                    double e     = 0.;
+                    if constexpr (resistive)
+                        e += diss_.eta * J(ijk);
+                    if constexpr (hyper)
+                        e -= coef(i) * laplacian(p.layout, J, i);
+                    E(ijk) = e;
+                });
+            });
+        });
+    }
 
     // a local point of a box as project's index
     template<std::size_t dim>

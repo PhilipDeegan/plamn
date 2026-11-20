@@ -36,6 +36,37 @@ SEED = 1337
 POPULATIONS = ["protons"]
 
 
+# memory: each case's "mem" estimate (GB, one code's run, all its ranks), checked against the
+#  measured peak after every run (run_case.py, test_ladder.memory): update it from the numbers.
+#  Without one, an estimate from the level 0 particles. The tier says where a case runs:
+#    gh     GitHub's runners (public repo: 4 cores, 16 GB, 14 GB disk), both codes one after
+#           the other: slow.yml, on merges to master
+#    local  this machine's (8 ranks or threads, the thermal governor)
+#    big    by hand
+GB = 1 << 30
+TIERS = {"gh": 6 * GB, "local": 40 * GB}
+BYTES_PER_PARTICLE = 250  # AoS ~80 B, times domain + ghosts + sort buffers + levels (rough)
+BYTES_BASE = GB // 2  # python, SAMRAI, the modules
+
+
+def ppc(name):
+    return CASES[name].get("ppc", PPC)
+
+
+def memory(name):
+    """a case's estimated peak memory in bytes, one code's run"""
+    case = CASES[name]
+    if "mem" in case:
+        return int(case["mem"] * GB)
+    cells = np.prod(case.get("cells", [CELLS] * NDIM))
+    return int(BYTES_BASE + cells * ppc(name) * BYTES_PER_PARTICLE)
+
+
+def tier(name):
+    m = memory(name)
+    return next((t for t, budget in TIERS.items() if m <= budget), "big")
+
+
 def _boxes(ndim, *levels):
     """refinement_boxes: one box per level, (lo, hi) as cell indices in that level's space."""
     from pyphare.core.box import nDBox
@@ -63,7 +94,12 @@ CASES = {
         refinement_boxes={"L0": {"B0": [(50,), (110,)]}},
     ),
     # compare_physics.py's (not a ladder step): 3 levels, tagging, final B composites
-    "harris_3d": dict(harris3d=True, steps=2),
+    "harris_3d": dict(harris3d=True, cells=(20, 20, 20), steps=2),
+    # harris 3D sized by memory (tier()): 10^3 at 100 ppc vs PHARE on GitHub (slow.yml), 80^3 at
+    #  100 ppc locally (51M level 0 particles; 8 ranks or 8 threads)
+    "harris_3d_10": dict(harris3d=True, cells=(10, 10, 10), ppc=100, steps=4, mem=1.0,
+                         tolerance=(1e-12, 1.5, 1e-10)),  # roundoff: 5.5e-14 locally
+    "harris_3d_80": dict(harris3d=True, cells=(80, 80, 80), ppc=100, steps=4, mem=25.0),
     # compare_physics.py --all-times: PHARE's tests/functional/mhd_shock/shock_periodic.py (MHD
     #  only, one level), dumps every 50 of its 400 steps
     "mhd_shock_1d": dict(mhd_shock=True, steps=400, dump_every=50, pops=[]),
@@ -88,6 +124,13 @@ CASES = {
     # Hall MHD (the Hall term in the fluxes and the constrained transport; PHARE's whistler cw: 0)
     "mhd_hall_L0": dict(mhd_advance=True, hall=True, boxes=(), steps=8, pops=[]),
     "mhd_hall_L1": dict(mhd_advance=True, hall=True, boxes=((10, 29),), steps=8, pops=[]),
+    # hyper resistivity (with Hall only, as PHARE): the constant mode alone (nu small: explicit
+    #  4th order diffusion, stable for dt nu / dx^4 small: 0.016 at L1), the spatial mode
+    #  (nu dx^2 (|B| / rho + 1)) with resistivity
+    "mhd_hall_hyper_L1": dict(mhd_advance=True, hall=True, nu=1e-4, boxes=((10, 29),), steps=8,
+                              pops=[]),
+    "mhd_hall_hyper_spatial_L1": dict(mhd_advance=True, hall=True, eta=0.05, nu=0.01,
+                                      hyper_mode="spatial", boxes=((10, 29),), steps=8, pops=[]),
     # HLLD on the cells' values (no reconstruction: PHARE's res/sim/all.txt has this one)
     "mhd_hlld_constant_L1": dict(mhd_advance=True, reconstruction="Constant", limiter="None",
                                  riemann="HLLD", boxes=((10, 29),), steps=8, pops=[]),
@@ -319,12 +362,12 @@ def _harris_3d(ph, out, case, largest_patch_size, fmt, fine_dump):
     sim = ph.Simulation(
         time_step=time_step,
         final_time=time_step * case["steps"],
-        cells=(20, 20, 20),
+        cells=case.get("cells", (20, 20, 20)),
         dl=(0.4, 0.4, 0.4),
         refinement="tagging",
         max_nbr_levels=3,
         nesting_buffer=1,
-        tagging_threshold=0.5,
+        tagging_threshold=float(os.environ.get("LADDER_TAGGING", case.get("tagging", 0.5))),
         hyper_resistivity=0.008,
         hyper_mode="spatial",
         resistivity=0.001,
@@ -376,12 +419,14 @@ def _harris_3d(ph, out, case, largest_patch_size, fmt, fine_dump):
             "vthx": vth,
             "vthy": vth,
             "vthz": vth,
-            "nbr_part_per_cell": PPC,
+            "nbr_part_per_cell": case.get("ppc", PPC),
             "init": {"seed": int(os.environ.get("LADDER_SEED", "12"))},
         },
     )
     ph.ElectronModel(closure="isothermal", Te=0.0)
-    ph.LoadBalancer(every=1, mode="nppc", tol=0.001)
+    if os.environ.get("LADDER_LB", "1") == "1":  # 0: none (PHARE re-initializes level 0 at
+        #  each rebalance, even on one rank: its moments from its particles, not the synchronized)
+        ph.LoadBalancer(every=1, mode="nppc", tol=0.001)
     _diagnostics(ph, time_step * np.arange(case["steps"] + 1), POPULATIONS, fmt)
     return sim
 
@@ -404,7 +449,8 @@ def _advance_mhd_1d(ph, out, case, largest_patch_size, fmt, fine_dump):
         strict=True,
         nesting_buffer=1,
         eta=case.get("eta", 0.0),
-        nu=0.0,
+        nu=case.get("nu", 0.0),
+        hyper_mode=case.get("hyper_mode", "constant"),
         gamma=5.0 / 3.0,
         reconstruction=case.get("reconstruction", "Linear"),
         limiter=case.get("limiter", "VanLeer"),

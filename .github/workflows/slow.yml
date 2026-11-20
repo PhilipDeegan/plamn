@@ -54,13 +54,15 @@ jobs:
         chmod +x mkn
         KLOG=3 ./mkn clean build test -dKOqp test_plamn_core_slow -W 9 -a "-Wno-unused-parameter -Wno-unused-variable -Wno-error=strict-aliasing" -x res/mkn/mpi -t 4
 
-  # PHARE master's 1D modules built as its CI builds them (cmake_ubuntu.yml: SAMRAI from the
+  # PHARE master's 1D modules (and a 3D hybrid one) built as its CI builds them (cmake_ubuntu.yml: SAMRAI from the
   #  image, double precision diagnostics), plamn's the same way, then the same input under both
   #  (etc/compare/phare): the ion beam, 2 levels, 2000 steps, B and E compared every 100 steps;
   #  then the MHD shocks (PHARE's tests/functional/mhd_shock: periodic, 400 steps; between an
   #  inflow and an open boundary, 1000 steps), and PHARE's test_advance_mhd input on 2 levels
   #  (a refinement box: level ghosts, reflux; tagged: regrids): MHD only, B rho V P at every
-  #  dump. Partitioned for the wall time: each module built on its own runner (plamn's and
+  #  dump; a 3D harris (10^3 cells, 100 ppc, tagged levels) sized for a runner by its memory
+  #  (cases.py tiers; each run's peak memory per rank in compare/**/*.mem.json). Partitioned
+  #  for the wall time: each module built on its own runner (plamn's and
   #  PHARE's at once), then each comparison on its own runner with every module
   plamn_modules:
     runs-on: ubuntu-24.04
@@ -71,6 +73,7 @@ jobs:
       matrix:
         include: # name: the artifact's; args: ./mkn.py's (the hybrid one builds plamn_etc too)
         - { name: hybrid, args: "--dim 1" }
+        - { name: hybrid3d, args: "--dim 3 --no-etc" }
         - { name: mhd, args: "--mhd --no-etc" }
         - { name: wenoz, args: "--mhd --no-etc --reconstruction WENOZ --limiter None" }
         - { name: hll, args: "--mhd --no-etc --riemann HLL" }
@@ -100,7 +103,7 @@ jobs:
       matrix:
         target: [cpp_1_1_2, cpp_1_Linear_VanLeer_Rusanov_false, cpp_1_WENOZ_None_Rusanov_false,
                  cpp_1_Linear_VanLeer_HLL_false, cpp_1_Linear_VanLeer_HLLD_false,
-                 cpp_1_Linear_VanLeer_Rusanov_true]
+                 cpp_1_Linear_VanLeer_Rusanov_true, cpp_3_1_6]
 
     steps:
     - uses: actions/checkout@v4
@@ -111,7 +114,7 @@ jobs:
     - name: PHARE's ${{ matrix.target }}
       run: |
         set -ex
-        printf '1,1,2\n1,Linear,VanLeer,Rusanov,false\n1,WENOZ,None,Rusanov,false\n1,Linear,VanLeer,HLL,false\n1,Linear,VanLeer,HLLD,false\n1,Linear,VanLeer,Rusanov,true\n' > "$PWD/phare_permutations.txt"
+        printf '1,1,2\n1,Linear,VanLeer,Rusanov,false\n1,WENOZ,None,Rusanov,false\n1,Linear,VanLeer,HLL,false\n1,Linear,VanLeer,HLLD,false\n1,Linear,VanLeer,Rusanov,true\n3,1,6\n' > "$PWD/phare_permutations.txt"
         mkdir -p phare/build && cd phare/build
         cmake .. --fresh -DSAMRAI_ROOT=/usr/local -DCMAKE_BUILD_TYPE=Release \
               -DdevMode=OFF -Dasan=OFF -Dbench=OFF -Dtest=OFF -DPHARE_EXE=OFF \
@@ -147,7 +150,11 @@ jobs:
         - { case: mhd_hll_L1, steps: 8 }
         - { case: mhd_hlld_L1, steps: 8 }
         - { case: mhd_hall_L1, steps: 8 }
+        - { case: mhd_hall_hyper_L1, steps: 8 }
+        - { case: mhd_hall_hyper_spatial_L1, steps: 8 }
         - { case: mhd_tagged_1d, steps: 40 }
+        # 3D, sized for a runner (cases.py tier "gh": ~1 GB per code), within roundoff
+        - { case: harris_3d_10, steps: 4, ndim: 3 }
 
     steps:
     - uses: actions/checkout@v4
@@ -173,7 +180,7 @@ jobs:
         LADDER_OUT: ${{ github.workspace }}/compare
         LADDER_PPC: ${{ matrix.ppc || '10' }}
       run: >-
-        python3 etc/compare/phare/compare_physics.py --case ${{ matrix.case }} --ndim 1
+        python3 etc/compare/phare/compare_physics.py --case ${{ matrix.case }} --ndim ${{ matrix.ndim || 1 }}
         --steps ${{ matrix.steps }} --ref "$PHARE_DIR" --cmp plamn --all-times
         --json compare/${{ matrix.case }}.json
     - if: always()
@@ -183,3 +190,4 @@ jobs:
         path: |
           compare/*.json
           compare/**/*.log
+          compare/**/*.mem.json

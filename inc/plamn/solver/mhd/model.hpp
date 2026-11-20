@@ -18,6 +18,7 @@
 #include "plamn/diagnostic/quantities.hpp"
 #include "plamn/core/numerics/godunov/hll.hpp"
 #include "plamn/core/numerics/godunov/hlld.hpp"
+#include "plamn/core/numerics/ohm/ohm.hpp"
 #include "plamn/core/numerics/reconstructions/constant.hpp"
 #include "plamn/core/numerics/reconstructions/linear.hpp"
 #include "plamn/core/numerics/reconstructions/mp5.hpp"
@@ -126,6 +127,7 @@ struct MHDModel<opts, true>
     MHDOpts::TimeIntegratorType scheme = MHDOpts::TimeIntegratorType::TVDRK2;
     double resistivity                 = 0.;
     double hyper_resistivity           = 0.;
+    core::HyperMode hyper_mode         = core::HyperMode::constant;
     bool hall                          = false;
     core::BoundaryManager<Quantity> boundaries{};
 
@@ -145,6 +147,7 @@ struct MHDModel<opts, true>
         m.gamma             = fv["heat_capacity_ratio"].template to<double>();
         m.resistivity       = cppdict::get_value(fv, "resistivity", 0.);
         m.hyper_resistivity = cppdict::get_value(fv, "hyper_resistivity", 0.);
+        m.hyper_mode        = cppdict::get_value(fv, "hyper_mode", core::HyperMode::constant);
         m.hall              = cppdict::get_value(fv, "hall", false);
         m.scheme            = cppdict::get_value(sim["algo"], "time_integrator_type",
                                                  MHDOpts::TimeIntegratorType::MHDOff);
@@ -157,8 +160,6 @@ struct MHDModel<opts, true>
                                      + " (./mkn.py --mhd --hall true|false)");
         if (m.hyper_resistivity > 0 and not opts.Hall) // PHARE's: only alongside the Hall term
             throw std::runtime_error("plamn: hyper resistivity (nu > 0) needs the Hall term");
-        if (m.hyper_resistivity > 0)
-            throw std::runtime_error("plamn: hyper resistivity is not ported yet");
         auto const& grid = sim["grid"];
         core::validate_physical_boundaries<opts.dimension>(grid);
         if (grid.contains("domain_boundaries"))

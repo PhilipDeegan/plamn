@@ -262,6 +262,9 @@ void Simulator<opts>::register_mhd_resources_()
         resources_[mhd_state_key(s)] = damn::amr::same_names(names);
     }
     resources_["MHD_E"] = damn::amr::same_names({"E_x", "E_y", "E_z"});
+    resources_["MHD_B"] = damn::amr::same_names(
+        {Patch_t::state_name("B", 0) + "_x", Patch_t::state_name("B", 0) + "_y",
+         Patch_t::state_name("B", 0) + "_z"}); // the advanced state's B (the root's max)
     // a reflux's step fluxes and E, their patch ghosts refilled after (PHARE's
     //  patchGhostRefluxedAlgo_)
     std::vector<std::string> reflux{"butcherE_x", "butcherE_y", "butcherE_z"};

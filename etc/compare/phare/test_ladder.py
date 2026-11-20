@@ -95,6 +95,30 @@ def run(code, case, out, largest_patch_size, steps=None):
         code_ = subprocess.call(cmd, env=environment(code), cwd=PLAMN, stdout=f, stderr=f)
     if code_:
         raise RuntimeError(f"{' '.join(cmd)} failed ({code_}), see {log}")
+    memory(code, case, out, n)
+
+
+def memory(code, case, out, n):
+    """the ranks' peak resident memory (run_case.py's OUT.mem.<rank>.json) summed, against the
+    case's estimate (cases.py "mem"): printed, and written to OUT.mem.json"""
+    import json
+
+    import cases
+
+    ranks = [json.loads(f.read_text()) for f in sorted(Path(out).parent.glob(f"{Path(out).name}.mem.*.json"))
+             if f.name.split(".")[-2].isdigit()]
+    if not ranks:
+        return None
+    total = sum(r["peak_rss"] for r in ranks)
+    row = dict(code=code, case=case, ranks=n, peak_rss=total,
+               peak_rss_rank=max(r["peak_rss"] for r in ranks),
+               seconds=max(r["seconds"] for r in ranks), estimate=cases.memory(case))
+    Path(f"{out}.mem.json").write_text(json.dumps(row, indent=1))
+    gb = 1 << 30
+    print(f"{code} {case}: peak memory {total / gb:.2f} GB over {n} rank(s) (largest rank "
+          f"{row['peak_rss_rank'] / gb:.2f} GB, estimate {row['estimate'] / gb:.2f} GB), "
+          f"{row['seconds']:.0f} s")
+    return row
 
 
 def ndim():

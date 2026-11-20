@@ -10,11 +10,16 @@ both codes provide it) go to OUT/particles/<step>.npz, for hierarchy_overlap.com
 (plamn's wrangler has no level ghost particles yet). One process per code:
 PHARE's and plamn's python modules both register as pyphare's simulator, so the caller sets
 PYTHONPATH (see test_ladder.py's environment()). One rank (the wrangler's view is rank 0's).
+Each rank writes its peak resident memory and wall time to OUT.mem.<rank>.json at the end
+(test_ladder.run sums them: what a case's "mem" estimate is checked against).
 """
 
 import argparse
+import json
 import os
+import resource
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -80,6 +85,7 @@ def main(argv=None):
     sys.path.insert(0, str(Path(__file__).parent))
     import cases
 
+    start = time.monotonic()
     if a.code == "plamn":
         # PHARE's regrid points (SAMRAI's): a regrid refills the level ghost fields after the
         #  synchronization, plamn's default skips it where the boxes do not change
@@ -104,7 +110,18 @@ def main(argv=None):
         if keep:
             np.savez(parts / f"{step}.npz", **particle_arrays(simulator, cases.populations(a.case)))
     simulator.reset()
+    write_memory(a.out, time.monotonic() - start)
     return 0
+
+
+def write_memory(out, seconds):
+    """this rank's peak resident memory (Linux ru_maxrss: KiB) and wall time, OUT.mem.<rank>.json"""
+    from pyphare import cpp
+
+    rank = cpp.mpi_rank()
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024
+    Path(f"{out}.mem.{rank}.json").write_text(
+        json.dumps(dict(rank=rank, peak_rss=peak, seconds=seconds)))
 
 
 if __name__ == "__main__":

@@ -204,13 +204,17 @@ template<auto opts>
 void Simulator<opts>::regrid_(double const t, int const from, bool const always)
 {
     DAMN_LOG_SCOPE(1, "Simulator::regrid_");
+    // coarser to finer: a level regridded keeps its finer levels (keep_finer), each regridded in
+    //  turn onto its new boxes, its data moved from the old level where they overlap (SAMRAI's
+    //  regrid: the old finer data is not refined again from the new coarser level)
+    bool coarser_regridded = false;
     for (int ln = from; ln + 1 < hierarchy_.max_levels and ln < static_cast<int>(levels_.size());
          ++ln)
     {
         auto const boxes = cluster_(ln);
         auto const fine  = static_cast<std::size_t>(ln) + 1;
         clustered_.resize(std::max(clustered_.size(), fine + 1));
-        if (fine < levels_.size() and boxes == clustered_[fine] and !always)
+        if (fine < levels_.size() and boxes == clustered_[fine] and !always and !coarser_regridded)
             continue;
         if (boxes.empty())
         {
@@ -220,8 +224,9 @@ void Simulator<opts>::regrid_(double const t, int const from, bool const always)
             break;
         }
         clustered_[fine] = boxes;
+        coarser_regridded = true;
         if (fine < levels_.size())
-            regrid_level_(ln + 1, boxes, t);
+            regrid_level_(ln + 1, boxes, t, /*keep_finer=*/true);
         else
         {
             make_level_(ln + 1, boxes);
@@ -233,10 +238,10 @@ void Simulator<opts>::regrid_(double const t, int const from, bool const always)
 
 // level ln onto new boxes, at t (every level synchronized): its data moved where the old level
 // was (damn::amr::regrid), refined from the coarser level elsewhere, as PHARE's
-// HybridHybridMessengerStrategy::regrid; finer levels go, the caller makes them again, unless
-// keep_finer (a rebalance, or a regrid onto the same boxes: the caller regrids each finer level
-// onto its own boxes after this one, coarser to finer, which also links them to their new
-// coarser level)
+// HybridHybridMessengerStrategy::regrid (moments: copied where the old level was, not deposited
+// again, unlike PHARE's); finer levels go, the caller makes them again, unless keep_finer (a
+// rebalance or a tagging regrid: the caller regrids each finer level onto its new boxes after
+// this one, coarser to finer, which also links them to their new coarser level)
 template<auto opts>
 void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxes, double const t,
                                     bool const keep_finer)
@@ -270,13 +275,12 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
             regrid_mhd_data_(ln, map, old_cells, t);
     }
     else if constexpr (Models_t::hybrid_on)
-        regrid_hybrid_data_(ln, map, old_cells, t, keep_finer);
+        regrid_hybrid_data_(ln, map, old_cells, t);
 }
 
 template<auto opts>
 void Simulator<opts>::regrid_hybrid_data_(int const ln, auto const& map,
-                                          std::vector<Box_t> const& old_cells, double const t,
-                                          bool const keep_finer)
+                                          std::vector<Box_t> const& old_cells, double const t)
 {
     using Patch_t    = solver::HybridModel<opts>::Patch_t;
     using Splitter_t = solver::HybridModel<opts>::Splitter_t;
@@ -338,10 +342,9 @@ void Simulator<opts>::regrid_hybrid_data_(int const ln, auto const& map,
     });
     solver::hybrid::sort_refined_particles(models_.hybrid, level_services_(fine));
 
-    if (!keep_finer)
-        solver::hybrid::refined_moments(models_.hybrid, level_services_(fine));
-    else
-        solver::hybrid::moved_moments(models_.hybrid, level_services_(fine));
+    // the moments copied where the old level was, deposited only in its new cells (a regrid
+    //  moves data: the synchronized moments of a level with a finer one stay)
+    solver::hybrid::moved_moments(models_.hybrid, level_services_(fine), old_cells);
     prepare_step_(ln, t);
 }
 
