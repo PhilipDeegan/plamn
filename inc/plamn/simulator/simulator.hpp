@@ -489,8 +489,8 @@ private:
     void debug_regrid_(int ln, double t);
     // regrid_level_'s data, the level's model's: where the old level was, moved; the new cells
     //  (outside old_cells) refined from the coarser level, then the ghosts
-    void regrid_hybrid_data_(int ln, auto const& map, std::vector<Box_t> const& old_cells, double t,
-                             bool keep_finer);
+    void regrid_hybrid_data_(int ln, auto const& map, std::vector<Box_t> const& old_cells,
+                             double t);
     void regrid_mhd_data_(int ln, auto const& map, std::vector<Box_t> const& old_cells, double t);
     // a new level ln's data, from the coarser level (regrid_, initialization)
     void initialize_refined_level_(int ln, double t);

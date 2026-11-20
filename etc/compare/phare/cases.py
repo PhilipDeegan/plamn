@@ -97,7 +97,8 @@ CASES = {
     "harris_3d": dict(harris3d=True, cells=(20, 20, 20), steps=2),
     # harris 3D sized by memory (tier()): 10^3 at 100 ppc vs PHARE on GitHub (slow.yml), 80^3 at
     #  100 ppc locally (51M level 0 particles; 8 ranks or 8 threads)
-    "harris_3d_10": dict(harris3d=True, cells=(10, 10, 10), ppc=100, steps=4, mem=1.0),
+    "harris_3d_10": dict(harris3d=True, cells=(10, 10, 10), ppc=100, steps=4, mem=1.0,
+                         tolerance=(1e-12, 1.5, 1e-10)),  # roundoff: 5.5e-14 locally
     "harris_3d_80": dict(harris3d=True, cells=(80, 80, 80), ppc=100, steps=4, mem=25.0),
     # compare_physics.py --all-times: PHARE's tests/functional/mhd_shock/shock_periodic.py (MHD
     #  only, one level), dumps every 50 of its 400 steps
@@ -366,7 +367,7 @@ def _harris_3d(ph, out, case, largest_patch_size, fmt, fine_dump):
         refinement="tagging",
         max_nbr_levels=3,
         nesting_buffer=1,
-        tagging_threshold=0.5,
+        tagging_threshold=float(os.environ.get("LADDER_TAGGING", case.get("tagging", 0.5))),
         hyper_resistivity=0.008,
         hyper_mode="spatial",
         resistivity=0.001,
@@ -423,7 +424,9 @@ def _harris_3d(ph, out, case, largest_patch_size, fmt, fine_dump):
         },
     )
     ph.ElectronModel(closure="isothermal", Te=0.0)
-    ph.LoadBalancer(every=1, mode="nppc", tol=0.001)
+    if os.environ.get("LADDER_LB", "1") == "1":  # 0: none (PHARE re-initializes level 0 at
+        #  each rebalance, even on one rank: its moments from its particles, not the synchronized)
+        ph.LoadBalancer(every=1, mode="nppc", tol=0.001)
     _diagnostics(ph, time_step * np.arange(case["steps"] + 1), POPULATIONS, fmt)
     return sim
 

@@ -133,6 +133,8 @@ void Simulator<opts>::regrid_after_step_(int const ln, double const t)
                 boxes.push_back(p.box);
             regrid_level_(fine, boxes, t, /*keep_finer=*/true);
         }
+    DAMN_SUPER_DEBUG_DO(for (auto l = static_cast<std::size_t>(ln); l < levels_.size(); ++l)
+                            sums_(l, "regridded", t);)
 }
 
 template<auto opts>
@@ -225,6 +227,7 @@ void Simulator<opts>::synchronize_(int const ln, double const t)
     step_model_(
         l, [&](auto& model) { solver::hybrid::synchronize(model, level_services_(l), t); },
         [&](auto& model, auto level) { solver::mhd::synchronize(model, level, t); });
+    DAMN_SUPER_DEBUG_DO(sums_(l - 1, "synchronized", t); sums_(l, "synchronized", t);)
     fine_dump_(static_cast<std::size_t>(ln) - 1, t);
 }
 

@@ -153,7 +153,7 @@ jobs:
         - { case: mhd_hall_hyper_L1, steps: 8 }
         - { case: mhd_hall_hyper_spatial_L1, steps: 8 }
         - { case: mhd_tagged_1d, steps: 40 }
-        # 3D, sized for a runner (cases.py tier "gh": ~1 GB per code)
+        # 3D, sized for a runner (cases.py tier "gh": ~1 GB per code), within roundoff
         - { case: harris_3d_10, steps: 4, ndim: 3 }
 
     steps:
