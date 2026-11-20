@@ -204,7 +204,21 @@ def main(argv=None):
         print("a difference is not finite: a run blew up or wrote NaN")
         return 1
     tolerance = a.tolerance or cases.CASES[a.case].get("tolerance")
-    return 1 if tolerance and not within(report, *tolerance) else 0
+    ok = not tolerance or within(report, *tolerance)
+    return 0 if levels_ok(report, cases.CASES[a.case].get("levels_at_end")) and ok else 1
+
+
+def levels_ok(report, expected):
+    """both codes have the case's "levels_at_end" levels at the last time compared (a tagging
+    case whose finest level is part of what is compared), when the case gives one"""
+    if not expected:
+        return True
+    last = max(r["t"] for r in report)
+    got = {tuple(r["levels"]) for r in report if r["t"] == last}
+    if got == {(expected, expected)}:
+        return True
+    print(f"FAIL levels at t {last:g}: {sorted(got)} (ref, cmp), {expected} expected")
+    return False
 
 
 def within(report, start, growth, cap):
