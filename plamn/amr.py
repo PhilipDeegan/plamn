@@ -602,6 +602,7 @@ def read_decomposition(path, costs=None):
                 t=rec["t"],
                 step=rec["step"],
                 busy_steps=rec.get("busy_steps", 0),
+                reach=rec["reach"],
                 hierarchy=h,
                 levels=levels,
                 migration=migration,
@@ -620,40 +621,52 @@ def read_decomposition(path, costs=None):
     return out
 
 
-def cost_fit(records, ratio=None):
-    """a hybrid patch's busy seconds per substep as a * particles + b * cells (least squares, no
-    intercept), from read_decomposition's records: each line's busy time is the work of the
+def cost_fit(records, ratio=None, terms=("particles", "cells")):
+    """a hybrid patch's busy seconds per substep as a linear sum of terms (least squares), from
+    read_decomposition's records (one run's, or several runs' concatenated per run: pass a list
+    of runs' records as records=[run0, run1, ...]); each line's busy time is the work of the
     previous line's patches (their particles then); level l does ratio^l substeps a step.
-    {"a": s / particle, "b": s / cell, "r2", "n": patches, "imbalance": per line, per level, the
-    busiest rank's busy time over the mean (and "weight_imbalance", the particles')}"""
+    terms: "particles", "cells", "ghost" (the patch grown by the line's reach less the patch:
+    ghost work), "patch" (a constant per patch: its fixed cost).
+    {term: seconds per unit, "r2", "n": patch rows, "imbalance": per line, per level, the busiest
+    rank's busy time over the mean (and "weight_imbalance", the particles')}"""
+    runs = records if records and isinstance(records[0], list) else [records]
     rows, y, imbalance = [], [], []
-    for prev, rec in zip(records, records[1:]):
-        h = prev["hierarchy"]
-        r = ratio or h.ratio
-        steps = rec["busy_steps"]
-        if steps <= 0:
-            continue
-        line = []
-        for ln, m in enumerate(rec["levels"]):
-            busy = m.get("busy", [])
-            if ln >= len(h.levels) or len(busy) != len(h.levels[ln]) or not any(busy):
-                continue  # a new level, or one not timed (MHD)
-            substeps = steps * r**ln
-            for (lo, up, _), w, b in zip(h.levels[ln], h.weights[ln], busy):
-                cells = float(np.prod(np.asarray(up) - np.asarray(lo) + 1))
-                rows.append((w, cells))
-                y.append(b / substeps)
-            per_rank = np.asarray(m["busy_rank"])
-            weights = np.asarray(prev["levels"][ln]["weight"])
-            line.append(dict(level=ln,
-                             imbalance=float(per_rank.max() / per_rank.mean()),
-                             weight_imbalance=float(weights.max() / weights.mean())))
-        if line:
-            imbalance.append(dict(event=rec["event"], step=rec["step"], levels=line))
+    for run in runs:
+        for prev, rec in zip(run, run[1:]):
+            h = prev["hierarchy"]
+            r = ratio or h.ratio
+            steps = rec["busy_steps"]
+            if steps <= 0:
+                continue
+            reach = rec.get("reach", _ghosts[h.interp_order])
+            line = []
+            for ln, m in enumerate(rec["levels"]):
+                busy = m.get("busy", [])
+                if ln >= len(h.levels) or len(busy) != len(h.levels[ln]) or not any(busy):
+                    continue  # a new level, or one not timed (MHD)
+                substeps = steps * r**ln
+                for (lo, up, _), w, b in zip(h.levels[ln], h.weights[ln], busy):
+                    n = np.asarray(up) - np.asarray(lo) + 1
+                    cells = float(np.prod(n))
+                    values = dict(particles=w, cells=cells,
+                                  ghost=float(np.prod(n + 2 * reach)) - cells, patch=1.0)
+                    rows.append([values[t] for t in terms])
+                    y.append(b / substeps)
+                per_rank = np.asarray(m["busy_rank"])
+                weights = np.asarray(prev["levels"][ln]["weight"])
+                line.append(dict(level=ln,
+                                 imbalance=float(per_rank.max() / per_rank.mean()),
+                                 weight_imbalance=float(weights.max() / weights.mean())))
+            if line:
+                imbalance.append(dict(event=rec["event"], step=rec["step"], levels=line))
     if not rows:
         return None
     A, y = np.asarray(rows), np.asarray(y)
-    (a, b), *_ = np.linalg.lstsq(A, y, rcond=None)
-    fitted = A @ np.array([a, b])
+    coef, *_ = np.linalg.lstsq(A, y, rcond=None)
+    fitted = A @ coef
     r2 = 1 - np.sum((y - fitted) ** 2) / np.sum((y - y.mean()) ** 2)
-    return dict(a=float(a), b=float(b), r2=float(r2), n=len(y), imbalance=imbalance)
+    out = {t: float(c) for t, c in zip(terms, coef)}
+    # the old names (a, b) of the default terms
+    out.update(a=out.get("particles"), b=out.get("cells"))
+    return dict(out, r2=float(r2), n=len(y), imbalance=imbalance)
