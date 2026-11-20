@@ -21,8 +21,14 @@
 //              under each grown patch), and ghost_box_cells (every patch's grown box less the
 //              patch: level ghosts and physical boundary cells = ghost_box_cells less the
 //              ghost_cells)
+//   busy       hybrid levels: seconds of work in the level's advance since the last line
+//              (per_patch_ timed: outside the exchanges; the push too only with a per patch
+//              mover: "busy_push") of each patch of the PREVIOUS line's level (the
+//              decomposition that did the work; none if the level is new), summed over the
+//              ranks; busy_rank: each rank's
 //   migration  damn::amr::migration from the previous line's decomposition (moved, refined
 //              cells by Distance), when there is one
+//  and busy_steps: the steps since the last line (a line within a step: 0)
 // the costs (critical path, distance weighted exchanges, migration) are derived from it in
 //  python (plamn.amr.read_decomposition), so their per cell costs can change without a build.
 // Collective: the weights are summed over the ranks, so every rank calls it at the same points.
@@ -93,6 +99,27 @@ int Simulator<opts>::decomposition_reach_()
 }
 
 template<auto opts>
+bool Simulator<opts>::busy_push_()
+{
+    if constexpr (Models_t::hybrid_on)
+        return solver::HybridModel<opts>::Patch_t::per_patch_mover;
+    else
+        return false;
+}
+
+template<auto opts>
+std::array<int, 2 * Simulator<opts>::dimension> Simulator<opts>::d_key_(Box_t const& box)
+{
+    std::array<int, 2 * dimension> key{};
+    for (std::size_t i = 0; i < dimension; ++i)
+    {
+        key[i]             = box.lower[i];
+        key[dimension + i] = box.upper[i];
+    }
+    return key;
+}
+
+template<auto opts>
 void Simulator<opts>::record_decomposition_(std::string const& event, double const t,
                                             bool const always)
 {
@@ -112,6 +139,39 @@ void Simulator<opts>::record_decomposition_(std::string const& event, double con
     DAMN_LOG_SCOPE(1, "Simulator::record_decomposition_");
 
     // collective: every rank, the same levels
+    // busy time per patch (its owner's) and per rank, summed / gathered over the ranks
+    std::vector<std::vector<double>> busy(hierarchy_.levels.size()), busy_rank(busy.size());
+    for (std::size_t ln = 0; ln < hierarchy_.levels.size(); ++ln)
+    {
+        static std::vector<damn::amr::Patch<dimension>> const none;
+        auto const& patches // the decomposition the work ran on
+            = d.last and ln < d.last->levels.size() ? d.last->levels[ln].patches : none;
+        busy[ln].assign(patches.size(), 0.);
+        double mine = 0;
+        if (ln < d.busy.size())
+        {
+            for (std::size_t i = 0; i < patches.size(); ++i)
+                if (patches[i].rank == rank_)
+                    if (auto const it = d.busy[ln].find(d_key_(patches[i].box));
+                        it != d.busy[ln].end())
+                        busy[ln][i] = it->second;
+            for (auto const& [_, s] : d.busy[ln])
+                mine += s;
+        }
+        busy_rank[ln].assign(static_cast<std::size_t>(n_ranks_), 0.);
+        busy_rank[ln][static_cast<std::size_t>(rank_)] = mine;
+        if (n_ranks_ > 1)
+        {
+            MPI_Allreduce(MPI_IN_PLACE, busy[ln].data(), static_cast<int>(busy[ln].size()),
+                          MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+            MPI_Allreduce(MPI_IN_PLACE, busy_rank[ln].data(), n_ranks_, MPI_DOUBLE, MPI_SUM,
+                          MPI_COMM_WORLD);
+        }
+    }
+    auto const busy_steps = steps_ - d.steps_then;
+    d.busy.clear();
+    d.steps_then = steps_;
+
     std::vector<std::vector<double>> weights(hierarchy_.levels.size());
     for (std::size_t ln = 0; ln < hierarchy_.levels.size(); ++ln)
     {
@@ -143,7 +203,9 @@ void Simulator<opts>::record_decomposition_(std::string const& event, double con
         detail::json_array(os, hierarchy_.periodic);
         os << R"(,"ratio":)" << hierarchy_.ratio << R"(,"dl":)";
         detail::json_array(os, cellWidth_);
-        os << R"(,"interp":)" << interp_order << R"(,"reach":)" << reach << R"(,"nodes":)";
+        os << R"(,"interp":)" << interp_order << R"(,"reach":)" << reach << R"(,"busy_steps":)"
+           << busy_steps << R"(,"busy_push":)" << busy_push_();
+        os << R"(,"nodes":)";
         std::vector<int> nodes;
         for (auto const& r : topology_.ranks)
             nodes.push_back(r.node);
@@ -171,7 +233,12 @@ void Simulator<opts>::record_decomposition_(std::string const& event, double con
             os << R"(,"metrics":{"cells":)" << m.cells << R"(,"smallest_patch":)"
                << m.smallest_patch << R"(,"imbalance":)" << m.imbalance() << R"(,"weight":)";
             detail::json_array(os, m.weight);
-            os << R"(,"ghost_box_cells":)" << ghost_box_cells << R"(,"ghost_cells":)";
+            os << R"(,"ghost_box_cells":)" << ghost_box_cells;
+            os << R"(,"busy":)";
+            detail::json_array(os, busy[ln]);
+            os << R"(,"busy_rank":)";
+            detail::json_array(os, busy_rank[ln]);
+            os << R"(,"ghost_cells":)";
             detail::json_distances(os, m.ghost_cells);
             os << R"(,"coarse_cells":)";
             detail::json_distances(os, m.coarse_cells);

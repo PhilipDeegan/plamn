@@ -623,6 +623,13 @@ class HybridRefinementTest(unittest.TestCase):
             self.assertGreater(last["levels"][0]["ghost_cells"]["Node"], 0)
             self.assertGreater(last["remote_ranks"][0][0], 0)
         self.assertGreaterEqual(last["critical_path"], 1.0)
+        # busy time: every second of a level's patch work is a patch's of the decomposition it
+        #  ran on (the cost fit: test_load_balancing, where particles do not follow cells)
+        for prev, r in zip(lines, lines[1:]):
+            for ln, m in enumerate(r["levels"]):
+                if m["busy"]:
+                    self.assertEqual(len(m["busy"]), len(prev["hierarchy"].levels[ln]))
+                    self.assertAlmostEqual(sum(m["busy"]), sum(m["busy_rank"]), places=9)
 
 
 if __name__ == "__main__":

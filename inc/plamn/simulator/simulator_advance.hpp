@@ -153,7 +153,11 @@ void Simulator<opts>::advance_level_(int const level_number, double const t, dou
             solver::advance(model, level, t, t + dt);
         }
         else
+        {
+            decomposition_.timing = !decomposition_.path.empty();
             solver::advance(model, level_services_(ln), t, dt);
+            decomposition_.timing = false;
+        }
     });
     DAMN_SUPER_DEBUG_DO(sums_(ln, "end", t);)
     if (ln + 1 == levels_.size()) // the finest; coarser ones after their synchronization
