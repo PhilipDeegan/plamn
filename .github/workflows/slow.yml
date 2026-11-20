@@ -191,3 +191,28 @@ jobs:
           compare/*.json
           compare/**/*.log
           compare/**/*.mem.json
+
+  # every comparison run's peak memory in one artifact ("memory": memory.json, memory.md) and
+  #  the job summary: measured against cases.py's estimates and tiers, to size cases for runners
+  memory:
+    needs: [phare]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/download-artifact@v4
+      with:
+        pattern: phare-compare-*
+        path: compare
+    - uses: actions/setup-python@v5 # cases.py needs numpy
+      with:
+        python-version: "3.12"
+    - run: |
+        python3 -m pip install --quiet numpy
+        python3 etc/compare/phare/memory_table.py compare --json memory.json --md memory.md >> "$GITHUB_STEP_SUMMARY"
+    - uses: actions/upload-artifact@v4
+      with:
+        name: memory
+        path: |
+          memory.json
+          memory.md
