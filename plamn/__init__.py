@@ -222,6 +222,26 @@ def _patch_live_simulators():
     simulator.Simulator._replace_live_simulator = replace_live_simulator
 
 
+# plamn's Simulation keywords that PHARE master's pyphare does not know: the module's particle
+#  layout and allocator (cpp_lib reads them; default AoSMapped, CPU)
+PLAMN_KEYWORDS = ("model_layout", "allocator")
+
+
+def _patch_keywords():
+    from pyphare.pharein import simulation
+
+    if getattr(simulation.check_optional_keywords, "_plamn", False):
+        return
+    original = simulation.check_optional_keywords
+
+    def check_optional_keywords(**kwargs):
+        extra = list(original(**kwargs))
+        return extra + [k for k in PLAMN_KEYWORDS if k not in extra]
+
+    check_optional_keywords._plamn = True
+    simulation.check_optional_keywords = check_optional_keywords
+
+
 def patch():
     """idempotent: test classes call it from setUpClass (nothing runs at import)"""
     global _patched
@@ -241,6 +261,7 @@ def patch():
     cpp.cpp_etc_lib = lambda: etc
     cpp.cpp_lib = cpp_lib
 
+    _patch_keywords()
     _patch_layout_for()
     _patch_enum_int()
     _patch_live_simulators()
