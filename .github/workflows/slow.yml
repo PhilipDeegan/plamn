@@ -60,7 +60,8 @@ jobs:
   #  then the MHD shocks (PHARE's tests/functional/mhd_shock: periodic, 400 steps; between an
   #  inflow and an open boundary, 1000 steps), and PHARE's test_advance_mhd input on 2 levels
   #  (a refinement box: level ghosts, reflux; tagged: regrids): MHD only, B rho V P at every
-  #  dump; a 3D harris (10^3 cells, 100 ppc, tagged levels) sized for a runner by its memory
+  #  dump; a 3D harris (10^3 cells, 100 ppc, tagged levels; 80^3 cells, level 0 only) sized
+  #  for a runner by its memory
   #  (cases.py tiers; each run's peak memory per rank in compare/**/*.mem.json). Partitioned
   #  for the wall time: each module built on its own runner (plamn's and
   #  PHARE's at once), then each comparison on its own runner with every module
@@ -155,6 +156,8 @@ jobs:
         - { case: mhd_tagged_1d, steps: 40 }
         # 3D, sized for a runner (cases.py tier "gh": ~1 GB per code), within roundoff
         - { case: harris_3d_10, steps: 4, ndim: 3 }
+        # 80^3, level 0 only, 80 ppc (41M particles): ~11 GB at its peak, one code at a time
+        - { case: harris_3d_80_L0, steps: 4, ndim: 3 }
 
     steps:
     - uses: actions/checkout@v4
