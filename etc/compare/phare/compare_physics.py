@@ -162,7 +162,7 @@ def main(argv=None):
     base = Path(test_ladder.setting("LADDER_OUT", test_ladder.PLAMN / "phare_outputs" / "compare"))
     import cases
 
-    base = base / f"physics_{a.case}_{a.steps}_ppc{cases.PPC}"
+    base = base / f"physics_{a.case}_{a.steps}_ppc{cases.ppc(a.case)}"
     out = {code: base / Path(code).name for code in (a.ref, a.cmp)}
     if not a.no_run:
         os.environ["LADDER_NDIM"] = str(a.ndim)
@@ -177,7 +177,7 @@ def main(argv=None):
             quantities = ["B", "E"] if a.all_times else ["B"]
     times = dump_times(out[a.ref], quantities[0]) if a.all_times else [None]
     what = " ".join(quantities) + (" at every dump" if a.all_times else ", final")
-    print(f"{a.case} {a.ndim}D, {a.steps} steps, {cases.PPC} ppc: {a.ref} vs {a.cmp}, {what} on the"
+    print(f"{a.case} {a.ndim}D, {a.steps} steps, {cases.ppc(a.case)} ppc: {a.ref} vs {a.cmp}, {what} on the"
           " finest grid (differences relative to the largest |value|)")
     report = []
     for t in times:
