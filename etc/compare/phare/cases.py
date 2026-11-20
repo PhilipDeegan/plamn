@@ -50,6 +50,11 @@ BYTES_PER_PARTICLE = 250  # AoS ~80 B, times domain + ghosts + sort buffers + le
 BYTES_BASE = GB // 2  # python, SAMRAI, the modules
 
 
+def dump_every(name):
+    """the steps between a case's dumps (its diagnostics', or live snapshots')"""
+    return CASES[name].get("dump_every", 1)
+
+
 def ppc(name):
     return CASES[name].get("ppc", PPC)
 
@@ -174,6 +179,8 @@ def _diag_options(out, fmt, fine_dump):
     """the regular dumps; with fine_dump, also each fine level at the end of its substeps
     (fine_dump_lvl_max: phareh5, PHARE master's pharevtkhdf writes them with level tables
     shorter than the steps, fixed in a later PHARE)."""
+    if fmt == "none":  # live comparisons (live.py): no diagnostics
+        return None
     options = {"dir": out, "mode": "overwrite"}
     if fine_dump:
         options["fine_dump_lvl_max"] = 10
@@ -181,6 +188,8 @@ def _diag_options(out, fmt, fine_dump):
 
 
 def _diagnostics(ph, timestamps, pops, fmt="phareh5"):
+    if fmt == "none":
+        return
     particles = os.environ.get("LADDER_PARTICLES", "1") == "1"  # 0: fields only
     if fmt == "phareh5" and particles:  # pharevtkhdf has no particles
         for pop in pops:

@@ -62,32 +62,42 @@ def dump_times(path, qty="B"):
 
 
 def composite(path, component, time=None, qty="B"):
-    """(the finest grid's quantity component at cell centres, time, number of levels)"""
+    """(the finest grid's quantity component at cell centres, time, number of levels), from a
+    run's diagnostics"""
     import h5py
-    from scipy.ndimage import map_coordinates
 
     f = h5py.File(Path(path) / field(qty, component, 1)[0], "r")
     times = sorted(f["/t"].keys(), key=float)
     t = times[-1] if time is None else time
     g = f[f"/t/{t}"]
-    levels = sorted((k for k in g.keys() if k.startswith("pl")), key=lambda k: int(k[2:]))
-    ndim = len(g[levels[0]][next(iter(g[levels[0]]))].attrs["lower"])
+    names = sorted((k for k in g.keys() if k.startswith("pl")), key=lambda k: int(k[2:]))
+    ndim = len(g[names[0]][next(iter(g[names[0]]))].attrs["lower"])
     _, ds, primal = field(qty, component, ndim)
-
-    def level_cells(ln, shape):
-        a = np.full(shape, np.nan)
-        for p in g[levels[ln]].values():
+    levels = []
+    for name in names:
+        patches = []
+        for p in g[name].values():
             if ds not in p:
                 continue
-            G = int(p[ds].attrs["ghosts"])
-            lo = np.array(p.attrs["lower"])
-            hi = np.array(p.attrs["upper"])
-            n = hi - lo + 1
             if p[ds].dtype != np.float64:  # float diagnostics: 1e-8 "differences" from storage
                 raise SystemExit(
                     f"{path}: {ds} is {p[ds].dtype}: comparing needs double precision diagnostics "
                     "(plamn: ./mkn.py --diag-doubles, PHARE: -DPHARE_DIAG_DOUBLES=1)")
-            v = p[ds][:]
+            patches.append((np.array(p.attrs["lower"]), np.array(p.attrs["upper"]),
+                            int(p[ds].attrs["ghosts"]), p[ds][:]))
+        levels.append(patches)
+    return composite_of(levels, primal, ndim), float(t), len(levels)
+
+
+def composite_of(levels, primal, ndim):
+    """the finest grid's composite at cell centres of levels: per level its patches as (lower,
+    upper (AMR cells), ghosts, values with ghosts); primal: the component's primal directions"""
+    from scipy.ndimage import map_coordinates
+
+    def level_cells(ln, shape):
+        a = np.full(shape, np.nan)
+        for lo, hi, G, v in levels[ln]:
+            n = hi - lo + 1
             sl = tuple(slice(G, G + n[d]) for d in range(ndim))
             cells = v[sl]
             for d in primal:  # the cell's two nodes along d
@@ -97,8 +107,8 @@ def composite(path, component, time=None, qty="B"):
         return a
 
     n0 = np.zeros(ndim, dtype=int)
-    for p in g[levels[0]].values():
-        n0 = np.maximum(n0, np.array(p.attrs["upper"]) + 1)
+    for _, hi, _, _ in levels[0]:
+        n0 = np.maximum(n0, hi + 1)
     comp = level_cells(0, tuple(n0))
     for ln in range(1, len(levels)):
         shape = tuple(n0 * 2**ln)
@@ -107,7 +117,7 @@ def composite(path, component, time=None, qty="B"):
         up = map_coordinates(comp, idx, order=1, mode="grid-wrap")
         fine = level_cells(ln, shape)
         comp = np.where(np.isnan(fine), up, fine)
-    return comp, float(t), len(levels)
+    return comp
 
 
 def compare(ref, cmp, ndim, qty="B", time=None):
@@ -118,14 +128,14 @@ def compare(ref, cmp, ndim, qty="B", time=None):
     for c in components(qty):
         a, ta, la = composite(ref, c, time, qty)
         b, tb, lb = composite(cmp, c, time, qty)
-        if a.shape != b.shape:  # a code with fewer levels: up to the finer one
-            from scipy.ndimage import zoom
-
-            if a.size < b.size:
-                a = zoom(a, b.shape[0] / a.shape[0], order=1, mode="grid-wrap")
-            else:
-                b = zoom(b, a.shape[0] / b.shape[0], order=1, mode="grid-wrap")
         pairs.append((c, a, b, ta, tb, la, lb))
+    return compare_pairs(qty, pairs)
+
+
+def compare_pairs(qty, pairs):
+    """compare's rows from (component, ref composite, cmp composite, their times, their
+    levels) per component"""
+    pairs = [(c, *_same_shape(a, b), ta, tb, la, lb) for c, a, b, ta, tb, la, lb in pairs]
     scale = max(max(np.max(np.abs(a)) for _, a, *_ in pairs), 1e-300)
     rows = []
     for c, a, b, ta, tb, la, lb in pairs:
@@ -134,6 +144,17 @@ def compare(ref, cmp, ndim, qty="B", time=None):
         rows.append((qty + c, ta, tb, la, lb, np.max(np.abs(a)), d.max() / scale,
                      np.sqrt(np.mean(d**2)) / scale, at))
     return rows
+
+
+def _same_shape(a, b):
+    """a code with fewer levels: its composite interpolated up to the other's grid"""
+    if a.shape == b.shape:
+        return a, b
+    from scipy.ndimage import zoom
+
+    if a.size < b.size:
+        return zoom(a, b.shape[0] / a.shape[0], order=1, mode="grid-wrap"), b
+    return a, zoom(b, a.shape[0] / b.shape[0], order=1, mode="grid-wrap")
 
 
 def main(argv=None):
@@ -147,6 +168,12 @@ def main(argv=None):
     p.add_argument("--no-run", action="store_true", help="compare the runs already there")
     p.add_argument("--all-times", action="store_true", help="B and E at every dump time")
     p.add_argument("--json", default=None, help="the rows written to this file too")
+    p.add_argument("--live", action="store_true",
+                   help="no diagnostics: --ref's snapshots (live.py) made once into the reference "
+                   "cache, --cmp compared against them while it runs (hybrid cases: B, E)")
+    p.add_argument("--ref-cache", default=None,
+                   help="--live: the references' directory (default LADDER_REF_CACHE, else the "
+                   "case's output directory)")
     p.add_argument(
         "--tolerance", nargs=3, type=float, default=None, metavar=("START", "GROWTH", "CAP"),
         help="fail where a relative difference at the k-th time compared exceeds "
@@ -170,6 +197,8 @@ def main(argv=None):
 
     base = base / f"physics_{a.case}_{a.steps}_ppc{cases.ppc(a.case)}"
     out = {code: base / Path(code).name for code in (a.ref, a.cmp)}
+    if a.live:
+        return live_main(a, base, out, cases, test_ladder)
     if not a.no_run:
         os.environ["LADDER_NDIM"] = str(a.ndim)
         for code in (a.ref, a.cmp):
@@ -219,6 +248,67 @@ def levels_ok(report, expected):
         return True
     print(f"FAIL levels at t {last:g}: {sorted(got)} (ref, cmp), {expected} expected")
     return False
+
+
+def _source_key(path):
+    """a checkout's commit and a hash of its uncommitted changes"""
+    import hashlib
+    import subprocess
+
+    def git(*args):
+        return subprocess.run(["git", "-C", str(path), *args], capture_output=True,
+                              text=True).stdout
+    return dict(commit=git("rev-parse", "HEAD").strip(),
+                diff=hashlib.sha256(git("diff", "HEAD").encode()).hexdigest()[:16])
+
+
+def live_main(a, base, out, cases, test_ladder):
+    """--live: the reference's snapshots made (if missing or stale) then the comparison run"""
+    import hashlib
+    import json
+    import os
+
+    if cases.CASES[a.case].get("mhd_shock") or cases.CASES[a.case].get("mhd_advance"):
+        raise SystemExit("--live: hybrid cases (B, E) only")
+    os.environ["LADDER_NDIM"] = str(a.ndim)
+    ref_dir = test_ladder.PLAMN if a.ref == "plamn" else test_ladder.phare_dir(a.ref)
+    cache = Path(a.ref_cache or os.environ.get("LADDER_REF_CACHE", base))
+    cache.mkdir(parents=True, exist_ok=True)
+    npz = cache / f"{a.case}_{a.ndim}d_{a.steps}_ppc{cases.ppc(a.case)}_np{a.np}.{Path(a.ref).name}.npz"
+    key = dict(ref=a.ref, source=_source_key(ref_dir), case=a.case, ndim=a.ndim, steps=a.steps,
+               ppc=cases.ppc(a.case), np=a.np,
+               inputs=hashlib.sha256((HERE / "cases.py").read_bytes()).hexdigest()[:16])
+    import live
+
+    stale = not npz.exists() or live.load(npz)[0] != key
+    if stale:
+        print(f"{a.case}: reference {npz.name} made by {a.ref}")
+        test_ladder.run(a.ref, a.case, out[a.ref], None, steps=a.steps,
+                        extra=["--live-out", npz, "--live-key", json.dumps(key)])
+    else:
+        print(f"{a.case}: reference {npz.name} (cached)")
+    report_file = base / f"{Path(a.cmp).name}.live.json"
+    test_ladder.run(a.cmp, a.case, out[a.cmp], None, steps=a.steps,
+                    extra=["--live-ref", npz, "--live-report", report_file])
+    report = json.loads(report_file.read_text())
+    if not a.all_times:
+        last = max(r["t"] for r in report)
+        report = [r for r in report if r["t"] == last]
+    print(f"{a.case} {a.ndim}D, {a.steps} steps, {cases.ppc(a.case)} ppc: {a.ref} vs {a.cmp}, "
+          f"B E live{' at every dump' if a.all_times else ', final'} on the finest grid "
+          "(differences relative to the quantity's largest |value|)")
+    for r in report:
+        print(f"  {r['quantity']}: t {r['t']:g}, levels {r['levels'][0]}/{r['levels'][1]}, "
+              f"max|{r['quantity']}| {r['scale']:.3g}, max diff {r['max_diff']:.2e}, "
+              f"rms diff {r['rms_diff']:.2e}, largest at {tuple(r['at'])}")
+    if a.json:
+        Path(a.json).write_text(json.dumps(report, indent=1))
+    if not all(np.isfinite(r["max_diff"]) for r in report):
+        print("a difference is not finite: a run blew up or wrote NaN")
+        return 1
+    tolerance = a.tolerance or cases.CASES[a.case].get("tolerance")
+    ok = not tolerance or within(report, *tolerance)
+    return 0 if levels_ok(report, cases.CASES[a.case].get("levels_at_end")) and ok else 1
 
 
 def within(report, start, growth, cap):
