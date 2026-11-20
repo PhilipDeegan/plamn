@@ -1,0 +1,41 @@
+name: prune runs
+
+# keep the newest KEEP finished pull request runs of each workflow, delete the older ones (their
+#  logs and artifacts with them); runs of pushes, schedules and dispatches are left alone. Daily,
+#  or by hand (gh workflow run prune_runs.yml -f keep=N)
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: pull request runs kept per workflow
+        default: "20"
+
+permissions:
+  actions: write
+
+concurrency:
+  group: prune-runs
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      KEEP: ${{ inputs.keep || '20' }}
+    steps:
+    - run: |
+        set -euo pipefail
+        for wf in $(gh workflow list -R "$GITHUB_REPOSITORY" --all --json id -q '.[].id'); do
+          # newest first: everything after the KEEP newest goes
+          gh run list -R "$GITHUB_REPOSITORY" --workflow "$wf" --event pull_request \
+              --status completed --limit 1000 --json databaseId -q ".[$KEEP:][].databaseId" \
+            | while read -r id; do
+                echo "workflow $wf: deleting run $id"
+                gh run delete -R "$GITHUB_REPOSITORY" "$id" || true
+              done
+        done
