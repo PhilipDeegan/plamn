@@ -27,8 +27,8 @@ jobs:
         KLOG=3 mkn clean build test -dKOqp test_plamn_core -t 4 -x res/mkn/mpi
         -W 9 -a "-Wno-unused-parameter -Wno-unused-variable -Wno-error=strict-aliasing"
 
-  # plamn runs pyphare's python against plamn's modules: pyphare from a PHARE checkout, tiling_gpu's
-  #  and wrangler's (the live DataWrangler, PHARE master based)
+  # plamn runs pyphare's python against plamn's modules: pyphare from PhilipDeegan/PHARE's wrangler
+  #  (PHARE master and the live DataWrangler's python accessors, which master lacks yet)
   python:
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-24.04
@@ -36,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pyphare: [tiling_gpu, wrangler]
+        pyphare: [wrangler]
     steps:
     - uses: actions/checkout@v4
     - uses: ./.github/actions/setup
