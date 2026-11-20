@@ -654,6 +654,14 @@ private:
         std::string mode           = "nppc";
         double tolerance           = 0.05;
         std::size_t next_rebalance = 200, backoff = 2, max_next_rebalance = 1000;
+        // how a level's patches get their ranks (level_of_; plamn's, not PHARE's: the PHARE
+        //  comparisons keep "levels"): "levels" each level along the Hilbert curve on its own,
+        //  "keep" where the data is (damn::amr::keep: the old level's owners, else the coarser
+        //  patch's under it, else the curve); spill >= 0: then no rank above (1 + spill) of its
+        //  share (damn::amr::spill). simulation/AMR/loadbalancing/partition, spill, or
+        //  PLAMN_PARTITION, PLAMN_SPILL
+        std::string partition = "levels";
+        double spill          = -1;
     } lb_;
     std::optional<amr::CoarsestRebalanceCheck> rebalance_check_;
     int rank_    = 0;
