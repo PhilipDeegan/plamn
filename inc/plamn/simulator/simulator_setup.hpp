@@ -236,6 +236,7 @@ void Simulator<opts>::setup_()
         setup_hybrid_();
     setup_restarts_();
     setup_diagnostics_();
+    setup_decomposition_log_();
 }
 
 template<auto opts>

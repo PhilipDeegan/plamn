@@ -518,3 +518,102 @@ class Chopper:
             h.levels.append([(lo, up, r) for (lo, up), r in zip(boxes, ranks)])
             h.weights.append(weights)
         return h
+
+
+# distance weighted per cell costs: placeholders until measured (Self and Local free)
+COSTS = {"Self": 0.0, "Local": 0.0, "Numa": 0.3, "Node": 1.0, "Remote": 10.0}
+
+
+def remote_ranks(h, reach=None):
+    """per level, (max, mean) over ranks of the other ranks whose patches lie within reach of
+    the rank's patches (same level ghosts, periodic images included): how many ranks each rank
+    exchanges ghosts with (PHARE's run summary's remote_ranks_max / _avg)"""
+    reach = _ghosts[h.interp_order] if reach is None else reach
+    lower, upper = (np.asarray(b) for b in h.domain)
+    extent = upper - lower + 1
+    out = []
+    for ln, patches in enumerate(h.levels):
+        n = extent * h.ratio**ln
+        shifts = [np.zeros(h.ndim, dtype=int)]
+        for d in range(h.ndim):
+            if h.periodic[d]:
+                shifts += [s + e for s in shifts for e in (n * np.eye(h.ndim, dtype=int)[d],
+                                                           -n * np.eye(h.ndim, dtype=int)[d])]
+        lo = np.array([p[0] for p in patches]).reshape(-1, h.ndim)
+        up = np.array([p[1] for p in patches]).reshape(-1, h.ndim)
+        rank = np.array([p[2] for p in patches], dtype=int)
+        peers = {r: set() for r in range(h.ranks)}
+        for i in range(len(patches)):
+            for s in shifts:
+                near = np.all((lo + s <= up[i] + reach) & (up + s >= lo[i] - reach), axis=1)
+                peers[int(rank[i])].update(int(r) for r in rank[near] if r != rank[i])
+        counts = [len(v) for v in peers.values()]
+        out.append((max(counts), float(np.mean(counts))))
+    return out
+
+
+def read_decomposition(path, costs=None):
+    """the simulator's decomposition log (simulation/AMR/decomposition/log, PLAMN_DECOMPOSITION):
+    per line its event, t, step, the NoDataHierarchy ("hierarchy": critical_path(),
+    total_work_imbalance(), comm_cost(), metrics()...), the simulator's own counts per level
+    ("levels": metrics, with level_ghost_cells = ghost_box_cells less the same level ghost
+    cells: level ghosts and physical boundary cells), and the derived costs: critical_path,
+    total_work_imbalance, comm_cost and migration_cost (costs per cell by distance, default
+    COSTS), remote_ranks"""
+    import json
+    from pathlib import Path
+
+    costs = costs or COSTS
+    out = []
+    for line in Path(path).read_text().splitlines():
+        if not line.strip():
+            continue
+        rec = json.loads(line)
+        ndim = len(rec["domain"][0])
+        h = NoDataHierarchy(
+            ndim,
+            tuple(rec["domain"]),
+            rec["periodic"],
+            rec["ratio"],
+            rec["dl"],
+            [0.0] * ndim,
+            rec["interp"],
+            rec["nodes"],
+            [[(lo, up, r) for lo, up, r in lvl["patches"]] for lvl in rec["levels"]],
+            [lvl["weights"] for lvl in rec["levels"]],
+        )
+        levels = []
+        for lvl in rec["levels"]:
+            m = dict(lvl["metrics"])
+            m["level"] = lvl["level"]
+            m["patches"] = len(lvl["patches"])
+            m["level_ghost_cells"] = m["ghost_box_cells"] - sum(m["ghost_cells"].values())
+            levels.append(m)
+        comm = sum(
+            costs[d] * n
+            for m in levels
+            for key in ("ghost_cells", "coarse_cells")
+            for d, n in m[key].items()
+        )
+        migration = rec.get("migration")
+        out.append(
+            dict(
+                event=rec["event"],
+                t=rec["t"],
+                step=rec["step"],
+                hierarchy=h,
+                levels=levels,
+                migration=migration,
+                critical_path=h.critical_path(),
+                total_work_imbalance=h.total_work_imbalance(),
+                comm_cost=comm,
+                migration_cost=None if migration is None else sum(
+                    costs[d] * n
+                    for m in migration
+                    for key in ("moved", "refined")
+                    for d, n in m[key].items()
+                ),
+                remote_ranks=remote_ranks(h, rec["reach"]),
+            )
+        )
+    return out

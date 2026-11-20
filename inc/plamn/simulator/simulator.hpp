@@ -450,6 +450,18 @@ private:
     NO_DISCARD bool should_rebalance_();
     void rebalance_(double t); // level 0 onto new owners, then each finer level
 
+    // the decomposition log (simulator_decomposition.hpp): one JSON line per init, changing
+    //  regrid or rebalance, and every `every` steps; collective
+    struct DecompositionLog
+    {
+        std::string path{}; // empty: off
+        int every = 0;
+        std::optional<damn::amr::Hierarchy<dimension>> last{}; // the last line's
+    } decomposition_;
+    void setup_decomposition_log_();
+    NO_DISCARD static int decomposition_reach_();
+    void record_decomposition_(std::string const& event, double t, bool always = false);
+
     void register_resources_();
     // the MHD states' (conservative) and E's resources: MHDState_<s>, MHD_E, MHD_B (state 0's B)
     void register_mhd_resources_();
@@ -676,6 +688,7 @@ private:
 #include "plamn/simulator/simulator_regrid.hpp"      // IWYU pragma: export
 #include "plamn/simulator/simulator_restarts.hpp"    // IWYU pragma: export
 #include "plamn/simulator/simulator_computed.hpp"    // IWYU pragma: export
+#include "plamn/simulator/simulator_decomposition.hpp" // IWYU pragma: export
 #include "plamn/simulator/simulator_diagnostics.hpp" // IWYU pragma: export
 #include "plamn/simulator/simulator_setup.hpp"       // IWYU pragma: export
 #include "plamn/simulator/simulator_sums.hpp"        // IWYU pragma: export

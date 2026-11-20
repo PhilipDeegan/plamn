@@ -97,6 +97,8 @@ double Simulator<opts>::advance()
     ++steps_;
     if (regrid_mode_ == RegridMode::normal and tagging_ and steps_ % regrid_interval_ == 0)
         regrid_(currentTime_);
+    if (decomposition_.every > 0 and steps_ % decomposition_.every == 0)
+        record_decomposition_("sample", currentTime_, /*always=*/true);
     return dt_;
 }
 

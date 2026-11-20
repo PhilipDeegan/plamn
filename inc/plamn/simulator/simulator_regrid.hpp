@@ -195,6 +195,7 @@ void Simulator<opts>::rebalance_(double const t)
         else
             regrid_level_(l, clustered_[ln], t, /*keep_finer=*/true);
     }
+    record_decomposition_("rebalance", t);
 }
 
 
@@ -234,6 +235,7 @@ void Simulator<opts>::regrid_(double const t, int const from, bool const always)
             prepare_step_(ln + 1, t);
         }
     }
+    record_decomposition_("regrid", t);
 }
 
 // level ln onto new boxes, at t (every level synchronized): its data moved where the old level

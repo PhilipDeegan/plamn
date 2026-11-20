@@ -185,11 +185,15 @@ void Simulator<opts>::initialize()
     DAMN_LOG_SCOPE(1, "Simulator::initialize");
     if (isInitialized_)
         throw std::runtime_error("plamn Simulator already initialized");
-    if constexpr (Models_t::mhd_on)
-        if (models_.mhd_levels > 0)
-            return initialize_mhd_();
-    if constexpr (Models_t::hybrid_on)
-        initialize_hybrid_();
+    auto const init = [&] {
+        if constexpr (Models_t::mhd_on)
+            if (models_.mhd_levels > 0)
+                return initialize_mhd_();
+        if constexpr (Models_t::hybrid_on)
+            initialize_hybrid_();
+    };
+    init();
+    record_decomposition_("init", currentTime_, /*always=*/true);
 }
 
 // level 0 from the user's functions (MHD alone, one level: MHD refinement and coupling to hybrid

@@ -501,6 +501,63 @@ class HybridRefinementTest(unittest.TestCase):
         for b_lb, b_no in zip(lb["B"], no["B"]):
             self.assertLess(np.abs(b_lb - b_no).max(), 1e-12)
 
+    def test_decomposition_log(self):
+        """PLAMN_DECOMPOSITION: a line at initialization, after each regrid or rebalance that
+        changes the decomposition, and every PLAMN_DECOMPOSITION_EVERY steps; each level's
+        weights are its particles (every rank's), the metrics consistent with its patches"""
+        from plamn.amr import read_decomposition
+
+        ph.startMPI()
+        size, rank = plamn.etc.mpi_size(), plamn.etc.mpi_rank()
+        path = Path("phare_outputs") / f"decomposition_n{size}.jsonl"  # one per rank count:
+        path.parent.mkdir(parents=True, exist_ok=True)  #  1 and 3 ranks run at once
+        steps = 4
+        os.environ.update(PLAMN_DECOMPOSITION=str(path), PLAMN_DECOMPOSITION_EVERY="2")
+        try:
+            out = harris(
+                steps,
+                tagging=True,
+                levels=3,
+                cells=(40, 100),
+                patch=(10, 10),
+                load_balancer=dict(every=2, tol=0.05) if size > 1 else None,
+            )
+        finally:
+            for key in ("PLAMN_DECOMPOSITION", "PLAMN_DECOMPOSITION_EVERY"):
+                os.environ.pop(key)
+        plamn.etc.mpi_barrier()
+        if rank != 0:
+            return
+        lines = read_decomposition(path)
+        events = [r["event"] for r in lines]
+        self.assertEqual(events[0], "init")
+        self.assertEqual(events.count("sample"), steps // 2)
+        self.assertIsNone(lines[0]["migration"])
+        last = lines[-1]
+        h = last["hierarchy"]
+        self.assertEqual(len(h.levels), out["levels"])
+        self.assertEqual(h.ranks, size)
+        for ln, m in enumerate(last["levels"]):
+            self.assertEqual(sum(h.weights[ln]), out["particles"][ln])
+            self.assertAlmostEqual(sum(m["weight"]), out["particles"][ln])
+            self.assertEqual(m["patches"], len(h.levels[ln]))
+            self.assertEqual(
+                m["cells"],
+                sum(np.prod(np.asarray(up) - lo + 1) for lo, up, _ in h.levels[ln]),
+            )
+            self.assertGreaterEqual(m["level_ghost_cells"], 0)
+            self.assertEqual(m["ghost_cells"]["Remote"], 0)  # one node
+            if size == 1:
+                self.assertEqual(m["ghost_cells"]["Node"], 0)
+            if ln > 0:
+                self.assertGreater(sum(m["coarse_cells"].values()), 0)
+        for r in lines[1:]:
+            self.assertEqual(len(r["migration"]), len(r["levels"]))
+        if size > 1:  # three ranks: ghosts cross ranks, and every rank has peers
+            self.assertGreater(last["levels"][0]["ghost_cells"]["Node"], 0)
+            self.assertGreater(last["remote_ranks"][0][0], 0)
+        self.assertGreaterEqual(last["critical_path"], 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()
