@@ -120,27 +120,106 @@ def crossing(patches, ranks, node_of_rank, extent, reach, numa_of_rank=None):
     return out
 
 
+class OwnerGrid:
+    """a level's patch owners on the grid of all its patches' edges (a level's patches: each box
+    chopped into a grid, so a coarse cell's owner is one slice): any box's overlap with each
+    owner from a slice of it, the overlap per grid cell separable along the axes"""
+
+    def __init__(self, patches, ranks):
+        lo = np.array([q[0] for q in patches])
+        up = np.array([q[1] for q in patches]) + 1  # exclusive
+        self.edges = [np.unique(np.concatenate([lo[:, d], up[:, d]])) for d in range(lo.shape[1])]
+        self.owner = np.full([len(e) - 1 for e in self.edges], -1, dtype=np.int64)
+        i0 = [np.searchsorted(e, lo[:, d]) for d, e in enumerate(self.edges)]
+        i1 = [np.searchsorted(e, up[:, d]) for d, e in enumerate(self.edges)]
+        for k, rk in enumerate(ranks):
+            self.owner[tuple(slice(i0[d][k], i1[d][k]) for d in range(len(self.edges)))] = rk
+
+    def overlap(self, lower, upper):
+        """(owners, cells) of the box lower..upper (inclusive) with the patches, per grid cell"""
+        sl, lengths = [], []
+        for d, e in enumerate(self.edges):
+            lo, hi = lower[d], upper[d] + 1
+            a = max(int(np.searchsorted(e, lo, side="right")) - 1, 0)
+            b = min(int(np.searchsorted(e, hi, side="left")), len(e) - 1)
+            if b <= a:
+                return np.zeros(0, dtype=np.int64), np.zeros(0)
+            sl.append(slice(a, b))
+            lengths.append(np.clip(np.minimum(e[a + 1:b + 1], hi) - np.maximum(e[a:b], lo), 0,
+                                   None))
+        cells = lengths[0]
+        for length in lengths[1:]:
+            cells = np.multiply.outer(cells, length)
+        owners = self.owner[tuple(sl)]
+        keep = owners >= 0
+        return owners[keep], cells[keep].astype(float)
+
+
 def under_by_distance(fine, fine_ranks, coarse, coarse_ranks, node_of_rank, ratio,
                       numa_of_rank=None):
     """the coarse cells under the fine patches (each coarsened) by the distance class from the
     fine patch's rank to their owner (CLASSES' shares; all same rank: every core's levels in the
     same place)"""
-    clo = np.array([c[0] for c in coarse])
-    cup = np.array([c[1] for c in coarse])
-    cr = np.asarray(coarse_ranks)
+    grid = OwnerGrid(coarse, coarse_ranks)
     node = np.asarray(node_of_rank)
     numa = np.asarray(numa_of_rank if numa_of_rank is not None else [0] * len(node_of_rank))
     out = np.zeros(len(CLASSES))
     for (lo, up), r in zip(fine, fine_ranks):
-        lo_c, up_c = np.asarray(lo) // ratio, np.asarray(up) // ratio
-        olo, oup = np.maximum(clo, lo_c), np.minimum(cup, up_c)
-        size = np.clip(oup - olo + 1, 0, None).prod(axis=1)
-        same_node = node[cr] == node[r]
-        out[0] += size[cr == r].sum()
-        out[1] += size[(cr != r) & same_node & (numa[cr] == numa[r])].sum()
-        out[2] += size[same_node & (numa[cr] != numa[r])].sum()
-        out[3] += size[~same_node].sum()
+        owners, cells = grid.overlap(np.asarray(lo) // ratio, np.asarray(up) // ratio)
+        same_node = node[owners] == node[r]
+        out[0] += cells[owners == r].sum()
+        out[1] += cells[(owners != r) & same_node & (numa[owners] == numa[r])].sum()
+        out[2] += cells[same_node & (numa[owners] != numa[r])].sum()
+        out[3] += cells[~same_node].sum()
     return out / out.sum() if out.sum() else out
+
+
+def majority_owner(fine, coarse, coarse_ranks, ratio, n_ranks):
+    """each fine patch's rank: the owner of most of the coarse cells under it (coarsened)"""
+    grid = OwnerGrid(coarse, coarse_ranks)
+    out = []
+    for lo, up in fine:
+        owners, cells = grid.overlap(np.asarray(lo) // ratio, np.asarray(up) // ratio)
+        out.append(int(np.argmax(np.bincount(owners, weights=cells, minlength=n_ranks))))
+    return out
+
+
+def spill(ranks, weights, node_of_rank, numa_of_rank, tol):
+    """no rank above (1 + tol) of the mean: an overloaded rank, the most loaded first, hands
+    patches (the heaviest that fits in its excess, else its lightest) to the least loaded rank
+    with room, the closest first (its NUMA zone, its node, any: damn::amr::spill's order); it
+    keeps its last patch"""
+    ranks = list(ranks)
+    w = np.asarray(weights, dtype=float)
+    n = len(node_of_rank)
+    load = np.bincount(ranks, weights=w, minlength=n)
+    limit = (1 + tol) * load.sum() / n
+    mine = [[] for _ in range(n)]
+    for i, rk in enumerate(ranks):
+        mine[rk].append(i)
+    node, numa = np.asarray(node_of_rank), np.asarray(numa_of_rank)
+    for rk in np.argsort(-load, kind="stable"):
+        while load[rk] > limit and len(mine[rk]) > 1:
+            excess = load[rk] - limit
+            own = mine[rk]
+            fits = [i for i in own if w[i] <= excess]
+            i = max(fits, key=lambda j: w[j]) if fits else min(own, key=lambda j: w[j])
+            room = np.nonzero(load + w[i] <= limit)[0]
+            room = room[room != rk]
+            best = None
+            for tier in (room[(node[room] == node[rk]) & (numa[room] == numa[rk])],
+                         room[node[room] == node[rk]], room):
+                if len(tier):
+                    best = int(tier[np.argmin(load[tier])])
+                    break
+            if best is None:
+                break
+            own.remove(i)
+            mine[best].append(i)
+            load[rk] -= w[i]
+            load[best] += w[i]
+            ranks[i] = best
+    return ranks
 
 
 def main():
@@ -154,6 +233,12 @@ def main():
     p.add_argument("--topologies", nargs="+", default=["4:2", "100:10", "1000:10"],
                    help="ranks:ranks per node[:NUMA zones per node, default --numa]")
     p.add_argument("--numa", type=int, default=2, help="NUMA zones a node (dual socket)")
+    p.add_argument("--partition", nargs="+", default=["levels"], choices=["levels", "aligned"],
+                   help="levels: each level along the curve (plamn's); aligned: level 0 along "
+                   "the curve, a finer patch to the owner of most of the coarse cells under it, "
+                   "then spilled (--spill)")
+    p.add_argument("--spill", type=float, nargs="+", default=[0.1],
+                   help="aligned: a rank's tolerance over the mean before it hands patches on")
     p.add_argument("--no-exchanges", action="store_true", help="skip the face counts (big runs)")
     p.add_argument("--locality", action="store_true",
                    help="each level's coarse cells under its patches on the same rank")
@@ -177,9 +262,10 @@ def main():
             for ln, (pt, _, c, q) in enumerate(per_level)) + f" ({time.monotonic() - t0:.1f} s)")
         serial = sum(r**ln * w.sum() for ln, (_, w, _, _) in enumerate(per_level))
         print(f"  1 core: {serial:.0f} s a coarse step (L0 1, L1 {r}, L2 {r * r} substeps)")
-        print(f"  {'topology':>9} {'step s':>9} {'speedup':>8} {'eff':>6} "
+        print(f"  {'topology':>9} {'partition':>12} {'step s':>9} {'speedup':>8} {'eff':>6} "
               + " ".join(f"{'imb L' + str(ln):>8}" for ln in range(len(levels))))
-        for topology in a.topologies:
+        strategies = [(m, t) for m in a.partition for t in (a.spill if m == "aligned" else [None])]
+        for (mode, tol), topology in ((x, t) for t in a.topologies for x in strategies):
             fields = [int(x) for x in topology.split(":")]
             n, per_node = fields[0], fields[1]
             zones = fields[2] if len(fields) > 2 else a.numa
@@ -189,8 +275,12 @@ def main():
             partition = getattr(plamn_etc, f"partition_{nd}")
             step, imbs, xc, owners = 0.0, [], [], []
             for ln, (patches, w, _, _) in enumerate(per_level):
-                ranks = partition([(lo, up) for lo, up in patches], list(map(float, w)),
-                                  node_of_rank)
+                if mode == "aligned" and ln > 0:
+                    ranks = majority_owner(patches, per_level[ln - 1][0], owners[ln - 1], r, n)
+                    ranks = spill(ranks, w, node_of_rank, numa_of_rank, tol)
+                else:
+                    ranks = partition([(lo, up) for lo, up in patches], list(map(float, w)),
+                                      node_of_rank, numa_of_rank)
                 owners.append(ranks)
                 load = np.bincount(ranks, weights=w, minlength=n)
                 step += r**ln * load.max()
@@ -199,7 +289,8 @@ def main():
                     extent = [c * r**ln for c in a.cells]
                     xc.append(crossing(patches, ranks, node_of_rank, extent, REACH,
                                        numa_of_rank))
-            print(f"  {topology:>9} {step:>9.1f} {serial / step:>8.1f} {serial / step / n:>6.2f} "
+            name = mode if tol is None else f"{mode} {tol:g}"
+            print(f"  {topology:>9} {name:>12} {step:>9.1f} {serial / step:>8.1f} {serial / step / n:>6.2f} "
                   + " ".join(f"{i:>8.3f}" for i in imbs))
             if not a.no_exchanges:
                 for ln, (by, cells) in enumerate(zip(xc, [c for _, _, c, _ in per_level])):
