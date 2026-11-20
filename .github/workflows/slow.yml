@@ -147,6 +147,8 @@ jobs:
         - { case: mhd_hll_L1, steps: 8 }
         - { case: mhd_hlld_L1, steps: 8 }
         - { case: mhd_hall_L1, steps: 8 }
+        - { case: mhd_hall_hyper_L1, steps: 8 }
+        - { case: mhd_hall_hyper_spatial_L1, steps: 8 }
         - { case: mhd_tagged_1d, steps: 40 }
 
     steps:

@@ -22,7 +22,8 @@ void advance(MHDModel<opts> const& model, auto& level, double const t0, double c
 {
     using R  = MHDModel<opts>::Reconstruction;
     using RS = MHDModel<opts>::Riemann;
-    core::MHDSteps<R, RS> const steps{model.gamma, model.resistivity};
+    core::MHDSteps<R, RS> const steps{
+        model.gamma, {model.resistivity, model.hyper_resistivity, model.hyper_mode}};
     switch (model.scheme)
     {
         case MHDOpts::TimeIntegratorType::Euler:

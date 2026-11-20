@@ -88,6 +88,13 @@ CASES = {
     # Hall MHD (the Hall term in the fluxes and the constrained transport; PHARE's whistler cw: 0)
     "mhd_hall_L0": dict(mhd_advance=True, hall=True, boxes=(), steps=8, pops=[]),
     "mhd_hall_L1": dict(mhd_advance=True, hall=True, boxes=((10, 29),), steps=8, pops=[]),
+    # hyper resistivity (with Hall only, as PHARE): the constant mode alone (nu small: explicit
+    #  4th order diffusion, stable for dt nu / dx^4 small: 0.016 at L1), the spatial mode
+    #  (nu dx^2 (|B| / rho + 1)) with resistivity
+    "mhd_hall_hyper_L1": dict(mhd_advance=True, hall=True, nu=1e-4, boxes=((10, 29),), steps=8,
+                              pops=[]),
+    "mhd_hall_hyper_spatial_L1": dict(mhd_advance=True, hall=True, eta=0.05, nu=0.01,
+                                      hyper_mode="spatial", boxes=((10, 29),), steps=8, pops=[]),
     # HLLD on the cells' values (no reconstruction: PHARE's res/sim/all.txt has this one)
     "mhd_hlld_constant_L1": dict(mhd_advance=True, reconstruction="Constant", limiter="None",
                                  riemann="HLLD", boxes=((10, 29),), steps=8, pops=[]),
@@ -404,7 +411,8 @@ def _advance_mhd_1d(ph, out, case, largest_patch_size, fmt, fine_dump):
         strict=True,
         nesting_buffer=1,
         eta=case.get("eta", 0.0),
-        nu=0.0,
+        nu=case.get("nu", 0.0),
+        hyper_mode=case.get("hyper_mode", "constant"),
         gamma=5.0 / 3.0,
         reconstruction=case.get("reconstruction", "Linear"),
         limiter=case.get("limiter", "VanLeer"),
