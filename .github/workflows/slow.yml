@@ -107,6 +107,10 @@ jobs:
                  cpp_1_Linear_VanLeer_Rusanov_true, cpp_3_1_6]
 
     steps:
+    - uses: actions/checkout@v4 # this file only: its hash keys the module cache (build flags)
+      with:
+        sparse-checkout: .github/workflows/slow.yml
+        sparse-checkout-cone-mode: false
     - uses: actions/checkout@v4
       with:
         repository: PHAREHUB/PHARE
