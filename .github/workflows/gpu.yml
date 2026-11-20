@@ -74,7 +74,7 @@ jobs:
         #  LD_LIBRARY_PATH for test runs, and the toolkit's cudart cannot run on the simulated driver
         sed -i "s|^path: .*|path: ${VGPU_SHIM_DIR}|" res/mkn/clang_cuda_ci.yaml
         grep -n "^path:\|cuda.arch" res/mkn/clang_cuda_ci.yaml
-        curl -Lo mkn https://github.com/mkn/mkn/releases/download/latest/mkn_nix
+        curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors -o mkn https://github.com/mkn/mkn/releases/latest/download/mkn_nix
         chmod +x mkn && mv mkn /usr/local/bin/mkn
     - name: Build/Test core
       run: |
@@ -119,7 +119,7 @@ jobs:
         #  developer's: CI uses mkn's defaults (~/.maiken/repo, https)
         sed -i -e '/^local:/,+2d' -e '/^remote:/,+2d' res/mkn/hip_thrust_ci.yaml
         cat res/mkn/hip_thrust_ci.yaml
-        curl -Lo mkn https://github.com/mkn/mkn/releases/download/latest/mkn_nix
+        curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors -o mkn https://github.com/mkn/mkn/releases/latest/download/mkn_nix
         chmod +x mkn && mv mkn /usr/local/bin/mkn
     - name: Build/Test core
       run: |
