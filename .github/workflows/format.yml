@@ -77,7 +77,7 @@ jobs:
         echo "damn: $(git log --oneline -1)"
 
     - run: |
-        curl -Lo mkn https://github.com/mkn/mkn/releases/download/latest/mkn_nix
+        curl -Lo mkn https://github.com/mkn/mkn/releases/latest/download/mkn_nix
         chmod +x mkn
         KLOG=3 ./mkn build -dKOqp iwyu_fix -Wx res/mkn/mpi -t 4 # build: the module must link
         git config --global --add safe.directory "$PWD"
@@ -128,7 +128,7 @@ jobs:
     - name: compile commands
       run: |
         git config --global --add safe.directory "$PWD"
-        curl -Lo mkn https://github.com/mkn/mkn/releases/download/latest/mkn_nix
+        curl -Lo mkn https://github.com/mkn/mkn/releases/latest/download/mkn_nix
         chmod +x mkn && mv mkn /usr/local/bin/mkn
         python3 res/ci/compile_db.py test_plamn_core,py_etc,py_sim -dKO -x res/mkn/mpi
 
