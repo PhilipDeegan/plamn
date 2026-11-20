@@ -184,6 +184,18 @@ def majority_owner(fine, coarse, coarse_ranks, ratio, n_ranks):
     return out
 
 
+def owner_above(coarse, fine, fine_ranks, ratio, n_ranks):
+    """each coarse patch's rank: the owner of most of the fine cells above it (its box refined),
+    -1 where no fine patch is above"""
+    grid = OwnerGrid(fine, fine_ranks)
+    out = []
+    for lo, up in coarse:
+        owners, cells = grid.overlap(np.asarray(lo) * ratio, (np.asarray(up) + 1) * ratio - 1)
+        out.append(int(np.argmax(np.bincount(owners, weights=cells, minlength=n_ranks)))
+                   if len(owners) else -1)
+    return out
+
+
 def spill(ranks, weights, node_of_rank, numa_of_rank, tol):
     """no rank above (1 + tol) of the mean: an overloaded rank, the most loaded first, hands
     patches (the heaviest that fits in its excess, else its lightest) to the least loaded rank
@@ -233,10 +245,13 @@ def main():
     p.add_argument("--topologies", nargs="+", default=["4:2", "100:10", "1000:10"],
                    help="ranks:ranks per node[:NUMA zones per node, default --numa]")
     p.add_argument("--numa", type=int, default=2, help="NUMA zones a node (dual socket)")
-    p.add_argument("--partition", nargs="+", default=["levels"], choices=["levels", "aligned"],
+    p.add_argument("--partition", nargs="+", default=["levels"],
+                   choices=["levels", "aligned", "finest"],
                    help="levels: each level along the curve (plamn's); aligned: level 0 along "
                    "the curve, a finer patch to the owner of most of the coarse cells under it, "
-                   "then spilled (--spill)")
+                   "then spilled (--spill); finest: the finest level along the curve, a coarser "
+                   "patch to the owner of most of the fine cells above it (the rest along the "
+                   "curve), then spilled")
     p.add_argument("--spill", type=float, nargs="+", default=[0.1],
                    help="aligned: a rank's tolerance over the mean before it hands patches on")
     p.add_argument("--no-exchanges", action="store_true", help="skip the face counts (big runs)")
@@ -264,7 +279,8 @@ def main():
         print(f"  1 core: {serial:.0f} s a coarse step (L0 1, L1 {r}, L2 {r * r} substeps)")
         print(f"  {'topology':>9} {'partition':>12} {'step s':>9} {'speedup':>8} {'eff':>6} "
               + " ".join(f"{'imb L' + str(ln):>8}" for ln in range(len(levels))))
-        strategies = [(m, t) for m in a.partition for t in (a.spill if m == "aligned" else [None])]
+        strategies = [(m, t) for m in a.partition
+                      for t in (a.spill if m in ("aligned", "finest") else [None])]
         for (mode, tol), topology in ((x, t) for t in a.topologies for x in strategies):
             fields = [int(x) for x in topology.split(":")]
             n, per_node = fields[0], fields[1]
@@ -273,15 +289,32 @@ def main():
             node_of_rank = [k // per_node for k in range(n)]
             numa_of_rank = [(k % per_node) // per_zone for k in range(n)]
             partition = getattr(plamn_etc, f"partition_{nd}")
-            step, imbs, xc, owners = 0.0, [], [], []
+            step, imbs, xc = 0.0, [], []
+            curve = lambda patches, w: partition(  # noqa: E731
+                [(lo, up) for lo, up in patches], list(map(float, w)), node_of_rank,
+                numa_of_rank)
+            owners = [None] * len(per_level)
+            if mode == "finest":  # the finest level first, each coarser one under it
+                for ln in reversed(range(len(per_level))):
+                    patches, w = per_level[ln][0], per_level[ln][1]
+                    if ln == len(per_level) - 1:
+                        owners[ln] = curve(patches, w)
+                        continue
+                    ranks = owner_above(patches, per_level[ln + 1][0], owners[ln + 1], r, n)
+                    rest = [i for i, rk in enumerate(ranks) if rk < 0]
+                    if rest:
+                        for i, rk in zip(rest, curve([patches[i] for i in rest], w[rest])):
+                            ranks[i] = rk
+                    owners[ln] = spill(ranks, w, node_of_rank, numa_of_rank, tol)
             for ln, (patches, w, _, _) in enumerate(per_level):
-                if mode == "aligned" and ln > 0:
+                if mode == "finest":
+                    ranks = owners[ln]
+                elif mode == "aligned" and ln > 0:
                     ranks = majority_owner(patches, per_level[ln - 1][0], owners[ln - 1], r, n)
                     ranks = spill(ranks, w, node_of_rank, numa_of_rank, tol)
                 else:
-                    ranks = partition([(lo, up) for lo, up in patches], list(map(float, w)),
-                                      node_of_rank, numa_of_rank)
-                owners.append(ranks)
+                    ranks = curve(patches, w)
+                owners[ln] = ranks
                 load = np.bincount(ranks, weights=w, minlength=n)
                 step += r**ln * load.max()
                 imbs.append(load.max() / load.mean())
