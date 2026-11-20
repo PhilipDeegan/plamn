@@ -87,3 +87,17 @@ def phare_build_config():
 
 def phare_deps():
     return {}
+
+
+def restored_time(folder):
+    """the time a restart folder (restart_path_for_time's) holds: its restart.h5's /restart
+    time (pyphare.pharein.restarts.restored_time, PHARE master's cpp_etc's)"""
+    from pathlib import Path
+
+    import h5py
+
+    file = Path(folder) / "restart.h5"
+    if not file.exists():
+        raise RuntimeError(f"no restart file {file} under {folder}")
+    with h5py.File(file, "r") as f:
+        return float(f["/restart"].attrs["time"])

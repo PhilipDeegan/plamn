@@ -59,6 +59,6 @@ runs:
   - if: inputs.mkn == 'true'
     shell: bash
     run: |
-      curl -Lo mkn https://github.com/mkn/mkn/releases/download/latest/mkn_nix
+      curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors -o mkn https://github.com/mkn/mkn/releases/latest/download/mkn_nix
       chmod +x mkn && mkdir -p "$RUNNER_TEMP/mkn" && mv mkn "$RUNNER_TEMP/mkn/"
       echo "$RUNNER_TEMP/mkn" >> $GITHUB_PATH
