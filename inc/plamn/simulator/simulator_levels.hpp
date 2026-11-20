@@ -207,6 +207,10 @@ void Simulator<opts>::initialize_mhd_()
             solver::mhd::initialize_state(models_.mhd, patch, dict_["simulation"]);
         });
         level.fill_state_ghosts(0, startTime_);
+        // a face on a periodic boundary is initialized twice (at 0 and at L): every patch
+        //  holding it takes the max of its copies, once, after the ghost fill (PHARE's
+        //  MHDMessenger fillRootGhosts)
+        level.copy(damn::amr::max_borders, "MHD_B");
         // the refinement boxes' levels, refined (PHARE's MHDMessenger initLevel)
         for (std::size_t ln = 1; ln <= refinement_boxes_.size(); ++ln)
         {

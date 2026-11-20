@@ -50,6 +50,11 @@ void initialize_root(HybridModel<opts>& model, auto&& level, auto const& sim)
         }
     });
     level.copy(damn::amr::fill_ghosts, "EM_B");
+    // a node on a periodic boundary is initialized twice (at 0 and at L; they differ where the
+    //  profile is not periodic): every patch holding it takes the max of its copies, once, after
+    //  the ghost fill (the max runs over whole ghost overlaps), before anything reads B (PHARE's
+    //  fillRootGhosts)
+    level.copy(damn::amr::max_borders, "EM_B");
     level.copy(damn::amr::fill_ghosts, "EM_E");
     level.check_set("EM_B", "root initialization"); // E: from Ohm's law below
 

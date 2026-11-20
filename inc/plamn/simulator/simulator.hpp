@@ -451,7 +451,7 @@ private:
     void rebalance_(double t); // level 0 onto new owners, then each finer level
 
     void register_resources_();
-    // the MHD states' (conservative) and E's resources: MHDState_<s>, MHD_E
+    // the MHD states' (conservative) and E's resources: MHDState_<s>, MHD_E, MHD_B (state 0's B)
     void register_mhd_resources_();
     NO_DISCARD static std::string mhd_state_key(std::size_t const s)
     {
