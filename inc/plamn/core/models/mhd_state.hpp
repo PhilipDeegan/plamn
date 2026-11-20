@@ -19,13 +19,13 @@ struct MHDState
     Grid P;
 };
 
-// one face direction's fluxes of the conserved quantities (F_B: unused by the ideal update, B
-//  is evolved by Faraday from the constrained transport E, as PHARE)
+// one face direction's fluxes of the evolved quantities but B (B is evolved by Faraday from the
+//  constrained transport E, as PHARE: the Godunov faces' B fluxes are not stored)
 template<typename Grid, typename VecField>
 struct MHDFaceFluxes
 {
     Grid F_rho;
-    VecField F_rhoV, F_B;
+    VecField F_rhoV;
     Grid F_Etot;
 };
 

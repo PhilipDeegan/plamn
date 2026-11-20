@@ -26,7 +26,7 @@ struct GodunovTile
     Field_t rho;
     VecField_t V, B;
     Field_t P, F_rho;
-    VecField_t F_rhoV, F_B;
+    VecField_t F_rhoV;
     Field_t F_Etot;
     VecField_t vt;
     Field_t aL, aR, dL, dR;
@@ -65,8 +65,8 @@ public:
 
     template<std::size_t dir, typename Field, typename VecField>
     void operator()(auto const& layout, Field const& rho, VecField const& V, VecField const& B,
-                    Field const& P, Field& F_rho, VecField& F_rhoV, VecField& F_B, Field& F_Etot,
-                    VecField& vt, Field& aL, Field& aR, Field& dL, Field& dR) const
+                    Field const& P, Field& F_rho, VecField& F_rhoV, Field& F_Etot, VecField& vt,
+                    Field& aL, Field& aR, Field& dL, Field& dR) const
     {
         if constexpr (not is_field_tile_set_v<Field>)
             // captureless kernel: the fields and the face travel as arguments, device-copyable
@@ -77,20 +77,20 @@ public:
                     Face_t::store(ijk, face.template operator()<dir>(ijk, rho_, V_, B_, P_),
                                   out...);
                 },
-                face_, rho, V, B, P, F_rho, F_rhoV, F_B, F_Etot, vt, aL, aR, dL, dR);
+                face_, rho, V, B, P, F_rho, F_rhoV, F_Etot, vt, aL, aR, dL, dR);
         else if constexpr (Field::alloc_mode == damn::AllocatorMode::GPU_UNIFIED)
-            on_tiles_gpu_<dir>(rho, V, B, P, F_rho, F_rhoV, F_B, F_Etot, vt, aL, aR, dL, dR);
+            on_tiles_gpu_<dir>(rho, V, B, P, F_rho, F_rhoV, F_Etot, vt, aL, aR, dL, dR);
         else
             for (std::size_t ti = 0; ti < tile_count(F_rho); ++ti)
-                on_tile<dir>(ti, rho, V, B, P, F_rho, F_rhoV, F_B, F_Etot, vt, aL, aR, dL, dR);
+                on_tile<dir>(ti, rho, V, B, P, F_rho, F_rhoV, F_Etot, vt, aL, aR, dL, dR);
     }
 
     // Hall: as operator(), J in, the faces' current and rho averages (jt, rhot) out for the
     //  constrained transport; untiled fields only (the tiled / GPU paths: not yet)
     template<std::size_t dir, typename Field, typename VecField>
     void hall(auto const& layout, Field const& rho, VecField const& V, VecField const& B,
-              Field const& P, VecField const& J, Field& F_rho, VecField& F_rhoV, VecField& F_B,
-              Field& F_Etot, VecField& vt, Field& aL, Field& aR, Field& dL, Field& dR, VecField& jt,
+              Field const& P, VecField const& J, Field& F_rho, VecField& F_rhoV, Field& F_Etot,
+              VecField& vt, Field& aL, Field& aR, Field& dL, Field& dR, VecField& jt,
               Field& rhot) const
     {
         static_assert(not is_field_tile_set_v<Field>, "plamn: Hall MHD on tiles: not yet");
@@ -103,24 +103,24 @@ public:
                 Face_t::store(ijk, r, out...);
                 Face_t::store_hall(ijk, r, jt_, rhot_);
             },
-            face_, rho, V, B, P, J, jt, rhot, F_rho, F_rhoV, F_B, F_Etot, vt, aL, aR, dL, dR);
+            face_, rho, V, B, P, J, jt, rhot, F_rho, F_rhoV, F_Etot, vt, aL, aR, dL, dR);
     }
 
     // one tile of the tiled fields, eg as one task of a thread pool
     template<std::size_t dir>
     void on_tile(std::size_t const tile_idx, auto const& rho, auto const& V, auto const& B,
-                 auto const& P, auto& F_rho, auto& F_rhoV, auto& F_B, auto& F_Etot, auto& vt,
-                 auto& aL, auto& aR, auto& dL, auto& dR) const
+                 auto const& P, auto& F_rho, auto& F_rhoV, auto& F_Etot, auto& vt, auto& aL,
+                 auto& aR, auto& dL, auto& dR) const
     {
         tile_exec_with_layout_at(
             tile_idx,
             [&](auto& layout, auto const& rho_t, auto const& V_t, auto const& B_t, auto const& P_t,
-                auto F_rho_t, auto F_rhoV_t, auto F_B_t, auto F_Etot_t, auto vt_t, auto aL_t,
-                auto aR_t, auto dL_t, auto dR_t) {
+                auto F_rho_t, auto F_rhoV_t, auto F_Etot_t, auto vt_t, auto aL_t, auto aR_t,
+                auto dL_t, auto dR_t) {
                 (*this).template operator()<dir>(layout, rho_t, V_t, B_t, P_t, F_rho_t, F_rhoV_t,
-                                                 F_B_t, F_Etot_t, vt_t, aL_t, aR_t, dL_t, dR_t);
+                                                 F_Etot_t, vt_t, aL_t, aR_t, dL_t, dR_t);
             },
-            rho, V, B, P, F_rho, F_rhoV, F_B, F_Etot, vt, aL, aR, dL, dR);
+            rho, V, B, P, F_rho, F_rhoV, F_Etot, vt, aL, aR, dL, dR);
     }
 
 private:
@@ -130,10 +130,9 @@ private:
     void on_tiles_gpu_([[maybe_unused]] Field const& rho, [[maybe_unused]] VecField const& V,
                        [[maybe_unused]] VecField const& B, [[maybe_unused]] Field const& P,
                        [[maybe_unused]] Field& F_rho, [[maybe_unused]] VecField& F_rhoV,
-                       [[maybe_unused]] VecField& F_B, [[maybe_unused]] Field& F_Etot,
-                       [[maybe_unused]] VecField& vt, [[maybe_unused]] Field& aL,
-                       [[maybe_unused]] Field& aR, [[maybe_unused]] Field& dL,
-                       [[maybe_unused]] Field& dR) const
+                       [[maybe_unused]] Field& F_Etot, [[maybe_unused]] VecField& vt,
+                       [[maybe_unused]] Field& aL, [[maybe_unused]] Field& aR,
+                       [[maybe_unused]] Field& dL, [[maybe_unused]] Field& dR) const
     {
 #if DAMN_HAVE_GPU
         using Launcher = damn::core::gpu::TileLauncher</*sync=*/true>;
@@ -151,7 +150,6 @@ private:
                           tile_at(P, ti),
                           F_rho_t,
                           tile_at(F_rhoV, ti),
-                          tile_at(F_B, ti),
                           tile_at(F_Etot, ti),
                           tile_at(vt, ti),
                           tile_at(aL, ti),
@@ -173,8 +171,7 @@ private:
             auto& it = ip[Launcher::tile_idx()];
             Launcher::for_each_point(it.box, [&](auto const& ijk) {
                 Face_t::store(ijk, it.face.template operator()<dir>(ijk, it.rho, it.V, it.B, it.P),
-                              it.F_rho, it.F_rhoV, it.F_B, it.F_Etot, it.vt, it.aL, it.aR, it.dL,
-                              it.dR);
+                              it.F_rho, it.F_rhoV, it.F_Etot, it.vt, it.aL, it.aR, it.dL, it.dR);
             });
         });
 #else

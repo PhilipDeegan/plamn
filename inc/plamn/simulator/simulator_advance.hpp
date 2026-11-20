@@ -178,7 +178,10 @@ void Simulator<opts>::prepare_step_(int const ln, double const t)
     models_.visit(l, [&](auto& model) {
         if constexpr (solver::is_hybrid_model_v<std::remove_cvref_t<decltype(model)>>)
             solver::hybrid::prepare_step(model, level_services_(l));
-        else // the state at the step's start (PHARE's MHDMessenger prepareStep), every point
+        else if (ln + 1 < hierarchy_.max_levels)
+            // the state at the step's start (PHARE's MHDMessenger prepareStep), every point: the
+            //  reflux redoes the step from it, so only a level that can have a finer one (one
+            //  made by a regrid after this is still refluxed at the step's end)
             MHDLevel{*this, l}.per_patch([](auto& patch) {
                 auto& u       = patch.states[0];
                 auto const cp = [](auto const& from, auto& to) {
