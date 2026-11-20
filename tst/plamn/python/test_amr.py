@@ -179,7 +179,7 @@ class AmrTest(unittest.TestCase):
         h = Chopper(sim, ranks=2, partition="columns", block=10).chop(
             {1: [([20], [59])]}
         )
-        cost = {"Self": 0.0, "Local": 0.0, "Numa": 1.0, "Node": 1.0, "Remote": 1.0}
+        cost = {"Self": 0.0, "Local": 0.0, "Numa": 1.0, "Node": 1.0, "Socket": 1.0, "Remote": 1.0}
         crossing = sum(
             m[key][d]
             for m in h.metrics()

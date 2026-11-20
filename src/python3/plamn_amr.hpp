@@ -49,12 +49,19 @@ PyBox<dim> from_box(damn::core::Box<int, dim> const& b)
     return {b.lower.toArray(), b.upper.toArray()};
 }
 
-// ranks per node given as each rank's node
-inline damn::amr::Topology topology_of(std::vector<int> const& node_of_rank)
+// ranks given as each rank's node, and its memory domain on the node (none: one per node)
+inline damn::amr::Topology topology_of(std::vector<int> const& node_of_rank,
+                                       std::vector<int> const& numa_of_rank = {})
 {
+    if (!numa_of_rank.empty() and numa_of_rank.size() != node_of_rank.size())
+        throw std::runtime_error("plamn: numa_of_rank: one per rank, as node_of_rank");
     auto t = damn::amr::single_node(static_cast<int>(node_of_rank.size()));
     for (std::size_t r = 0; r < node_of_rank.size(); ++r)
+    {
         t.ranks[r].node = node_of_rank[r];
+        if (!numa_of_rank.empty())
+            t.ranks[r].numa = numa_of_rank[r];
+    }
     return t;
 }
 
@@ -122,27 +129,31 @@ void declare_amr(nb::module_& m)
 
     m.def(("partition_" + d).c_str(),
           [](std::vector<PyBox<dim>> const& boxes, std::vector<double> const& weights,
-             std::vector<int> const& node_of_rank) {
+             std::vector<int> const& node_of_rank, std::vector<int> const& numa_of_rank) {
               std::vector<damn::core::Box<int, dim>> bs;
               bs.reserve(boxes.size());
               for (auto const& [lo, up] : boxes)
                   bs.push_back(to_box<dim>(lo, up));
-              auto const t = topology_of(node_of_rank);
+              auto const t = topology_of(node_of_rank, numa_of_rank);
               return damn::amr::partition(bs, weights, damn::amr::node_share_capacity(t));
           },
+          nb::arg("boxes"), nb::arg("weights"), nb::arg("node_of_rank"),
+          nb::arg("numa_of_rank") = std::vector<int>{},
           "each box's rank: the boxes along the Hilbert curve cut by weight, each node an equal "
-          "share split over its ranks (node_of_rank: each rank's node)");
+          "share split over its ranks (node_of_rank: each rank's node; numa_of_rank: its memory "
+          "domain on the node)");
 
     m.def(("metrics_" + d).c_str(),
           [](IntArray<dim> const& domain_lower, IntArray<dim> const& domain_upper,
              std::array<bool, dim> const& periodic, int const ratio,
              std::vector<std::vector<PyPatch<dim>>> const& levels,
              std::vector<int> const& node_of_rank, int const reach,
-             std::vector<std::vector<double>> const& weights) {
+             std::vector<std::vector<double>> const& weights,
+             std::vector<int> const& numa_of_rank) {
               auto const h = hierarchy_of<dim>(domain_lower, domain_upper, periodic, ratio, levels);
               nb::list out;
               for (auto const& lm :
-                   damn::amr::metrics(h, topology_of(node_of_rank), reach, weights))
+                   damn::amr::metrics(h, topology_of(node_of_rank, numa_of_rank), reach, weights))
               {
                   nb::dict dm;
                   dm["level"]          = lm.level;
@@ -165,6 +176,9 @@ void declare_amr(nb::module_& m)
               }
               return out;
           },
+          nb::arg("domain_lower"), nb::arg("domain_upper"), nb::arg("periodic"), nb::arg("ratio"),
+          nb::arg("levels"), nb::arg("node_of_rank"), nb::arg("reach"), nb::arg("weights"),
+          nb::arg("numa_of_rank") = std::vector<int>{},
           "per level: patches, cells, weight per rank, imbalance, and the cells exchanged by "
           "distance (same level ghosts within reach, coarser cells under each grown patch)");
 
@@ -172,12 +186,13 @@ void declare_amr(nb::module_& m)
           [](IntArray<dim> const& domain_lower, IntArray<dim> const& domain_upper,
              std::array<bool, dim> const& periodic, int const ratio,
              std::vector<std::vector<PyPatch<dim>>> const& from,
-             std::vector<std::vector<PyPatch<dim>>> const& to,
-             std::vector<int> const& node_of_rank) {
+             std::vector<std::vector<PyPatch<dim>>> const& to, std::vector<int> const& node_of_rank,
+             std::vector<int> const& numa_of_rank) {
               auto const a = hierarchy_of<dim>(domain_lower, domain_upper, periodic, ratio, from);
               auto const b = hierarchy_of<dim>(domain_lower, domain_upper, periodic, ratio, to);
               nb::list out;
-              for (auto const& lm : damn::amr::migration(a, b, topology_of(node_of_rank)))
+              for (auto const& lm :
+                   damn::amr::migration(a, b, topology_of(node_of_rank, numa_of_rank)))
               {
                   nb::dict dm;
                   dm["level"]   = lm.level;
@@ -187,6 +202,9 @@ void declare_amr(nb::module_& m)
               }
               return out;
           },
+          nb::arg("domain_lower"), nb::arg("domain_upper"), nb::arg("periodic"), nb::arg("ratio"),
+          nb::arg("from"), nb::arg("to"), nb::arg("node_of_rank"),
+          nb::arg("numa_of_rank") = std::vector<int>{},
           "per level of `to`, the cells moving from `from`'s owners by distance: held by the "
           "old level (moved) or refined from the old coarser level (refined)");
 }

@@ -56,6 +56,7 @@ class NoDataHierarchy:
     node_of_rank: list  # each rank's node
     levels: list = field(default_factory=list)  # [[(lower, upper, rank)]]
     weights: list = field(default_factory=list)  # [[weight per patch]]
+    numa_of_rank: list = None  # each rank's memory domain on its node (None: one a node)
 
     @property
     def ranks(self):
@@ -73,6 +74,7 @@ class NoDataHierarchy:
             self.node_of_rank,
             reach,
             self.weights,
+            self.numa_of_rank or [],
         )
 
     def total_work_imbalance(self):
@@ -88,12 +90,13 @@ class NoDataHierarchy:
     def comm_cost(self, cost=None, reach=None):
         """the cells exchanged (same level ghosts and coarse cells under each patch) weighed by
         distance: cost {distance: per cell}, placeholders until measured (Self and Local free,
-        Numa 0.3, Node 1, Remote 10)"""
+        Numa 0.3, Node 1, Socket 2: another memory domain of the node, Remote 10)"""
         cost = cost or {
             "Self": 0.0,
             "Local": 0.0,
             "Numa": 0.3,
             "Node": 1.0,
+            "Socket": 2.0,
             "Remote": 10.0,
         }
         total = 0.0
@@ -113,6 +116,7 @@ class NoDataHierarchy:
             previous.levels,
             self.levels,
             self.node_of_rank,
+            self.numa_of_rank or [],
         )
 
     def migration_cost(self, previous, cost=None):
@@ -122,6 +126,7 @@ class NoDataHierarchy:
             "Local": 0.0,
             "Numa": 0.3,
             "Node": 1.0,
+            "Socket": 2.0,
             "Remote": 10.0,
         }
         return sum(
@@ -148,7 +153,7 @@ class NoDataHierarchy:
         for m in self.metrics(reach):
             exchanged = ", ".join(
                 f"{d} {m['ghost_cells'][d]}/{m['coarse_cells'][d]}"
-                for d in ("Self", "Local", "Numa", "Node", "Remote")
+                for d in ("Self", "Local", "Numa", "Node", "Socket", "Remote")
                 if m["ghost_cells"][d] or m["coarse_cells"][d]
             )
             lines.append(
@@ -260,6 +265,7 @@ class Chopper:
     sim: object
     ranks: int = 1
     ranks_per_node: int = None  # default: all on one node
+    numa_per_node: int = 1  # memory domains a node (2: dual socket), its ranks split evenly
     mode: str = "even"
     partition: str = "levels"
     block: int = 8
@@ -290,6 +296,8 @@ class Chopper:
         )
         per_node = self.ranks_per_node or self.ranks
         self.node_of_rank = [r // per_node for r in range(self.ranks)]
+        per_zone = max(1, -(-per_node // self.numa_per_node))
+        self.numa_of_rank = [(r % per_node) // per_zone for r in range(self.ranks)]
 
     def _patch_boxes(self, ln, boxes):
         size, gran = self.patch_size, 1
@@ -478,6 +486,7 @@ class Chopper:
             self.origin,
             self.sim.interp_order,
             self.node_of_rank,
+            numa_of_rank=self.numa_of_rank,
         )
         for ln in sorted(tag_boxes):
             if ln != len(h.levels):
@@ -521,7 +530,7 @@ class Chopper:
 
 
 # distance weighted per cell costs: placeholders until measured (Self and Local free)
-COSTS = {"Self": 0.0, "Local": 0.0, "Numa": 0.3, "Node": 1.0, "Remote": 10.0}
+COSTS = {"Self": 0.0, "Local": 0.0, "Numa": 0.3, "Node": 1.0, "Socket": 2.0, "Remote": 10.0}
 
 
 def remote_ranks(h, reach=None):
