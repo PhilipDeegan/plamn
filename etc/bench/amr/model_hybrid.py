@@ -77,6 +77,39 @@ def chop(plamn_etc, boxes, size, ratio, ln):
     return out
 
 
+def box_minus(lo, up, cut_lo, cut_up):
+    """the box lo..up less cut_lo..cut_up (inclusive), as disjoint boxes: per axis the slabs
+    below and above the cut, the rest narrowed to the cut along that axis"""
+    lo, up = list(lo), list(up)
+    if any(cut_up[d] < lo[d] or cut_lo[d] > up[d] for d in range(len(lo))):
+        return [(lo, up)]
+    out = []
+    for d in range(len(lo)):
+        if lo[d] < cut_lo[d]:
+            out.append((list(lo), up[:d] + [cut_lo[d] - 1] + up[d + 1:]))
+            lo[d] = cut_lo[d]
+        if up[d] > cut_up[d]:
+            out.append((lo[:d] + [cut_up[d] + 1] + lo[d + 1:], list(up)))
+            up[d] = cut_up[d]
+    return out
+
+
+def split_under(boxes, finer, ratio):
+    """boxes split into (under, rest): under, the parts below the finer level's boxes (coarsened)"""
+    under, rest = [], [(list(lo), list(up)) for lo, up in boxes]
+    for flo, fup in finer:
+        clo, cup = [x // ratio for x in flo], [x // ratio for x in fup]
+        left = []
+        for lo, up in rest:
+            ilo = [max(a, b) for a, b in zip(lo, clo)]
+            iup = [min(a, b) for a, b in zip(up, cup)]
+            if all(a <= b for a, b in zip(ilo, iup)):
+                under.append((ilo, iup))
+            left += box_minus(lo, up, clo, cup)
+        rest = left
+    return under, rest
+
+
 def costs_of(patches, ppc_l, costs, reach):
     lo = np.array([p[0] for p in patches])
     up = np.array([p[1] for p in patches])
@@ -241,7 +274,10 @@ def main():
     p.add_argument("--ratio", type=int, default=2)
     p.add_argument("--ppc", type=float, default=100)
     p.add_argument("--refined-nbr", type=int, default=6, help="refined particles a particle")
-    p.add_argument("--patch", type=int, nargs="+", default=[20], help="largest patch size")
+    p.add_argument("--patch", nargs="+", default=["20"],
+                   help="largest patch size, every level's (20) or per level (10/10/20: L0 10, L1 "
+                   "10, L2 20; the last for any further level); size:under (20:5/20:10/20) chops "
+                   "the cells under the next finer level at under, the rest at size")
     p.add_argument("--topologies", nargs="+", default=["4:2", "100:10", "1000:10"],
                    help="ranks:ranks per node[:NUMA zones per node, default --numa]")
     p.add_argument("--numa", type=int, default=2, help="NUMA zones a node (dual socket)")
@@ -266,7 +302,17 @@ def main():
     boxes = level_boxes(a.cells, r, a.fractions)
     for size in a.patch:
         t0 = time.monotonic()
-        levels = [chop(plamn_etc, b, [size] * nd, r, ln) for ln, b in enumerate(boxes)]
+        sizes = [[int(y) for y in x.split(":")] for x in size.split("/")]
+        sizes += sizes[-1:] * (len(boxes) - len(sizes))
+        levels = []
+        for ln, b in enumerate(boxes):
+            s0, *under = sizes[ln]
+            if under and ln + 1 < len(boxes):
+                below, rest = split_under(b, boxes[ln + 1], r)
+                levels.append(chop(plamn_etc, below, [under[0]] * nd, r, ln)
+                              + chop(plamn_etc, rest, [s0] * nd, r, ln))
+            else:
+                levels.append(chop(plamn_etc, b, [s0] * nd, r, ln))
         per_level = []
         for ln, patches in enumerate(levels):
             ppc_l = a.ppc * (a.refined_nbr / r**nd) ** ln
