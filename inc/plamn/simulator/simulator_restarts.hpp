@@ -147,8 +147,8 @@ void Simulator<opts>::write_restart_(std::string const& dir)
                 {
                     auto& ld          = model.levels[static_cast<int>(ln)];
                     auto const& names = restart_names_(model);
-                    Leases<std::decay_t<decltype(ld)>> leases; // tiled fields:
-                    leases.add(ld, names, amr::Lease::read);   //  untiled to write
+                    Leases leases;                           // tiled fields:
+                    leases.add(ld, names, amr::Lease::read); //  untiled to write
                     write_checkpoint(file, "/level" + std::to_string(ln), hierarchy_.levels[ln], ld,
                                      names);
                 }});
@@ -205,8 +205,8 @@ void Simulator<opts>::load_restart_()
                 {
                     auto& ld          = model.levels[ln];
                     auto const& names = restart_names_(model);
-                    Leases<std::decay_t<decltype(ld)>> leases; // tiled fields: read
-                    leases.add(ld, names, amr::Lease::fill);   //  untiled, written back
+                    Leases leases;                           // tiled fields: read
+                    leases.add(ld, names, amr::Lease::fill); //  untiled, written back
                     read_checkpoint(file, group, hierarchy_.levels[ln], ld, names);
                 }});
     }

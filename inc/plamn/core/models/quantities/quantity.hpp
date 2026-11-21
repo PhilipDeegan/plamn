@@ -29,6 +29,7 @@ enum class Phys : std::uint8_t {
     ScalarFlux, // comp = face direction
     VecFlux,    // comp = (component, face direction)
     AllPrimal,  // scratch, any quantity on primal nodes
+    AllDual,    // scratch, any quantity at cell centres
 };
 
 // tensor components: (row, column); for VecFlux (vector component, face direction)

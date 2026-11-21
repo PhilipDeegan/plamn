@@ -273,7 +273,7 @@ void Simulator<opts>::initialize_mhd_()
         for (std::size_t ln = 1; ln <= refinement_boxes_.size(); ++ln)
         {
             make_level_(static_cast<int>(ln), refinement_boxes_[ln - 1]);
-            initialize_refined_mhd_(ln, startTime_);
+            initialize_refined_(ln, startTime_);
         }
         // tagging: each new level from the tags of the one under it, as long as some are (or
         //  from the supplied tag boxes); pretag is a hybrid one (B before any particle): the
@@ -290,7 +290,7 @@ void Simulator<opts>::initialize_mhd_()
                 clustered_.resize(static_cast<std::size_t>(ln) + 2);
                 clustered_[ln + 1] = boxes;
                 make_level_(ln + 1, boxes);
-                initialize_refined_mhd_(static_cast<std::size_t>(ln) + 1, startTime_);
+                initialize_refined_(static_cast<std::size_t>(ln) + 1, startTime_);
             }
         // every level's old state at t0, for the finer levels' time interpolation
         for (std::size_t ln = 0; ln < levels_.size(); ++ln)
@@ -322,6 +322,120 @@ void Simulator<opts>::initialize_refined_mhd_(std::size_t const ln, double const
             });
     }
     MHDLevel{*this, ln}.fill_state_ghosts(0, t);
+}
+
+template<auto opts>
+void Simulator<opts>::initialize_refined_(std::size_t const ln, double const t)
+{
+    if (models_.is_mhd(ln))
+        return initialize_refined_mhd_(ln, t);
+    if constexpr (Models_t::hybrid_on)
+    {
+        if (models_.is_mhd(ln - 1))
+            return initialize_hybrid_over_mhd_(ln, t);
+        solver::hybrid::initialize_refined(models_.hybrid, level_services_(ln), t);
+    }
+}
+
+template<auto opts>
+void Simulator<opts>::mhd_prims_over_(std::size_t const ln, bool const interior)
+{
+    if constexpr (Models_t::hybrid_on and Models_t::mhd_on)
+    {
+        using damn::amr::LevelRegion;
+        MHDLevel{*this, ln - 1}.per_patch([&](auto& patch) {
+            auto& u = patch.states[0];
+            core::PrimitiveConservativeTransformer{models_.mhd.gamma}.to_primitive(
+                patch.layout, u.rho, u.rhoV, u.B, u.Etot, u.V, u.P);
+        });
+        for (auto& patch : models_.hybrid.levels[static_cast<int>(ln)].data)
+            simulator::coupling::make_prim_scratch(*patch);
+        if (interior)
+            refine_(ln, amr::CellInjector{}, LevelRegion::Interior,
+                    simulator::coupling::prim_pairs());
+        refine_(ln, amr::CellInjector{}, LevelRegion::LevelGhosts,
+                simulator::coupling::prim_pairs());
+    }
+}
+
+template<auto opts>
+void Simulator<opts>::spawn_level_ghosts_(std::size_t const ln, bool const new_ghosts,
+                                          std::uint64_t const salt)
+{
+    if constexpr (Models_t::hybrid_on and Models_t::mhd_on)
+    {
+        using Patch_t     = solver::HybridModel<opts>::Patch_t;
+        auto const pgw    = Patch_t::particle_ghost_width;
+        auto const domain = damn::amr::level_domain(hierarchy_, static_cast<int>(ln));
+        double const Te
+            = dict_["simulation"]["electrons"]["pressure_closure"]["Te"].template to<double>();
+        auto& ld = models_.hybrid.levels[static_cast<int>(ln)];
+        for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
+        {
+            auto const& cell = ld.patches[i].box;
+            std::vector<Box_t> ghosts{
+                damn::core::grow(cell, mkn::kul::ConstArray<int, dimension>(pgw))};
+            for (std::size_t d = 0; d < dimension; ++d)
+                if (!hierarchy_.periodic[d])
+                {
+                    ghosts[0].lower[d] = std::max(ghosts[0].lower[d], domain.lower[d]);
+                    ghosts[0].upper[d] = std::min(ghosts[0].upper[d], domain.upper[d]);
+                }
+            for (auto const& covered :
+                 damn::amr::covered_by_level(hierarchy_, static_cast<int>(ln), ghosts.front()))
+            {
+                std::vector<Box_t> rest;
+                for (auto const& g : ghosts)
+                    for (auto const& r : g.remove(covered))
+                        rest.push_back(r);
+                ghosts = std::move(rest);
+            }
+            simulator::coupling::spawn(
+                *ld.data[i], ghosts,
+                [&](auto& pop) -> auto& {
+                    return new_ghosts ? pop.levelGhostParticlesNew() : pop.levelGhostParticlesOld();
+                },
+                Te, salt);
+        }
+        solver::hybrid::own_level_ghosts(level_services_(ln), new_ghosts);
+    }
+}
+
+template<auto opts>
+void Simulator<opts>::initialize_hybrid_over_mhd_(std::size_t const ln, double const t)
+{
+    if constexpr (Models_t::hybrid_on and Models_t::mhd_on)
+    {
+        using Patch_t = solver::HybridModel<opts>::Patch_t;
+        // the ions' internal energy is (3/2) Pi: MHD's (gamma - 1)^-1 P agrees with it at 5/3 only
+        if (std::abs(models_.mhd.gamma - 5. / 3.) > 1e-12)
+            throw std::runtime_error("plamn coupling: MHD under hybrid levels needs gamma 5/3");
+        double const Te
+            = dict_["simulation"]["electrons"]["pressure_closure"]["Te"].template to<double>();
+
+        mhd_prims_over_(ln, /*interior=*/true);
+        auto level = level_services_(ln);
+        solver::hybrid::refine_magnetic(models_.hybrid, level); // MHD's B (coarse_pairs_)
+        level.fill_magnetic_ghosts("EM_B", t);
+
+        auto& ld = models_.hybrid.levels[static_cast<int>(ln)];
+        for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
+            simulator::coupling::spawn(
+                *ld.data[i], {ld.patches[i].box},
+                [](auto& pop) -> auto& { return pop.domainParticles(); }, Te,
+                simulator::coupling::Salt::domain);
+        spawn_level_ghosts_(ln, /*new_ghosts=*/false, simulator::coupling::Salt::ghosts_at_init);
+        level.per_patch([](auto& patch) {
+            for (auto& pop : patch.ions)
+                pop.levelGhostParticles() = pop.levelGhostParticlesOld();
+        });
+        solver::hybrid::sort_refined_particles(models_.hybrid, level);
+        solver::hybrid::refined_moments(models_.hybrid, level);
+
+        // E from Ohm's law over the moments, its level ghosts MHD's
+        solver::hybrid::ampere_ohm<&Patch_t::em>(models_.hybrid, level);
+        level.fill_electric_ghosts("EM_E", t);
+    }
 }
 
 template<auto opts>

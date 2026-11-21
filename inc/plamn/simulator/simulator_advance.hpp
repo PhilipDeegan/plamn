@@ -188,7 +188,7 @@ void Simulator<opts>::prepare_step_(int const ln, double const t)
             // the state at the step's start (PHARE's MHDMessenger prepareStep), every point: the
             //  reflux redoes the step from it, so only a level that can have a finer one (one
             //  made by a regrid after this is still refluxed at the step's end)
-            MHDLevel{*this, l}.per_patch([](auto& patch) {
+            MHDLevel{*this, l}.per_patch([&, hybrid_over = !models_.is_mhd(l + 1)](auto& patch) {
                 auto& u       = patch.states[0];
                 auto const cp = [](auto const& from, auto& to) {
                     std::copy(from.data(), from.data() + from.size(), to.data());
@@ -199,6 +199,8 @@ void Simulator<opts>::prepare_step_(int const ln, double const t)
                 {
                     cp(u.rhoV.grids[c], patch.old.rhoV.grids[c]);
                     cp(u.B.grids[c], patch.old.B.grids[c]);
+                    if (hybrid_over) // its E ghosts in time (simulator/coupling.hpp)
+                        cp(patch.E.grids[c], patch.E_old.grids[c]);
                 }
             });
     });
@@ -216,7 +218,21 @@ void Simulator<opts>::first_step_(int const level_number, double, double const c
     l.coarse_t       = coarse_t;
     l.coarse_dt      = coarse_dt;
     step_model_(
-        ln, [&](auto& model) { solver::hybrid::first_step(model, level_services_(ln)); },
+        ln,
+        [&](auto& model) {
+            if (!models_.is_mhd(ln - 1))
+                return solver::hybrid::first_step(model, level_services_(ln));
+            // over MHD: the new level ghosts spawned from its state at the step's end
+            level_services_(ln).per_patch([](auto& patch) {
+                for (auto& pop : patch.ions)
+                    pop.levelGhostParticlesNew().clear();
+                for (auto& e : patch.fluxSumE)
+                    e.zero();
+            });
+            mhd_prims_over_(ln, /*interior=*/false);
+            spawn_level_ghosts_(ln, /*new_ghosts=*/true,
+                                simulator::coupling::Salt::ghosts_new(coarse_t + coarse_dt));
+        },
         [](auto& model, auto level) { solver::mhd::first_step(model, level); });
 }
 
@@ -234,7 +250,12 @@ void Simulator<opts>::synchronize_(int const ln, double const t)
 {
     auto const l = static_cast<std::size_t>(ln);
     step_model_(
-        l, [&](auto& model) { solver::hybrid::synchronize(model, level_services_(l), t); },
+        l,
+        [&](auto& model) {
+            if (models_.is_mhd(l - 1))
+                return; // hybrid -> MHD (sync and reflux at the model boundary): not yet
+            solver::hybrid::synchronize(model, level_services_(l), t);
+        },
         [&](auto& model, auto level) { solver::mhd::synchronize(model, level, t); });
     DAMN_SUPER_DEBUG_DO(sums_(l - 1, "synchronized", t); sums_(l, "synchronized", t);)
     fine_dump_(static_cast<std::size_t>(ln) - 1, t);

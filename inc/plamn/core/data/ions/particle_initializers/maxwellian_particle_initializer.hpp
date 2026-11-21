@@ -32,6 +32,7 @@
 #include <tuple>
 #include <type_traits>
 #include <vector>
+#include <utility>
 
 namespace plamn::core
 {
@@ -60,6 +61,29 @@ void maxwellianVelocity(std::array<double, 3> const& V, std::array<double, 3> co
  * Seeded values are reproducible for a given standard library only, since the std distributions
  * used to draw positions and velocities are implementation-defined.
  */
+// one cell's particles: nppc of weight n / nppc, Maxwellian velocities (V, Vth; in basis's
+//  frame if given) and uniform positions in the cell, drawn from a stream keyed by key (a cell's
+//  damn::core::cell_key: the same particles whichever patch or rank loads the cell)
+void load_maxwellian_cell(auto& out, auto const& iCell, double const n,
+                          std::array<double, 3> const& V, std::array<double, 3> const& Vth,
+                          std::uint32_t const nppc, std::uint64_t const key,
+                          std::array<std::array<double, 3>, 3> const* const basis = nullptr)
+{
+    auto constexpr dim = std::tuple_size_v<std::decay_t<decltype(iCell)>>;
+    mkn::kul::SplitMix64 randGen{key};
+    ParticleDeltaDistribution<double> deltaDistrib;
+    std::array<double, 3> particleVelocity;
+    for (std::uint32_t ipart = 0; ipart < nppc; ++ipart)
+    {
+        maxwellianVelocity(V, Vth, randGen, particleVelocity);
+        if (basis)
+            particleVelocity = basisTransform(*basis, particleVelocity);
+        auto const delta
+            = mkn::kul::for_N_make_array<dim>([&](auto) { return deltaDistrib(randGen); });
+        out.emplace_back(n / nppc, iCell, delta, particleVelocity);
+    }
+}
+
 template<typename Particles, typename Layout>
 class MaxwellianParticleInitializer : public ParticleInitializer<Particles, Layout>
 {
@@ -207,11 +231,6 @@ template<typename Particles_t, typename Layout>
 void MaxwellianParticleInitializer<Particles_t, Layout>::loadParticles(Particles_t& particles,
                                                                        Layout const& layout) const
 {
-    auto const deltas = [](auto& pos, auto& gen) {
-        return mkn::kul::for_N_make_array<dimension>([&](auto) { return pos(gen); });
-    };
-
-
     auto const cells = coordinate_vectors(
         layout.dx, layout.cells, mkn::kul::ConstArray<QtyCentering, dimension>(QtyCentering::dual));
 
@@ -269,31 +288,19 @@ void MaxwellianParticleInitializer<Particles_t, Layout>::loadParticles(Particles
         if (n[flatCellIdx] < densityCutOff_)
             continue;
 
-        auto const cellWeight = n[flatCellIdx] / nbrParticlePerCell_;
-        auto const iCell      = cells.points[flatCellIdx].toArray();
-        mkn::kul::SplitMix64 randGen{
-            damn::core::cell_key(seed, populationKey_, layout.level, iCell)};
-        ParticleDeltaDistribution<double> deltaDistrib;
-        std::array<double, 3> particleVelocity;
         std::array<std::array<double, 3>, 3> basis{}; // set and read only for Basis::Magnetic
-
         if (basis_ == Basis::Magnetic)
         {
             auto const B = fns.B();
             localMagneticBasis({B[0][flatCellIdx], B[1][flatCellIdx], B[2][flatCellIdx]}, basis);
         }
-
-        for (std::uint32_t ipart = 0; ipart < nbrParticlePerCell_; ++ipart)
-        {
-            maxwellianVelocity({V[0][flatCellIdx], V[1][flatCellIdx], V[2][flatCellIdx]},
-                               {Vth[0][flatCellIdx], Vth[1][flatCellIdx], Vth[2][flatCellIdx]}, //
-                               randGen, particleVelocity);
-
-            if (basis_ == Basis::Magnetic)
-                particleVelocity = basisTransform(basis, particleVelocity);
-
-            out.emplace_back(cellWeight, iCell, deltas(deltaDistrib, randGen), particleVelocity);
-        }
+        load_maxwellian_cell(out, cells.points[flatCellIdx].toArray(), n[flatCellIdx],
+                             {V[0][flatCellIdx], V[1][flatCellIdx], V[2][flatCellIdx]},
+                             {Vth[0][flatCellIdx], Vth[1][flatCellIdx], Vth[2][flatCellIdx]},
+                             nbrParticlePerCell_,
+                             damn::core::cell_key(seed, populationKey_, layout.level,
+                                                  cells.points[flatCellIdx].toArray()),
+                             basis_ == Basis::Magnetic ? &basis : nullptr);
     }
 
     if constexpr (staged)

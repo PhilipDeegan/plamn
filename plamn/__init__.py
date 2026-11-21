@@ -67,6 +67,15 @@ def cpp_lib(sim):
             f"./mkn.py --dim {sim.ndim} --interp {sim.interp_order}"
             f" --refined {sim.refined_particle_nbr} --layout {layout} --allocator {allocator}"
         )
+        if getattr(sim, "mhd_timestepper", None):
+            # MHD levels under hybrid ones (AMR/max_mhd_level): the hybrid id, then MHD's
+            hall = "true" if getattr(sim, "hall", False) else "false"
+            choices = (sim.reconstruction, sim.limiter, sim.riemann)
+            sim_id += "_" + "_".join(choices) + f"_{hall}"
+            build += (
+                f" --coupled --reconstruction {choices[0]} --limiter {choices[1]}"
+                f" --riemann {choices[2]} --hall {hall}"
+            )
     name = f"plamn.plamn_cpp_{sim_id}"
     try:
         return importlib.import_module(name)
@@ -242,6 +251,59 @@ def _patch_keywords():
     simulation.check_optional_keywords = check_optional_keywords
 
 
+def _patch_coupled_input():
+    """MHD levels under hybrid ones (AMR/max_mhd_level, model_options MHD and hybrid): plamn's
+    own input, no pyphare has coupling. One MHDModel holds the profiles and the ion species the
+    hybrid levels carry, MHDModel(..., protons={charge, mass, nbr_part_per_cell, init,
+    density_cut_off}), with an ElectronModel. Each species' Maxwellian comes from the MHD
+    state (one species for now): n = rho / m, V, vth = sqrt(max(P - Pe, 0) / (n m)) with the
+    isothermal electrons' Pe = Te q n"""
+    import numpy as np
+    from pyphare.pharein import global_vars
+    from pyphare.pharein.mhd_model import MHDModel
+
+    init = MHDModel.__init__
+
+    def init_with_species(self, density=None, vx=None, vy=None, vz=None, bx=None, by=None,
+                          bz=None, p=None, **species):
+        init(self, density, vx, vy, vz, bx, by, bz, p)
+        self.populations = list(species)
+        if len(self.populations) > 1:
+            raise ValueError("plamn coupled input: one ion species for now")
+        md = self.model_dict
+        for name, d in species.items():
+            mass, charge = float(d.get("mass", 1.0)), float(d.get("charge", 1.0))
+            if name in md:
+                raise ValueError(f"population {name}: already registered")
+
+            def n(*x, mass=mass):
+                return md["density"](*x) / mass
+
+            def vth(*x, mass=mass, charge=charge):
+                te = global_vars.sim.electrons.closure.Te
+                ni = n(*x)
+                ti = np.maximum(md["p"](*x) - te * charge * ni, 0.0) / ni
+                return np.sqrt(ti / mass)
+
+            md[name] = {
+                "charge": charge,
+                "mass": mass,
+                "density": n,
+                "vx": md["vx"],
+                "vy": md["vy"],
+                "vz": md["vz"],
+                "vthx": vth,
+                "vthy": vth,
+                "vthz": vth,
+                "nbrParticlesPerCell": int(d.get("nbr_part_per_cell", 100)),
+                "init": dict(seed=d.get("init", {}).get("seed")),
+                "density_cut_off": float(d.get("density_cut_off", 1e-16)),
+            }
+
+    MHDModel.__init__ = init_with_species
+    MHDModel.nbr_populations = lambda self: len(getattr(self, "populations", []))
+
+
 def patch():
     """idempotent: test classes call it from setUpClass (nothing runs at import)"""
     global _patched
@@ -267,6 +329,7 @@ def patch():
     _patch_live_simulators()
     _patch_density_background()
     _patch_tag_boxes()
+    _patch_coupled_input()
 
     # restart directories: 10 digits each side of the point, as the C++ restart_path_for_time
     #  (pyphare's 5 decimals cannot tell small steps apart); keep_last deletes by this name

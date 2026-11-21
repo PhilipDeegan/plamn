@@ -68,7 +68,7 @@ std::vector<typename Simulator<opts>::Box_t> Simulator<opts>::cluster_(int const
         for (auto const& q : tag.quantities)
             for (auto const& component : q.components)
                 tagged_on.push_back(mhd ? component : "EM_" + component);
-        Leases<std::decay_t<decltype(ld)>> leases;
+        Leases leases;
         leases.add(ld, tagged_on, amr::Lease::read);
         for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
         {

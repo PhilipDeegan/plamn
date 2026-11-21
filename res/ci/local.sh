@@ -24,6 +24,7 @@ mkn build -p test_plamn_core_slow -dKO -t "$J" "${W[@]}" -x res/mkn/mpi
 step "python modules (1D, 2D; 1D MHD only, ideal and Hall)"
 ./mkn.py --dim 1 2 -- "${W[@]}"
 ./mkn.py --mhd --no-etc --hall false true -- "${W[@]}"
+./mkn.py --coupled --no-etc --dim 1 -- "${W[@]}" # MHD under hybrid (test_coupled)
 
 step "C++ diagnostics tests (embedded python): 1 rank (mkn test), then 3"
 mkn build test -p test_plamn_diagnostics -dKO -t "$J" "${W[@]}" -x res/mkn/mpi

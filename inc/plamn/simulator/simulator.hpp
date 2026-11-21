@@ -62,6 +62,7 @@
 #include "plamn/core/numerics/ohm/ohm.hpp"
 #include "plamn/initializer/data_provider.hpp"
 #include "plamn/simulator/hybrid_patch.hpp"
+#include "plamn/simulator/coupling.hpp"
 #include "plamn/simulator/simulator_def.hpp"
 #include "plamn/simulator/timestepper.hpp"
 #include "plamn/amr/tagging.hpp"
@@ -331,6 +332,17 @@ private:
     // an MHD level from the coarser one: the advanced state refined (B divergence free), its
     //  ghosts
     void initialize_refined_mhd_(std::size_t ln, double t);
+    // a refined level of whichever model owns it, from the level under it
+    void initialize_refined_(std::size_t ln, double t);
+    // the hybrid level over an MHD one from it: B and E refined, the particles spawned from its
+    //  primitives (domain, level ghosts), the moments, J and E (simulator/coupling.hpp)
+    void initialize_hybrid_over_mhd_(std::size_t ln, double t);
+    // the MHD level ln - 1's primitives now into hybrid level ln's scratch: its level ghosts, and
+    //  its interior too if asked
+    void mhd_prims_over_(std::size_t ln, bool interior);
+    // hybrid level ln's level ghost particles (old or new) spawned from the scratch primitives,
+    //  each kept by its cell's owner
+    void spawn_level_ghosts_(std::size_t ln, bool new_ghosts, std::uint64_t salt);
     // MHD state s's level ghosts from the coarser level at t: rho, rhoV, Etot, B refined from the
     //  coarser level's old and advanced states, linear in time (PHARE's MHDMessenger
     //  stateGhostsRefiners_), B made divergence free
@@ -487,19 +499,19 @@ private:
     }
 
     // the leases of one operation, released when it ends (an exception too)
-    template<typename LevelData>
     struct Leases
     {
-        std::vector<LevelData*> levels;
+        // a level's release, any model's (a refine leases levels of two patch types)
+        std::vector<std::function<void()>> releases;
         ~Leases()
         {
-            for (auto* ld : levels)
-                release_(*ld);
+            for (auto const& release : releases)
+                release();
         }
-        void add(LevelData& ld, std::vector<std::string> const& names, amr::Lease const how)
+        void add(auto& ld, std::vector<std::string> const& names, amr::Lease const how)
         {
             lease_(ld, names, how);
-            levels.push_back(&ld);
+            releases.emplace_back([&ld] { release_(ld); });
         }
     };
     template<typename How>
@@ -521,7 +533,7 @@ private:
             std::vector<std::string> dst, src;
             for (auto const& r : resources)
                 dst.push_back(r.dst), src.push_back(r.src);
-            Leases<std::decay_t<decltype(ld)>> leases;
+            Leases leases;
             leases.add(ld, dst, lease_of_<std::decay_t<decltype(how)>>()); // first: dst wins
             leases.add(ld, src, amr::Lease::read);
             if (n_ranks_ > 1)
@@ -531,23 +543,40 @@ private:
         });
     }
 
-    // fn(level ln's data, level ln - 1's) of their model (one model on both: a model change
-    //  between them is not yet)
+    // fn(level ln's data, level ln - 1's), each of its own model: across the model boundary
+    //  (MHD under hybrid) two patch types, which damn's refine / coarsen take
     void with_level_pair_(std::size_t const ln, auto&& fn)
     {
-        if (models_.is_mhd(ln) != models_.is_mhd(ln - 1))
-            throw std::runtime_error("plamn: MHD and hybrid levels together not yet");
-        models_.visit(ln, [&](auto& model) {
-            fn(model.levels[static_cast<int>(ln)], model.levels[static_cast<int>(ln) - 1]);
+        models_.visit(ln, [&](auto& fine) {
+            models_.visit(ln - 1, [&](auto& coarse) {
+                fn(fine.levels[static_cast<int>(ln)], coarse.levels[static_cast<int>(ln) - 1]);
+            });
         });
+    }
+
+    // a fine level's pairs as the coarser level names them: the same model's, its own names; a
+    //  hybrid level over an MHD one, MHD's (simulator/coupling.hpp)
+    static auto const& coarse_pairs_(auto const&, auto const&,
+                                     std::vector<damn::amr::LevelPair> const& pairs)
+    {
+        return pairs;
+    }
+    template<typename Fine, typename Coarse>
+        requires(!simulator::coupling::is_mhd_level_v<Fine>
+                 and simulator::coupling::is_mhd_level_v<Coarse>)
+    static std::vector<damn::amr::LevelPair>
+    coarse_pairs_(Fine const&, Coarse const&, std::vector<damn::amr::LevelPair> const& pairs)
+    {
+        return simulator::coupling::to_mhd_coarse(pairs);
     }
 
     // from level ln - 1 into level ln
     void refine_(std::size_t const ln, auto const& op, damn::amr::LevelRegion const region,
-                 std::vector<damn::amr::LevelPair> const& pairs, double const alpha = 0)
+                 std::vector<damn::amr::LevelPair> const& level_pairs, double const alpha = 0)
     {
         auto& l = levels_[ln];
         with_level_pair_(ln, [&](auto& ld, auto& coarse) {
+            auto const& pairs = coarse_pairs_(ld, coarse, level_pairs);
             std::vector<std::string> fine, coarser;
             for (auto const& p : pairs)
             {
@@ -559,7 +588,7 @@ private:
             // damn's plans read the pairs' names on both levels: the written ones first (fill)
             auto all = fine;
             all.insert(all.end(), coarser.begin(), coarser.end());
-            Leases<std::decay_t<decltype(ld)>> leases;
+            Leases leases;
             leases.add(ld, fine, amr::Lease::fill);
             leases.add(ld, all, amr::Lease::read);
             leases.add(coarse, all, amr::Lease::read);
@@ -581,7 +610,7 @@ private:
                 fine.push_back(p.fine), coarser.push_back(p.coarse);
             auto all = fine; // damn's plans read the pairs' names on both levels
             all.insert(all.end(), coarser.begin(), coarser.end());
-            Leases<std::decay_t<decltype(ld)>> leases;
+            Leases leases;
             leases.add(coarse, coarser, amr::Lease::fill);
             leases.add(coarse, all, amr::Lease::read);
             leases.add(ld, all, amr::Lease::read);

@@ -62,12 +62,13 @@ TEST(MHDPatch, resourcesNamedOnce)
     std::set<std::string> const unique{names.begin(), names.end()};
     EXPECT_EQ(unique.size(), names.size());
     // per state 3 scalars and 3 vectors, the old state's conservative 2 scalars and 2 vectors,
-    //  E, per direction (2D) the step's and the summed rho, rhoV, Etot fluxes, the step's and
-    //  the summed E
-    EXPECT_EQ(names.size(), 2u * (3 + 3 * 3) + (2 + 2 * 3) + 3 + 2 * 2 * 5 + 2 * 3);
-    for (auto const* name : {"rho", "rhoV_x", "B_z", "Etot", "V_y", "P", "rho_s1", "B_s1_x",
-                             "rho_old", "rhoV_old_y", "B_old_z", "Etot_old", "E_x", "E_z",
-                             "F_rho_butcher_y", "F_rhoV_sum_x_z", "butcherE_x", "E_sum_y"})
+    //  E and its step start value (a hybrid level over it), per direction (2D) the step's and
+    //  the summed rho, rhoV, Etot fluxes, the step's and the summed E
+    EXPECT_EQ(names.size(), 2u * (3 + 3 * 3) + (2 + 2 * 3) + 2 * 3 + 2 * 2 * 5 + 2 * 3);
+    for (auto const* name :
+         {"rho", "rhoV_x", "B_z", "Etot", "V_y", "P", "rho_s1", "B_s1_x", "rho_old", "rhoV_old_y",
+          "B_old_z", "Etot_old", "E_x", "E_z", "E_old_y", "F_rho_butcher_y", "F_rhoV_sum_x_z",
+          "butcherE_x", "E_sum_y"})
         EXPECT_TRUE(unique.contains(name)) << name;
 }
 

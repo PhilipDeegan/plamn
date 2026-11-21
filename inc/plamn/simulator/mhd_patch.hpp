@@ -26,8 +26,8 @@
 //
 // for_each_resource names what damn's schedules may move (PHARE's MHD names for the advanced
 //  state): rho, rhoV_x..., B_x..., Etot, V_x..., P; a stage s > 0: rho_s<s>, rhoV_s<s>_x...;
-//  the old state: rho_old, rhoV_old_x..., B_old_x..., Etot_old; E_x...; per direction d < dim
-//  the refluxed step fluxes and their sums: F_rho_butcher_<d>, F_rhoV_butcher_<d>_x...,
+//  the old state: rho_old, rhoV_old_x..., B_old_x..., Etot_old; E_x..., E_old_x...; per direction d
+//  < dim the refluxed step fluxes and their sums: F_rho_butcher_<d>, F_rhoV_butcher_<d>_x...,
 //  F_Etot_butcher_<d>, F_rho_sum_<d>...; butcherE_x..., E_sum_x... (the last fluxes and the
 //  constrained transport inputs never move)
 
@@ -203,6 +203,8 @@ struct MHDPatch
                 VecField{"B_old", layout, V::B},   Grid_t{"Etot_old", layout, S::Etot},
                 VecField{"V_old", layout, V::V},   Grid_t{"P_old", layout, S::P}};
     VecField E{"E", layout, V::E, 0.}, butcherE{"butcherE", layout, V::E, 0.};
+    // E at the step's start: a hybrid level over this one interpolates its E ghosts in time
+    VecField E_old{"E_old", layout, V::E, 0.};
     std::array<Fluxes_t, 3> fluxes{fluxes_("x", S::ScalarFlux_x, V::VecFlux_x),
                                    fluxes_("y", S::ScalarFlux_y, V::VecFlux_y),
                                    fluxes_("z", S::ScalarFlux_z, V::VecFlux_z)};
@@ -293,6 +295,7 @@ void for_each_field_grid(MHDPatch<opts>& patch, auto&& fn)
     vector(patch.old.B);
     scalar(patch.old.Etot);
     vector(patch.E);
+    vector(patch.E_old);
     for (std::size_t d = 0; d < MHDPatch<opts>::dimension; ++d)
         for (auto* f : {&patch.butcher[d], &patch.flux_sum[d]})
         {

@@ -110,6 +110,25 @@ struct FieldRefiner
 };
 
 
+// a fine point from the coarse point under it, piecewise constant (cell centred values: the
+//  coarse cell's, as the MHD primitives a hybrid level over an MHD one loads its particles from)
+struct CellInjector
+{
+    int stencil = 0;
+
+    template<typename Field, std::uint32_t gw, typename T>
+    void operator()(FieldResource<Field, gw>& dst,
+                    damn::core::Box<int, Field::dimension> const& cells,
+                    damn::core::Box<int, Field::dimension> const& box,
+                    damn::amr::BoxValues<T const, Field::dimension> const& coarse) const
+    {
+        damn::core::for_each_point(box, [&](auto const& p) {
+            value(dst, cells, p) = coarse(damn::core::floor_div(p, 2));
+        });
+    }
+};
+
+
 // B: the components' resources (x, y, z), cells: the fine patch's, region: fine cells, a union
 // of whole coarse cells whose faces FieldRefiner wrote, dx: the fine mesh size
 template<typename Resource, std::size_t dim>
