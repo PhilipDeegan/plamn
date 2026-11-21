@@ -106,6 +106,7 @@ profile:
 - name: bench_mover
   inc: . tpp/damn
   self: base
+  mode: none
   main: etc/bench/particles/bench_mover.cpp
 
 # tpp/damn may be a symlink to a local damn checkout, otherwise it is cloned

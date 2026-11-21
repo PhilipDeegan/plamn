@@ -7,7 +7,9 @@
 //   -DPLAMN_BENCH_DIM=2] mkn run -p bench_mover [-x ...]
 //
 // env: PLAMN_CELLS (20 a side), PLAMN_PPC (100), PLAMN_PATCHES (1), PLAMN_THREADS (1, a pool's
-//  threads), PLAMN_REPEATS (3: the fastest and the median printed), PLAMN_SEED, PLAMN_TIMESTEP;
+//  threads), PLAMN_REPEATS (3: the fastest and the median printed), PLAMN_SEED, PLAMN_TIMESTEP,
+//  PLAMN_WARM (1: each step once untimed first, on the same patches: without the first touches),
+//  PLAMN_ONLY (the layouts whose name has it, e.g. GPU);
 //  tiles as a run: DAMN_TILING_MAX_TILE_SIZE / DAMN_TILING_MIN_TILE_SIZE, the device deposit
 //  PLAMN_GPU_TILE_DEPOSIT
 
@@ -25,6 +27,7 @@
 #include "tst/plamn/amr/resources_manager/test_resources_manager_fixtures.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -47,6 +50,8 @@ auto static const n_threads = mkn::kul::env::get_as("PLAMN_THREADS", std::size_t
 auto static const repeats   = mkn::kul::env::get_as("PLAMN_REPEATS", std::size_t{3});
 auto static const seed      = mkn::kul::env::get_as("PLAMN_SEED", std::size_t{1067});
 auto static const dt        = mkn::kul::env::get_as("PLAMN_TIMESTEP", double{.001});
+auto static const warm      = mkn::kul::env::get_as("PLAMN_WARM", std::size_t{0});
+auto static const only      = mkn::kul::env::get_as("PLAMN_ONLY", std::string{});
 
 bool static const premain = []() {
     DAMN_WITH_MKN_GPU({
@@ -95,12 +100,14 @@ auto from_ions(auto const& layout, auto const& from)
 }
 
 
-template<std::size_t dim, auto layout_mode, auto alloc_mode>
+template<std::size_t dim, auto layout_mode, auto alloc_mode, std::size_t interp = 1>
 struct Case
 {
-    auto constexpr static ref_opts = SimOpts{.dimension = dim};
-    auto constexpr static opts
-        = SimOpts{.dimension = dim, .layout_mode = layout_mode, .alloc_mode = alloc_mode};
+    auto constexpr static ref_opts = SimOpts{.dimension = dim, .interp_order = interp};
+    auto constexpr static opts     = SimOpts{.dimension    = dim,
+                                             .interp_order = interp,
+                                             .layout_mode  = layout_mode,
+                                             .alloc_mode   = alloc_mode};
 
     using RefTypes                  = PLAMN_Types<ref_opts>::Hybrid;
     using Types                     = PLAMN_Types<opts>::Hybrid;
@@ -128,7 +135,7 @@ struct Case
         return patches;
     }
 
-    template<MoveSpec spec>
+    template<MoveSpec spec, DepositSpec deposit = DepositSpec{}>
     void run(Patches& patches) const
     {
         using Boxing_t = Mover_t::Boxing_t;
@@ -137,7 +144,7 @@ struct Case
             {
                 auto& [layout_, ions, em, electromag] = patch.model.state;
                 Boxing_t const boxing{layout_, {layout_.cells}};
-                Mover_t{}.template update<spec>(ions, electromag, boxing, dt);
+                Mover_t{}.template update<spec, deposit>(ions, electromag, boxing, dt);
             }
         else
         {
@@ -148,24 +155,28 @@ struct Case
                                              patches[i].model.state.electromag);
             };
             auto accessor = test::make_model_level_accessor(patches, quantities);
-            Mover_t{}.template update<spec>(accessor, boxings, dt);
+            Mover_t{}.template update<spec, deposit>(accessor, boxings, dt);
         }
         DAMN_WITH_MKN_GPU(mkn::gpu::sync();)
     }
 
-    template<MoveSpec spec>
+    template<MoveSpec spec, DepositSpec deposit = DepositSpec{}>
     void time(std::string_view const name, std::string_view const step) const
     {
         if constexpr (per_patch and not spec.copy and not spec.sync)
             return; // AoSMapped: its in place push syncs as it goes
+        else if constexpr (layout_mode == LayoutMode::AoSTS and spec.sync)
+            return; // a test layout: its sync sorts by hand, slow by design
         else
         {
             std::vector<double> ms;
             for (std::size_t r = 0; r < repeats; ++r)
             {
-                auto patches  = make_patches(); // not timed
+                auto patches = make_patches(); // not timed
+                if (warm) // once untimed on the same patches: first touches (managed memory)
+                    run<spec, deposit>(patches);
                 auto const t0 = std::chrono::steady_clock::now();
-                run<spec>(patches);
+                run<spec, deposit>(patches);
                 auto const t1 = std::chrono::steady_clock::now();
                 ms.push_back(std::chrono::duration<double, std::milli>(t1 - t0).count());
             }
@@ -179,18 +190,36 @@ struct Case
 
     void operator()(std::string_view const name) const
     {
+        if constexpr (is_tiled(layout_mode))
+        { // what the deposit stages per tile: its field's largest tile, ghosts included
+            auto patches     = make_patches();
+            auto const& rho  = patches[0].model.state.ions[0].particleDensity();
+            auto const nodes = rho.max_tile_size();
+            std::printf("%-22s tiles %zu, largest density tile %u nodes (%.1f a side), %zu "
+                        "particles a tile\n",
+                        std::string{name}.c_str(), static_cast<std::size_t>(tile_count(rho)),
+                        static_cast<unsigned>(nodes), std::cbrt(static_cast<double>(nodes)),
+                        layout.cells.size() * ppc / static_cast<std::size_t>(tile_count(rho)));
+        }
         time<push>(name, "push");
         time<push_sync>(name, "push+sync");
         time<push_deposit>(name, "push+deposit");
         time<push_all>(name, "push+sync+dep");
         time<copy_spec>(name, "copy+deposit");
+        if constexpr (alloc_mode == damn::AllocatorMode::GPU_UNIFIED)
+        { // the device deposit after an in place push, 8 warps a tile (DepositSpec)
+            time<push_deposit, DepositSpec{.warps = 8}>(name, "push+dep w8");
+            time<push_all, DepositSpec{.warps = 8}>(name, "push+sync+dep w8");
+        }
     }
 };
 
-template<std::size_t dim, auto layout_mode, auto alloc_mode>
+template<std::size_t dim, auto layout_mode, auto alloc_mode, std::size_t interp = 1>
 void run_case(std::string_view const name)
 {
-    Case<dim, layout_mode, alloc_mode>{}(name);
+    if (!only.empty() and name.find(only) == std::string_view::npos)
+        return;
+    Case<dim, layout_mode, alloc_mode, interp>{}(name);
 }
 
 } // namespace plamn::core::bench
@@ -216,5 +245,6 @@ int main()
     run_case<dim, AoSPCTS, CPU>("AoSPCTS");
     DAMN_WITH_THRUST(run_case<dim, SoAVXChunked, CPU>("SoAVXChunked");)
     DAMN_WITH_GPU(run_case<dim, AoSTS, GPU_UNIFIED>("AoSTS GPU_UNIFIED");)
+    DAMN_WITH_GPU(run_case<dim, AoSTS, GPU_UNIFIED, 2>("AoSTS GPU_UNIFIED i2");)
     return 0;
 }

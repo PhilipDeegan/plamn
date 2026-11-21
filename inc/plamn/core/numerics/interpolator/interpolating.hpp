@@ -551,8 +551,17 @@ public:
         auto const ft   = Flux.template as<TensorField_t>([&](auto& c) { return c[blockIdx.x](); });
         auto& parts     = particles()[blockIdx.x]();
 
+        // a contiguous share of the tile's particles per warp (blockDim.x / warpSize warps, see
+        //  DepositSpec): sorted particles keep each warp on its own cells, so warps don't
+        //  contend for the same staged nodes
+        auto const warps = blockDim.x / warpSize;
+        auto const warp  = threadIdx.x / warpSize;
+        auto const lane  = threadIdx.x % warpSize;
+        auto const n     = parts.size();
+        auto const begin = n * warp / warps;
+        auto const end   = n * (warp + 1) / warps;
         tile_deposit<deposit_v>(rhop_tile(), ft, rhop_tile.ghost_box(), coef, [&](auto&& dep) {
-            for (std::size_t i = threadIdx.x; i < parts.size(); i += blockDim.x)
+            for (std::size_t i = begin + lane; i < end; i += warpSize)
                 dep(parts[i]);
         });
 #endif

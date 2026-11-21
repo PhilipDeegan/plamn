@@ -38,6 +38,19 @@ struct MoveSpec
 
 MoveSpec constexpr copy_spec{.copy = true, .deposit = true, .sync = false};
 
+// how the device deposit after an in place push runs (Interpolating::on_tiles): a block per tile
+//  of `warps` warps, each a contiguous share of the tile's particles (sorted: each warp on its own
+//  cells). The default from PLAMN_DEPOSIT_WARPS, for a bootstrap probe of the local GPU to set
+#ifndef PLAMN_DEPOSIT_WARPS
+#define PLAMN_DEPOSIT_WARPS 1
+#endif
+struct DepositSpec
+{
+    std::uint8_t warps = PLAMN_DEPOSIT_WARPS;
+};
+static_assert(DepositSpec{}.warps >= 1 and DepositSpec{}.warps <= 32,
+              "PLAMN_DEPOSIT_WARPS: 1 to 32 (a block of at most 1024 threads)");
+
 template<MoveSpec spec>
 void constexpr check_move_spec()
 {

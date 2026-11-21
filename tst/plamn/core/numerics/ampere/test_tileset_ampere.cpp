@@ -23,6 +23,7 @@
 #include "mkn/kul/env.hpp"
 #include "damn/core/exec/thread_pool.hpp"
 #include "plamn/core/numerics/ampere/ampere_transformer.hpp"
+#include "plamn/core/numerics/faraday/faraday_transformer.hpp"
 #include "plamn/core/data/field/field_tiles_gpu.hpp"
 #include "plamn/core/data/field/field_algorithm.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
@@ -37,6 +38,8 @@
 #include "gtest/gtest.h"
 
 #include <cmath>
+#include <cstdio>
+#include <memory>
 #include <string>
 #include <cstddef>
 #include <algorithm>
@@ -292,6 +295,89 @@ TYPED_TEST(AmpereTileTest, device_ops)
         core::average(dev.em.E, dev.J, dev.em.B); // GPU_UNIFIED: device jobs, see algorithm.hpp
         expect_same_tiles(host.em.B, dev.em.B, "average");
     }
+}
+
+// Faraday then Ampere, as the solver within a patch (faraday, fill_magnetic_ghosts, ampere: the
+//  level fill only brings the patch's outer ghosts): tiled against untiled. Each tile's J is on its
+//  ghost box less 1 (AmpereMode::ShrinkedGhost), from its B ghosts. Faraday writes each tile's
+//  Bnew without its ghosts between tiles: without sync_inner_ghosts(Bnew) they are stale, with it
+//  J must match the untiled one. Enough cells for tiles between tiles (PLAMN_CELLS is 4: one tile)
+TYPED_TEST(AmpereTileTest, faraday_then_ampere)
+{
+    using Ref       = TestFixture::RefPatch;
+    using Cmp       = TestFixture::CmpPatch;
+    auto const n    = std::max<std::uint32_t>(cells, 20);
+    double const dt = .001;
+
+    struct Pair
+    {
+        Pair(std::uint32_t const cells_)
+            : ref_layout{cells_}
+            , cmp_layout{cells_}
+        {
+        }
+
+        TestLayout<typename Ref::Layout_t> const ref_layout;
+        TestLayout<typename Cmp::Layout_t> const cmp_layout;
+        Ref ref{ref_layout};
+        Cmp cmp{cmp_layout};
+        typename Ref::UsableElectromag_t ref_new{*ref_layout};
+        typename Cmp::UsableElectromag_t cmp_new{*cmp_layout};
+    };
+
+    auto const run_pair = [&](bool const sync) {
+        auto pair     = std::make_unique<Pair>(n);
+        auto& ref     = pair->ref;
+        auto& cmp     = pair->cmp;
+        auto& ref_new = pair->ref_new;
+        auto& cmp_new = pair->cmp_new;
+        if (tile_count(cmp.J) < 2)
+            return std::size_t{0};
+
+        FaradayTransformer{}(ref.layout, ref.em.B, ref.em.E, ref_new.B, dt);
+        AmpereTransformer<>{}(ref.layout, ref_new.B, ref.J);
+
+        FaradayTransformer const faraday{};
+        AmpereTransformer<> const ampere{};
+        if constexpr (Cmp::alloc_mode == damn::AllocatorMode::GPU_UNIFIED)
+        {
+            faraday(cmp.layout, cmp.em.B, cmp.em.E, cmp_new.B, dt);
+            if (sync)
+                sync_inner_ghosts_on_device(cmp_new.B);
+            ampere(cmp.layout, cmp_new.B, cmp.J);
+        }
+        else
+        {
+            for (std::size_t ti = 0; ti < tile_count(cmp_new.B); ++ti)
+                faraday.on_tile(ti, cmp.em.B, cmp.em.E, cmp_new.B, dt);
+            if (sync)
+                sync_inner_ghosts(cmp_new.B);
+            for (std::size_t ti = 0; ti < tile_count(cmp.J); ++ti)
+                ampere.on_tile(ti, cmp_new.B, cmp.J);
+        }
+
+        std::size_t n_bad = 0;
+        for (std::size_t c = 0; c < 3; ++c)
+        {
+            auto const eq = compare_fields(ref.J[c], cmp.J[c]);
+            if (!eq)
+            {
+                ++n_bad;
+                DAMN_LOG_LINE_SS((sync ? "synced" : "unsynced") << " J" << c << ": " << eq.why());
+            }
+        }
+        return n_bad;
+    };
+
+    auto const unsynced = run_pair(false);
+    auto const synced   = run_pair(true);
+    DAMN_LOG_LINE_SS("faraday_then_ampere: J components differing, without the inner ghost sync "
+                     << unsynced << ", with it " << synced);
+    EXPECT_EQ(synced, 0u);
+    if (unsynced)
+        std::printf("faraday_then_ampere: %zu of 3 J components differ without "
+                    "sync_inner_ghosts(Bnew) (the solver's path within a patch)\n",
+                    unsynced);
 }
 
 } // namespace plamn::core
