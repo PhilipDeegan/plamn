@@ -75,6 +75,9 @@ jobs:
         include: # name: the artifact's; args: ./mkn.py's (the hybrid one builds plamn_etc too)
         - { name: hybrid, args: "--dim 1" }
         - { name: hybrid3d, args: "--dim 3 --no-etc" }
+        # tiled layouts, compared against the same PHARE references (phare: layout rows)
+        - { name: hybrid_aoscmts, args: "--dim 1 --no-etc --layout AoSCMTS" }
+        - { name: hybrid3d_aoscmts, args: "--dim 3 --no-etc --layout AoSCMTS" }
         - { name: mhd, args: "--mhd --no-etc" }
         - { name: wenoz, args: "--mhd --no-etc --reconstruction WENOZ --limiter None" }
         - { name: hll, args: "--mhd --no-etc --riemann HLL" }
@@ -180,6 +183,9 @@ jobs:
         - { case: harris_3d_10, steps: 4, ndim: 3, live: true }
         # 80^3, level 0 only, 80 ppc (41M particles): ~11 GB at its peak, one code at a time
         - { case: harris_3d_80_L0, steps: 4, ndim: 3, live: true }
+        # every layout against PHARE master, not only AoSMapped: tiled, the same references
+        - { case: beam_1d_long, steps: 2000, ppc: "100", live: true, layout: AoSCMTS }
+        - { case: harris_3d_10, steps: 4, ndim: 3, live: true, layout: AoSCMTS }
 
     steps:
     - uses: actions/checkout@v4
@@ -209,7 +215,7 @@ jobs:
       with:
         path: ref_cache
         key: phare-ref-${{ matrix.case }}-${{ matrix.steps }}-${{ matrix.ppc }}-${{ steps.phare.outputs.sha }}-${{ hashFiles('etc/compare/phare/*.py') }}
-    - name: PHARE vs plamn, ${{ matrix.case }}, ${{ matrix.steps }} steps
+    - name: PHARE vs plamn ${{ matrix.layout || 'AoSMapped' }}, ${{ matrix.case }}, ${{ matrix.steps }} steps
       env:
         PHARE_DIR: ${{ github.workspace }}/phare
         LADDER_OUT: ${{ github.workspace }}/compare
@@ -219,11 +225,12 @@ jobs:
         python3 etc/compare/phare/compare_physics.py ${{ matrix.live && '--live' || '' }}
         --case ${{ matrix.case }} --ndim ${{ matrix.ndim || 1 }}
         --steps ${{ matrix.steps }} --ref "$PHARE_DIR" --cmp plamn --all-times
-        --json compare/${{ matrix.case }}.json
+        --layout ${{ matrix.layout || 'AoSMapped' }}
+        --json compare/${{ matrix.case }}_${{ matrix.layout || 'AoSMapped' }}.json
     - if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: phare-compare-${{ matrix.case }}
+        name: phare-compare-${{ matrix.case }}-${{ matrix.layout || 'AoSMapped' }}
         path: |
           compare/*.json
           compare/**/*.log
