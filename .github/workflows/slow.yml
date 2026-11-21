@@ -91,7 +91,8 @@ jobs:
         damn-key: ${{ secrets.DAMN_DEPLOY_KEY }}
         mkn: "true"
     # --optimise 3: no -march=native (built on one runner, run on another: SIGILL otherwise)
-    - run: KLOG=3 ./mkn.py ${{ matrix.args }} --jobs 4 --optimise 3 --diag-doubles -- -q -x res/mkn/mpi
+    # -g 0: NDEBUG, no DAMN_DEBUG checks (drop it here to compare a debug build)
+    - run: KLOG=3 ./mkn.py ${{ matrix.args }} --jobs 4 --optimise 3 --diag-doubles -- -q -g 0 -x res/mkn/mpi
     - uses: actions/upload-artifact@v4
       with:
         name: plamn-${{ matrix.name }}

@@ -1527,6 +1527,7 @@ struct MultiBorisFunctors
         auto const& em                       = em_tile(tile_idx);
         auto& parts                          = tile();
         auto const tile_cell                 = pps.local_cell(tile.lower);
+        check_electromag(em); // debug builds: once a tile, not a particle (a whole tile scan)
 
         // GPU uses on_gpu_tile_cells, one block per cell
         damn::core::for_each_point(parts.local_box(), [&](auto const& bix) {
@@ -1545,6 +1546,7 @@ struct MultiBorisFunctors
         auto const& em                       = em_tile(tile_idx);
         auto& parts                          = tile();
         auto const tile_cell                 = pps.local_cell(tile.lower);
+        check_electromag(em); // debug builds: once a tile, not a particle (a whole tile scan)
 
         auto const each = pps()[tile_idx]().size() / ws;
 
@@ -1620,7 +1622,6 @@ struct MultiBorisFunctors
         static constexpr auto alloc_mode             = Particles_t::alloc_mode;
         auto const& [particle, layout, pt, pidx, em] = std::forward_as_tuple(args...);
 
-        check_electromag(em);
         {
             Interpolator_t interp;
             boris::accelerate(particle, interp.m2p(particle, em, layout), coef1);
