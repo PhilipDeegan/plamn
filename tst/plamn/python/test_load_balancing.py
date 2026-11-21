@@ -135,7 +135,7 @@ class LoadBalancingTest(unittest.TestCase):
         size = plamn_etc.mpi_size()
         path = Path("phare_outputs") / f"busy_n{size}.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
-        steps = 4
+        steps = 12
         os.environ.update(PLAMN_DECOMPOSITION=str(path), PLAMN_DECOMPOSITION_EVERY="1")
         try:
             self.simulator = (
@@ -151,8 +151,12 @@ class LoadBalancingTest(unittest.TestCase):
         plamn_etc.mpi_barrier()
         if plamn_etc.mpi_rank() != 0:
             return
-        fit = cost_fit(read_decomposition(path))
-        self.assertEqual(fit["n"], steps * 100)  # every patch, every step
+        records = read_decomposition(path)
+        self.assertEqual(cost_fit(records)["n"], steps * 100)  # every patch, every step
+        # each patch's fastest step: CI runs jobs side by side (ranks oversubscribed), and a
+        #  ~1 ms patch's wall time takes every preemption (every row: r2 0.19 there)
+        fit = cost_fit(records, reduce="min")
+        self.assertEqual(fit["n"], 100)
         self.assertGreater(fit["a"], 0)  # a particle costs time
         self.assertGreater(fit["r2"], 0.5)
         if size > 1:

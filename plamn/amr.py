@@ -630,18 +630,25 @@ def read_decomposition(path, costs=None):
     return out
 
 
-def cost_fit(records, ratio=None, terms=("particles", "cells")):
+def cost_fit(records, ratio=None, terms=("particles", "cells"), reduce=None):
     """a hybrid patch's busy seconds per substep as a linear sum of terms (least squares), from
     read_decomposition's records (one run's, or several runs' concatenated per run: pass a list
     of runs' records as records=[run0, run1, ...]); each line's busy time is the work of the
     previous line's patches (their particles then); level l does ratio^l substeps a step.
     terms: "particles", "cells", "ghost" (the patch grown by the line's reach less the patch:
     ghost work), "patch" (a constant per patch: its fixed cost).
-    {term: seconds per unit, "r2", "n": patch rows, "imbalance": per line, per level, the busiest
-    rank's busy time over the mean (and "weight_imbalance", the particles')}"""
+    reduce="min": one row per patch (run, level, box, owner): its fastest line's seconds per
+    substep, and one imbalance per run and level, each rank's the sum of its patches' fastest:
+    wall time on a shared machine (CI's concurrent jobs, oversubscribed ranks) only ever adds to
+    the work, the minimum is the work.
+    {term: seconds per unit, "r2", "n": patch rows, "imbalance": per line (reduce: per run), per
+    level, the busiest rank's busy time over the mean (and "weight_imbalance", the particles')}"""
+    if reduce not in (None, "min"):
+        raise ValueError(f"cost_fit: reduce {reduce!r}, not None or 'min'")
     runs = records if records and isinstance(records[0], list) else [records]
     rows, y, imbalance = [], [], []
-    for run in runs:
+    for ri, run in enumerate(runs):
+        fastest, weights_of = {}, {}  # reduce: (level, box, owner) -> (s, row); level -> weights
         for prev, rec in zip(run, run[1:]):
             h = prev["hierarchy"]
             r = ratio or h.ratio
@@ -655,20 +662,38 @@ def cost_fit(records, ratio=None, terms=("particles", "cells")):
                 if ln >= len(h.levels) or len(busy) != len(h.levels[ln]) or not any(busy):
                     continue  # a new level, or one not timed (MHD)
                 substeps = steps * r**ln
-                for (lo, up, _), w, b in zip(h.levels[ln], h.weights[ln], busy):
+                for (lo, up, owner), w, b in zip(h.levels[ln], h.weights[ln], busy):
                     n = np.asarray(up) - np.asarray(lo) + 1
                     cells = float(np.prod(n))
                     values = dict(particles=w, cells=cells,
                                   ghost=float(np.prod(n + 2 * reach)) - cells, patch=1.0)
-                    rows.append([values[t] for t in terms])
-                    y.append(b / substeps)
+                    row, s = [values[t] for t in terms], b / substeps
+                    if reduce:
+                        key = (ln, tuple(lo), tuple(up), owner)
+                        if key not in fastest or s < fastest[key][0]:
+                            fastest[key] = (s, row)
+                    else:
+                        rows.append(row)
+                        y.append(s)
                 per_rank = np.asarray(m["busy_rank"])
                 weights = np.asarray(prev["levels"][ln]["weight"])
+                weights_of.setdefault(ln, weights)
                 line.append(dict(level=ln,
                                  imbalance=float(per_rank.max() / per_rank.mean()),
                                  weight_imbalance=float(weights.max() / weights.mean())))
-            if line:
+            if line and not reduce:
                 imbalance.append(dict(event=rec["event"], step=rec["step"], levels=line))
+        per_rank = {}
+        for (ln, _, _, owner), (s, row) in fastest.items():
+            rows.append(row)
+            y.append(s)
+            r = per_rank.setdefault(ln, np.zeros(len(weights_of[ln])))
+            r[owner] += s
+        if per_rank:
+            imbalance.append(dict(event="min", run=ri, levels=[
+                dict(level=ln, imbalance=float(r.max() / r.mean()),
+                     weight_imbalance=float(weights_of[ln].max() / weights_of[ln].mean()))
+                for ln, r in sorted(per_rank.items())]))
     if not rows:
         return None
     A, y = np.asarray(rows), np.asarray(y)
