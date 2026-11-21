@@ -63,6 +63,7 @@
 #include "plamn/initializer/data_provider.hpp"
 #include "plamn/simulator/hybrid_patch.hpp"
 #include "plamn/simulator/coupling.hpp"
+#include "plamn/amr/field_access.hpp"
 #include "plamn/simulator/simulator_def.hpp"
 #include "plamn/simulator/timestepper.hpp"
 #include "plamn/amr/tagging.hpp"
@@ -79,6 +80,8 @@
 #include <cstddef>
 #include <format>
 #include <functional>
+#include <tuple>
+#include <any>
 #include <map>
 #include <memory>
 #include <numeric>
@@ -537,10 +540,41 @@ private:
             leases.add(ld, dst, lease_of_<std::decay_t<decltype(how)>>()); // first: dst wins
             leases.add(ld, src, amr::Lease::read);
             if (n_ranks_ > 1)
-                damn::mpi::copy(how, l.neighbours, resources, ld);
+                damn::mpi::copy(how, l.neighbours, resources, access_(model, ld, key, how), ld);
             else
-                damn::amr::copy(how, l.neighbours, resources, ld);
+                damn::amr::copy(how, l.neighbours, resources, access_(model, ld, key, how), ld);
         });
+    }
+
+    // how damn's copy of key reaches the resources: untiled field copies by accessors, resolved
+    //  once per model (amr/field_access.hpp); tiled patches (leased temporaries) and particles
+    //  by name
+    template<typename Model, typename LD, damn::amr::Region region, damn::amr::Arrival arrival>
+        requires(region != damn::amr::Region::Leaving
+                 and !TiledFieldsPatch<std::decay_t<decltype(*std::declval<LD&>().data[0])>>)
+    auto const& access_(Model& model, LD& ld, std::string const& key,
+                        damn::amr::CopyOp<region, arrival>)
+    {
+        using Patch_t = std::decay_t<decltype(*ld.data[0])>;
+        auto it       = model.field_access.find(key);
+        if (it == model.field_access.end())
+        {
+            if (damn::amr::size(ld) == 0) // no patch here: never called, one per pair all the same
+            {
+                static thread_local std::vector<amr::FieldAccess<Patch_t::field_ghost_width>> none;
+                none.resize(resources_.at(key).size());
+                return none;
+            }
+            it = model.field_access
+                     .emplace(key, amr::field_access<Patch_t::field_ghost_width>(
+                                       *ld.data[0], resources_.at(key)))
+                     .first;
+        }
+        return it->second;
+    }
+    static auto const& access_(auto&, auto&, std::string const&, auto)
+    {
+        return damn::amr::by_name;
     }
 
     // fn(level ln's data, level ln - 1's), each of its own model: across the model boundary
@@ -577,6 +611,36 @@ private:
         auto& l = levels_[ln];
         with_level_pair_(ln, [&](auto& ld, auto& coarse) {
             auto const& pairs = coarse_pairs_(ld, coarse, level_pairs);
+            Leases leases;
+            lease_level_pairs_(leases, ld, coarse, pairs, /*refine=*/true);
+            auto const by = [&](auto const& access) {
+                if (n_ranks_ > 1)
+                    damn::mpi::refine(op, region, *l.to_coarser, pairs, access, coarse, ld, alpha);
+                else
+                    damn::amr::refine(op, region, *l.to_coarser, pairs, access, coarse, ld, alpha);
+            };
+            if (auto const* access = level_access_(ld, coarse, pairs))
+                by(*access);
+            else
+                by(damn::amr::by_name);
+        });
+    }
+
+    // tiled fields: the pairs' names leased on both levels (damn's plans read them on both),
+    //  the written ones first: fill (refine: the fine ones, coarsen: the coarse ones)
+    template<typename LD>
+    using patch_of_t = std::decay_t<decltype(*std::declval<LD&>().data[0])>;
+    template<typename FineLD, typename CoarseLD>
+    static constexpr bool any_tiled_v
+        = TiledFieldsPatch<patch_of_t<FineLD>> or TiledFieldsPatch<patch_of_t<CoarseLD>>;
+
+    template<typename FineLD, typename CoarseLD>
+        requires any_tiled_v<FineLD, CoarseLD>
+    static void lease_level_pairs_(Leases& leases, FineLD& fine_ld, CoarseLD& coarse_ld,
+                                   std::vector<damn::amr::LevelPair> const& pairs,
+                                   bool const refine)
+    {
+        {
             std::vector<std::string> fine, coarser;
             for (auto const& p : pairs)
             {
@@ -585,19 +649,67 @@ private:
                 if (!p.coarse_new.empty())
                     coarser.push_back(p.coarse_new);
             }
-            // damn's plans read the pairs' names on both levels: the written ones first (fill)
             auto all = fine;
             all.insert(all.end(), coarser.begin(), coarser.end());
-            Leases leases;
-            leases.add(ld, fine, amr::Lease::fill);
-            leases.add(ld, all, amr::Lease::read);
-            leases.add(coarse, all, amr::Lease::read);
-            if (n_ranks_ > 1)
-                damn::mpi::refine(op, region, *l.to_coarser, pairs, coarse, ld, alpha);
+            if (refine)
+                leases.add(fine_ld, fine, amr::Lease::fill);
             else
-                damn::amr::refine(op, region, *l.to_coarser, pairs, coarse, ld, alpha);
-        });
+                leases.add(coarse_ld, coarser, amr::Lease::fill);
+            leases.add(fine_ld, all, amr::Lease::read);
+            leases.add(coarse_ld, all, amr::Lease::read);
+        }
     }
+    template<typename FineLD, typename CoarseLD>
+        requires(!any_tiled_v<FineLD, CoarseLD>)
+    static void lease_level_pairs_(Leases&, FineLD&, CoarseLD&,
+                                   std::vector<damn::amr::LevelPair> const&, bool)
+    {
+    }
+
+    // refine / coarsen's accessors of pairs between a level's data and the coarser level's:
+    //  untiled fields, resolved once per models and pairs (amr/field_access.hpp); null: by
+    //  name (particle arrays, tiled patches, or no patch of either level here yet)
+    template<typename FineLD, typename CoarseLD>
+    using level_access_t
+        = std::vector<amr::LevelFieldAccess<patch_of_t<CoarseLD>::field_ghost_width,
+                                            patch_of_t<FineLD>::field_ghost_width>>;
+
+    template<typename FineLD, typename CoarseLD>
+        requires any_tiled_v<FineLD, CoarseLD>
+    auto const* level_access_(FineLD&, CoarseLD&, std::vector<damn::amr::LevelPair> const&)
+    {
+        return static_cast<level_access_t<FineLD, CoarseLD> const*>(nullptr);
+    }
+    template<typename FineLD, typename CoarseLD>
+        requires(!any_tiled_v<FineLD, CoarseLD>)
+    auto const* level_access_(FineLD& fine, CoarseLD& coarse,
+                              std::vector<damn::amr::LevelPair> const& pairs)
+    {
+        using F        = patch_of_t<FineLD>;
+        using C        = patch_of_t<CoarseLD>;
+        using Access_t = level_access_t<FineLD, CoarseLD>;
+        using Cached_t = std::optional<Access_t>;
+        {
+            auto const key = LevelAccessKey{simulator::coupling::is_mhd_patch_v<F>,
+                                            simulator::coupling::is_mhd_patch_v<C>, pairs};
+            auto it        = level_access_cache_.find(key);
+            if (it == level_access_cache_.end())
+            {
+                if (damn::amr::size(fine) == 0 or damn::amr::size(coarse) == 0)
+                    return static_cast<Access_t const*>(nullptr);
+                it = level_access_cache_
+                         .emplace(
+                             key,
+                             amr::level_field_access<C::field_ghost_width, F::field_ghost_width>(
+                                 *coarse.data[0], *fine.data[0], pairs))
+                         .first;
+            }
+            auto const& cached = std::any_cast<Cached_t const&>(it->second);
+            return cached ? &*cached : static_cast<Access_t const*>(nullptr);
+        }
+    }
+    using LevelAccessKey = std::tuple<bool, bool, std::vector<damn::amr::LevelPair>>;
+    std::map<LevelAccessKey, std::any> level_access_cache_; // level_access_'s
 
     // from level ln onto level ln - 1
     void coarsen_(std::size_t const ln, auto const& op,
@@ -605,19 +717,18 @@ private:
     {
         auto& l = levels_[ln];
         with_level_pair_(ln, [&](auto& ld, auto& coarse) {
-            std::vector<std::string> fine, coarser;
-            for (auto const& p : pairs)
-                fine.push_back(p.fine), coarser.push_back(p.coarse);
-            auto all = fine; // damn's plans read the pairs' names on both levels
-            all.insert(all.end(), coarser.begin(), coarser.end());
             Leases leases;
-            leases.add(coarse, coarser, amr::Lease::fill);
-            leases.add(coarse, all, amr::Lease::read);
-            leases.add(ld, all, amr::Lease::read);
-            if (n_ranks_ > 1)
-                damn::mpi::coarsen(op, *l.to_coarser, pairs, ld, coarse);
+            lease_level_pairs_(leases, ld, coarse, pairs, /*refine=*/false);
+            auto const by = [&](auto const& access) {
+                if (n_ranks_ > 1)
+                    damn::mpi::coarsen(op, *l.to_coarser, pairs, access, ld, coarse);
+                else
+                    damn::amr::coarsen(op, *l.to_coarser, pairs, access, ld, coarse);
+            };
+            if (auto const* access = level_access_(ld, coarse, pairs))
+                by(*access);
             else
-                damn::amr::coarsen(op, *l.to_coarser, pairs, ld, coarse);
+                by(damn::amr::by_name);
         });
     }
 

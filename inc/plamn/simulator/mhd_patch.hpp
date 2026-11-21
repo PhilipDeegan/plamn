@@ -241,6 +241,8 @@ struct MHDPatch
     //  works on them, see amr/untiled.hpp and Simulator::lease_
     using Untiled_t = amr::UntiledFor_t<Grid_t>;
     Untiled_t untiled;
+    // the grids for_each_field_grid moves, in its order (see grid_table)
+    std::vector<Grid_t*> grid_table_;
 
 private:
     Fluxes_t fluxes_(std::string const& d, S const sf, V const vf) const
@@ -305,6 +307,13 @@ void for_each_field_grid(MHDPatch<opts>& patch, auto&& fn)
         }
     vector(patch.butcherE);
     vector(patch.flux_sum_E);
+}
+
+// MHD patches have no scratch grids: every one is fixed (grid_table)
+template<auto opts>
+void for_each_fixed_field_grid(MHDPatch<opts>& patch, auto&& fn)
+{
+    for_each_field_grid(patch, fn);
 }
 
 template<auto opts>

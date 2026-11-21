@@ -9,9 +9,9 @@
 //  and the physical boundaries' conditions. The reconstruction (and its slope limiter) is the
 //  simulation's compile time options'. Empty if the build does not enable it
 
+#include "plamn/amr/field_access.hpp" // IWYU pragma: keep (a member's type)
 #include "damn/amr/level_data.hpp"
 #include "damn/core/def.hpp"
-
 #include "plamn/core/boundary/boundary.hpp"
 #include "plamn/core/models/options/mhd_options_def.hpp"
 #include "plamn/core/models/quantities/mhd_quantities.hpp"
@@ -27,7 +27,6 @@
 #include "plamn/initializer/data_provider.hpp"
 #include "plamn/simulator/mhd_patch.hpp"
 #include "plamn/solver/model_def.hpp"
-
 #include "dict.hpp"
 
 #include <cstddef>
@@ -36,6 +35,8 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <format>
+
 
 namespace plamn::solver
 {
@@ -121,6 +122,8 @@ struct MHDModel<opts, true>
     using LevelData_t    = damn::amr::LevelData<opts.dimension, std::unique_ptr<Patch_t>>;
 
     std::map<int, LevelData_t> levels; // the levels the model is active on
+    // damn's field copies by accessors, per resource key: resolved once (Simulator::copy_)
+    std::map<std::string, std::vector<amr::FieldAccess<Patch_t::field_ghost_width>>> field_access{};
     std::map<std::string, diagnostic::Accessor<Patch_t>> quantities{}; // diagnostics' fields
 
     double gamma                       = 5. / 3.;

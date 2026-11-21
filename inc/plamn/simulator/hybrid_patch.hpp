@@ -282,6 +282,8 @@ struct HybridPatch
     //  works on them, see amr/untiled.hpp and Simulator::lease_
     using Untiled_t = amr::UntiledFor_t<Grid_t>;
     Untiled_t untiled;
+    // the grids for_each_field_grid moves, in its order, scratch grids apart (see grid_table)
+    std::vector<Grid_t*> grid_table_;
 
 private:
     std::optional<Electrons_t> electrons_;
@@ -299,9 +301,10 @@ namespace detail
     }
 } // namespace detail
 
-// fn(name, grid) for each field grid damn's schedules may move, by the name they know it as
+// fn(name, grid) for each of the patch's own field grids (scratch grids apart), in a fixed
+//  order: the same on every patch of the model (grid_table)
 template<auto opts>
-void for_each_field_grid(HybridPatch<opts>& patch, auto&& fn)
+void for_each_fixed_field_grid(HybridPatch<opts>& patch, auto&& fn)
 {
     detail::vector_grids("EM_B", patch.emB, fn);
     detail::vector_grids("EM_E", patch.emE, fn);
@@ -323,6 +326,13 @@ void for_each_field_grid(HybridPatch<opts>& patch, auto&& fn)
         fn(name + "_charge_density", pop->charge_density);
         detail::vector_grids(name + "_flux", pop->flux, fn);
     }
+}
+
+// fn(name, grid) for each field grid damn's schedules may move, by the name they know it as
+template<auto opts>
+void for_each_field_grid(HybridPatch<opts>& patch, auto&& fn)
+{
+    for_each_fixed_field_grid(patch, fn);
     for (auto& [name, grid] : patch.scratch)
         fn(name, grid);
 }
