@@ -7,6 +7,8 @@
 
 #include <array>
 #include <cstddef>
+#include <type_traits>
+#include <utility>
 
 #if defined(MKN_WITH_MKN_AVX) // the lane kernels below
 #include "mkn/avx.hpp"
@@ -115,7 +117,19 @@ private:
                         s[(i * span + j) * span + k] = field(base[0] + i, base[1] + j, base[2] + k);
     }
 
-    // component q at the lanes: the direction's primal or dual weights over the union
+    // fn(i) for i in [0, n), unrolled at compile time
+    template<std::size_t n>
+    static void each(auto&& fn)
+    {
+        [&]<std::size_t... i>(std::index_sequence<i...>) {
+            (fn(std::integral_constant<std::size_t, i>{}), ...);
+        }(std::make_index_sequence<n>{});
+    }
+
+    // component q at the lanes: the direction's primal or dual weights over the union. The lane
+    //  loop outermost, the nodes' unrolled in it (compile time trip counts): it vectorises over
+    //  the lanes (an inner lane loop left gcc vectorising the 2 or 3 nodes, 2 wide). Each lane
+    //  sums in MeshToParticle's order: x outer, the last direction inner
     template<std::size_t q>
     void value_(double const (&P)[dim][2][lanes], double const (&D)[dim][3][lanes],
                 double (&out)[lanes]) const
@@ -125,48 +139,30 @@ private:
         auto const w     = [&](std::size_t const k, std::size_t const i, std::size_t const l) {
             return c[k] == QtyCentering::dual ? D[k][i][l] : P[k][i][l];
         };
-        // the lane loops innermost (vectorised), each lane's sums in MeshToParticle's order
-        double x[lanes];
         for (std::size_t l = 0; l < lanes; ++l)
-            x[l] = 0.;
-        if constexpr (dim == 1)
-            for (std::size_t i = 0; i < nodes(c[0]); ++i)
-                for (std::size_t l = 0; l < lanes; ++l)
-                    x[l] += s[i] * w(0, i, l);
-        else if constexpr (dim == 2)
-            for (std::size_t i = 0; i < nodes(c[0]); ++i)
-            {
-                double y[lanes];
-                for (std::size_t l = 0; l < lanes; ++l)
-                    y[l] = 0.;
-                for (std::size_t j = 0; j < nodes(c[1]); ++j)
-                    for (std::size_t l = 0; l < lanes; ++l)
-                        y[l] += s[i * span + j] * w(1, j, l);
-                for (std::size_t l = 0; l < lanes; ++l)
-                    x[l] += y[l] * w(0, i, l);
-            }
-        else
-            for (std::size_t i = 0; i < nodes(c[0]); ++i)
-            {
-                double y[lanes];
-                for (std::size_t l = 0; l < lanes; ++l)
-                    y[l] = 0.;
-                for (std::size_t j = 0; j < nodes(c[1]); ++j)
-                {
-                    double z[lanes];
-                    for (std::size_t l = 0; l < lanes; ++l)
-                        z[l] = 0.;
-                    for (std::size_t k = 0; k < nodes(c[2]); ++k)
-                        for (std::size_t l = 0; l < lanes; ++l)
-                            z[l] += s[(i * span + j) * span + k] * w(2, k, l);
-                    for (std::size_t l = 0; l < lanes; ++l)
-                        y[l] += z[l] * w(1, j, l);
-                }
-                for (std::size_t l = 0; l < lanes; ++l)
-                    x[l] += y[l] * w(0, i, l);
-            }
-        for (std::size_t l = 0; l < lanes; ++l)
-            out[l] = x[l];
+        {
+            double x = 0.;
+            if constexpr (dim == 1)
+                each<nodes(c[0])>([&](auto i) { x += s[i] * w(0, i, l); });
+            else if constexpr (dim == 2)
+                each<nodes(c[0])>([&](auto i) {
+                    double y = 0.;
+                    each<nodes(c[1])>([&](auto j) { y += s[i * span + j] * w(1, j, l); });
+                    x += y * w(0, i, l);
+                });
+            else
+                each<nodes(c[0])>([&](auto i) {
+                    double y = 0.;
+                    each<nodes(c[1])>([&](auto j) {
+                        double z = 0.;
+                        each<nodes(c[2])>(
+                            [&](auto k) { z += s[(i * span + j) * span + k] * w(2, k, l); });
+                        y += z * w(1, j, l);
+                    });
+                    x += y * w(0, i, l);
+                });
+            out[l] = x;
+        }
     }
 };
 
