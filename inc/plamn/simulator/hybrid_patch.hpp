@@ -24,6 +24,7 @@
 #include "plamn/core/def.hpp"
 #include "plamn/plamn_core.hpp"
 #include "plamn/amr/resources.hpp"
+#include "plamn/amr/untiled.hpp"
 #include "plamn/core/data/ions/ion_population/particle_pack.hpp"
 #include "plamn/core/numerics/particles_synchronised_mover/particles_synchronised_mover.hpp"
 #include "plamn/initializer/data_provider.hpp"
@@ -277,6 +278,11 @@ struct HybridPatch
     std::optional<Grids<3>> electronVelocity;
     std::optional<Grid_t> electronPressure;
 
+    // tiled fields: their untiled temporaries while a whole patch operation (damn's schedules)
+    //  works on them, see amr/untiled.hpp and Simulator::lease_
+    using Untiled_t = amr::UntiledFor_t<Grid_t>;
+    Untiled_t untiled;
+
 private:
     std::optional<Electrons_t> electrons_;
 };
@@ -286,16 +292,40 @@ namespace detail
 {
     std::array<char const*, 3> constexpr inline xyz{"_x", "_y", "_z"};
 
-    template<auto gw>
-    void vector_resources(std::string const& name, auto& grids, auto&& fn)
+    void vector_grids(std::string const& name, auto& grids, auto&& fn)
     {
         for (std::size_t i = 0; i < 3; ++i)
-        {
-            auto r = amr::field_resource<gw>(grids[i]);
-            fn(name + xyz[i], r);
-        }
+            fn(name + xyz[i], grids[i]);
     }
 } // namespace detail
+
+// fn(name, grid) for each field grid damn's schedules may move, by the name they know it as
+template<auto opts>
+void for_each_field_grid(HybridPatch<opts>& patch, auto&& fn)
+{
+    detail::vector_grids("EM_B", patch.emB, fn);
+    detail::vector_grids("EM_E", patch.emE, fn);
+    detail::vector_grids("EMPred_B", patch.predB, fn);
+    detail::vector_grids("EMPred_E", patch.predE, fn);
+    detail::vector_grids("EMAvg_B", patch.avgB, fn);
+    detail::vector_grids("EMAvg_E", patch.avgE, fn);
+    detail::vector_grids("EM_E_old", patch.oldE, fn);
+    detail::vector_grids("EM_B_old", patch.oldB, fn);
+    detail::vector_grids("EM_fluxSum_E", patch.fluxSumE, fn);
+
+    fn("ions_charge_density", patch.chargeDensity);
+    detail::vector_grids("ions_charge_flux", patch.chargeFlux, fn);
+
+    for (auto& pop : patch.populations)
+    {
+        auto const& name = pop->pack._name;
+        fn(name + "_density", pop->density);
+        fn(name + "_charge_density", pop->charge_density);
+        detail::vector_grids(name + "_flux", pop->flux, fn);
+    }
+    for (auto& [name, grid] : patch.scratch)
+        fn(name, grid);
+}
 
 template<auto opts>
 void for_each_resource(HybridPatch<opts>& patch, auto&& fn)
@@ -304,29 +334,13 @@ void for_each_resource(HybridPatch<opts>& patch, auto&& fn)
     auto const gw  = Patch::field_ghost_width;
     auto const pgw = Patch::particle_ghost_width;
 
-    detail::vector_resources<gw>("EM_B", patch.emB, fn);
-    detail::vector_resources<gw>("EM_E", patch.emE, fn);
-    detail::vector_resources<gw>("EMPred_B", patch.predB, fn);
-    detail::vector_resources<gw>("EMPred_E", patch.predE, fn);
-    detail::vector_resources<gw>("EMAvg_B", patch.avgB, fn);
-    detail::vector_resources<gw>("EMAvg_E", patch.avgE, fn);
-    detail::vector_resources<gw>("EM_E_old", patch.oldE, fn);
-    detail::vector_resources<gw>("EM_B_old", patch.oldB, fn);
-    detail::vector_resources<gw>("EM_fluxSum_E", patch.fluxSumE, fn);
-
-    auto charge_density = amr::field_resource<gw>(patch.chargeDensity);
-    fn("ions_charge_density", charge_density);
-    detail::vector_resources<gw>("ions_charge_flux", patch.chargeFlux, fn);
+    for_each_field_grid(patch, [&](std::string const& name, auto& grid) {
+        amr::field_resource_for<gw>(patch.untiled, name, grid, fn);
+    });
 
     for (auto& pop : patch.populations)
     {
-        auto const& name = pop->pack._name;
-        auto density     = amr::field_resource<gw>(pop->density);
-        auto charge      = amr::field_resource<gw>(pop->charge_density);
-        fn(name + "_density", density);
-        fn(name + "_charge_density", charge);
-        detail::vector_resources<gw>(name + "_flux", pop->flux, fn);
-
+        auto const& name     = pop->pack._name;
         auto domain          = amr::particle_resource<pgw>(pop->domain);
         auto patch_ghost     = amr::particle_resource<pgw>(pop->patch_ghost);
         auto level_ghost     = amr::particle_resource<pgw>(pop->level_ghost);
@@ -337,11 +351,6 @@ void for_each_resource(HybridPatch<opts>& patch, auto&& fn)
         fn(name + "_level_ghost", level_ghost);
         fn(name + "_level_ghost_old", level_ghost_old);
         fn(name + "_level_ghost_new", level_ghost_new);
-    }
-    for (auto& [name, grid] : patch.scratch)
-    {
-        auto r = amr::field_resource<gw>(grid);
-        fn(name, r);
     }
 }
 

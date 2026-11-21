@@ -4,6 +4,7 @@
 // plamn::Simulator: tagging, clustering, regrid, load balancing
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
+#include "plamn/amr/untiled.hpp"
 #include "damn/amr/clustering.hpp"
 #include "damn/amr/copy.hpp"
 #include "damn/amr/hierarchy.hpp"
@@ -58,10 +59,17 @@ std::vector<typename Simulator<opts>::Box_t> Simulator<opts>::cluster_(int const
     models_.visit(static_cast<std::size_t>(ln), [&](auto& model) {
         using Model_t   = std::remove_cvref_t<decltype(model)>;
         using Patch_t   = Model_t::Patch_t;
-        using Resource  = amr::FieldResource<typename Patch_t::Grid_t, Patch_t::field_ghost_width>;
+        using Resource  = amr::FieldResource<typename resource_field_<Patch_t>::type,
+                                             Patch_t::field_ghost_width>;
         bool const mhd  = solver::is_mhd_model_v<Model_t>;
         auto const& tag = mhd ? *mhd_tagging_ : *tagging_;
         auto& ld        = model.levels[ln];
+        std::vector<std::string> tagged_on; // tiled fields: read on untiled temporaries
+        for (auto const& q : tag.quantities)
+            for (auto const& component : q.components)
+                tagged_on.push_back(mhd ? component : "EM_" + component);
+        Leases<std::decay_t<decltype(ld)>> leases;
+        leases.add(ld, tagged_on, amr::Lease::read);
         for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
         {
             auto const resource = [&](std::string const& component) {
@@ -167,9 +175,9 @@ void Simulator<opts>::rebalance_(double const t)
         auto const map  = damn::amr::make_regrid_map(old0, hierarchy_.levels[0], rank_,
                                                      damn::amr::periodic_shifts(hierarchy_, 0));
         auto& ld        = data_(0);
-        ld              = damn::mpi::regrid(map, std::move(ld), [&](auto const& p) {
-            return make_patch_(models_.hybrid, 0, p.box);
-        });
+        ld              = regrid_leased_(
+            map, std::move(ld),
+            [&](auto const& p) { return make_patch_(models_.hybrid, 0, p.box); }, /*mpi=*/true);
         for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
         {
             ld.data[i]->rebox(
@@ -292,8 +300,7 @@ void Simulator<opts>::regrid_hybrid_data_(int const ln, auto const& map,
     auto const make   = [&](auto const& p) { return make_patch_(models_.hybrid, ln, p.box); };
     auto& l = levels_[fine];
     auto& ld          = data_(fine);
-    ld                = n_ranks_ > 1 ? damn::mpi::regrid(map, std::move(ld), make)
-                                     : damn::amr::regrid(map, std::move(ld), make);
+    ld                = regrid_leased_(map, std::move(ld), make);
     for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
         ld.data[i]->rebox(
             solver::hybrid::surroundings(models_.hybrid, hierarchy_, ln, ld.patches[i].box));
@@ -309,12 +316,12 @@ void Simulator<opts>::regrid_hybrid_data_(int const ln, auto const& map,
     {
         auto& patch      = *ld.data[i];
         auto const cells = ld.patches[i].box;
-        auto bx          = amr::field_resource<gw>(patch.emB[0]);
-        auto by          = amr::field_resource<gw>(patch.emB[1]);
-        auto bz          = amr::field_resource<gw>(patch.emB[2]);
-        for (auto const& region : masked_field.uncovered(cells, [](auto const& b) { return b; }))
-            amr::divergence_free_touch_up(std::array{&bx, &by, &bz}, cells, region,
-                                          damn::amr::mesh_size(hierarchy_, ln));
+        amr::with_untiled_resources<gw>(patch.emB, [&](auto const& B) { // tiled: untiled copies
+            for (auto const& region :
+                 masked_field.uncovered(cells, [](auto const& b) { return b; }))
+                amr::divergence_free_touch_up(B, cells, region,
+                                              damn::amr::mesh_size(hierarchy_, ln));
+        });
     }
     refine_(fine, masked_field, LevelRegion::Interior, amr::vector_pairs("EM_E", "EM_E"));
     per_patch_(fine, [](auto& patch) {
@@ -362,8 +369,7 @@ void Simulator<opts>::regrid_mhd_data_(int const ln, auto const& map,
     auto const fine   = static_cast<std::size_t>(ln);
     auto const make   = [&](auto const& p) { return make_patch_(models_.mhd, ln, p.box); };
     auto& ld          = models_.mhd.levels[ln];
-    ld                = n_ranks_ > 1 ? damn::mpi::regrid(map, std::move(ld), make)
-                                     : damn::amr::regrid(map, std::move(ld), make);
+    ld                = regrid_leased_(map, std::move(ld), make);
     link_level_(ln);
     auto& l     = levels_[fine];
     l.coarse_t  = t;
@@ -378,14 +384,12 @@ void Simulator<opts>::regrid_mhd_data_(int const ln, auto const& map,
     refine_(fine, masked, LevelRegion::Interior, amr::vector_pairs("B", "B"));
     for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
     {
-        auto& B          = ld.data[i]->states[0].B.grids;
-        auto bx          = amr::field_resource<gw>(B[0]);
-        auto by          = amr::field_resource<gw>(B[1]);
-        auto bz          = amr::field_resource<gw>(B[2]);
         auto const cells = ld.patches[i].box;
-        for (auto const& region : masked.uncovered(cells, [](auto const& b) { return b; }))
-            amr::divergence_free_touch_up(std::array{&bx, &by, &bz}, cells, region,
-                                          damn::amr::mesh_size(hierarchy_, ln));
+        amr::with_untiled_resources<gw>(ld.data[i]->states[0].B.grids, [&](auto const& B) {
+            for (auto const& region : masked.uncovered(cells, [](auto const& b) { return b; }))
+                amr::divergence_free_touch_up(B, cells, region,
+                                              damn::amr::mesh_size(hierarchy_, ln));
+        });
     }
     MHDLevel{*this, fine}.fill_state_ghosts(0, t);
     prepare_step_(ln, t);

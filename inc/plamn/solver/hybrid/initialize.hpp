@@ -9,14 +9,13 @@
 //   check_set(key, where)                debug: throws if a ghost of key was not filled
 //   mesh_size()                          the level's
 
+#include "plamn/amr/untiled.hpp"
 #include "damn/amr/copy.hpp"
 #include "damn/amr/level_data.hpp"
 #include "damn/amr/level_map.hpp"
 #include "damn/core/geometry/box_spans.hpp"
-
 #include "plamn/amr/level_pairs.hpp"
 #include "plamn/amr/refine.hpp"
-#include "plamn/amr/resources.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/models/electromag_initializer.hpp"
@@ -30,7 +29,6 @@
 #include "plamn/solver/hybrid/model.hpp"
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <vector>
 #include <format>
@@ -89,12 +87,12 @@ void refine_magnetic(HybridModel<opts> const&, auto&& level)
     auto& ld = level.data();
     for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
     {
-        auto& patch = *ld.data[i];
-        auto bx     = amr::field_resource<Patch_t::field_ghost_width>(patch.emB[0]);
-        auto by     = amr::field_resource<Patch_t::field_ghost_width>(patch.emB[1]);
-        auto bz     = amr::field_resource<Patch_t::field_ghost_width>(patch.emB[2]);
-        amr::divergence_free_touch_up(std::array{&bx, &by, &bz}, ld.patches[i].box,
-                                      ld.patches[i].box, level.mesh_size());
+        auto& patch       = *ld.data[i];
+        auto constexpr gw = Patch_t::field_ghost_width;
+        amr::with_untiled_resources<gw>(patch.emB, [&](auto const& B) { // tiled: untiled copies
+            amr::divergence_free_touch_up(B, ld.patches[i].box, ld.patches[i].box,
+                                          level.mesh_size());
+        });
     }
 }
 
@@ -179,31 +177,35 @@ void moved_moments(HybridModel<opts> const& model, auto&& level, auto const& old
     std::vector<std::vector<std::vector<double>>> kept; // per patch, per moment: its values
     level.per_patch([&](auto& patch) {
         auto& mine = kept.emplace_back();
-        each_moment(patch,
-                    [&](auto const& f) { mine.emplace_back(f.data(), f.data() + f.size()); });
+        each_moment(patch, [&](auto const& f) {
+            amr::with_untiled(
+                f, [&](auto const& u) { mine.emplace_back(u.data(), u.data() + u.size()); });
+        });
     });
     refined_moments(model, level); // the ghost nodes and new cells; the old domain put back below
     std::size_t i = 0;
     level.per_patch([&](auto& patch) {
         std::size_t m = 0;
-        each_moment(patch, [&](auto& f) {
-            auto const& values = kept[i][m++];
-            auto constexpr dim = std::decay_t<decltype(patch.layout)>::dimension;
-            auto const cent    = core::centering<dim>(f);
-            auto const was_old = [&](auto const& amr) { // a node of the old level's domain
-                return std::any_of(old_cells.begin(), old_cells.end(), [&](auto const& b) {
-                    for (std::size_t d = 0; d < dim; ++d)
-                        if (amr[d] < b.lower[d]
-                            or amr[d] > b.upper[d] + (cent[d] == core::QtyCentering::primal))
-                            return false;
-                    return true;
+        each_moment(patch, [&](auto& tiled) {
+            amr::modify_untiled(tiled, [&](auto& f) {
+                auto const& values = kept[i][m++];
+                auto constexpr dim = std::decay_t<decltype(patch.layout)>::dimension;
+                auto const cent    = core::centering<dim>(f);
+                auto const was_old = [&](auto const& amr) { // a node of the old level's domain
+                    return std::any_of(old_cells.begin(), old_cells.end(), [&](auto const& b) {
+                        for (std::size_t d = 0; d < dim; ++d)
+                            if (amr[d] < b.lower[d]
+                                or amr[d] > b.upper[d] + (cent[d] == core::QtyCentering::primal))
+                                return false;
+                        return true;
+                    });
+                };
+                damn::core::for_each_point(domain_box(patch.layout, f), [&](auto const& ijk) {
+                    if (!was_old(core::to_amr(patch.layout, ijk)))
+                        return;
+                    auto& v = f(ijk);
+                    v       = values[static_cast<std::size_t>(&v - f.data())];
                 });
-            };
-            damn::core::for_each_point(domain_box(patch.layout, f), [&](auto const& ijk) {
-                if (!was_old(core::to_amr(patch.layout, ijk)))
-                    return;
-                auto& v = f(ijk);
-                v       = values[static_cast<std::size_t>(&v - f.data())];
             });
         });
         ++i;

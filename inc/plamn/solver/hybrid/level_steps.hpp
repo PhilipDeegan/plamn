@@ -15,6 +15,7 @@
 //   coarse_dt()                          the coarser level's step it subcycles in
 //   time_ratio()                         its substeps per step of the coarser level
 
+#include "plamn/core/data/field/field_tiles.hpp"
 #include "damn/amr/copy.hpp"
 #include "damn/amr/level_map.hpp"
 #include "damn/core/logger.hpp"
@@ -98,12 +99,16 @@ void accumulate_flux_sum(auto&& level, double const coef)
 {
     level.per_patch([&](auto& patch) {
         for (std::size_t i = 0; i < 3; ++i)
-        {
-            auto* sum         = patch.fluxSumE[i].data();
-            auto const* avg   = patch.avgE[i].data();
-            auto const values = patch.fluxSumE[i].size();
-            for (std::size_t k = 0; k < values; ++k)
-                sum[k] += coef * avg[k];
+        { // the same tiling: their buffers pair up
+            std::vector<double const*> avg;
+            core::for_each_buffer(std::as_const(patch.avgE[i]),
+                                  [&](auto const* data, auto) { avg.push_back(data); });
+            std::size_t b = 0;
+            core::for_each_buffer(patch.fluxSumE[i], [&](auto* sum, auto const values) {
+                auto const* a = avg[b++];
+                for (std::size_t k = 0; k < values; ++k)
+                    sum[k] += coef * a[k];
+            });
         }
     });
 }

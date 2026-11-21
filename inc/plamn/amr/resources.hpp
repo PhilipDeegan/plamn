@@ -20,6 +20,7 @@
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/layout.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
+#include "plamn/core/data/particles/particle_iteration.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 
 #include <cstddef>
@@ -129,12 +130,7 @@ NO_DISCARD auto ghost_box(ParticleResource<Particles, gw> const&,
 template<typename Particles, std::uint32_t gw>
 void for_each_item(ParticleResource<Particles, gw> const& r, auto&& fn)
 {
-    auto const& particles = *r.particles;
-    for (std::size_t i = 0; i < particles.size(); ++i)
-        if constexpr (requires { particles.copy(i); }) // columns (SoA family): a Particle
-            fn(particles.copy(i));
-        else
-            fn(particles[i]);
+    core::for_each_particle(*r.particles, fn); // tiled arrays tile by tile
 }
 
 template<typename Particles, std::uint32_t gw>

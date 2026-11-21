@@ -31,6 +31,7 @@
 #include "damn/amr/level_data.hpp"
 #include "damn/amr/level_map.hpp"
 #include "damn/amr/neighbours.hpp"
+#include "damn/amr/regrid.hpp"
 #include "damn/amr/topology.hpp"
 #include "damn/hdf5/damn_hdf5.hpp"
 #include "damn/core/vector.hpp"
@@ -38,6 +39,7 @@
 #include "damn/mpi/copy.hpp"
 #include "damn/mpi/damn_mpi.hpp"
 #include "damn/mpi/inter_level.hpp"
+#include "damn/mpi/regrid.hpp"
 #include "damn/core/def/constants.hpp"
 #include "plamn/diagnostic/vtkhdf.hpp"
 #include "plamn/simulator/hybrid_patch_view.hpp"
@@ -115,6 +117,27 @@ NO_DISCARD inline std::unique_ptr<std::ofstream> rank_log_file()
         return std::make_unique<std::ofstream>(".log/" + std::to_string(rank) + ".out");
     throw std::runtime_error("PHARE_LOG: RANK_FILES, NULL or CLI, not " + mode);
 }
+
+namespace simulator::detail
+{
+    // one callable of several overloads (constrained lambdas: a visit's per case branches)
+    template<typename... Fns>
+    struct Overloaded : Fns...
+    {
+        using Fns::operator()...;
+    };
+} // namespace simulator::detail
+
+// a patch whose fields are tiled (it has untiled temporaries for whole patch operations), a
+//  patch whose particles are tiled: what the Simulator's per patch overloads branch on
+template<typename Patch>
+concept TiledFieldsPatch = requires {
+    typename std::decay_t<Patch>::Grid_t;
+    typename std::decay_t<Patch>::Untiled_t;
+} and core::TiledField<typename std::decay_t<Patch>::Grid_t>;
+template<typename Patch>
+concept TiledParticlesPatch = requires { typename std::decay_t<Patch>::Particles_t; }
+                              and core::TiledParticles<typename std::decay_t<Patch>::Particles_t>;
 
 template<auto opts>
 class Simulator : public ISimulator
@@ -399,17 +422,112 @@ private:
         }
     }
 
+    // tiled fields: damn's schedules work on untiled temporaries (amr/untiled.hpp), leased on
+    //  every patch of a level for the names an operation reads (read) or writes (fill, sum:
+    //  written back into every tile's ghost box when released, inner tile ghosts included)
+    static void lease_(auto& ld, std::vector<std::string> const& names, amr::Lease const how)
+    {
+        for (auto& patch : ld.data)
+            lease_patch_(*patch, names, how);
+    }
+    static void release_(auto& ld)
+    {
+        for (auto& patch : ld.data)
+            release_patch_(*patch);
+    }
+    static void lease_patch_(TiledFieldsPatch auto& patch, std::vector<std::string> const& names,
+                             amr::Lease const how)
+    {
+        simulator::for_each_field_grid(patch, [&](std::string const& name, auto& grid) {
+            if (std::find(names.begin(), names.end(), name) != names.end())
+                patch.untiled.lease(name, grid, patch.layout, how);
+        });
+    }
+    static void lease_patch_(auto&, std::vector<std::string> const&, amr::Lease) {}
+    static void release_patch_(TiledFieldsPatch auto& patch) { patch.untiled.release(); }
+    static void release_patch_(auto&) {}
+    // every tiled field of a patch leased (a regrid moves them all)
+    static void lease_all_(TiledFieldsPatch auto& patch, amr::Lease const how)
+    {
+        simulator::for_each_field_grid(patch, [&](std::string const& name, auto& grid) {
+            patch.untiled.lease(name, grid, patch.layout, how);
+        });
+    }
+    static void lease_all_(auto&, amr::Lease) {}
+    // the field type a patch's field resources hold: a tiled patch's leased untiled temporaries
+    template<typename Patch>
+    struct resource_field_
+    {
+        using type = Patch::Grid_t;
+    };
+    template<TiledFieldsPatch Patch>
+    struct resource_field_<Patch>
+    {
+        using type = Patch::Untiled_t::field_type;
+    };
+    // damn's regrid of ld (MPI when there are ranks): tiled fields moved on untiled temporaries,
+    //  the old patches' read, each new one's leased as made and written back after
+    auto regrid_leased_(auto const& map, auto&& ld, auto const& make) const
+    {
+        return regrid_leased_(map, std::move(ld), make, n_ranks_ > 1);
+    }
+    auto regrid_leased_(auto const& map, auto&& ld, auto const& make, bool const mpi) const
+    {
+        for (auto& patch : ld.data)
+            lease_all_(*patch, amr::Lease::read);
+        auto const made = [&](auto const& p) {
+            auto patch = make(p);
+            lease_all_(*patch, amr::Lease::fill);
+            return patch;
+        };
+        auto out = mpi ? damn::mpi::regrid(map, std::move(ld), made)
+                       : damn::amr::regrid(map, std::move(ld), made);
+        release_(out);
+        return out;
+    }
+
+    // the leases of one operation, released when it ends (an exception too)
+    template<typename LevelData>
+    struct Leases
+    {
+        std::vector<LevelData*> levels;
+        ~Leases()
+        {
+            for (auto* ld : levels)
+                release_(*ld);
+        }
+        void add(LevelData& ld, std::vector<std::string> const& names, amr::Lease const how)
+        {
+            lease_(ld, names, how);
+            levels.push_back(&ld);
+        }
+    };
+    template<typename How>
+    static amr::Lease constexpr lease_of_()
+    {
+        if constexpr (std::is_same_v<How, std::decay_t<decltype(damn::amr::sum_borders)>>)
+            return amr::Lease::sum;
+        return amr::Lease::fill;
+    }
+
     // copies key's resources between the patches of level ln (its model's), see
     //  register_resources_
     void copy_(std::size_t const ln, auto const how, std::string const& key)
     {
-        auto& l = levels_[ln];
+        auto& l               = levels_[ln];
+        auto const& resources = resources_.at(key);
         models_.visit(ln, [&](auto& model) {
             auto& ld = model.levels[static_cast<int>(ln)];
+            std::vector<std::string> dst, src;
+            for (auto const& r : resources)
+                dst.push_back(r.dst), src.push_back(r.src);
+            Leases<std::decay_t<decltype(ld)>> leases;
+            leases.add(ld, dst, lease_of_<std::decay_t<decltype(how)>>()); // first: dst wins
+            leases.add(ld, src, amr::Lease::read);
             if (n_ranks_ > 1)
-                damn::mpi::copy(how, l.neighbours, resources_.at(key), ld);
+                damn::mpi::copy(how, l.neighbours, resources, ld);
             else
-                damn::amr::copy(how, l.neighbours, resources_.at(key), ld);
+                damn::amr::copy(how, l.neighbours, resources, ld);
         });
     }
 
@@ -430,6 +548,21 @@ private:
     {
         auto& l = levels_[ln];
         with_level_pair_(ln, [&](auto& ld, auto& coarse) {
+            std::vector<std::string> fine, coarser;
+            for (auto const& p : pairs)
+            {
+                fine.push_back(p.fine);
+                coarser.push_back(p.coarse);
+                if (!p.coarse_new.empty())
+                    coarser.push_back(p.coarse_new);
+            }
+            // damn's plans read the pairs' names on both levels: the written ones first (fill)
+            auto all = fine;
+            all.insert(all.end(), coarser.begin(), coarser.end());
+            Leases<std::decay_t<decltype(ld)>> leases;
+            leases.add(ld, fine, amr::Lease::fill);
+            leases.add(ld, all, amr::Lease::read);
+            leases.add(coarse, all, amr::Lease::read);
             if (n_ranks_ > 1)
                 damn::mpi::refine(op, region, *l.to_coarser, pairs, coarse, ld, alpha);
             else
@@ -443,6 +576,15 @@ private:
     {
         auto& l = levels_[ln];
         with_level_pair_(ln, [&](auto& ld, auto& coarse) {
+            std::vector<std::string> fine, coarser;
+            for (auto const& p : pairs)
+                fine.push_back(p.fine), coarser.push_back(p.coarse);
+            auto all = fine; // damn's plans read the pairs' names on both levels
+            all.insert(all.end(), coarser.begin(), coarser.end());
+            Leases<std::decay_t<decltype(ld)>> leases;
+            leases.add(coarse, coarser, amr::Lease::fill);
+            leases.add(coarse, all, amr::Lease::read);
+            leases.add(ld, all, amr::Lease::read);
             if (n_ranks_ > 1)
                 damn::mpi::coarsen(op, *l.to_coarser, pairs, ld, coarse);
             else

@@ -20,6 +20,7 @@
 // data is a writable numpy view on the patch's grid, particles the patch's domain particle
 //  array, by reference: only valid while the simulator and its patches exist
 
+#include "plamn/core/data/particles/particle_iteration.hpp"
 #include "damn/mpi/damn_mpi.hpp"
 
 #include "plamn/core/data/particles/particle_components.hpp"
@@ -46,8 +47,59 @@ namespace plamn::python3
 {
 namespace nb = nanobind;
 
+// a tiled particle array's components(): {name: numpy array} of every component, as the
+//  columns' (weight, iCell_x.., delta_x.., v_x..): copies, tile by tile (no contiguous columns)
+template<typename Particles_t, std::size_t dim = Particles_t::dimension>
+void def_tiled_components(auto& particles)
+    requires core::TiledParticles<Particles_t>
+{
+    particles.def("components", [](Particles_t const& self) {
+        std::array<char const*, 3> constexpr xyz{"x", "y", "z"};
+        std::vector<std::vector<double>> real(1 + dim + 3);
+        std::vector<std::vector<int>> cells(dim);
+        core::for_each_particle(self, [&](auto const& p) {
+            real[0].push_back(p.weight());
+            for (std::size_t d = 0; d < dim; ++d)
+            {
+                cells[d].push_back(p.iCell()[d]);
+                real[1 + d].push_back(p.delta()[d]);
+            }
+            for (std::size_t d = 0; d < 3; ++d)
+                real[1 + dim + d].push_back(p.v()[d]);
+        });
+        auto const array = [](auto& v) {
+            using T          = typename std::decay_t<decltype(v)>::value_type;
+            auto* owned      = new std::vector<T>(std::move(v));
+            nb::capsule free = nb::capsule(
+                owned, [](void* q) noexcept { delete static_cast<std::vector<T>*>(q); });
+            std::size_t const shape[1] = {owned->size()};
+            return nb::ndarray<nb::numpy, T, nb::ndim<1>>(owned->data(), 1, shape, free);
+        };
+        nb::dict out;
+        out["weight"] = array(real[0]);
+        for (std::size_t d = 0; d < dim; ++d)
+        {
+            out[(std::string{"iCell_"} + xyz[d]).c_str()] = array(cells[d]);
+            out[(std::string{"delta_"} + xyz[d]).c_str()] = array(real[1 + d]);
+        }
+        for (std::size_t d = 0; d < 3; ++d)
+            out[(std::string{"v_"} + xyz[d]).c_str()] = array(real[1 + dim + d]);
+        return out;
+    });
+}
+template<typename Particles_t>
+void def_tiled_components(auto&)
+    requires(!core::TiledParticles<Particles_t>)
+{
+}
+
+
 template<std::size_t dim>
 using FieldView = nb::ndarray<nb::numpy, double, nb::c_contig>;
+
+// a tiled particle array's tile's own array
+template<typename Particles_t>
+using tile_particles_t = std::decay_t<decltype(std::declval<Particles_t&>()()[0]())>;
 
 template<typename Data, std::size_t dim>
 struct PatchData
@@ -136,13 +188,41 @@ public:
         return fields_([&](auto& p) -> auto& { return population_(p, pop).particleDensity(); });
     }
 
+    // a population's domain particles: a patch data per patch, a tiled array's one per tile (tiles
+    //  count as patches: each its own array, live, as an untiled patch's)
     auto getParticles(std::string const& pop)
+        requires(!core::TiledParticles<Particles_t>)
     {
         std::vector<ParticlesData> out;
         for_each_patch_([&](auto const& patch, auto& data) {
             set_(out.emplace_back(), patch, data);
             out.back().data    = &population_(data, pop).domainParticles();
             out.back().nGhosts = Patch_t::particle_ghost_width;
+        });
+        return out;
+    }
+    auto getParticles(std::string const& pop)
+        requires core::TiledParticles<Particles_t>
+    {
+        std::vector<PatchData<tile_particles_t<Particles_t>*, dim>> out;
+        for_each_patch_([&](auto const& patch, auto& data) {
+            auto& tiles = population_(data, pop).domainParticles()();
+            for (std::size_t t = 0; t < tiles.size(); ++t)
+            {
+                auto& tile = tiles[t];
+                auto& pd   = out.emplace_back();
+                pd.patchID = id_(patch) + "_t" + std::to_string(t);
+                for (std::size_t i = 0; i < dim; ++i)
+                {
+                    pd.lower[i] = tile.lower[i];
+                    pd.upper[i] = tile.upper[i];
+                    pd.origin[i]
+                        = data.layout.origin[i]
+                          + (tile.lower[i] - data.layout.cells.lower[i]) * data.layout.dx[i];
+                }
+                pd.data    = &tile();
+                pd.nGhosts = Patch_t::particle_ghost_width;
+            }
         });
         return out;
     }
@@ -163,24 +243,51 @@ private:
             fn(level.patches[i], *level.data[i]);
     }
 
-    static void set_(auto& pd, auto const& patch, Patch_t const& data)
+    static std::string id_(auto const& patch)
     {
-        pd.patchID = std::to_string(patch.rank) + "#" + std::to_string(patch.id);
+        return std::to_string(patch.rank) + "#" + std::to_string(patch.id);
+    }
+    static void set_(auto& pd, std::string const& id, auto const& layout)
+    {
+        pd.patchID = id;
         for (std::size_t i = 0; i < dim; ++i)
         {
-            pd.origin[i] = data.layout.origin[i];
-            pd.lower[i]  = data.layout.cells.lower[i];
-            pd.upper[i]  = data.layout.cells.upper[i];
+            pd.origin[i] = layout.origin[i];
+            pd.lower[i]  = layout.cells.lower[i];
+            pd.upper[i]  = layout.cells.upper[i];
         }
         pd.nGhosts = Patch_t::field_ghost_width;
+    }
+    static void set_(auto& pd, auto const& patch, Patch_t const& data)
+    {
+        set_(pd, id_(patch), data.layout);
+    }
+
+    // a field's patch datas: an untiled field one, a tiled one one per tile (tiles count as
+    //  patches: each its own contiguous data, layout and ghosts; their domains do not overlap)
+    static void add_field_(std::vector<FieldData>& out, std::string const& id, auto const& layout,
+                           auto& field)
+        requires(!core::TiledField<decltype(field)>)
+    {
+        set_(out.emplace_back(), id, layout);
+        out.back().data = field_view<dim>(field);
+    }
+    static void add_field_(std::vector<FieldData>& out, std::string const& id, auto const&,
+                           core::TiledField auto& field)
+    {
+        for (std::size_t t = 0; t < field().size(); ++t)
+        {
+            auto& tile = field()[t];
+            set_(out.emplace_back(), id + "_t" + std::to_string(t), tile.layout());
+            out.back().data = field_view<dim>(tile());
+        }
     }
 
     auto fields_(auto&& get)
     {
         std::vector<FieldData> out;
         for_each_patch_([&](auto const& patch, auto& data) {
-            set_(out.emplace_back(), patch, data);
-            out.back().data = field_view<dim>(get(data));
+            add_field_(out, id_(patch), data.layout, get(data));
         });
         return out;
     }
@@ -326,24 +433,15 @@ void declare_patch_data(nb::module_& m, char const* name)
 }
 
 
-template<typename Simulator>
-void declare_data_wrangler(nb::module_& m)
+// a particle array's python class: size, __len__, __getitem__ and components() (live views of
+//  the columns where it has them, copies tile by tile for a tiled array)
+template<typename Particles_t, std::size_t dim>
+void declare_particle_array(nb::module_& m, char const* name)
 {
-    auto constexpr dim = Simulator::dimension;
-    using DW           = DataWrangler<Simulator>;
-    using Level        = DW::Level_t;
-    using Particles_t  = plamn::solver::HybridModel<Simulator::options>::Patch_t::Particles_t;
-    using Particle_t   = plamn::core::Particle<dim>;
-
-    nb::class_<Particle_t>(m, "Particle")
-        .def_prop_ro("weight", [](Particle_t const& p) { return p.weight(); })
-        .def_prop_ro("iCell", [](Particle_t const& p) { return p.iCell(); })
-        .def_prop_ro("delta", [](Particle_t const& p) { return p.delta(); })
-        .def_prop_ro("v", [](Particle_t const& p) { return p.v(); });
-
-    auto particles = nb::class_<Particles_t>(m, "ParticleArray")
-                         .def("size", [](Particles_t& self) { return self.size(); })
-                         .def("__len__", [](Particles_t& self) { return self.size(); });
+    using Particle_t = plamn::core::Particle<dim>;
+    auto particles   = nb::class_<Particles_t>(m, name)
+                           .def("size", [](Particles_t& self) { return self.size(); })
+                           .def("__len__", [](Particles_t& self) { return self.size(); });
 
     if constexpr (plamn::core::HasComponents<Particles_t>)
     {
@@ -380,15 +478,52 @@ void declare_data_wrangler(nb::module_& m)
         });
     }
     else
+    {
         particles.def(
             "__getitem__",
             [](Particles_t& self, std::size_t const i) -> auto& {
                 if (i >= self.size())
                     throw nb::index_error();
-                return self[i];
+                return core::particle_at(self, i); // tiled: through the tiles
             },
             nb::rv_policy::reference_internal);
+        def_tiled_components<Particles_t>(particles);
+    }
+}
 
+// a tiled array's tiles' own arrays and their patch datas (getParticles: a patch data per tile)
+template<typename Particles_t, std::size_t dim>
+void declare_tile_particles(nb::module_& m)
+    requires core::TiledParticles<Particles_t>
+{
+    using Tile_t = tile_particles_t<Particles_t>;
+    declare_particle_array<Tile_t, dim>(m, "ParticleArrayTile");
+    declare_patch_data<Tile_t*, dim>(m, "PatchDataParticleTile");
+}
+template<typename Particles_t, std::size_t dim>
+void declare_tile_particles(nb::module_&)
+    requires(!core::TiledParticles<Particles_t>)
+{
+}
+
+
+template<typename Simulator>
+void declare_data_wrangler(nb::module_& m)
+{
+    auto constexpr dim = Simulator::dimension;
+    using DW           = DataWrangler<Simulator>;
+    using Level        = DW::Level_t;
+    using Particles_t  = plamn::solver::HybridModel<Simulator::options>::Patch_t::Particles_t;
+    using Particle_t   = plamn::core::Particle<dim>;
+
+    nb::class_<Particle_t>(m, "Particle")
+        .def_prop_ro("weight", [](Particle_t const& p) { return p.weight(); })
+        .def_prop_ro("iCell", [](Particle_t const& p) { return p.iCell(); })
+        .def_prop_ro("delta", [](Particle_t const& p) { return p.delta(); })
+        .def_prop_ro("v", [](Particle_t const& p) { return p.v(); });
+
+    declare_particle_array<Particles_t, dim>(m, "ParticleArray");
+    declare_tile_particles<Particles_t, dim>(m);
     declare_patch_data<FieldView<dim>, dim>(m, "PatchDataField");
     declare_patch_data<Particles_t*, dim>(m, "PatchDataParticles");
 
@@ -403,7 +538,8 @@ void declare_data_wrangler(nb::module_& m)
         .def("getChargeFlux", &Level::getChargeFlux)
         .def("getDensity", &Level::getDensity)
         .def("getMomentumTensor", &Level::getMomentumTensor, nb::arg("c"), nb::arg("pop") = "")
-        .def("getParticles", &Level::getParticles);
+        .def("getParticles", // per patch, or per tile (tiled layouts): one of two overloads
+             [](Level& level, std::string const& pop) { return level.getParticles(pop); });
 
     nb::class_<DW>(m, "DataWrangler")
         .def(nb::init<Simulator&, nb::handle>(), nb::keep_alive<1, 2>())

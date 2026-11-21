@@ -10,11 +10,13 @@
 //
 // vw_d the whistler phase speed at the grid's shortest wavelength along d
 
+#include "plamn/core/data/field/field_tiles.hpp"
 #include "damn/core/def.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
 
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <limits>
@@ -35,6 +37,7 @@ NO_DISCARD inline double whistler_speed(double const inv_dx, double const rho, d
 template<typename Layout>
 NO_DISCARD double whistler_dt(Layout const& layout, auto const& rho, auto const& B,
                               double const cfl_wave)
+    requires(!TiledField<decltype(rho)>)
 {
     auto constexpr dim = Layout::dimension;
     using Scalar       = std::decay_t<decltype(Layout::options)>::FieldOptions::Scalar;
@@ -56,6 +59,21 @@ NO_DISCARD double whistler_dt(Layout const& layout, auto const& rho, auto const&
             inv_dt += std::numbers::pi * whistler_speed(1. / layout.dx[d], n, BdotB) / layout.dx[d];
         dt = std::min(dt, cfl_wave / inv_dt);
     });
+    return dt;
+}
+
+// tiled: tile by tile, on each tile's layout and views (B's tile ghosts current after its ghost
+//  fill)
+template<typename Layout>
+NO_DISCARD double whistler_dt(Layout const&, TiledField auto const& rho, auto const& B,
+                              double const cfl_wave)
+{
+    double dt = std::numeric_limits<double>::max();
+    for (std::size_t ti = 0; ti < rho().size(); ++ti)
+    {
+        std::array const Bt{B[0]()[ti](), B[1]()[ti](), B[2]()[ti]()};
+        dt = std::min(dt, whistler_dt(rho()[ti].layout(), rho()[ti](), Bt, cfl_wave));
+    }
     return dt;
 }
 

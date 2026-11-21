@@ -11,6 +11,7 @@
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/geometry/point.hpp"
 
+#include "plamn/core/data/particles/particle_iteration.hpp"
 #include "plamn/solver/hybrid/model.hpp"
 
 #include "mkn/kul/std/array.hpp"
@@ -67,13 +68,11 @@ NO_DISCARD auto cell_counts(Patch const& patch)
     CellCounts<dim> counts{patch.layout.cells};
     for (auto const& pop : patch.ions)
     {
-        auto const& particles = pop.domainParticles();
-        for (std::size_t p = 0; p < particles.size(); ++p)
-        {
-            damn::core::Point<int, dim> const c{particles[p].iCell()};
+        core::for_each_particle(pop.domainParticles(), [&](auto const& particle) {
+            damn::core::Point<int, dim> const c{particle.iCell()};
             if (damn::core::isIn(c, counts.cells))
                 counts.n[counts.index(c)] += 1;
-        }
+        });
     }
     return counts;
 }

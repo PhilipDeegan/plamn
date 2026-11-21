@@ -20,12 +20,15 @@
 // a dump at a time covers every level, or one (PHARE's dump_level, fine_dump_lvl_max): such a
 // time holds that level only
 
+#include "plamn/amr/untiled.hpp"
+#include "plamn/core/data/particles/particle_iteration.hpp"
 #include "damn/core/def.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "plamn/amr/resources.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
 #include "plamn/core/data/particles/particle_components.hpp"
 #include "plamn/core/models/quantities/quantity.hpp"
+#include "plamn/core/data/particles/particles_def.hpp"
 
 #include <algorithm>
 #include <array>
@@ -80,8 +83,8 @@ NO_DISCARD inline std::string patch_path(std::string const& time, int const leve
 // a patch's field on PHARE's ghost box (ghosts G of plamn's gw), C order (x slowest): its
 //  shape, and its values into out
 template<std::uint32_t gw, std::uint32_t G, typename Field, typename Float>
-void field_values(Field const& field, damn::core::Box<int, Field::dimension> const& cells,
-                  std::vector<std::size_t>& shape, std::vector<Float>& out)
+void field_values_untiled_(Field const& field, damn::core::Box<int, Field::dimension> const& cells,
+                           std::vector<std::size_t>& shape, std::vector<Float>& out)
 {
     static_assert(G <= gw, "plamn's field ghosts narrower than PHARE's");
     auto constexpr dim    = Field::dimension;
@@ -112,6 +115,15 @@ void field_values(Field const& field, damn::core::Box<int, Field::dimension> con
     }
 }
 
+// tiled fields from an untiled copy of their tiles
+template<std::uint32_t gw, std::uint32_t G, typename Field, typename Float>
+void field_values(Field const& field, damn::core::Box<int, Field::dimension> const& cells,
+                  std::vector<std::size_t>& shape, std::vector<Float>& out)
+{
+    amr::with_untiled(field,
+                      [&](auto const& f) { field_values_untiled_<gw, G>(f, cells, shape, out); });
+}
+
 // PHARE's particle datasets (ParticlePacker's keys and shapes): weight (n, 1), iCell (n, dim),
 //  delta (n, dim), v (n, 3), each row-major
 template<std::size_t dim>
@@ -122,10 +134,29 @@ struct ParticleColumns
     std::vector<int> iCell;
 };
 
-template<typename Particles>
-NO_DISCARD auto particle_columns(Particles const& particles)
+// tiled: tile by tile
+NO_DISCARD auto particle_columns(core::TiledParticles auto const& particles)
 {
-    auto constexpr dim = std::decay_t<Particles>::dimension;
+    auto constexpr dim = std::decay_t<decltype(particles)>::dimension;
+    ParticleColumns<dim> out;
+    core::for_each_particle(particles, [&](auto const& p) {
+        out.weight.push_back(p.weight());
+        for (std::size_t i = 0; i < dim; ++i)
+        {
+            out.iCell.push_back(p.iCell()[i]);
+            out.delta.push_back(p.delta()[i]);
+        }
+        for (std::size_t i = 0; i < 3; ++i)
+            out.v.push_back(p.v()[i]);
+    });
+    out.n = out.weight.size();
+    return out;
+}
+
+NO_DISCARD auto particle_columns(auto const& particles)
+    requires(!core::TiledParticles<decltype(particles)>)
+{
+    auto constexpr dim = std::decay_t<decltype(particles)>::dimension;
     ParticleColumns<dim> out;
     if (particles.size() == 0)
         return out;

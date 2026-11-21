@@ -4,6 +4,7 @@
 // plamn::Simulator: making and initializing levels (PHARE's HybridLevelInitializer)
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
+#include "plamn/amr/untiled.hpp"
 #include "damn/amr/copy.hpp"
 #include "damn/amr/hierarchy.hpp"
 #include "damn/amr/level_data.hpp"
@@ -81,9 +82,22 @@ Simulator<opts>::level_of_(int const ln, std::vector<Box_t> const& boxes)
     auto const l          = static_cast<std::size_t>(ln);
     auto const* const old = l < hierarchy_.levels.size() ? &hierarchy_.levels[l].patches : nullptr;
     auto const* const coarser = ln > 0 ? &hierarchy_.levels[l - 1].patches : nullptr;
+    // a refined level's patches in whole coarse cells (lower and shape multiples of the
+    //  ratio): its tiles are then even, starting on even indices (tile_set_mapper.hpp)
+    auto const whole_coarse = [&](std::vector<Box_t> const& patches) {
+        if (ln == 0)
+            return;
+        auto const r = static_cast<int>(hierarchy_.ratio);
+        for (auto const& p : patches)
+            for (std::size_t d = 0; d < dimension; ++d)
+                if (p.lower[d] % r != 0 or p.shape()[d] % r != 0)
+                    throw std::runtime_error("plamn Simulator: a level " + std::to_string(ln)
+                                             + " patch not in whole coarse cells");
+    };
     if (lb_.partition != "keep" or (!old and !coarser))
     {
         auto const patches = chop(boxes);
+        whole_coarse(patches);
         return damn::amr::make_level(ln, patches, curve(patches));
     }
 
@@ -110,6 +124,7 @@ Simulator<opts>::level_of_(int const ln, std::vector<Box_t> const& boxes)
         }
     if (lb_.spill >= 0)
         ranks = damn::amr::spill(patches, ranks, weights(patches), topology_, lb_.spill);
+    whole_coarse(patches);
     return damn::amr::make_level(ln, patches, ranks);
 }
 
@@ -301,12 +316,10 @@ void Simulator<opts>::initialize_refined_mhd_(std::size_t const ln, double const
     using Patch_t = solver::MHDModel<opts>::Patch_t;
     for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
     {
-        auto& B = ld.data[i]->states[0].B.grids;
-        auto bx = amr::field_resource<Patch_t::field_ghost_width>(B[0]);
-        auto by = amr::field_resource<Patch_t::field_ghost_width>(B[1]);
-        auto bz = amr::field_resource<Patch_t::field_ghost_width>(B[2]);
-        amr::divergence_free_touch_up(std::array{&bx, &by, &bz}, ld.patches[i].box,
-                                      ld.patches[i].box, dx);
+        amr::with_untiled_resources<Patch_t::field_ghost_width>(
+            ld.data[i]->states[0].B.grids, [&](auto const& B) { // tiled: untiled copies
+                amr::divergence_free_touch_up(B, ld.patches[i].box, ld.patches[i].box, dx);
+            });
     }
     MHDLevel{*this, ln}.fill_state_ghosts(0, t);
 }

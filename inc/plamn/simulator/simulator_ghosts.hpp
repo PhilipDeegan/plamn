@@ -114,6 +114,8 @@ void Simulator<opts>::check_set_(std::size_t const ln, std::string const& key,
 
     auto& ld          = data_(ln);
     auto const domain = damn::amr::level_domain(hierarchy_, static_cast<int>(ln));
+    Leases<std::decay_t<decltype(ld)>> leases; // tiled fields: checked on untiled temporaries
+    leases.add(ld, {key + "_x", key + "_y", key + "_z"}, amr::Lease::read);
     for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
         for (auto const* c : {"_x", "_y", "_z"})
             damn::amr::with_resource(ld.data[i], key + c, [&](auto const& r) {
@@ -136,8 +138,12 @@ void Simulator<opts>::touch_up_level_ghosts_(std::size_t const ln, std::string c
     auto const dx = damn::amr::mesh_size(hierarchy_, static_cast<int>(ln));
     models_.visit(ln, [&](auto& model) {
         using Patch_t  = std::remove_cvref_t<decltype(model)>::Patch_t;
-        using Resource = amr::FieldResource<typename Patch_t::Grid_t, Patch_t::field_ghost_width>;
+        using Resource = amr::FieldResource<typename resource_field_<Patch_t>::type,
+                                            Patch_t::field_ghost_width>;
         auto& ld       = model.levels[static_cast<int>(ln)];
+        // tiled B: touched up on its untiled temporaries, written back into the tiles
+        Leases<std::decay_t<decltype(ld)>> leases;
+        leases.add(ld, {key + "_x", key + "_y", key + "_z"}, amr::Lease::fill);
         for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
         {
             std::vector<Resource> B;

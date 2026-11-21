@@ -32,7 +32,7 @@
 //  constrained transport inputs never move)
 
 #include "damn/core/def.hpp"
-#include "plamn/amr/resources.hpp"
+#include "plamn/amr/untiled.hpp"
 #include "plamn/core/models/mhd_state.hpp"
 #include "plamn/core/models/quantities/mhd_quantities.hpp"
 #include "plamn/plamn_core.hpp"
@@ -235,6 +235,11 @@ struct MHDPatch
             fn(*g);
     }
 
+    // tiled fields: their untiled temporaries while a whole patch operation (damn's schedules)
+    //  works on them, see amr/untiled.hpp and Simulator::lease_
+    using Untiled_t = amr::UntiledFor_t<Grid_t>;
+    Untiled_t untiled;
+
 private:
     Fluxes_t fluxes_(std::string const& d, S const sf, V const vf) const
     {
@@ -265,16 +270,11 @@ private:
     }
 };
 
+// fn(name, grid) for each field grid damn's schedules may move, by its name
 template<auto opts>
-void for_each_resource(MHDPatch<opts>& patch, auto&& fn)
+void for_each_field_grid(MHDPatch<opts>& patch, auto&& fn)
 {
-    using Patch   = MHDPatch<opts>;
-    auto const gw = Patch::field_ghost_width;
-
-    auto const scalar = [&](auto& grid) {
-        auto r = amr::field_resource<gw>(grid);
-        fn(grid.name(), r);
-    };
+    auto const scalar = [&](auto& grid) { fn(grid.name(), grid); };
     auto const vector = [&](auto& v) {
         for (auto& g : v.grids)
             scalar(g);
@@ -293,7 +293,7 @@ void for_each_resource(MHDPatch<opts>& patch, auto&& fn)
     vector(patch.old.B);
     scalar(patch.old.Etot);
     vector(patch.E);
-    for (std::size_t d = 0; d < Patch::dimension; ++d)
+    for (std::size_t d = 0; d < MHDPatch<opts>::dimension; ++d)
         for (auto* f : {&patch.butcher[d], &patch.flux_sum[d]})
         {
             scalar(f->F_rho);
@@ -302,6 +302,16 @@ void for_each_resource(MHDPatch<opts>& patch, auto&& fn)
         }
     vector(patch.butcherE);
     vector(patch.flux_sum_E);
+}
+
+template<auto opts>
+void for_each_resource(MHDPatch<opts>& patch, auto&& fn)
+{
+    using Patch   = MHDPatch<opts>;
+    auto const gw = Patch::field_ghost_width;
+    for_each_field_grid(patch, [&](std::string const& name, auto& grid) {
+        amr::field_resource_for<gw>(patch.untiled, name, grid, fn);
+    });
 }
 
 // LevelData holds patches by unique_ptr

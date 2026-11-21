@@ -61,6 +61,10 @@ bool constexpr is_tiled(LayoutMode lm)
     return mkn::kul::any_in(lm, AoSCMTS, AoSTS, SoATS, SoAVXTS, AoSPCTS);
 }
 
+// a tiled particle array, whatever its cv/ref: what the tile/untiled overloads branch on
+template<typename P>
+concept TiledParticles = is_tiled(std::decay_t<P>::layout_mode);
+
 // flat SoAVX columns, with or without per cell offsets
 bool constexpr is_soavx(LayoutMode lm)
 {

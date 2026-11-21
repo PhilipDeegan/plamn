@@ -8,6 +8,7 @@
 #include "damn/core/def.hpp"
 
 #include "plamn/amr/refine.hpp"
+#include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/numerics/ampere/ampere_transformer.hpp"
 #include "plamn/solver/hybrid/level_steps.hpp"
@@ -94,10 +95,21 @@ void restart_loaded(HybridModel<opts> const& model, auto&& level)
             for (auto& c : patch.chargeFlux)
                 fn(c);
         };
-        each([&](auto const& g) { stored.emplace_back(g.data(), g.data() + g.size()); });
+        each([&](auto const& g) {
+            auto& values = stored.emplace_back();
+            core::for_each_buffer(g, [&](auto const* data, auto const size) {
+                values.insert(values.end(), data, data + size);
+            });
+        });
         patch.ions.update();
         std::size_t i = 0;
-        each([&](auto& g) { std::copy(stored[i].begin(), stored[i].end(), g.data()), ++i; });
+        each([&](auto& g) {
+            auto const* from = stored[i++].data();
+            core::for_each_buffer(g, [&](auto* data, auto const size) {
+                std::copy(from, from + size, data);
+                from += size;
+            });
+        });
     });
     level.per_patch(
         [&](auto& patch) { core::AmpereTransformer{}(patch.layout, patch.em.B, patch.J); });
