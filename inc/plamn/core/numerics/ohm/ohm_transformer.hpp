@@ -51,7 +51,7 @@ public:
                     VecField const& B, VecField const& J, VecField& Enew) const
         requires(not is_field_tile_set_v<Field>)
     {
-        with_flags([&]<bool isResistive, bool isHyperResistive>() {
+        with_flags([&]<bool isResistive, bool isHyperResistive, HyperMode hyper>() {
             auto const gradPe = grad(layout, Pe);
             Ohm<Layout> const ohm{info_, layout};
 
@@ -60,7 +60,8 @@ public:
                 eval_on_box(
                     Enew(c), domain_box(layout, Enew(c)),
                     [] DAMN_ALL(auto const& ijk, auto const& ohm_, auto&&... args) {
-                        ohm_.template operator()<c, isResistive, isHyperResistive>(ijk, args...);
+                        ohm_.template operator()<c, isResistive, isHyperResistive, hyper>(ijk,
+                                                                                          args...);
                     },
                     ohm, n, Ve, gradPe_c, B, J, Enew);
             };
@@ -95,10 +96,11 @@ public:
     }
 
 private:
-    // fn<isResistive, isHyperResistive>(): runtime flags as compile-time tags
+    // fn<isResistive, isHyperResistive, hyper mode>(): runtime flags as compile-time tags
     void with_flags(auto&& fn) const
     {
-        mkn::kul::Constexprifier{info_.isResistive(), info_.isHyperResistive()}(fn);
+        mkn::kul::Constexprifier{info_.isResistive(), info_.isHyperResistive(),
+                                 info_.hyper_mode}(fn);
     }
 
     // block per tile, block threads stride each E component's box
@@ -138,12 +140,12 @@ private:
             items.emplace_back(make_item(ti));
         auto* const ip = items.data();
 
-        with_flags([&]<bool isResistive, bool isHyperResistive>() {
+        with_flags([&]<bool isResistive, bool isHyperResistive, HyperMode hyper>() {
             Launcher{n_tiles}([=] DAMN_ALL() mutable {
                 auto& it        = ip[Launcher::tile_idx()];
                 auto const eval = [&]<auto c>(auto const& box, auto const& gradPe_c) {
                     Launcher::for_each_point(box, [&](auto const& ijk) {
-                        it.ohm.template operator()<c, isResistive, isHyperResistive>(
+                        it.ohm.template operator()<c, isResistive, isHyperResistive, hyper>(
                             ijk, it.n, it.Ve, gradPe_c, it.B, it.J, it.E);
                     });
                 };

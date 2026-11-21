@@ -55,10 +55,11 @@ public:
 
     // E component c at one point: gradPe_c is that component of grad(layout, Pe), layout the
     //  one of the fields at ijk (patch or tile). The resistive / hyper-resistive runtime flags
-    //  come in as compile-time tags: no branch on them per point, the projection / laplacian
-    //  are skipped when eta or nu is zero. Where and how it is evaluated (boxes, tiles, GPU) is
-    //  up to the caller, see core/numerics/ohm/ohm_transformer.hpp
-    template<auto c, bool isResistive, bool isHyperResistive>
+    //  and the hyper mode come in as compile-time tags: no branch on them per point (the loops
+    //  vectorise), the projection / laplacian are skipped when eta or nu is zero. Where and how
+    //  it is evaluated (boxes, tiles, GPU) is up to the caller, see
+    //  core/numerics/ohm/ohm_transformer.hpp
+    template<auto c, bool isResistive, bool isHyperResistive, HyperMode hyper>
     void operator()(auto const& ijk, auto const& n, auto const& Ve, auto const& gradPe_c,
                     auto const& B, auto const& J, auto& E) const DAMN_ALL
     {
@@ -69,7 +70,7 @@ public:
         if constexpr (isResistive)
             E_ += resistive_<c>(J, ijk);
         if constexpr (isHyperResistive)
-            E_ += hyperresistive_<c>(J, B, n, ijk);
+            E_ += hyperresistive_<c, hyper>(J, B, n, ijk);
 
         E(c)(ijk) = E_;
     }
@@ -196,17 +197,22 @@ private:
         }
     }
 
-    template<auto component, typename VecField>
+    // one overload per HyperMode (a new mode: a compile error here, add its overload)
+    static_assert(static_cast<std::underlying_type_t<HyperMode>>(HyperMode::count) == 2);
+
+    template<auto component, HyperMode hyper, typename VecField>
+        requires(hyper == HyperMode::constant)
+    auto hyperresistive_(VecField const& J, VecField const&, auto const&,
+                         damn::core::Point<std::size_t, VecField::dimension> index) const DAMN_ALL
+    {
+        return constant_hyperresistive_<component>(J, index);
+    }
+
+    template<auto component, HyperMode hyper, typename VecField>
+        requires(hyper == HyperMode::spatial)
     auto hyperresistive_(VecField const& J, VecField const& B, auto const& n,
                          damn::core::Point<std::size_t, VecField::dimension> index) const DAMN_ALL
     {
-        // if compile error, fix this function
-        static_assert(static_cast<std::underlying_type_t<HyperMode>>(HyperMode::count) == 2);
-
-        if (hyper_mode == HyperMode::constant)
-            return constant_hyperresistive_<component>(J, index);
-
-        // else
         return spatial_hyperresistive_<component>(J, B, n, index);
     }
 
@@ -223,7 +229,8 @@ private:
         VecField const& J, VecField const& B, auto const& n,
         damn::core::Point<std::size_t, VecField::dimension> index) const DAMN_ALL
     {
-        auto const lvlCoeff = 1. / std::pow(4, layout_.level);
+        // 1 / 4^level, exact (no pow call per point: it blocks vectorisation)
+        auto const lvlCoeff = 1. / static_cast<double>(std::uint64_t{1} << (2 * layout_.level));
 
         auto constexpr min_density = 0.1;
         auto computeHR             = [&]<auto dst>() {
