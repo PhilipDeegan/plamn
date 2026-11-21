@@ -19,6 +19,7 @@ modelled time, not a prediction for another machine; exchanges are counted, not 
 """
 
 import argparse
+import heapq
 import time
 
 import numpy as np
@@ -121,7 +122,43 @@ def costs_of(patches, ppc_l, costs, reach):
             + costs["patch"]), cells, particles
 
 
-CLASSES = ("same rank", "same NUMA", "other NUMA", "other node")
+CLASSES = ("same process", "same NUMA", "other NUMA", "other node")
+
+
+def tiles_of(patches, w, tile):
+    """each patch's tiles (at most tile cells a side, damn's TilingOptions max_tile_size), the
+    patch's cost shared evenly: (patch index per tile, cost per tile)"""
+    n = np.array([np.asarray(up) - np.asarray(lo) + 1 for lo, up in patches])
+    k = np.ceil(n / tile).astype(np.int64).prod(axis=1)
+    return np.repeat(np.arange(len(patches)), k), np.repeat(np.asarray(w, dtype=float) / k, k)
+
+
+def process_times(ranks, patches, w, n_procs, threads, tile, main_busy):
+    """each process's time for its patches: their tiles over its threads, largest first to the
+    least loaded thread (the main one has 1 - main_busy of its time for tiles); threads 1: the
+    sum. One process a NUMA zone (threads = its cores): the zone's cores share its work, the
+    imbalance only between zones"""
+    w = np.asarray(w, dtype=float)
+    ranks = np.asarray(ranks)
+    if threads == 1:
+        return np.bincount(ranks, weights=w, minlength=n_procs) / (1 - main_busy)
+    of_patch, cost = tiles_of(patches, w, tile)
+    owner = ranks[of_patch]
+    order = np.lexsort((-cost, owner))
+    owner, cost = owner[order], cost[order]
+    bounds = np.searchsorted(owner, np.arange(n_procs + 1))
+    speed = np.ones(threads)
+    speed[0] = 1 - main_busy
+    out = np.zeros(n_procs)
+    for pr in range(n_procs):
+        heap = [(0.0, t) for t in range(threads)]
+        if speed[0] <= 0:
+            heap = heap[1:]
+        for c in cost[bounds[pr]:bounds[pr + 1]]:
+            load, t = heapq.heappop(heap)
+            heapq.heappush(heap, (load + c / speed[t], t))
+        out[pr] = max(load for load, _ in heap)
+    return out
 
 
 def where(a, b, node_of_rank, numa_of_rank):
@@ -135,7 +172,7 @@ def where(a, b, node_of_rank, numa_of_rank):
 
 def crossing(patches, ranks, node_of_rank, extent, reach, numa_of_rank=None):
     """ghost cells exchanged both ways between face neighbours of different ranks, per distance
-    class (CLASSES, same rank: 0); neighbours along each axis through the chop's grid (a
+    class (CLASSES, same process: 0); neighbours along each axis through the chop's grid (a
     neighbour's lower is this patch's upper + 1, the other lowers the same), periodic within
     extent"""
     numa_of_rank = numa_of_rank or [0] * len(node_of_rank)
@@ -191,7 +228,7 @@ class OwnerGrid:
 def under_by_distance(fine, fine_ranks, coarse, coarse_ranks, node_of_rank, ratio,
                       numa_of_rank=None):
     """the coarse cells under the fine patches (each coarsened) by the distance class from the
-    fine patch's rank to their owner (CLASSES' shares; all same rank: every core's levels in the
+    fine patch's process to their owner (CLASSES' shares; all same process: every level in the
     same place)"""
     grid = OwnerGrid(coarse, coarse_ranks)
     node = np.asarray(node_of_rank)
@@ -290,9 +327,18 @@ def main():
                    "curve), then spilled")
     p.add_argument("--spill", type=float, nargs="+", default=[0.1],
                    help="aligned: a rank's tolerance over the mean before it hands patches on")
+    p.add_argument("--threads", type=int, nargs="+", default=[1],
+                   help="threads a process (its main thread included): a topology's first field "
+                   "is then cores, processes = cores / threads; the patches partitioned over the "
+                   "processes, each process's tiles over its threads")
+    p.add_argument("--tile", type=int, default=10, help="largest tile a side (damn's default)")
+    p.add_argument("--main-busy", type=float, default=0.0,
+                   help="the main thread's share taken by MPI (not on tiles)")
+    p.add_argument("--thread-eff", type=float, default=1.0,
+                   help="a process's threads' parallel efficiency (shared memory bandwidth)")
     p.add_argument("--no-exchanges", action="store_true", help="skip the face counts (big runs)")
     p.add_argument("--locality", action="store_true",
-                   help="each level's coarse cells under its patches on the same rank")
+                   help="each level's coarse cells under its patches on the same process")
     a = p.parse_args()
 
     from plamn import plamn_etc
@@ -323,13 +369,19 @@ def main():
             for ln, (pt, _, c, q) in enumerate(per_level)) + f" ({time.monotonic() - t0:.1f} s)")
         serial = sum(r**ln * w.sum() for ln, (_, w, _, _) in enumerate(per_level))
         print(f"  1 core: {serial:.0f} s a coarse step (L0 1, L1 {r}, L2 {r * r} substeps)")
-        print(f"  {'topology':>9} {'partition':>12} {'step s':>9} {'speedup':>8} {'eff':>6} "
+        print(f"  {'topology':>9} {'thr':>4} {'procs':>6} {'partition':>12} {'step s':>9} "
+              f"{'speedup':>8} {'eff':>6} "
               + " ".join(f"{'imb L' + str(ln):>8}" for ln in range(len(levels))))
         strategies = [(m, t) for m in a.partition
                       for t in (a.spill if m in ("aligned", "finest") else [None])]
-        for (mode, tol), topology in ((x, t) for t in a.topologies for x in strategies):
+        for (mode, tol), topology, threads in ((x, t, th) for t in a.topologies
+                                               for th in a.threads for x in strategies):
             fields = [int(x) for x in topology.split(":")]
-            n, per_node = fields[0], fields[1]
+            cores, cores_per_node = fields[0], fields[1]
+            if cores % threads or cores_per_node % threads:
+                print(f"  {topology:>9} {threads:>4}: cores not a multiple of the threads")
+                continue
+            n, per_node = cores // threads, cores_per_node // threads
             zones = fields[2] if len(fields) > 2 else a.numa
             per_zone = max(1, -(-per_node // zones))  # a node's ranks in halves (dual socket)
             node_of_rank = [k // per_node for k in range(n)]
@@ -361,7 +413,8 @@ def main():
                 else:
                     ranks = curve(patches, w)
                 owners[ln] = ranks
-                load = np.bincount(ranks, weights=w, minlength=n)
+                load = process_times(ranks, patches, w, n, threads, a.tile, a.main_busy)
+                load /= a.thread_eff if threads > 1 else 1.0
                 step += r**ln * load.max()
                 imbs.append(load.max() / load.mean())
                 if not a.no_exchanges:
@@ -369,7 +422,8 @@ def main():
                     xc.append(crossing(patches, ranks, node_of_rank, extent, REACH,
                                        numa_of_rank))
             name = mode if tol is None else f"{mode} {tol:g}"
-            print(f"  {topology:>9} {name:>12} {step:>9.1f} {serial / step:>8.1f} {serial / step / n:>6.2f} "
+            print(f"  {topology:>9} {threads:>4} {n:>6} {name:>12} {step:>9.2f} "
+                  f"{serial / step:>8.1f} {serial / step / cores:>6.2f} "
                   + " ".join(f"{i:>8.3f}" for i in imbs))
             if not a.no_exchanges:
                 for ln, (by, cells) in enumerate(zip(xc, [c for _, _, c, _ in per_level])):
