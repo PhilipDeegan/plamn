@@ -181,7 +181,6 @@ struct MHDPatch
             {
                 fn(f.F_rho);
                 vector(f.F_rhoV);
-                vector(f.F_B);
                 fn(f.F_Etot);
             }
         for (auto& c : ct)
@@ -221,13 +220,12 @@ struct MHDPatch
     VecField J{"J", layout, V::J, 0.}, E_diss{"E_diss", layout, V::E, 0.};
     std::conditional_t<hall, std::array<HallCT, 3>, NoHall> hall_ct = hall_ct_();
 
-    // a face's fluxes' grids: F_rho, F_rhoV (x y z), F_B (x y z), F_Etot
+    // a face's fluxes' grids: F_rho, F_rhoV (x y z), F_Etot
     static std::vector<Grid_t*> flux_grids(Fluxes_t& f)
     {
         std::vector<Grid_t*> grids{std::addressof(f.F_rho)}; // Grid overloads operator&
-        for (auto* v : {&f.F_rhoV, &f.F_B})
-            for (auto& g : v->grids)
-                grids.push_back(std::addressof(g));
+        for (auto& g : f.F_rhoV.grids)
+            grids.push_back(std::addressof(g));
         grids.push_back(std::addressof(f.F_Etot));
         return grids;
     }
@@ -240,9 +238,9 @@ struct MHDPatch
 private:
     Fluxes_t fluxes_(std::string const& d, S const sf, V const vf) const
     {
-        return Fluxes_t{
-            Grid_t{"F_rho_" + d, layout, sf, 0.}, VecField{"F_rhoV_" + d, layout, vf, 0.},
-            VecField{"F_B_" + d, layout, vf, 0.}, Grid_t{"F_Etot_" + d, layout, sf, 0.}};
+        return Fluxes_t{Grid_t{"F_rho_" + d, layout, sf, 0.},
+                        VecField{"F_rhoV_" + d, layout, vf, 0.},
+                        Grid_t{"F_Etot_" + d, layout, sf, 0.}};
     }
     auto hall_ct_() const
     {

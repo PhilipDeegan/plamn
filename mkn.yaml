@@ -102,6 +102,13 @@ profile:
   parent: test_plamn_core
   test: tst/plamn/core/data/particles/test_particles_partitioning.cpp
 
+# each step of the particles movers timed on its own, per layout (MoveSpec): see the file's header
+- name: bench_mover
+  inc: . tpp/damn
+  self: base
+  mode: none
+  main: etc/bench/particles/bench_mover.cpp
+
 # tpp/damn may be a symlink to a local damn checkout, otherwise it is cloned
 - name: damn
   dep: damn&tpp/damn(https://github.com/PhilipDeegan/damn)[damn_core]

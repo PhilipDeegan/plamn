@@ -97,6 +97,8 @@ double Simulator<opts>::advance()
     ++steps_;
     if (regrid_mode_ == RegridMode::normal and tagging_ and steps_ % regrid_interval_ == 0)
         regrid_(currentTime_);
+    if (decomposition_.every > 0 and steps_ % decomposition_.every == 0)
+        record_decomposition_("sample", currentTime_, /*always=*/true);
     return dt_;
 }
 
@@ -151,7 +153,11 @@ void Simulator<opts>::advance_level_(int const level_number, double const t, dou
             solver::advance(model, level, t, t + dt);
         }
         else
+        {
+            decomposition_.timing = !decomposition_.path.empty();
             solver::advance(model, level_services_(ln), t, dt);
+            decomposition_.timing = false;
+        }
     });
     DAMN_SUPER_DEBUG_DO(sums_(ln, "end", t);)
     if (ln + 1 == levels_.size()) // the finest; coarser ones after their synchronization
@@ -178,7 +184,10 @@ void Simulator<opts>::prepare_step_(int const ln, double const t)
     models_.visit(l, [&](auto& model) {
         if constexpr (solver::is_hybrid_model_v<std::remove_cvref_t<decltype(model)>>)
             solver::hybrid::prepare_step(model, level_services_(l));
-        else // the state at the step's start (PHARE's MHDMessenger prepareStep), every point
+        else if (ln + 1 < hierarchy_.max_levels)
+            // the state at the step's start (PHARE's MHDMessenger prepareStep), every point: the
+            //  reflux redoes the step from it, so only a level that can have a finer one (one
+            //  made by a regrid after this is still refluxed at the step's end)
             MHDLevel{*this, l}.per_patch([](auto& patch) {
                 auto& u       = patch.states[0];
                 auto const cp = [](auto const& from, auto& to) {

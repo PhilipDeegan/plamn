@@ -22,6 +22,42 @@ namespace plamn::core
 {
 enum class UpdaterMode : std::uint16_t { domain_only = 0, all };
 
+// what one mover call does (the movers' update<spec>): the push in place (the particles to n+1,
+//  post_move_sync after it when sync) or on copies (copy: the particles stay at n and the copies
+//  are deposited, nothing to sync), and the deposit of the pushed particles in the mover.
+//  UpdaterMode::domain_only is copy_spec, UpdaterMode::all each mover's all_spec (CPU: push and
+//  sync, the domain deposit after the exchange; the device mover deposits too). The other
+//  combinations time the steps on their own (etc/bench/particles/bench_mover.cpp); without the
+//  sync the arrays stay as the push left them
+struct MoveSpec
+{
+    bool copy    = false;
+    bool deposit = false;
+    bool sync    = true;
+};
+
+MoveSpec constexpr copy_spec{.copy = true, .deposit = true, .sync = false};
+
+// how the device deposit after an in place push runs (Interpolating::on_tiles): a block per tile
+//  of `warps` warps, each a contiguous share of the tile's particles (sorted: each warp on its own
+//  cells). The default from PLAMN_DEPOSIT_WARPS, for a bootstrap probe of the local GPU to set
+#ifndef PLAMN_DEPOSIT_WARPS
+#define PLAMN_DEPOSIT_WARPS 1
+#endif
+struct DepositSpec
+{
+    std::uint8_t warps = PLAMN_DEPOSIT_WARPS;
+};
+static_assert(DepositSpec{}.warps >= 1 and DepositSpec{}.warps <= 32,
+              "PLAMN_DEPOSIT_WARPS: 1 to 32 (a block of at most 1024 threads)");
+
+template<MoveSpec spec>
+void constexpr check_move_spec()
+{
+    static_assert(!spec.copy or (spec.deposit and !spec.sync),
+                  "MoveSpec copy: the pushed copies are deposited, nothing to sync");
+}
+
 template<typename Layout>
 struct UpdaterSelectionBoxing;
 template<typename Selector_t, typename Layout>

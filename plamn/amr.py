@@ -56,6 +56,7 @@ class NoDataHierarchy:
     node_of_rank: list  # each rank's node
     levels: list = field(default_factory=list)  # [[(lower, upper, rank)]]
     weights: list = field(default_factory=list)  # [[weight per patch]]
+    numa_of_rank: list = None  # each rank's memory domain on its node (None: one a node)
 
     @property
     def ranks(self):
@@ -73,6 +74,7 @@ class NoDataHierarchy:
             self.node_of_rank,
             reach,
             self.weights,
+            self.numa_of_rank or [],
         )
 
     def total_work_imbalance(self):
@@ -88,12 +90,13 @@ class NoDataHierarchy:
     def comm_cost(self, cost=None, reach=None):
         """the cells exchanged (same level ghosts and coarse cells under each patch) weighed by
         distance: cost {distance: per cell}, placeholders until measured (Self and Local free,
-        Numa 0.3, Node 1, Remote 10)"""
+        Numa 0.3, Node 1, Socket 2: another memory domain of the node, Remote 10)"""
         cost = cost or {
             "Self": 0.0,
             "Local": 0.0,
             "Numa": 0.3,
             "Node": 1.0,
+            "Socket": 2.0,
             "Remote": 10.0,
         }
         total = 0.0
@@ -113,6 +116,7 @@ class NoDataHierarchy:
             previous.levels,
             self.levels,
             self.node_of_rank,
+            self.numa_of_rank or [],
         )
 
     def migration_cost(self, previous, cost=None):
@@ -122,6 +126,7 @@ class NoDataHierarchy:
             "Local": 0.0,
             "Numa": 0.3,
             "Node": 1.0,
+            "Socket": 2.0,
             "Remote": 10.0,
         }
         return sum(
@@ -148,7 +153,7 @@ class NoDataHierarchy:
         for m in self.metrics(reach):
             exchanged = ", ".join(
                 f"{d} {m['ghost_cells'][d]}/{m['coarse_cells'][d]}"
-                for d in ("Self", "Local", "Numa", "Node", "Remote")
+                for d in ("Self", "Local", "Numa", "Node", "Socket", "Remote")
                 if m["ghost_cells"][d] or m["coarse_cells"][d]
             )
             lines.append(
@@ -260,6 +265,7 @@ class Chopper:
     sim: object
     ranks: int = 1
     ranks_per_node: int = None  # default: all on one node
+    numa_per_node: int = 1  # memory domains a node (2: dual socket), its ranks split evenly
     mode: str = "even"
     partition: str = "levels"
     block: int = 8
@@ -290,6 +296,8 @@ class Chopper:
         )
         per_node = self.ranks_per_node or self.ranks
         self.node_of_rank = [r // per_node for r in range(self.ranks)]
+        per_zone = max(1, -(-per_node // self.numa_per_node))
+        self.numa_of_rank = [(r % per_node) // per_zone for r in range(self.ranks)]
 
     def _patch_boxes(self, ln, boxes):
         size, gran = self.patch_size, 1
@@ -478,6 +486,7 @@ class Chopper:
             self.origin,
             self.sim.interp_order,
             self.node_of_rank,
+            numa_of_rank=self.numa_of_rank,
         )
         for ln in sorted(tag_boxes):
             if ln != len(h.levels):
@@ -518,3 +527,180 @@ class Chopper:
             h.levels.append([(lo, up, r) for (lo, up), r in zip(boxes, ranks)])
             h.weights.append(weights)
         return h
+
+
+# distance weighted per cell costs: placeholders until measured (Self and Local free)
+COSTS = {"Self": 0.0, "Local": 0.0, "Numa": 0.3, "Node": 1.0, "Socket": 2.0, "Remote": 10.0}
+
+
+def remote_ranks(h, reach=None):
+    """per level, (max, mean) over ranks of the other ranks whose patches lie within reach of
+    the rank's patches (same level ghosts, periodic images included): how many ranks each rank
+    exchanges ghosts with (PHARE's run summary's remote_ranks_max / _avg)"""
+    reach = _ghosts[h.interp_order] if reach is None else reach
+    lower, upper = (np.asarray(b) for b in h.domain)
+    extent = upper - lower + 1
+    out = []
+    for ln, patches in enumerate(h.levels):
+        n = extent * h.ratio**ln
+        shifts = [np.zeros(h.ndim, dtype=int)]
+        for d in range(h.ndim):
+            if h.periodic[d]:
+                shifts += [s + e for s in shifts for e in (n * np.eye(h.ndim, dtype=int)[d],
+                                                           -n * np.eye(h.ndim, dtype=int)[d])]
+        lo = np.array([p[0] for p in patches]).reshape(-1, h.ndim)
+        up = np.array([p[1] for p in patches]).reshape(-1, h.ndim)
+        rank = np.array([p[2] for p in patches], dtype=int)
+        peers = {r: set() for r in range(h.ranks)}
+        for i in range(len(patches)):
+            for s in shifts:
+                near = np.all((lo + s <= up[i] + reach) & (up + s >= lo[i] - reach), axis=1)
+                peers[int(rank[i])].update(int(r) for r in rank[near] if r != rank[i])
+        counts = [len(v) for v in peers.values()]
+        out.append((max(counts), float(np.mean(counts))))
+    return out
+
+
+def read_decomposition(path, costs=None):
+    """the simulator's decomposition log (simulation/AMR/decomposition/log, PLAMN_DECOMPOSITION):
+    per line its event, t, step, the NoDataHierarchy ("hierarchy": critical_path(),
+    total_work_imbalance(), comm_cost(), metrics()...), the simulator's own counts per level
+    ("levels": metrics, with level_ghost_cells = ghost_box_cells less the same level ghost
+    cells: level ghosts and physical boundary cells), and the derived costs: critical_path,
+    total_work_imbalance, comm_cost and migration_cost (costs per cell by distance, default
+    COSTS), remote_ranks"""
+    import json
+    from pathlib import Path
+
+    costs = costs or COSTS
+    out = []
+    for line in Path(path).read_text().splitlines():
+        if not line.strip():
+            continue
+        rec = json.loads(line)
+        ndim = len(rec["domain"][0])
+        h = NoDataHierarchy(
+            ndim,
+            tuple(rec["domain"]),
+            rec["periodic"],
+            rec["ratio"],
+            rec["dl"],
+            [0.0] * ndim,
+            rec["interp"],
+            rec["nodes"],
+            [[(lo, up, r) for lo, up, r in lvl["patches"]] for lvl in rec["levels"]],
+            [lvl["weights"] for lvl in rec["levels"]],
+        )
+        levels = []
+        for lvl in rec["levels"]:
+            m = dict(lvl["metrics"])
+            m["level"] = lvl["level"]
+            m["patches"] = len(lvl["patches"])
+            m["level_ghost_cells"] = m["ghost_box_cells"] - sum(m["ghost_cells"].values())
+            levels.append(m)
+        comm = sum(
+            costs[d] * n
+            for m in levels
+            for key in ("ghost_cells", "coarse_cells")
+            for d, n in m[key].items()
+        )
+        migration = rec.get("migration")
+        out.append(
+            dict(
+                event=rec["event"],
+                t=rec["t"],
+                step=rec["step"],
+                busy_steps=rec.get("busy_steps", 0),
+                reach=rec["reach"],
+                hierarchy=h,
+                levels=levels,
+                migration=migration,
+                critical_path=h.critical_path(),
+                total_work_imbalance=h.total_work_imbalance(),
+                comm_cost=comm,
+                migration_cost=None if migration is None else sum(
+                    costs[d] * n
+                    for m in migration
+                    for key in ("moved", "refined")
+                    for d, n in m[key].items()
+                ),
+                remote_ranks=remote_ranks(h, rec["reach"]),
+            )
+        )
+    return out
+
+
+def cost_fit(records, ratio=None, terms=("particles", "cells"), reduce=None):
+    """a hybrid patch's busy seconds per substep as a linear sum of terms (least squares), from
+    read_decomposition's records (one run's, or several runs' concatenated per run: pass a list
+    of runs' records as records=[run0, run1, ...]); each line's busy time is the work of the
+    previous line's patches (their particles then); level l does ratio^l substeps a step.
+    terms: "particles", "cells", "ghost" (the patch grown by the line's reach less the patch:
+    ghost work), "patch" (a constant per patch: its fixed cost).
+    reduce="min": one row per patch (run, level, box, owner): its fastest line's seconds per
+    substep, and one imbalance per run and level, each rank's the sum of its patches' fastest:
+    wall time on a shared machine (CI's concurrent jobs, oversubscribed ranks) only ever adds to
+    the work, the minimum is the work.
+    {term: seconds per unit, "r2", "n": patch rows, "imbalance": per line (reduce: per run), per
+    level, the busiest rank's busy time over the mean (and "weight_imbalance", the particles')}"""
+    if reduce not in (None, "min"):
+        raise ValueError(f"cost_fit: reduce {reduce!r}, not None or 'min'")
+    runs = records if records and isinstance(records[0], list) else [records]
+    rows, y, imbalance = [], [], []
+    for ri, run in enumerate(runs):
+        fastest, weights_of = {}, {}  # reduce: (level, box, owner) -> (s, row); level -> weights
+        for prev, rec in zip(run, run[1:]):
+            h = prev["hierarchy"]
+            r = ratio or h.ratio
+            steps = rec["busy_steps"]
+            if steps <= 0:
+                continue
+            reach = rec.get("reach", _ghosts[h.interp_order])
+            line = []
+            for ln, m in enumerate(rec["levels"]):
+                busy = m.get("busy", [])
+                if ln >= len(h.levels) or len(busy) != len(h.levels[ln]) or not any(busy):
+                    continue  # a new level, or one not timed (MHD)
+                substeps = steps * r**ln
+                for (lo, up, owner), w, b in zip(h.levels[ln], h.weights[ln], busy):
+                    n = np.asarray(up) - np.asarray(lo) + 1
+                    cells = float(np.prod(n))
+                    values = dict(particles=w, cells=cells,
+                                  ghost=float(np.prod(n + 2 * reach)) - cells, patch=1.0)
+                    row, s = [values[t] for t in terms], b / substeps
+                    if reduce:
+                        key = (ln, tuple(lo), tuple(up), owner)
+                        if key not in fastest or s < fastest[key][0]:
+                            fastest[key] = (s, row)
+                    else:
+                        rows.append(row)
+                        y.append(s)
+                per_rank = np.asarray(m["busy_rank"])
+                weights = np.asarray(prev["levels"][ln]["weight"])
+                weights_of.setdefault(ln, weights)
+                line.append(dict(level=ln,
+                                 imbalance=float(per_rank.max() / per_rank.mean()),
+                                 weight_imbalance=float(weights.max() / weights.mean())))
+            if line and not reduce:
+                imbalance.append(dict(event=rec["event"], step=rec["step"], levels=line))
+        per_rank = {}
+        for (ln, _, _, owner), (s, row) in fastest.items():
+            rows.append(row)
+            y.append(s)
+            r = per_rank.setdefault(ln, np.zeros(len(weights_of[ln])))
+            r[owner] += s
+        if per_rank:
+            imbalance.append(dict(event="min", run=ri, levels=[
+                dict(level=ln, imbalance=float(r.max() / r.mean()),
+                     weight_imbalance=float(weights_of[ln].max() / weights_of[ln].mean()))
+                for ln, r in sorted(per_rank.items())]))
+    if not rows:
+        return None
+    A, y = np.asarray(rows), np.asarray(y)
+    coef, *_ = np.linalg.lstsq(A, y, rcond=None)
+    fitted = A @ coef
+    r2 = 1 - np.sum((y - fitted) ** 2) / np.sum((y - y.mean()) ** 2)
+    out = {t: float(c) for t, c in zip(terms, coef)}
+    # the old names (a, b) of the default terms
+    out.update(a=out.get("particles"), b=out.get("cells"))
+    return dict(out, r2=float(r2), n=len(y), imbalance=imbalance)

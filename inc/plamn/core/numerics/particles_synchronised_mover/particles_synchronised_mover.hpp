@@ -278,8 +278,14 @@ class ParticlesSynchronisedMover
 public:
     using Boxing_t = UpdaterCellMapSelectionBoxing<Selector_t, Layout>;
 
+    MoveSpec constexpr static all_spec{}; // push and sync, the domain deposit after the exchange
+
     void updatePopulations(auto& ions, auto const& em, Boxing_t const& boxing, double dt,
                            UpdaterMode mode = UpdaterMode::all);
+
+    // its in place push syncs as it goes (updateAll_): no spec without the sync
+    template<MoveSpec spec, DepositSpec deposit_spec = DepositSpec{}>
+    void update(auto& ions, auto const& em, Boxing_t const& boxing, double dt);
 
     // mode all moves only: the domain deposit, after the exchange (deposit_domain)
     static void depositDomain(auto& ions, auto const& layout)
@@ -304,17 +310,34 @@ void ParticlesSynchronisedMover<Particles_t, Layout>::updatePopulations(auto& io
                                                                         Boxing_t const& boxing,
                                                                         double dt, UpdaterMode mode)
 {
+    if (mode == UpdaterMode::domain_only)
+        update<copy_spec>(ions, em, boxing, dt);
+    else
+        update<all_spec>(ions, em, boxing, dt);
+}
+
+template<typename Particles_t, typename Layout>
+template<MoveSpec spec, DepositSpec deposit_spec>
+void ParticlesSynchronisedMover<Particles_t, Layout>::update(auto& ions, auto const& em,
+                                                             Boxing_t const& boxing, double dt)
+{
+    check_move_spec<spec>();
+    static_assert(spec.copy or spec.sync, "AoSMapped: its in place push syncs as it goes");
     DAMN_LOG_SCOPE(3, "ParticlesSynchronisedMover::updatePopulations");
 
     pusher_.setMeshAndTimeStep(boxing.layout.dx, dt);
 
-    if (mode == UpdaterMode::domain_only)
+    if constexpr (spec.copy)
     {
         resetMoments(ions);
         updateAndDepositDomain_(ions, em, boxing);
     }
     else
+    {
         updateAll_(ions, em, boxing);
+        if constexpr (spec.deposit)
+            depositDomain(ions, boxing.layout);
+    }
 }
 
 
@@ -466,8 +489,14 @@ class ParallelParticlesSynchronisedMover
 public:
     using Boxing_t = UpdaterSelectionBoxing<Layout>;
 
+    MoveSpec constexpr static all_spec{}; // push and sync, the domain deposit after the exchange
+
     void updatePopulations(auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings,
                            double const& dt, UpdaterMode mode = UpdaterMode::all);
+
+    template<MoveSpec spec, DepositSpec deposit_spec = DepositSpec{}>
+    void update(auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings,
+                double const& dt);
 
     // mode all moves only: the domain deposit, after the exchange (deposit_domain)
     static void depositDomain(auto& ions, auto const& layout)
@@ -488,7 +517,10 @@ protected:
 private:
     void updateAndDepositDomain_(auto& accessor,
                                  std::unordered_map<std::string, Boxing_t> const& boxings);
-    void updateAll_(auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings);
+    void move_(auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings);
+    static void sync_(auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings);
+    static void deposit_all_(auto& accessor,
+                             std::unordered_map<std::string, Boxing_t> const& boxings);
 
     static auto n_tiles_(auto& view)
     {
@@ -587,16 +619,37 @@ void ParallelParticlesSynchronisedMover<Particles_t, Layout>::updatePopulations(
     auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings, double const& dt,
     UpdaterMode mode)
 {
+    if (mode == UpdaterMode::domain_only)
+        update<copy_spec>(accessor, boxings, dt);
+    else
+        update<all_spec>(accessor, boxings, dt);
+}
+
+template<typename Particles_t, typename Layout>
+template<MoveSpec spec, DepositSpec deposit_spec>
+void ParallelParticlesSynchronisedMover<Particles_t, Layout>::update(
+    auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings, double const& dt)
+{
+    check_move_spec<spec>();
     DAMN_LOG_SCOPE(2, "ParticlesSynchronisedMover::updatePopulations");
 
     dt_ = dt;
-    if (mode == UpdaterMode::domain_only)
+    if constexpr (spec.copy)
     {
         reset_moments(accessor);
         updateAndDepositDomain_(accessor, boxings);
     }
     else
-        updateAll_(accessor, boxings);
+    {
+        if (accessor.size() == 0)
+            return;
+        DAMN_LOG_SCOPE(1, "ParticlesSynchronisedMover::updateAll_");
+        move_(accessor, boxings);
+        if constexpr (spec.sync)
+            sync_(accessor, boxings);
+        if constexpr (spec.deposit)
+            deposit_all_(accessor, boxings);
+    }
 }
 
 
@@ -616,20 +669,39 @@ void ParallelParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositDo
 
 
 template<typename Particles_t, typename Layout>
-void ParallelParticlesSynchronisedMover<Particles_t, Layout>::updateAll_(
+void ParallelParticlesSynchronisedMover<Particles_t, Layout>::move_(
     auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings)
 {
-    DAMN_LOG_SCOPE(1, "ParticlesSynchronisedMover::updateAll_");
-
-    if (accessor.size() == 0)
-        return;
-
     using Accessor_t = std::remove_reference_t<decltype(accessor)>;
-    {
-        DAMN_LOG_SCOPE(1, "ParticlesSynchronisedMover::updateAll_::multi_boris");
-        MultiBoris<Accessor_t, Interpolator_t>{dt_, accessor}.move(boxings);
-    }
+    DAMN_LOG_SCOPE(1, "ParticlesSynchronisedMover::updateAll_::multi_boris");
+    MultiBoris<Accessor_t, Interpolator_t>{dt_, accessor}.move(boxings);
+}
 
+
+// the moments of every patch, reset first, from its domain and patch ghost particles (tiled: a
+//  task per tile)
+template<typename Particles_t, typename Layout>
+void ParallelParticlesSynchronisedMover<Particles_t, Layout>::deposit_all_(
+    auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings)
+{
+    DAMN_LOG_SCOPE(1, "ParticlesSynchronisedMover::updateAll_::deposit");
+    reset_moments(accessor);
+    auto& tp = damn::core::ThreadPool::INSTANCE();
+    if constexpr (is_tiled(Particles_t::layout_mode))
+        tp.tile_exec(
+            accessor.size(), [&](auto const i) { return accessor[i]; },
+            [](auto& view) { return n_tiles_(view); },
+            [](auto& view, auto const t) { deposit_tile_(view, t); });
+    else
+        for (std::size_t i = 0; i < accessor.size(); ++i)
+            deposit(accessor, boxings, i);
+}
+
+
+template<typename Particles_t, typename Layout>
+void ParallelParticlesSynchronisedMover<Particles_t, Layout>::sync_(
+    auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings)
+{
     // AoSCMTS: only writes tile t of each population's arrays, see post_move_sync_tile
     auto const post_move_sync_tile = [&](auto& view, auto const t) {
         auto const& patch_boxings = boxings.at(view.patchID());
@@ -675,12 +747,19 @@ class FlatParallelParticlesSynchronisedMover
     static constexpr auto dimension    = Layout::dimension;
     static constexpr auto interp_order = Layout::options.interp_order;
     using Interpolator_t               = Interpolator<dimension, interp_order, /*atomic=*/false>;
+    using Interpolating_t              = Interpolating<dimension, interp_order, /*atomic=*/false>;
 
 public:
     using Boxing_t = UpdaterSelectionBoxing<Layout>;
 
+    MoveSpec constexpr static all_spec{}; // push and sync, the domain deposit after the exchange
+
     void updatePopulations(auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings,
                            double const& dt, UpdaterMode mode = UpdaterMode::all);
+
+    template<MoveSpec spec, DepositSpec deposit_spec = DepositSpec{}>
+    void update(auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings,
+                double const& dt);
 
     // mode all moves only: the domain deposit, after the exchange (deposit_domain)
     static void depositDomain(auto& ions, auto const& layout)
@@ -692,6 +771,7 @@ public:
 
 private:
     static void per_patch(auto& accessor, auto const& fn);
+    static void sync_(auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings);
 
     double dt_ = 0;
 };
@@ -711,6 +791,19 @@ void FlatParallelParticlesSynchronisedMover<Particles_t, Layout>::updatePopulati
     auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings, double const& dt,
     UpdaterMode mode)
 {
+    if (mode == UpdaterMode::domain_only)
+        update<copy_spec>(accessor, boxings, dt);
+    else
+        update<all_spec>(accessor, boxings, dt);
+}
+
+
+template<typename Particles_t, typename Layout>
+template<MoveSpec spec, DepositSpec deposit_spec>
+void FlatParallelParticlesSynchronisedMover<Particles_t, Layout>::update(
+    auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings, double const& dt)
+{
+    check_move_spec<spec>();
     DAMN_LOG_SCOPE(2, "FlatParallelParticlesSynchronisedMover::updatePopulations");
 
     if (accessor.size() == 0)
@@ -721,13 +814,15 @@ void FlatParallelParticlesSynchronisedMover<Particles_t, Layout>::updatePopulati
     using Accessor_t = std::remove_reference_t<decltype(accessor)>;
     MultiBoris<Accessor_t, Interpolator_t> multi_boris{dt_, accessor};
 
-    if (mode == UpdaterMode::domain_only)
+    auto const reset_moments = [&]() {
+        DAMN_LOG_SCOPE(2,
+                       "FlatParallelParticlesSynchronisedMover::updatePopulations::reset_moments");
+        per_patch(accessor, [](auto& view) { resetMoments(std::get<0>(view.args)); });
+    };
+
+    if constexpr (spec.copy)
     {
-        {
-            DAMN_LOG_SCOPE(
-                2, "FlatParallelParticlesSynchronisedMover::updatePopulations::reset_moments");
-            per_patch(accessor, [](auto& view) { resetMoments(std::get<0>(view.args)); });
-        }
+        reset_moments();
         DAMN_LOG_SCOPE(2, "FlatParallelParticlesSynchronisedMover::updatePopulations::move_copy");
         multi_boris.template move<MultiBorisMode::COPY>(boxings);
         return;
@@ -738,6 +833,32 @@ void FlatParallelParticlesSynchronisedMover<Particles_t, Layout>::updatePopulati
         multi_boris.move(boxings);
     }
 
+    if constexpr (spec.sync)
+        sync_(accessor, boxings);
+
+    if constexpr (spec.deposit)
+    {
+        reset_moments();
+        DAMN_LOG_SCOPE(2, "FlatParallelParticlesSynchronisedMover::updatePopulations::deposit");
+        per_patch(accessor, [&](auto& view) {
+            auto const& layout = boxings.at(view.patchID()).layout;
+            Interpolating_t interp;
+            for (auto& pop : std::get<0>(view.args))
+            {
+                interp.particleToMesh(pop.domainParticles(), layout, pop.particleDensity(),
+                                      pop.flux());
+                interp.particleToMesh(pop.patchGhostParticles(), layout, pop.particleDensity(),
+                                      pop.flux());
+            }
+        });
+    }
+}
+
+
+template<typename Particles_t, typename Layout>
+void FlatParallelParticlesSynchronisedMover<Particles_t, Layout>::sync_(
+    auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings)
+{
     DAMN_LOG_SCOPE(2, "FlatParallelParticlesSynchronisedMover::updatePopulations::per_patch");
     per_patch(accessor, [&](auto& view) {
         auto const& boxing = boxings.at(view.patchID());
@@ -794,12 +915,20 @@ public:
     // damn's synchronous pools (DAMN_THREAD_POOL_SYNC): the host steps on this thread too
     auto constexpr static synchronous = damn::core::ThreadPool::synchronous;
 
+    // push, sync and deposit on the device
+    MoveSpec constexpr static all_spec{.deposit = true};
+
     void updatePopulations(auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings,
                            double const& dt, UpdaterMode mode = UpdaterMode::all);
+
+    template<MoveSpec spec, DepositSpec deposit_spec = DepositSpec{}>
+    void update(auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings,
+                double const& dt);
 
 private:
     void updateAndDepositDomain_(auto& accessor,
                                  std::unordered_map<std::string, Boxing_t> const& boxings);
+    template<MoveSpec spec, DepositSpec deposit_spec = DepositSpec{}>
     void updateAndDepositAll_(auto& accessor,
                               std::unordered_map<std::string, Boxing_t> const& boxings);
 
@@ -845,15 +974,27 @@ void ParallelParticlesSynchronisedMover<Particles_t, Layout>::updatePopulations(
     auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings, double const& dt,
     UpdaterMode mode)
 {
+    if (mode == UpdaterMode::domain_only)
+        update<copy_spec>(accessor, boxings, dt);
+    else
+        update<all_spec>(accessor, boxings, dt);
+}
+
+template<typename Particles_t, typename Layout>
+template<MoveSpec spec, DepositSpec deposit_spec>
+void ParallelParticlesSynchronisedMover<Particles_t, Layout>::update(
+    auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings, double const& dt)
+{
+    check_move_spec<spec>();
     DAMN_LOG_SCOPE(2, "mkn_xyz::ParticlesSynchronisedMover::updatePopulations");
 
     if constexpr (not moments_on_streams) // else zeroed on each patch's stream, see reset_moments_
         Super::reset_moments(accessor);
     this->dt_ = dt;
-    if (mode == UpdaterMode::domain_only)
+    if constexpr (spec.copy)
         updateAndDepositDomain_(accessor, boxings);
     else
-        updateAndDepositAll_(accessor, boxings);
+        updateAndDepositAll_<spec, deposit_spec>(accessor, boxings);
 }
 
 
@@ -880,6 +1021,7 @@ void ParallelParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositDo
 
 
 template<typename Particles_t, typename Layout>
+template<MoveSpec spec, DepositSpec deposit_spec>
 void ParallelParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositAll_(
     auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings)
 {
@@ -895,17 +1037,24 @@ void ParallelParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositAl
     reset_moments_(accessor, in);
     in.move(boxings);
 
-    auto post_move_sync
-        = [&](auto const i) mutable { Super::post_move_sync(accessor, boxings, i); };
+    if constexpr (spec.sync)
+    {
+        auto post_move_sync
+            = [&](auto const i) mutable { Super::post_move_sync(accessor, boxings, i); };
 
-    if constexpr (synchronous)
-        for (std::size_t i = 0; i < accessor.size(); ++i)
-            post_move_sync(i);
-    else
-        in.streamer.host(std::move(post_move_sync));
+        if constexpr (synchronous)
+            for (std::size_t i = 0; i < accessor.size(); ++i)
+                post_move_sync(i);
+        else
+            in.streamer.host(std::move(post_move_sync));
+    }
 
-    if constexpr (Particles_t::alloc_mode == damn::AllocatorMode::GPU_UNIFIED
-                  and is_tiled(Particles_t::layout_mode))
+    if constexpr (not spec.deposit)
+    {
+        // the push (and sync) alone: nothing deposited
+    }
+    else if constexpr (Particles_t::alloc_mode == damn::AllocatorMode::GPU_UNIFIED
+                       and is_tiled(Particles_t::layout_mode))
     {
         auto deposit = [&](auto const i) mutable {
             auto view      = accessor[i];
@@ -948,7 +1097,7 @@ void ParallelParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositAl
                     with_tile_deposit(mode, [&](auto deposit_c) {
                         using Launcher = damn::core::gpu::ChunkLauncher<false>;
                         Launcher launcher{1, 0};
-                        launcher.b.x = damn::kernel::warp_size();
+                        launcher.b.x = damn::kernel::warp_size() * deposit_spec.warps;
                         launcher.g.x = domain().size();
                         launcher.ds  = tile_deposit_bytes(deposit_c(), n_points);
                         launcher.stream(in.streamer.streams[i], [=] __device__() mutable {

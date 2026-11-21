@@ -233,12 +233,11 @@ struct FacePatch
             , dL{"dL", layout, sf}
             , dR{"dR", layout, sf}
             , F_rhoV{"F_rhoV", layout, vf}
-            , F_B{"F_B", layout, vf}
             , vt{"vt", layout, vf}
         {
         }
         Grid_t F_rho, F_Etot, aL, aR, dL, dR;
-        VecField_t F_rhoV, F_B, vt;
+        VecField_t F_rhoV, vt;
     };
 
     explicit FacePatch(Layout_t const& layout_)
@@ -296,15 +295,15 @@ void faces(Patch& p)
     auto& f = p.faces[dir];
     if constexpr (not is_tiled(Patch::layout_mode)
                   or Patch::alloc_mode == damn::AllocatorMode::GPU_UNIFIED)
-        godunov.template operator()<dir>(p.layout, p.rho, p.V, p.B, p.P, f.F_rho, f.F_rhoV, f.F_B,
+        godunov.template operator()<dir>(p.layout, p.rho, p.V, p.B, p.P, f.F_rho, f.F_rhoV,
                                          f.F_Etot, f.vt, f.aL, f.aR, f.dL, f.dR);
     else
     {
         // a pool task per tile, as the level transformer
         for (std::size_t ti = 0; ti < tile_count(p.rho); ++ti)
             pool.detach_task([&, ti]() {
-                godunov.template on_tile<dir>(ti, p.rho, p.V, p.B, p.P, f.F_rho, f.F_rhoV, f.F_B,
-                                              f.F_Etot, f.vt, f.aL, f.aR, f.dL, f.dR);
+                godunov.template on_tile<dir>(ti, p.rho, p.V, p.B, p.P, f.F_rho, f.F_rhoV, f.F_Etot,
+                                              f.vt, f.aL, f.aR, f.dL, f.dR);
             });
         pool.wait();
     }
@@ -359,7 +358,6 @@ TYPED_TEST(GodunovTest, transformer_matches_face)
                 for (std::size_t c = 0; c < 3; ++c)
                 {
                     close(f.F_rhoV[c](ijk), r.F.rhoV[c]);
-                    close(f.F_B[c](ijk), r.F.B[c]);
                     close(f.vt[c](ijk), r.vt[c]);
                 }
                 EXPECT_TRUE(std::isfinite(r.F.Etot));
@@ -442,7 +440,6 @@ TYPED_TEST(GodunovTileTest, tiled_matches_untiled)
         {
             EXPECT_EQ(tile_mismatches(ref_layout, r.F_rhoV[k], c.F_rhoV[k], box_of, tol), 0u)
                 << "F_rhoV";
-            EXPECT_EQ(tile_mismatches(ref_layout, r.F_B[k], c.F_B[k], box_of, tol), 0u) << "F_B";
             EXPECT_EQ(tile_mismatches(ref_layout, r.vt[k], c.vt[k], box_of, tol), 0u) << "vt";
         }
     });

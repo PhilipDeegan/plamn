@@ -60,7 +60,8 @@ jobs:
   #  then the MHD shocks (PHARE's tests/functional/mhd_shock: periodic, 400 steps; between an
   #  inflow and an open boundary, 1000 steps), and PHARE's test_advance_mhd input on 2 levels
   #  (a refinement box: level ghosts, reflux; tagged: regrids): MHD only, B rho V P at every
-  #  dump; a 3D harris (10^3 cells, 100 ppc, tagged levels) sized for a runner by its memory
+  #  dump; a 3D harris (10^3 cells, 100 ppc, tagged levels; 80^3 cells, level 0 only) sized
+  #  for a runner by its memory
   #  (cases.py tiers; each run's peak memory per rank in compare/**/*.mem.json). Partitioned
   #  for the wall time: each module built on its own runner (plamn's and
   #  PHARE's at once), then each comparison on its own runner with every module
@@ -106,12 +107,31 @@ jobs:
                  cpp_1_Linear_VanLeer_Rusanov_true, cpp_3_1_6]
 
     steps:
+    - uses: actions/checkout@v4 # this file only: its hash keys the module cache (build flags)
+      with:
+        sparse-checkout: .github/workflows/slow.yml
+        sparse-checkout-cone-mode: false
     - uses: actions/checkout@v4
       with:
         repository: PHAREHUB/PHARE
         path: phare
         submodules: recursive
+    - name: PHARE's commit
+      id: phare
+      run: |
+        git config --global --add safe.directory '*'
+        echo "sha=$(git -C phare rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+    # built once per PHARE commit (and build flags: this file)
+    - id: built
+      uses: actions/cache@v4
+      with:
+        path: |
+          phare/build/pybindlibs/*.so
+          phare/build/src/amr/libphare_amr.so
+          phare/build/src/initializer/libphare_initializer.so
+        key: phare-module-${{ matrix.target }}-${{ steps.phare.outputs.sha }}-${{ hashFiles('.github/workflows/slow.yml') }}
     - name: PHARE's ${{ matrix.target }}
+      if: steps.built.outputs.cache-hit != 'true'
       run: |
         set -ex
         printf '1,1,2\n1,Linear,VanLeer,Rusanov,false\n1,WENOZ,None,Rusanov,false\n1,Linear,VanLeer,HLL,false\n1,Linear,VanLeer,HLLD,false\n1,Linear,VanLeer,Rusanov,true\n3,1,6\n' > "$PWD/phare_permutations.txt"
@@ -139,9 +159,12 @@ jobs:
     timeout-minutes: 120
     strategy:
       fail-fast: false
+      # live: no diagnostics, PHARE's snapshots cached per PHARE commit (and comparison scripts):
+      #  PHARE runs only when they are missing, plamn compares against them while it runs
+      #  (compare_physics.py --live; hybrid cases)
       matrix: # each with its expected tolerance (cases.py) unless print only
         include:
-        - { case: beam_1d_long, steps: 2000, ppc: "100" }
+        - { case: beam_1d_long, steps: 2000, ppc: "100", live: true }
         - { case: mhd_shock_1d, steps: 400 }
         - { case: mhd_shock_walls_1d, steps: 1000 }
         - { case: mhd_advance_L1, steps: 8 }
@@ -154,7 +177,9 @@ jobs:
         - { case: mhd_hall_hyper_spatial_L1, steps: 8 }
         - { case: mhd_tagged_1d, steps: 40 }
         # 3D, sized for a runner (cases.py tier "gh": ~1 GB per code), within roundoff
-        - { case: harris_3d_10, steps: 4, ndim: 3 }
+        - { case: harris_3d_10, steps: 4, ndim: 3, live: true }
+        # 80^3, level 0 only, 80 ppc (41M particles): ~11 GB at its peak, one code at a time
+        - { case: harris_3d_80_L0, steps: 4, ndim: 3, live: true }
 
     steps:
     - uses: actions/checkout@v4
@@ -174,13 +199,25 @@ jobs:
         pattern: phare-cpp_*
         path: phare/build
         merge-multiple: true
+    - name: PHARE's commit
+      id: phare
+      run: |
+        git config --global --add safe.directory '*'
+        echo "sha=$(git -C phare rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+    - if: matrix.live
+      uses: actions/cache@v4
+      with:
+        path: ref_cache
+        key: phare-ref-${{ matrix.case }}-${{ matrix.steps }}-${{ matrix.ppc }}-${{ steps.phare.outputs.sha }}-${{ hashFiles('etc/compare/phare/*.py') }}
     - name: PHARE vs plamn, ${{ matrix.case }}, ${{ matrix.steps }} steps
       env:
         PHARE_DIR: ${{ github.workspace }}/phare
         LADDER_OUT: ${{ github.workspace }}/compare
         LADDER_PPC: ${{ matrix.ppc || '10' }}
+        LADDER_REF_CACHE: ${{ github.workspace }}/ref_cache
       run: >-
-        python3 etc/compare/phare/compare_physics.py --case ${{ matrix.case }} --ndim ${{ matrix.ndim || 1 }}
+        python3 etc/compare/phare/compare_physics.py ${{ matrix.live && '--live' || '' }}
+        --case ${{ matrix.case }} --ndim ${{ matrix.ndim || 1 }}
         --steps ${{ matrix.steps }} --ref "$PHARE_DIR" --cmp plamn --all-times
         --json compare/${{ matrix.case }}.json
     - if: always()
@@ -191,3 +228,28 @@ jobs:
           compare/*.json
           compare/**/*.log
           compare/**/*.mem.json
+
+  # every comparison run's peak memory in one artifact ("memory": memory.json, memory.md) and
+  #  the job summary: measured against cases.py's estimates and tiers, to size cases for runners
+  memory:
+    needs: [phare]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/download-artifact@v4
+      with:
+        pattern: phare-compare-*
+        path: compare
+    - uses: actions/setup-python@v5 # cases.py needs numpy
+      with:
+        python-version: "3.12"
+    - run: |
+        python3 -m pip install --quiet numpy
+        python3 etc/compare/phare/memory_table.py compare --json memory.json --md memory.md >> "$GITHUB_STEP_SUMMARY"
+    - uses: actions/upload-artifact@v4
+      with:
+        name: memory
+        path: |
+          memory.json
+          memory.md

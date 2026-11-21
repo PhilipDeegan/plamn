@@ -84,14 +84,12 @@ private:
 public:
     // the face's result into the direction's flux and constrained transport fields
     static void store(auto const& ijk, GodunovFaceResult const& r, auto& F_rho, auto& F_rhoV,
-                      auto& F_B, auto& F_Etot, auto& vt, auto& aL, auto& aR, auto& dL,
-                      auto& dR) DAMN_ALL
+                      auto& F_Etot, auto& vt, auto& aL, auto& aR, auto& dL, auto& dR) DAMN_ALL
     {
         F_rho(ijk) = r.F.rho;
         for (std::size_t c = 0; c < 3; ++c)
         {
             F_rhoV[c](ijk) = r.F.rhoV[c];
-            F_B[c](ijk)    = r.F.B[c];
             vt[c](ijk)     = r.vt[c];
         }
         F_Etot(ijk) = r.F.Etot;

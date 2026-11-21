@@ -10,6 +10,7 @@
 #include "damn/amr/level_map.hpp"
 #include "damn/amr/neighbours.hpp"
 #include "damn/amr/partition.hpp"
+#include "damn/amr/keep_partition.hpp"
 #include "damn/amr/topology.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/logger.hpp"
@@ -43,9 +44,9 @@
 
 namespace plamn
 {
-// level ln from its boxes (that level's cells): chopped into the largest patch size,
-// partitioned along the Hilbert curve by the particles they will hold, allocated, with their
-// neighbours and the map to the coarser level
+// level ln from its boxes (that level's cells): chopped into the largest patch size, given
+// ranks (lb_.partition: along the Hilbert curve by the particles they will hold, or where the
+// data is, then spilled), allocated, with their neighbours and the map to the coarser level
 template<auto opts>
 damn::amr::Level<Simulator<opts>::dimension>
 Simulator<opts>::level_of_(int const ln, std::vector<Box_t> const& boxes)
@@ -56,11 +57,14 @@ Simulator<opts>::level_of_(int const ln, std::vector<Box_t> const& boxes)
     if (ln > 0)
         for (auto& s : size)
             s = std::max(hierarchy_.ratio, s / hierarchy_.ratio * hierarchy_.ratio);
-    std::vector<Box_t> patches;
-    for (auto const& box : boxes)
-        for (auto const& b : damn::amr::chop_evenly(box, size, ln > 0 ? hierarchy_.ratio : 1))
-            patches.push_back(b);
-    auto const weights = [&]() {
+    auto const chop = [&](std::vector<Box_t> const& bs) {
+        std::vector<Box_t> patches;
+        for (auto const& box : bs)
+            for (auto const& b : damn::amr::chop_evenly(box, size, ln > 0 ? hierarchy_.ratio : 1))
+                patches.push_back(b);
+        return patches;
+    };
+    auto const weights = [&](std::vector<Box_t> const& patches) {
         if constexpr (Models_t::hybrid_on)
             if (!models_.is_mhd(static_cast<std::size_t>(ln)))
                 return isInitialized_ ? particle_weights_(ln, patches) : box_weights_(ln, patches);
@@ -69,9 +73,44 @@ Simulator<opts>::level_of_(int const ln, std::vector<Box_t> const& boxes)
             cells.push_back(static_cast<double>(p.size()));
         return cells;
     };
-    return damn::amr::make_level(
-        ln, patches,
-        damn::amr::partition(patches, weights(), damn::amr::node_share_capacity(topology_)));
+    auto const capacity = damn::amr::node_share_capacity(topology_);
+    auto const curve    = [&](std::vector<Box_t> const& patches) {
+        return damn::amr::partition(patches, weights(patches), capacity);
+    };
+
+    auto const l          = static_cast<std::size_t>(ln);
+    auto const* const old = l < hierarchy_.levels.size() ? &hierarchy_.levels[l].patches : nullptr;
+    auto const* const coarser = ln > 0 ? &hierarchy_.levels[l - 1].patches : nullptr;
+    if (lb_.partition != "keep" or (!old and !coarser))
+    {
+        auto const patches = chop(boxes);
+        return damn::amr::make_level(ln, patches, curve(patches));
+    }
+
+    using Owned   = damn::amr::OwnedBox<dimension>;
+    using Patches = std::vector<damn::amr::Patch<dimension>>;
+    auto const pieces
+        = damn::amr::keep(boxes, old ? *old : Patches{}, coarser ? *coarser : Patches{},
+                          hierarchy_.ratio, [&](std::vector<Box_t> const& rest) {
+                              auto const patches = chop(rest);
+                              auto const ranks   = curve(patches);
+                              std::vector<Owned> out;
+                              for (std::size_t i = 0; i < patches.size(); ++i)
+                                  out.push_back({patches[i], ranks[i]});
+                              return out;
+                          });
+    std::vector<Box_t> patches;
+    std::vector<int> ranks;
+    auto const per_rank = damn::amr::owned_boxes(pieces, n_ranks_);
+    for (std::size_t r = 0; r < per_rank.size(); ++r)
+        for (auto const& b : chop(per_rank[r]))
+        {
+            patches.push_back(b);
+            ranks.push_back(static_cast<int>(r));
+        }
+    if (lb_.spill >= 0)
+        ranks = damn::amr::spill(patches, ranks, weights(patches), topology_, lb_.spill);
+    return damn::amr::make_level(ln, patches, ranks);
 }
 
 template<auto opts>
@@ -185,11 +224,15 @@ void Simulator<opts>::initialize()
     DAMN_LOG_SCOPE(1, "Simulator::initialize");
     if (isInitialized_)
         throw std::runtime_error("plamn Simulator already initialized");
-    if constexpr (Models_t::mhd_on)
-        if (models_.mhd_levels > 0)
-            return initialize_mhd_();
-    if constexpr (Models_t::hybrid_on)
-        initialize_hybrid_();
+    auto const init = [&] {
+        if constexpr (Models_t::mhd_on)
+            if (models_.mhd_levels > 0)
+                return initialize_mhd_();
+        if constexpr (Models_t::hybrid_on)
+            initialize_hybrid_();
+    };
+    init();
+    record_decomposition_("init", currentTime_, /*always=*/true);
 }
 
 // level 0 from the user's functions (MHD alone, one level: MHD refinement and coupling to hybrid

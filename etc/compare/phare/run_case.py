@@ -78,7 +78,13 @@ def main(argv=None):
     p.add_argument("--ndim", type=int, default=2)
     p.add_argument("--largest-patch-size", type=int, default=None)
     p.add_argument("--fine-dump", action="store_true", help="fine_dump_lvl_max (see cases.py)")
-    p.add_argument("--format", default="phareh5", choices=["phareh5", "pharevtkhdf"])
+    p.add_argument("--format", default="phareh5", choices=["phareh5", "pharevtkhdf", "none"])
+    p.add_argument("--live-out", help="live.py snapshots at the dump times to this npz (no "
+                   "diagnostics): a reference")
+    p.add_argument("--live-key", default="{}", help="--live-out: what made it (json)")
+    p.add_argument("--live-ref", help="live.py: compare against this npz's snapshots at the "
+                   "dump times (no diagnostics); the rows to --live-report")
+    p.add_argument("--live-report", help="--live-ref: the rows as json")
     p.add_argument("--steps", type=int, default=None, help="the case's steps, else cases.py's")
     a = p.parse_args(argv)
 
@@ -98,8 +104,26 @@ def main(argv=None):
     startMPI()
     if a.steps is not None:
         cases.CASES[a.case] = dict(cases.CASES[a.case], steps=a.steps)
-    sim = cases.simulation(a.case, a.out, a.ndim, a.largest_patch_size, a.format, a.fine_dump)
+    live = a.live_out or a.live_ref
+    fmt = "none" if live else a.format
+    sim = cases.simulation(a.case, a.out, a.ndim, a.largest_patch_size, fmt, a.fine_dump)
     simulator = Simulator(sim, log_to_file=False).setup().initialize()
+    every = cases.dump_every(a.case)
+    if live:
+        import live as lv
+
+        snaps = lv.Snapshots(simulator, a.ndim)
+        comparer = lv.Comparer(lv.load(a.live_ref)[1]) if a.live_ref else None
+        saved, rows = [], []
+
+        def on_dump():
+            snap = snaps.take()
+            if comparer:
+                rows.extend(comparer.against(snap))
+            else:
+                saved.append(snap)
+
+        on_dump()
     keep = os.environ.get("LADDER_PARTICLES", "1") == "1"  # 0: no particles (large runs)
     parts = Path(a.out) / "particles"
     if keep:
@@ -109,6 +133,15 @@ def main(argv=None):
         simulator.advance()
         if keep:
             np.savez(parts / f"{step}.npz", **particle_arrays(simulator, cases.populations(a.case)))
+        if live and step % every == 0:
+            on_dump()
+    if a.live_out:
+        lv.save(a.live_out, json.loads(a.live_key), saved)
+    if a.live_ref:
+        Path(a.live_report).write_text(json.dumps(
+            [dict(quantity=c, t=ta, levels=[la, lb], scale=float(sc), max_diff=float(dm),
+                  rms_diff=float(dr), at=[int(i) for i in at])
+             for c, ta, tb, la, lb, sc, dm, dr, at in rows], indent=1))
     simulator.reset()
     write_memory(a.out, time.monotonic() - start)
     return 0

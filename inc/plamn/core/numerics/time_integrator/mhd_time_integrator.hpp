@@ -82,8 +82,6 @@ namespace detail
         fn(f0.F_rho, f.F_rho...);
         for (std::size_t c = 0; c < 3; ++c)
             fn(f0.F_rhoV[c], f.F_rhoV[c]...);
-        for (std::size_t c = 0; c < 3; ++c)
-            fn(f0.F_B[c], f.F_B[c]...);
         fn(f0.F_Etot, f.F_Etot...);
     }
 
@@ -142,13 +140,12 @@ public:
                 {
                     auto& h = p.hall_ct[d];
                     godunov.template hall<d>(p.layout, u.rho, u.V, u.B, u.P, p.J, f.F_rho, f.F_rhoV,
-                                             f.F_B, f.F_Etot, c.vt, c.aL, c.aR, c.dL, c.dR, h.jt,
-                                             h.rhot);
+                                             f.F_Etot, c.vt, c.aL, c.aR, c.dL, c.dR, h.jt, h.rhot);
                 }
                 else
                     godunov.template operator()<d>(p.layout, u.rho, u.V, u.B, u.P, f.F_rho,
-                                                   f.F_rhoV, f.F_B, f.F_Etot, c.vt, c.aL, c.aR,
-                                                   c.dL, c.dR);
+                                                   f.F_rhoV, f.F_Etot, c.vt, c.aL, c.aR, c.dL,
+                                                   c.dR);
                 if (dissipative_())
                     dissipative_fluxes_<d>(p, u.B);
             });
@@ -207,42 +204,12 @@ public:
         euler_using(level, si, so, last_E, last_fluxes, t, dt);
     }
 
-    void reset_butcher(auto& level) const
-    {
-        level.per_patch([&](auto& p) {
-            auto const zero = [](auto& f) {
-                detail::on_arrays(
-                    [](auto const n, auto* d) {
-                        for (std::size_t i = 0; i < n; ++i)
-                            d[i] = 0;
-                    },
-                    f);
-            };
-            for (auto& b : p.butcher)
-                detail::for_each_flux_field(zero, b);
-            for (std::size_t c = 0; c < 3; ++c)
-                zero(p.butcherE[c]);
-        });
-    }
+    // butcher = coef * (the last fluxes, E), every point: a step's first sum (PHARE's reset to 0
+    //  then PlusEqualsProduct: 0 + x == x, the same bits but for the sign of a zero)
+    void assign_butcher(auto& level, double const coef) const { butcher_<false>(level, coef); }
 
     // butcher += coef * (the last fluxes, E), every point (PHARE's PlusEqualsProduct)
-    void accumulate_butcher(auto& level, double const coef) const
-    {
-        level.per_patch([&](auto& p) {
-            auto const axpy = [&](auto& d, auto const& s) {
-                detail::on_arrays(
-                    [&](auto const n, auto* dp, auto const* sp) {
-                        for (std::size_t i = 0; i < n; ++i)
-                            dp[i] += sp[i] * coef;
-                    },
-                    d, s);
-            };
-            for (std::size_t d = 0; d < 3; ++d)
-                detail::for_each_flux_field(axpy, p.butcher[d], p.fluxes[d]);
-            for (std::size_t c = 0; c < 3; ++c)
-                axpy(p.butcherE[c], p.E[c]);
-        });
-    }
+    void accumulate_butcher(auto& level, double const coef) const { butcher_<true>(level, coef); }
 
     // states[dst] = sum_j w_j states[s_j] on the domain (PHARE's RKUtils), no ghosts
     void rk_blend(auto& level, std::size_t const dst,
@@ -266,6 +233,30 @@ public:
         });
     }
 
+private:
+    template<bool accumulate>
+    void butcher_(auto& level, double const coef) const
+    {
+        level.per_patch([&](auto& p) {
+            auto const axpy = [&](auto& d, auto const& s) {
+                detail::on_arrays(
+                    [&](auto const n, auto* dp, auto const* sp) {
+                        for (std::size_t i = 0; i < n; ++i)
+                            if constexpr (accumulate)
+                                dp[i] += sp[i] * coef;
+                            else
+                                dp[i] = sp[i] * coef;
+                    },
+                    d, s);
+            };
+            for (std::size_t d = 0; d < 3; ++d)
+                detail::for_each_flux_field(axpy, p.butcher[d], p.fluxes[d]);
+            for (std::size_t c = 0; c < 3; ++c)
+                axpy(p.butcherE[c], p.E[c]);
+        });
+    }
+
+public:
     // which E and fluxes euler_using takes
     static constexpr auto last_E         = [](auto& p) -> auto& { return p.E; };
     static constexpr auto last_fluxes    = [](auto& p) -> auto& { return p.fluxes; };
@@ -345,8 +336,8 @@ private:
     }
 
     // the dissipative E's work on the face fluxes of direction d (PHARE's MHDEquations
-    //  dissipative_contributions over the faces' domain box): F_B gets the transverse E, F_Etot
-    //  E x B along the face's normal, both projected onto the face
+    //  dissipative_contributions over the faces' domain box): F_Etot gets E x B along the face's
+    //  normal, projected onto the face (B is evolved by Faraday: no F_B)
     template<std::size_t d>
     static void dissipative_fluxes_(auto& p, auto const& B)
     {
@@ -360,24 +351,18 @@ private:
             {
                 auto const ey = project<S::Ey, S::Bx>(E[1], i), ez = project<S::Ez, S::Bx>(E[2], i);
                 auto const by = project<S::By, S::Bx>(B[1], i), bz = project<S::Bz, S::Bx>(B[2], i);
-                f.F_B[1](ijk) += -ez;
-                f.F_B[2](ijk) += ey;
                 f.F_Etot(ijk) += ey * bz - ez * by;
             }
             else if constexpr (d == 1)
             {
                 auto const ex = project<S::Ex, S::By>(E[0], i), ez = project<S::Ez, S::By>(E[2], i);
                 auto const bx = project<S::Bx, S::By>(B[0], i), bz = project<S::Bz, S::By>(B[2], i);
-                f.F_B[0](ijk) += ez;
-                f.F_B[2](ijk) += -ex;
                 f.F_Etot(ijk) += ez * bx - ex * bz;
             }
             else
             {
                 auto const ex = project<S::Ex, S::Bz>(E[0], i), ey = project<S::Ey, S::Bz>(E[1], i);
                 auto const bx = project<S::Bx, S::Bz>(B[0], i), by = project<S::By, S::Bz>(B[1], i);
-                f.F_B[0](ijk) += -ey;
-                f.F_B[1](ijk) += ex;
                 f.F_Etot(ijk) += ex * by - ey * bx;
             }
         });
@@ -394,9 +379,8 @@ struct EulerIntegrator
 
     void operator()(auto& level, double const t0, double const t1) const
     {
-        steps.reset_butcher(level);
         steps.euler(level, 0, 0, t1, t1 - t0);
-        steps.accumulate_butcher(level, 1.0);
+        steps.assign_butcher(level, 1.0);
     }
 };
 
@@ -411,10 +395,9 @@ struct TVDRK2Integrator
     void operator()(auto& level, double const t0, double const t1) const
     {
         using S = MHDSteps<Reconstruction, Riemann>;
-        steps.reset_butcher(level);
         steps.euler(level, 0, 1, t1, t1 - t0);
-        steps.accumulate_butcher(level, w0);
-        steps.euler(level, 1, 1, t1, t1 - t0);
+        steps.assign_butcher(level, w0);
+        steps.compute_fluxes(level, 1, t1); // F(U1) only: the final update is from the sums
         steps.accumulate_butcher(level, w1);
         steps.euler_using(level, 0, 0, S::butcher_E, S::butcher_fluxes, t1, t1 - t0);
     }
@@ -435,9 +418,8 @@ struct TVDRK3Integrator
         using S       = MHDSteps<Reconstruction, Riemann>;
         using P       = std::pair<double, std::size_t>;
         auto const dt = t1 - t0;
-        steps.reset_butcher(level);
         steps.euler(level, 0, 1, t1, dt);
-        steps.accumulate_butcher(level, w01 * w11);
+        steps.assign_butcher(level, w01 * w11);
         steps.euler(level, 1, 1, t1, dt);
         steps.accumulate_butcher(level, w01 * w11);
         steps.rk_blend(level, 2, P{w00, 0}, P{w01, 1});
@@ -479,11 +461,9 @@ struct SSPRK4_5Integrator
         using S       = MHDSteps<Reconstruction, Riemann>;
         using P       = std::pair<double, std::size_t>;
         auto const dt = t1 - t0;
-        steps.reset_butcher(level);
-
         steps.euler(level, 0, 1, t0 + c1 * dt, w0 * dt);
-        steps.accumulate_butcher(
-            level, (w0 * w11 * w21 * w31 * w43 + w0 * w11 * w21 * w41 + w0 * w11 * w40));
+        steps.assign_butcher(level,
+                             (w0 * w11 * w21 * w31 * w43 + w0 * w11 * w21 * w41 + w0 * w11 * w40));
 
         steps.rk_blend(level, 2, P{w10, 0}, P{w11, 1});
         steps.compute_fluxes(level, 1, t1);
