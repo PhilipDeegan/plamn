@@ -19,7 +19,9 @@ modelled time, not a prediction for another machine; exchanges are counted, not 
 """
 
 import argparse
+import hashlib
 import heapq
+import json
 import time
 
 import numpy as np
@@ -337,6 +339,10 @@ def main():
     p.add_argument("--thread-eff", type=float, default=1.0,
                    help="a process's threads' parallel efficiency (shared memory bandwidth)")
     p.add_argument("--no-exchanges", action="store_true", help="skip the face counts (big runs)")
+    p.add_argument("--json", help="every row's results to this file (a reference: "
+                   "tst/plamn/python/test_model_hybrid.py compares runs against etc/bench/amr/ref)")
+    p.add_argument("--owners", help="every row's owners per level to this .npz (keys: the row's "
+                   "json 'key' and _L<level>)")
     p.add_argument("--locality", action="store_true",
                    help="each level's coarse cells under its patches on the same process")
     a = p.parse_args()
@@ -346,6 +352,7 @@ def main():
     nd, r = len(a.cells), a.ratio
     costs = COSTS_3D
     boxes = level_boxes(a.cells, r, a.fractions)
+    rows, owner_arrays = [], {}
     for size in a.patch:
         t0 = time.monotonic()
         sizes = [[int(y) for y in x.split(":")] for x in size.split("/")]
@@ -422,6 +429,23 @@ def main():
                     xc.append(crossing(patches, ranks, node_of_rank, extent, REACH,
                                        numa_of_rank))
             name = mode if tol is None else f"{mode} {tol:g}"
+            row = dict(key=f"{size}|{topology}|{threads}|{name}".replace(" ", "_"), patch=size,
+                       topology=topology, threads=threads, partition=mode, spill=tol,
+                       processes=n, serial=float(serial), step=float(step), levels=[])
+            for ln, (patches, w, cells, particles) in enumerate(per_level):
+                own = np.asarray(owners[ln], dtype=np.int32)
+                owner_arrays[f"{row['key']}_L{ln}"] = own
+                lvl = dict(patches=len(patches), cells=float(cells), particles=float(particles),
+                           owners_sha256=hashlib.sha256(own.tobytes()).hexdigest(),
+                           imbalance=float(imbs[ln]))
+                if not a.no_exchanges:
+                    lvl["ghosts"] = dict(zip(CLASSES[1:], map(float, xc[ln][1:])))
+                if a.locality and ln > 0:
+                    d = under_by_distance(patches, owners[ln], per_level[ln - 1][0],
+                                          owners[ln - 1], node_of_rank, r, numa_of_rank)
+                    lvl["over_coarser"] = dict(zip(CLASSES, map(float, d)))
+                row["levels"].append(lvl)
+            rows.append(row)
             print(f"  {topology:>9} {threads:>4} {n:>6} {name:>12} {step:>9.2f} "
                   f"{serial / step:>8.1f} {serial / step / cores:>6.2f} "
                   + " ".join(f"{i:>8.3f}" for i in imbs))
@@ -433,10 +457,15 @@ def main():
                           + f" ({by[1:].sum() / cells:.1%} of the level's cells)")
             if a.locality:
                 for ln in range(1, len(per_level)):
-                    d = under_by_distance(per_level[ln][0], owners[ln], per_level[ln - 1][0],
-                                          owners[ln - 1], node_of_rank, r, numa_of_rank)
+                    d = row["levels"][ln]["over_coarser"]
                     print(f"{'':14}L{ln} over L{ln - 1}: coarse cells "
-                          + ", ".join(f"{name} {v:.0%}" for name, v in zip(CLASSES, d)))
+                          + ", ".join(f"{name} {v:.0%}" for name, v in d.items()))
+    if a.json:
+        args = {k: v for k, v in vars(a).items() if k not in ("json", "owners")}
+        with open(a.json, "w") as f:
+            json.dump(dict(args=args, costs=costs, reach=REACH, rows=rows), f, indent=1)
+    if a.owners:
+        np.savez_compressed(a.owners, **owner_arrays)
 
 
 if __name__ == "__main__":
