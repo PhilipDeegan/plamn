@@ -30,6 +30,7 @@
   "threads": [
    1
   ],
+  "tiles": "damn",
   "tile": 10,
   "main_busy": 0.0,
   "thread_eff": 1.0,

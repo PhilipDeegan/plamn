@@ -10,6 +10,7 @@
 #include "damn/amr/partition.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"
+#include "damn/core/data/tiles/tile_set.hpp"
 
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/array.h>
@@ -126,6 +127,23 @@ void declare_amr(nb::module_& m)
           },
           "box lower..upper cut into patches of at most size cells: mode 'chop' (from the lower "
           "corner) or 'even' (cells shared evenly in units of granularity, SAMRAI's on one rank)");
+
+    m.def(("tile_cells_" + d).c_str(),
+          [](std::vector<PyBox<dim>> const& boxes) {
+              std::vector<std::size_t> tiles_per_box, cells_per_tile;
+              tiles_per_box.reserve(boxes.size());
+              for (auto const& [lo, up] : boxes)
+              {
+                  damn::core::TileSet<damn::core::Box<int, dim>> const tiles{to_box<dim>(lo, up)};
+                  tiles_per_box.push_back(tiles.size());
+                  for (auto const& tile : tiles())
+                      cells_per_tile.push_back(tile.size());
+              }
+              return std::make_tuple(tiles_per_box, cells_per_tile);
+          },
+          nb::arg("boxes"),
+          "damn's tiles of each box, no data (TileSet of boxes, DAMN_TILING_* as a run): "
+          "(tiles per box, cells per tile, box after box)");
 
     m.def(("partition_" + d).c_str(),
           [](std::vector<PyBox<dim>> const& boxes, std::vector<double> const& weights,

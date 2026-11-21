@@ -127,15 +127,23 @@ def costs_of(patches, ppc_l, costs, reach):
 CLASSES = ("same process", "same NUMA", "other NUMA", "other node")
 
 
-def tiles_of(patches, w, tile):
-    """each patch's tiles (at most tile cells a side, damn's TilingOptions max_tile_size), the
-    patch's cost shared evenly: (patch index per tile, cost per tile)"""
+def tiles_of(patches, w, tile, damn_tiles=None):
+    """each patch's tiles, its cost shared by their cells: (patch index per tile, cost per tile).
+    damn_tiles (plamn_etc.tile_cells_<dim>): damn's TileSet of the patch, no data (max / min tile
+    size from DAMN_TILING_*, as a run); else ceil(n / tile) tiles a side of the same size"""
+    w = np.asarray(w, dtype=float)
+    if damn_tiles is not None:
+        per_patch, cells = damn_tiles([(list(lo), list(up)) for lo, up in patches])
+        per_patch, cells = np.asarray(per_patch), np.asarray(cells, dtype=float)
+        of_patch = np.repeat(np.arange(len(patches)), per_patch)
+        patch_cells = np.bincount(of_patch, weights=cells, minlength=len(patches))
+        return of_patch, w[of_patch] * cells / patch_cells[of_patch]
     n = np.array([np.asarray(up) - np.asarray(lo) + 1 for lo, up in patches])
     k = np.ceil(n / tile).astype(np.int64).prod(axis=1)
-    return np.repeat(np.arange(len(patches)), k), np.repeat(np.asarray(w, dtype=float) / k, k)
+    return np.repeat(np.arange(len(patches)), k), np.repeat(w / k, k)
 
 
-def process_times(ranks, patches, w, n_procs, threads, tile, main_busy):
+def process_times(ranks, patches, w, n_procs, threads, tile, main_busy, damn_tiles=None):
     """each process's time for its patches: their tiles over its threads, largest first to the
     least loaded thread (the main one has 1 - main_busy of its time for tiles); threads 1: the
     sum. One process a NUMA zone (threads = its cores): the zone's cores share its work, the
@@ -144,7 +152,7 @@ def process_times(ranks, patches, w, n_procs, threads, tile, main_busy):
     ranks = np.asarray(ranks)
     if threads == 1:
         return np.bincount(ranks, weights=w, minlength=n_procs) / (1 - main_busy)
-    of_patch, cost = tiles_of(patches, w, tile)
+    of_patch, cost = tiles_of(patches, w, tile, damn_tiles)
     owner = ranks[of_patch]
     order = np.lexsort((-cost, owner))
     owner, cost = owner[order], cost[order]
@@ -333,7 +341,10 @@ def main():
                    help="threads a process (its main thread included): a topology's first field "
                    "is then cores, processes = cores / threads; the patches partitioned over the "
                    "processes, each process's tiles over its threads")
-    p.add_argument("--tile", type=int, default=10, help="largest tile a side (damn's default)")
+    p.add_argument("--tiles", choices=["damn", "even"], default="damn",
+                   help="damn: damn's TileSet of each patch (DAMN_TILING_* as a run); even: "
+                   "ceil(n / --tile) equal tiles a side")
+    p.add_argument("--tile", type=int, default=10, help="--tiles even: the largest tile a side")
     p.add_argument("--main-busy", type=float, default=0.0,
                    help="the main thread's share taken by MPI (not on tiles)")
     p.add_argument("--thread-eff", type=float, default=1.0,
@@ -394,6 +405,7 @@ def main():
             node_of_rank = [k // per_node for k in range(n)]
             numa_of_rank = [(k % per_node) // per_zone for k in range(n)]
             partition = getattr(plamn_etc, f"partition_{nd}")
+            damn_tiles = getattr(plamn_etc, f"tile_cells_{nd}") if a.tiles == "damn" else None
             step, imbs, xc = 0.0, [], []
             curve = lambda patches, w: partition(  # noqa: E731
                 [(lo, up) for lo, up in patches], list(map(float, w)), node_of_rank,
@@ -420,7 +432,8 @@ def main():
                 else:
                     ranks = curve(patches, w)
                 owners[ln] = ranks
-                load = process_times(ranks, patches, w, n, threads, a.tile, a.main_busy)
+                load = process_times(ranks, patches, w, n, threads, a.tile, a.main_busy,
+                                     damn_tiles)
                 load /= a.thread_eff if threads > 1 else 1.0
                 step += r**ln * load.max()
                 imbs.append(load.max() / load.mean())

@@ -31,6 +31,7 @@
    1,
    20
   ],
+  "tiles": "damn",
   "tile": 10,
   "main_busy": 0.0,
   "thread_eff": 1.0,
@@ -146,14 +147,14 @@
    "spill": null,
    "processes": 320,
    "serial": 15365.395692160004,
-   "step": 2.418143801899999,
+   "step": 2.4177740058912267,
    "levels": [
     {
      "patches": 130400,
      "cells": 32000000.0,
      "particles": 3200000000.0,
      "owners_sha256": "eab29a197c69b0fa80b848604f128ed9f666efb0df86238fde492238a75addd2",
-     "imbalance": 1.0557783397818823
+     "imbalance": 1.0515093370080941
     },
     {
      "patches": 64000,
@@ -192,14 +193,14 @@
    "spill": 0.05,
    "processes": 320,
    "serial": 15365.395692160004,
-   "step": 2.405825534499999,
+   "step": 2.4058424105157883,
    "levels": [
     {
      "patches": 130400,
      "cells": 32000000.0,
      "particles": 3200000000.0,
      "owners_sha256": "e840d0b8d0270d1687fb9f17b37538d650574a0aebcb52b2e009bec7fe764416",
-     "imbalance": 1.0538307043125932
+     "imbalance": 1.0540782946698661
     },
     {
      "patches": 64000,
@@ -330,14 +331,14 @@
    "spill": null,
    "processes": 320,
    "serial": 14895.267719360005,
-   "step": 2.3591656870249986,
+   "step": 2.356759171759683,
    "levels": [
     {
      "patches": 19920,
      "cells": 32000000.0,
      "particles": 3200000000.0,
      "owners_sha256": "61b917ebf377e25058550f4e0cb928dfce65bbc988bf98ba3e5bf97e03b587b6",
-     "imbalance": 1.1528652611318606
+     "imbalance": 1.146714990156254
     },
     {
      "patches": 9600,
@@ -376,14 +377,14 @@
    "spill": 0.05,
    "processes": 320,
    "serial": 14895.267719360005,
-   "step": 2.339578262949999,
+   "step": 2.3363774241711845,
    "levels": [
     {
      "patches": 19920,
      "cells": 32000000.0,
      "particles": 3200000000.0,
      "owners_sha256": "65a9f88b01854f809cafa48129aeb1f09f11d3e18ea42e8d960686c36abff12c",
-     "imbalance": 1.1023272250215963
+     "imbalance": 1.0901654307358668
     },
     {
      "patches": 9600,

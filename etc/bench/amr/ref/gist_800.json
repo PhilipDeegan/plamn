@@ -31,6 +31,7 @@
    1,
    20
   ],
+  "tiles": "damn",
   "tile": 10,
   "main_busy": 0.0,
   "thread_eff": 1.0,
@@ -176,7 +177,7 @@
    "spill": null,
    "processes": 40,
    "serial": 1903.3992159200004,
-   "step": 2.4045523415999988,
+   "step": 2.400531265049999,
    "levels": [
     {
      "patches": 500,
@@ -195,7 +196,7 @@
      "cells": 14080000.0,
      "particles": 1056000000.0,
      "owners_sha256": "a1451e3be9df8b53e9791f01fad948bf29fefd7ca41756c5278cc8d831ee076f",
-     "imbalance": 1.0291790421499574,
+     "imbalance": 1.0172215267049995,
      "ghosts": {
       "same NUMA": 0.0,
       "other NUMA": 1007360.0,
@@ -237,7 +238,7 @@
    "spill": 0.05,
    "processes": 40,
    "serial": 1903.3992159200004,
-   "step": 2.4206366477999985,
+   "step": 2.416398967585713,
    "levels": [
     {
      "patches": 500,
@@ -256,7 +257,7 @@
      "cells": 14080000.0,
      "particles": 1056000000.0,
      "owners_sha256": "952eaf0261e771e3fff124e0ec0885739fad53384cf06d62fca18cedfeb71840",
-     "imbalance": 1.058843407053314,
+     "imbalance": 1.0595190229434082,
      "ghosts": {
       "same NUMA": 0.0,
       "other NUMA": 904320.0,
@@ -420,14 +421,14 @@
    "spill": null,
    "processes": 40,
    "serial": 1920.6744615200005,
-   "step": 2.413445884399999,
+   "step": 2.413710798042104,
    "levels": [
     {
      "patches": 16300,
      "cells": 4000000.0,
      "particles": 400000000.0,
      "owners_sha256": "222561f3b3a09529d56a9c3b4d73d3a53236a6c29524d0186ed8aaf5ab87de24",
-     "imbalance": 1.0320938228329588,
+     "imbalance": 1.035627327199235,
      "ghosts": {
       "same NUMA": 0.0,
       "other NUMA": 511560.0,
@@ -481,14 +482,14 @@
    "spill": 0.05,
    "processes": 40,
    "serial": 1920.6744615200005,
-   "step": 2.405825534499999,
+   "step": 2.405793062642104,
    "levels": [
     {
      "patches": 16300,
      "cells": 4000000.0,
      "particles": 400000000.0,
      "owners_sha256": "bad321d64caecc955d203b5138bf773acea899e575cba47b3cbe2b59e35e487a",
-     "imbalance": 1.0547761519834034,
+     "imbalance": 1.0540463306665375,
      "ghosts": {
       "same NUMA": 0.0,
       "other NUMA": 796680.0,
