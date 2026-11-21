@@ -107,6 +107,15 @@ void Simulator<opts>::setup_()
             throw std::runtime_error("plamn Simulator: regrid_mode normal or high, not " + mode);
         regrid_mode_ = mode == "high" ? RegridMode::high : RegridMode::normal;
     }
+    lb_.partition = cppdict::get_value(dict_, "simulation/AMR/loadbalancing/partition",
+                                       std::string{"levels"});
+    if (auto const* env = std::getenv("PLAMN_PARTITION"); env and *env)
+        lb_.partition = env;
+    if (lb_.partition != "levels" and lb_.partition != "keep")
+        throw std::runtime_error("plamn Simulator: partition levels or keep, not " + lb_.partition);
+    lb_.spill = cppdict::get_value(dict_, "simulation/AMR/loadbalancing/spill", -1.);
+    if (auto const* env = std::getenv("PLAMN_SPILL"); env and *env)
+        lb_.spill = std::stod(env);
     pretag_enabled_ = cppdict::get_value(dict_, "simulation/AMR/refinement/tagging/pretag", false);
     if (auto const* env = std::getenv("PLAMN_PRETAG"))
         pretag_enabled_ = std::string_view{env} == "1";
@@ -236,6 +245,7 @@ void Simulator<opts>::setup_()
         setup_hybrid_();
     setup_restarts_();
     setup_diagnostics_();
+    setup_decomposition_log_();
 }
 
 template<auto opts>

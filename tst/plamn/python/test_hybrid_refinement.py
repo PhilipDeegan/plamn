@@ -94,6 +94,7 @@ def harris(
     cells=(100, 100),
     patch=(25, 25),
     tag_boxes=None,
+    by_node=False,  # out["final"]: b_by_node at the end
 ):
     ph.global_vars.sim = None
     ph.clearDict()
@@ -177,7 +178,9 @@ def harris(
         simulator.advance()
         if measure:
             measured.append(measure(simulator))
+    final = b_by_node(simulator) if by_node else None
     out = {
+        "final": final,
         "levels": cpp.n_levels(),
         "initial": initial,
         "particles": [cpp.total_particle_count(ln) for ln in range(cpp.n_levels())],
@@ -291,6 +294,24 @@ def level_fields(simulator):
         np.concatenate([np.asarray(cpp.level_values(n, ln)) for n in names])
         for ln in range(cpp.n_levels())
     ]
+
+
+def b_by_node(simulator):
+    """{(level, component, AMR node): B} of every patch's domain nodes, every rank's on rank 0
+    (empty on the others; collective): comparable whatever the patches (all_domain_values is
+    in patch order)"""
+    dw = simulator.data_wrangler().cpp
+    out = {}
+    for ln in range(dw.getNumberOfLevels()):
+        for c in "xyz":
+            for p in dw.sync(dw.getHybridPatchLevel(ln).getB(c)):
+                lo, up, g = np.asarray(p.lower), np.asarray(p.upper), int(p.nGhosts)
+                v = np.asarray(p.data)
+                n = [min(v.shape[d] - 2 * g, up[d] - lo[d] + 2) for d in range(v.ndim)]
+                for idx in np.ndindex(*n):  # the patch's nodes (a dual direction: its cells)
+                    out[(ln, c, *(lo[d] + idx[d] for d in range(v.ndim)))] = v[
+                        tuple(g + i for i in idx)]
+    return out
 
 
 def max_divb(simulator):
@@ -500,6 +521,115 @@ class HybridRefinementTest(unittest.TestCase):
         self.assertEqual(lb["measured"], no["measured"])
         for b_lb, b_no in zip(lb["B"], no["B"]):
             self.assertLess(np.abs(b_lb - b_no).max(), 1e-12)
+
+    def test_keep_partition(self):
+        """PLAMN_PARTITION=keep (with PLAMN_SPILL): a regridded level's patches stay with their
+        data's owner, a new one with the coarser patch's under it, then spilled to within the
+        tolerance. The same physics as the curve ("levels"); on more than one rank, fewer of the
+        coarse cells under a fine patch on another rank, every level within its tolerance"""
+        from plamn.amr import read_decomposition
+
+        ph.startMPI()
+        size, rank = plamn.etc.mpi_size(), plamn.etc.mpi_rank()
+        steps, spill = 4, 0.2
+        out, logs = {}, {}
+        for mode in ("levels", "keep"):
+            path = Path("phare_outputs") / f"partition_{mode}_n{size}.jsonl"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            logs[mode] = path
+            os.environ.update(PLAMN_PARTITION=mode, PLAMN_SPILL=str(spill),
+                              PLAMN_DECOMPOSITION=str(path))
+            try:
+                out[mode] = harris(steps, tagging=True, levels=3, cells=(40, 100),
+                                   patch=(10, 10), by_node=True)
+                out[mode]["nodes"] = out[mode]["final"]
+            finally:
+                for key in ("PLAMN_PARTITION", "PLAMN_SPILL", "PLAMN_DECOMPOSITION"):
+                    os.environ.pop(key)
+        self.assertEqual(out["keep"]["levels"], out["levels"]["levels"])
+        plamn.etc.mpi_barrier()
+        if rank != 0:
+            return
+        a, b = out["keep"]["nodes"], out["levels"]["nodes"]
+        self.assertEqual(a.keys(), b.keys())  # the same levels' nodes
+        self.assertLess(max(abs(a[k] - b[k]) for k in a), 1e-12)
+        if size == 1:
+            return
+        last = {m: read_decomposition(p)[-1] for m, p in logs.items()}
+
+        def crossing(rec):  # coarse cells under fine patches owned by another rank
+            return sum(m["coarse_cells"]["Node"] + m["coarse_cells"]["Remote"]
+                       for m in rec["levels"])
+
+        self.assertLess(crossing(last["keep"]), crossing(last["levels"]))
+        for m in last["keep"]["levels"]:
+            share = sum(m["weight"]) / size
+            heaviest = max(last["keep"]["hierarchy"].weights[m["level"]])
+            self.assertLessEqual(max(m["weight"]), (1 + spill) * share + heaviest)
+
+    def test_decomposition_log(self):
+        """PLAMN_DECOMPOSITION: a line at initialization, after each regrid or rebalance that
+        changes the decomposition, and every PLAMN_DECOMPOSITION_EVERY steps; each level's
+        weights are its particles (every rank's), the metrics consistent with its patches"""
+        from plamn.amr import read_decomposition
+
+        ph.startMPI()
+        size, rank = plamn.etc.mpi_size(), plamn.etc.mpi_rank()
+        path = Path("phare_outputs") / f"decomposition_n{size}.jsonl"  # one per rank count:
+        path.parent.mkdir(parents=True, exist_ok=True)  #  1 and 3 ranks run at once
+        steps = 4
+        os.environ.update(PLAMN_DECOMPOSITION=str(path), PLAMN_DECOMPOSITION_EVERY="2")
+        try:
+            out = harris(
+                steps,
+                tagging=True,
+                levels=3,
+                cells=(40, 100),
+                patch=(10, 10),
+                load_balancer=dict(every=2, tol=0.05) if size > 1 else None,
+            )
+        finally:
+            for key in ("PLAMN_DECOMPOSITION", "PLAMN_DECOMPOSITION_EVERY"):
+                os.environ.pop(key)
+        plamn.etc.mpi_barrier()
+        if rank != 0:
+            return
+        lines = read_decomposition(path)
+        events = [r["event"] for r in lines]
+        self.assertEqual(events[0], "init")
+        self.assertEqual(events.count("sample"), steps // 2)
+        self.assertIsNone(lines[0]["migration"])
+        last = lines[-1]
+        h = last["hierarchy"]
+        self.assertEqual(len(h.levels), out["levels"])
+        self.assertEqual(h.ranks, size)
+        for ln, m in enumerate(last["levels"]):
+            self.assertEqual(sum(h.weights[ln]), out["particles"][ln])
+            self.assertAlmostEqual(sum(m["weight"]), out["particles"][ln])
+            self.assertEqual(m["patches"], len(h.levels[ln]))
+            self.assertEqual(
+                m["cells"],
+                sum(np.prod(np.asarray(up) - lo + 1) for lo, up, _ in h.levels[ln]),
+            )
+            self.assertGreaterEqual(m["level_ghost_cells"], 0)
+            self.assertEqual(m["ghost_cells"]["Remote"], 0)  # one node
+            if size == 1:
+                self.assertEqual(m["ghost_cells"]["Node"], 0)
+            if ln > 0:
+                self.assertGreater(sum(m["coarse_cells"].values()), 0)
+        for r in lines[1:]:
+            self.assertEqual(len(r["migration"]), len(r["levels"]))
+        if size > 1:  # three ranks: ghosts cross ranks, and every rank has peers
+            self.assertGreater(last["levels"][0]["ghost_cells"]["Node"], 0)
+            self.assertGreater(last["remote_ranks"][0][0], 0)
+        self.assertGreaterEqual(last["critical_path"], 1.0)
+        # busy time: every second of a level's patch work is a patch's of the decomposition it
+        #  ran on (the cost fit: test_load_balancing, where particles do not follow cells)
+        for prev, r in zip(lines, lines[1:]):
+            for ln, m in enumerate(r["levels"]):
+                if m["busy"]:
+                    self.assertEqual(len(m["busy"]), len(prev["hierarchy"].levels[ln]))
+                    self.assertAlmostEqual(sum(m["busy"]), sum(m["busy_rank"]), places=9)
 
 
 if __name__ == "__main__":

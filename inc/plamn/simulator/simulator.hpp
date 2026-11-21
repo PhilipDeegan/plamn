@@ -383,8 +383,20 @@ private:
     // one patch's work, for every local patch of level ln
     void per_patch_(std::size_t const ln, auto&& fn)
     {
-        for (auto& patch : data_(ln).data)
-            fn(*patch);
+        auto& ld = data_(ln);
+        if (!decomposition_.timing) // the decomposition log's busy time: a hybrid advance only
+        {
+            for (auto& patch : ld.data)
+                fn(*patch);
+            return;
+        }
+        for (std::size_t i = 0; i < ld.data.size(); ++i)
+        {
+            auto const t0 = std::chrono::steady_clock::now();
+            fn(*ld.data[i]);
+            decomposition_.busy_of(ln, ld.patches[i].box)
+                += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        }
     }
 
     // copies key's resources between the patches of level ln (its model's), see
@@ -449,6 +461,31 @@ private:
     // PHARE's: a rebalance of level 0 (and so of the finer levels) due at this step
     NO_DISCARD bool should_rebalance_();
     void rebalance_(double t); // level 0 onto new owners, then each finer level
+
+    // the decomposition log (simulator_decomposition.hpp): one JSON line per init, changing
+    //  regrid or rebalance, and every `every` steps; collective
+    struct DecompositionLog
+    {
+        std::string path{}; // empty: off
+        int every = 0;
+        std::optional<damn::amr::Hierarchy<dimension>> last{}; // the last line's
+        // busy time: seconds of each patch's work in a hybrid level's advance (per_patch_,
+        //  outside the exchanges), by level and patch box, since the last line
+        bool timing    = false;
+        int steps_then = 0; // steps_ at the last line
+        std::vector<std::map<std::array<int, 2 * dimension>, double>> busy{};
+        double& busy_of(std::size_t const ln, Box_t const& box)
+        {
+            if (busy.size() <= ln)
+                busy.resize(ln + 1);
+            return busy[ln][Simulator::d_key_(box)];
+        }
+    } decomposition_;
+    void setup_decomposition_log_();
+    NO_DISCARD static int decomposition_reach_();
+    NO_DISCARD static bool busy_push_();
+    NO_DISCARD static std::array<int, 2 * dimension> d_key_(Box_t const& box);
+    void record_decomposition_(std::string const& event, double t, bool always = false);
 
     void register_resources_();
     // the MHD states' (conservative) and E's resources: MHDState_<s>, MHD_E, MHD_B (state 0's B)
@@ -642,6 +679,14 @@ private:
         std::string mode           = "nppc";
         double tolerance           = 0.05;
         std::size_t next_rebalance = 200, backoff = 2, max_next_rebalance = 1000;
+        // how a level's patches get their ranks (level_of_; plamn's, not PHARE's: the PHARE
+        //  comparisons keep "levels"): "levels" each level along the Hilbert curve on its own,
+        //  "keep" where the data is (damn::amr::keep: the old level's owners, else the coarser
+        //  patch's under it, else the curve); spill >= 0: then no rank above (1 + spill) of its
+        //  share (damn::amr::spill). simulation/AMR/loadbalancing/partition, spill, or
+        //  PLAMN_PARTITION, PLAMN_SPILL
+        std::string partition = "levels";
+        double spill          = -1;
     } lb_;
     std::optional<amr::CoarsestRebalanceCheck> rebalance_check_;
     int rank_    = 0;
@@ -676,6 +721,7 @@ private:
 #include "plamn/simulator/simulator_regrid.hpp"      // IWYU pragma: export
 #include "plamn/simulator/simulator_restarts.hpp"    // IWYU pragma: export
 #include "plamn/simulator/simulator_computed.hpp"    // IWYU pragma: export
+#include "plamn/simulator/simulator_decomposition.hpp" // IWYU pragma: export
 #include "plamn/simulator/simulator_diagnostics.hpp" // IWYU pragma: export
 #include "plamn/simulator/simulator_setup.hpp"       // IWYU pragma: export
 #include "plamn/simulator/simulator_sums.hpp"        // IWYU pragma: export

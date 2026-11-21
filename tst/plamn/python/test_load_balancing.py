@@ -6,11 +6,14 @@ rank starts within one patch of the others. Meaningful on more than one rank:
     mpirun -n 3 python3 -m tst.plamn.python.test_load_balancing   (phlop: --tags mpi)
 """
 
+import os
 import unittest
+from pathlib import Path
 
 import numpy as np
 
 import plamn.backend.phare as ph
+from plamn import plamn_etc
 
 cells = (100, 100)
 dl = (0.2, 0.2)
@@ -36,11 +39,11 @@ def density_empty_middle(x, y):
     return rho
 
 
-def config(protons_density):
+def config(protons_density, steps=1):
     ph.global_vars.sim = None
     ph.clearDict()
     sim = ph.Simulation(
-        time_step_nbr=1,
+        time_step_nbr=steps,
         time_step=0.001,
         cells=cells,
         dl=dl,
@@ -120,6 +123,46 @@ class LoadBalancingTest(unittest.TestCase):
         #  worth per cell): two ranks within two
         heaviest = np.prod(patch) * (ppc_high + ppc_low + 1)
         self.assertLessEqual(max(per_rank) - min(per_rank), 2 * heaviest)
+
+    def test_busy_time_follows_particles(self):
+        """the decomposition log's busy time (each patch's work in the advance) against its
+        particles and cells: with one population absent from the middle, particles per patch do
+        not follow cells, and a particle's cost is clear of a cell's; on more ranks the busy
+        time's imbalance follows the particles'"""
+        from plamn.amr import cost_fit, read_decomposition
+
+        ph.startMPI()
+        size = plamn_etc.mpi_size()
+        path = Path("phare_outputs") / f"busy_n{size}.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        steps = 12
+        os.environ.update(PLAMN_DECOMPOSITION=str(path), PLAMN_DECOMPOSITION_EVERY="1")
+        try:
+            self.simulator = (
+                ph.Simulator(config(density_empty_middle, steps), log_to_file=False)
+                .setup()
+                .initialize()
+            )
+            for _ in range(steps):
+                self.simulator.advance()
+        finally:
+            for key in ("PLAMN_DECOMPOSITION", "PLAMN_DECOMPOSITION_EVERY"):
+                os.environ.pop(key)
+        plamn_etc.mpi_barrier()
+        if plamn_etc.mpi_rank() != 0:
+            return
+        records = read_decomposition(path)
+        self.assertEqual(cost_fit(records)["n"], steps * 100)  # every patch, every step
+        # each patch's fastest step: CI runs jobs side by side (ranks oversubscribed), and a
+        #  ~1 ms patch's wall time takes every preemption (every row: r2 0.19 there)
+        fit = cost_fit(records, reduce="min")
+        self.assertEqual(fit["n"], 100)
+        self.assertGreater(fit["a"], 0)  # a particle costs time
+        self.assertGreater(fit["r2"], 0.5)
+        if size > 1:
+            for line in fit["imbalance"]:
+                (lvl,) = line["levels"]
+                self.assertLess(abs(lvl["imbalance"] - lvl["weight_imbalance"]), 0.1)
 
 
 if __name__ == "__main__":

@@ -74,7 +74,7 @@ def environment(code):
     return env
 
 
-def run(code, case, out, largest_patch_size, steps=None):
+def run(code, case, out, largest_patch_size, steps=None, extra=()):
     n = int(setting("LADDER_NP", "1"))
     kind = "plamn" if code == "plamn" else "phare"
     cmd = [sys.executable, str(HERE / "run_case.py"), kind, case, str(out)]
@@ -86,6 +86,7 @@ def run(code, case, out, largest_patch_size, steps=None):
     if setting("LADDER_FINE_DUMP", "1") == "1":
         cmd += ["--fine-dump"]
     cmd += ["--format", setting("LADDER_FORMAT", "phareh5")]
+    cmd += [str(x) for x in extra]
     if n > 1:
         cmd = ["mpirun", "--oversubscribe", "-n", str(n)] + cmd
     shutil.rmtree(out, ignore_errors=True)  # no files of an earlier run (another format)

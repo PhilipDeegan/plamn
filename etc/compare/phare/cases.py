@@ -39,14 +39,20 @@ POPULATIONS = ["protons"]
 # memory: each case's "mem" estimate (GB, one code's run, all its ranks), checked against the
 #  measured peak after every run (run_case.py, test_ladder.memory): update it from the numbers.
 #  Without one, an estimate from the level 0 particles. The tier says where a case runs:
-#    gh     GitHub's runners (public repo: 4 cores, 16 GB, 14 GB disk), both codes one after
-#           the other: slow.yml, on merges to master
+#    gh     GitHub's runners (public repo: 4 cores, 16 GB, 14 GB disk), a runner per case,
+#           both codes one after the other (the peak is one code's; the disk holds both runs'
+#           outputs): slow.yml, on merges to master
 #    local  this machine's (8 ranks or threads, the thermal governor)
 #    big    by hand
 GB = 1 << 30
-TIERS = {"gh": 6 * GB, "local": 40 * GB}
+TIERS = {"gh": 12 * GB, "local": 40 * GB}
 BYTES_PER_PARTICLE = 250  # AoS ~80 B, times domain + ghosts + sort buffers + levels (rough)
 BYTES_BASE = GB // 2  # python, SAMRAI, the modules
+
+
+def dump_every(name):
+    """the steps between a case's dumps (its diagnostics', or live snapshots')"""
+    return CASES[name].get("dump_every", 1)
 
 
 def ppc(name):
@@ -96,10 +102,19 @@ CASES = {
     # compare_physics.py's (not a ladder step): 3 levels, tagging, final B composites
     "harris_3d": dict(harris3d=True, cells=(20, 20, 20), steps=2),
     # harris 3D sized by memory (tier()): 10^3 at 100 ppc vs PHARE on GitHub (slow.yml), 80^3 at
-    #  100 ppc locally (51M level 0 particles; 8 ranks or 8 threads)
+    #  100 ppc locally (51M level 0 particles; 8 ranks or 8 threads). harris_3d_10 is the 3D L2
+    #  comparison: tagging makes levels 1 and 2 (0.9 GB, ~80 s per code on a runner)
     "harris_3d_10": dict(harris3d=True, cells=(10, 10, 10), ppc=100, steps=4, mem=1.0,
-                         tolerance=(1e-12, 1.5, 1e-10)),  # roundoff: 5.5e-14 locally
-    "harris_3d_80": dict(harris3d=True, cells=(80, 80, 80), ppc=100, steps=4, mem=25.0),
+                         tolerance=(1e-12, 1.5, 1e-10), levels_at_end=3),  # 5.5e-14 locally
+    # 80^3 at 100 ppc tags 40% of level 1 and 20% of level 2: 543M particles (51M + 123M + 369M,
+    #  the decomposition log), killed at 62 GB on 8 ranks: "big"; at 20 ppc, local
+    "harris_3d_80": dict(harris3d=True, cells=(80, 80, 80), ppc=100, steps=4, mem=100.0),
+    "harris_3d_80_ppc20": dict(harris3d=True, cells=(80, 80, 80), ppc=20, steps=4, mem=25.0),
+    # level 0 only at 80 ppc (41M particles, ~250 B each as measured at 20 ppc: 30 GB for
+    #  108M over 8 ranks): measured PHARE 10.65 GB, plamn 7.11 GB, ~40 s each; roundoff
+    #  (1.6e-15 locally)
+    "harris_3d_80_L0": dict(harris3d=True, cells=(80, 80, 80), ppc=80, steps=4, levels=1,
+                            tolerance=(1e-13, 1.5, 1e-11)),
     # compare_physics.py --all-times: PHARE's tests/functional/mhd_shock/shock_periodic.py (MHD
     #  only, one level), dumps every 50 of its 400 steps
     "mhd_shock_1d": dict(mhd_shock=True, steps=400, dump_every=50, pops=[]),
@@ -164,6 +179,8 @@ def _diag_options(out, fmt, fine_dump):
     """the regular dumps; with fine_dump, also each fine level at the end of its substeps
     (fine_dump_lvl_max: phareh5, PHARE master's pharevtkhdf writes them with level tables
     shorter than the steps, fixed in a later PHARE)."""
+    if fmt == "none":  # live comparisons (live.py): no diagnostics
+        return None
     options = {"dir": out, "mode": "overwrite"}
     if fine_dump:
         options["fine_dump_lvl_max"] = 10
@@ -171,6 +188,8 @@ def _diag_options(out, fmt, fine_dump):
 
 
 def _diagnostics(ph, timestamps, pops, fmt="phareh5"):
+    if fmt == "none":
+        return
     particles = os.environ.get("LADDER_PARTICLES", "1") == "1"  # 0: fields only
     if fmt == "phareh5" and particles:  # pharevtkhdf has no particles
         for pop in pops:
@@ -365,7 +384,7 @@ def _harris_3d(ph, out, case, largest_patch_size, fmt, fine_dump):
         cells=case.get("cells", (20, 20, 20)),
         dl=(0.4, 0.4, 0.4),
         refinement="tagging",
-        max_nbr_levels=3,
+        max_nbr_levels=case.get("levels", 3),
         nesting_buffer=1,
         tagging_threshold=float(os.environ.get("LADDER_TAGGING", case.get("tagging", 0.5))),
         hyper_resistivity=0.008,
