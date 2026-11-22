@@ -11,6 +11,7 @@
 #include "damn/core/geometry/box.hpp"
 #include "damn/mpi/scope_timing.hpp"
 #include "damn/mpi/topology.hpp"
+#include "mkn/kul/env.hpp"
 
 #include "plamn/simulator/simulator.hpp" // IWYU pragma: keep (the class)
 #include "plamn/amr/load_balancing.hpp"
@@ -118,6 +119,13 @@ void Simulator<opts>::setup_()
     lb_.spill = cppdict::get_value(dict_, "simulation/AMR/loadbalancing/spill", -1.);
     if (auto const* env = std::getenv("PLAMN_SPILL"); env and *env)
         lb_.spill = std::stod(env);
+    lb_.near_band = mkn::kul::env::get_as<int>(
+        "PLAMN_NEAR_BAND", cppdict::get_value(dict_, "simulation/AMR/loadbalancing/near_band", -1));
+    lb_.far = mkn::kul::env::get_as<std::string>(
+        "PLAMN_FAR",
+        cppdict::get_value(dict_, "simulation/AMR/loadbalancing/far", std::string{"balance"}));
+    if (lb_.far != "balance" and lb_.far != "local")
+        throw std::runtime_error("plamn Simulator: far balance or local, not " + lb_.far);
     pretag_enabled_ = cppdict::get_value(dict_, "simulation/AMR/refinement/tagging/pretag", false);
     if (auto const* env = std::getenv("PLAMN_PRETAG"))
         pretag_enabled_ = std::string_view{env} == "1";

@@ -57,12 +57,21 @@ Simulator<opts>::decompose_in_(std::string const& partition)
             cells.push_back(static_cast<double>(p.size()));
         return cells;
     };
+    // the level 0 cells about level 1 its coarse step reads: where its level ghost particles
+    //  split from (a particle ghost width, in coarse cells at most); running level 0's far part
+    //  out of order would need the stages' ghost exchanges on top
+    int near_band = lb_.near_band;
+    if constexpr (Models_t::hybrid_on)
+        if (near_band < 0)
+            near_band = static_cast<int>(solver::HybridModel<opts>::Patch_t::particle_ghost_width);
     return {.topology   = topology_,
             .weigh      = weigh,
             .patch_size = patch_size_,
             .partition  = partition,
             .spill      = lb_.spill,
-            .block      = rebalance_block};
+            .block      = rebalance_block,
+            .near_band  = std::max(near_band, 0),
+            .far        = lb_.far};
 }
 
 // level ln from its boxes (that level's cells): planned_[ln] if decomposed with the others
