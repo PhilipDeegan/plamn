@@ -39,10 +39,71 @@
 namespace plamn::solver::hybrid
 {
 // the ions' totals from the populations' (complete) moments
+namespace detail
+{
+    // the ions' totals from their populations' moments (Ions::update's sums, in its order): on
+    //  unified memory a few kernels for the whole level (zero, then each population, then the
+    //  velocity's division) instead of host loops per patch
+    template<auto opts>
+        requires(opts.alloc_mode == damn::AllocatorMode::GPU_UNIFIED
+                 and !core::is_tiled(opts.layout_mode))
+    void compute_moments_level(auto& level)
+    {
+        using T           = double;
+        auto constexpr am = opts.alloc_mode;
+        auto const of     = [&](auto const get) {
+            return core::level_of<am>(level,
+                                      [&](auto& patch, auto& fields) { fields.add(get(patch)); });
+        };
+        std::vector<std::pair<double, double>> pops; // (charge, mass), every patch the same
+        level.per_patch([&](auto& patch) {
+            if (pops.empty())
+                for (auto const& pop : patch.ions)
+                    pops.emplace_back(pop.charge(), pop.mass());
+        });
+
+        auto charge_density = of([](auto& p) -> auto& { return p.ions.chargeDensity(); });
+        auto mass_density   = of([](auto& p) -> auto& { return p.ions.massDensity(); });
+        auto velocity       = of([](auto& p) -> auto& { return p.ions.velocity(); });
+        auto charge_flux    = of([](auto& p) -> auto& { return p.ions.chargeFlux(); });
+        charge_density.zero();
+        mass_density.zero();
+        velocity.zero();
+        charge_flux.zero();
+        for (std::size_t k = 0; k < pops.size(); ++k)
+        {
+            auto const [q, m] = pops[k];
+            auto const n
+                = of([k](auto& p) -> auto& { return p.ions.population(k).particleDensity(); });
+            auto pop_charge
+                = of([k](auto& p) -> auto& { return p.ions.population(k).chargeDensity(); });
+            auto const f = of([k](auto& p) -> auto& { return p.ions.population(k).flux(); });
+            pop_charge.transform([q] DAMN_ALL(T & out, T const n_) { out = q * n_; }, n);
+            charge_density.transform([] DAMN_ALL(T & c, T const pc) { c = c + pc; }, pop_charge);
+            mass_density.transform([m] DAMN_ALL(T & r, T const n_) { r = r + n_ * m; }, n);
+            velocity.transform([m] DAMN_ALL(T & v, T const f_) { v = v + f_ * m; }, f);
+            charge_flux.transform([q] DAMN_ALL(T & c, T const f_) { c = c + q * f_; }, f);
+        }
+        // v / the mass density, component by component: the mass density's view three times
+        auto const mass_density_3 = core::level_of<am>(level, [](auto& p, auto& fields) {
+            for (std::size_t c = 0; c < 3; ++c)
+                fields.add(p.ions.massDensity());
+        });
+        velocity.transform([] DAMN_ALL(T & v, T const r) { v = v / r; }, mass_density_3);
+    }
+    template<auto opts>
+        requires(opts.alloc_mode == damn::AllocatorMode::CPU or core::is_tiled(opts.layout_mode))
+    void compute_moments_level(auto& level)
+    {
+        level.per_patch([](auto& patch) { patch.ions.update(); });
+    }
+} // namespace detail
+
+template<auto opts>
 void compute_moments(auto&& level)
 {
     DAMN_LOG_SCOPE(1, "Simulator::compute_moments_");
-    level.per_patch([](auto& patch) { patch.ions.update(); });
+    detail::compute_moments_level<opts>(level);
 }
 
 void fill_ion_borders(auto&& level)
@@ -338,7 +399,7 @@ void move_ions(HybridModel<opts>& model, auto& level, double const t, double con
         deposit_level_ghosts<opts>(level, t + dt);
     }
     fill_ion_borders(level);
-    compute_moments(level);
+    compute_moments<opts>(level);
 }
 
 // B predicted (into emPred) or corrected (into em) from E by Faraday, then its ghosts,

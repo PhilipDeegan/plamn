@@ -189,7 +189,7 @@ void Simulator<opts>::rebalance_(double const t)
         fill_magnetic_ghosts_(0, "EM_B", t);
         fill_electric_ghosts_(0, "EM_E", t);
         copy_(0, damn::amr::fill_ghosts, "IonPopMoments");
-        solver::hybrid::compute_moments(level_services_(0));
+        solver::hybrid::compute_moments<opts>(level_services_(0));
         prepare_step_(0, t);
     }
 

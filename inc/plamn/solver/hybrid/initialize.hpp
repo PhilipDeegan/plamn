@@ -69,7 +69,7 @@ void initialize_root(HybridModel<opts>& model, auto&& level, auto const& sim)
             core::DomainDeposit{});
     });
     fill_ion_borders(level);
-    compute_moments(level);
+    compute_moments<opts>(level);
 
     // J from B, then E from Ohm's law
     ampere_ohm<&Patch_t::em>(model, level);
@@ -124,7 +124,7 @@ void refined_moments(HybridModel<opts> const&, auto&& level)
             core::LevelGhostDeposit{});
     });
     fill_ion_borders(level);
-    compute_moments(level);
+    compute_moments<opts>(level);
 
     // J from B; E was refined
     level.per_patch(
@@ -211,7 +211,7 @@ void moved_moments(HybridModel<opts> const& model, auto&& level, auto const& old
         ++i;
     });
     level.copy(damn::amr::fill_ghosts, "IonPopMoments");
-    compute_moments(level);
+    compute_moments<opts>(level);
 }
 
 } // namespace plamn::solver::hybrid
