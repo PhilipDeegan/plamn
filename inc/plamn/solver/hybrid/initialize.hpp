@@ -63,9 +63,10 @@ void initialize_root(HybridModel<opts>& model, auto&& level, auto const& sim)
     // moments from the particles, completed across patch borders
     level.per_patch([&](auto& patch) {
         core::resetMoments(patch.ions);
-        core::depositParticles(patch.ions, patch.layout,
-                               core::Interpolating<opts.dimension, opts.interp_order>{},
-                               core::DomainDeposit{});
+        core::depositParticles(
+            patch.ions, patch.layout,
+            core::DepositInterpolating<opts.dimension, opts.interp_order, opts.alloc_mode>{},
+            core::DomainDeposit{});
     });
     fill_ion_borders(level);
     compute_moments(level);
@@ -117,9 +118,10 @@ void refined_moments(HybridModel<opts> const&, auto&& level)
 {
     level.per_patch([&](auto& patch) {
         core::deposit_domain<opts.dimension, opts.interp_order>(patch.ions, patch.layout);
-        core::depositParticles(patch.ions, patch.layout,
-                               core::Interpolating<opts.dimension, opts.interp_order>{},
-                               core::LevelGhostDeposit{});
+        core::depositParticles(
+            patch.ions, patch.layout,
+            core::DepositInterpolating<opts.dimension, opts.interp_order, opts.alloc_mode>{},
+            core::LevelGhostDeposit{});
     });
     fill_ion_borders(level);
     compute_moments(level);

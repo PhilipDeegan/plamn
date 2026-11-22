@@ -479,14 +479,16 @@ void declare_particle_array(nb::module_& m, char const* name)
     }
     else
     {
+        using At_t = decltype(core::particle_at(std::declval<Particles_t&>(), std::size_t{}));
+        // a reference into the array, or a proxy by value (SoAVX's zip particle, thrust builds)
         particles.def(
             "__getitem__",
-            [](Particles_t& self, std::size_t const i) -> auto& {
+            [](Particles_t& self, std::size_t const i) -> At_t {
                 if (i >= self.size())
                     throw nb::index_error();
                 return core::particle_at(self, i); // tiled: through the tiles
             },
-            nb::rv_policy::reference_internal);
+            std::is_reference_v<At_t> ? nb::rv_policy::reference_internal : nb::rv_policy::move);
         def_tiled_components<Particles_t>(particles);
     }
 }

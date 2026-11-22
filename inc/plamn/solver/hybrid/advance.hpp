@@ -96,7 +96,7 @@ void deposit_level_ghosts(auto& level, double const t)
                                  + std::to_string(alpha));
     alpha = std::clamp(alpha, 0., 1.);
     level.per_patch([&](auto& patch) {
-        core::Interpolating<opts.dimension, opts.interp_order> interpolate;
+        core::DepositInterpolating<opts.dimension, opts.interp_order, opts.alloc_mode> interpolate;
         for (auto& pop : patch.ions)
         {
             interpolate(pop.levelGhostParticlesOld(), pop.particleDensity(), pop.flux(),

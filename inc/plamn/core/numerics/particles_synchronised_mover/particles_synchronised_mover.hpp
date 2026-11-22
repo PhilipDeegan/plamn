@@ -254,8 +254,11 @@ template<std::size_t dim, std::size_t interp_order>
 void deposit_domain(auto& ions, auto const& layout)
 {
     DAMN_LOG_SCOPE(3, "ParticlesSynchronisedMover::depositDomain");
+    using Pop_t       = std::decay_t<decltype(*std::begin(ions))>;
+    using Particles_t = std::decay_t<decltype(std::declval<Pop_t&>().domainParticles())>;
     resetMoments(ions);
-    depositParticles(ions, layout, Interpolating<dim, interp_order>{},
+    depositParticles(ions, layout,
+                     DepositInterpolating<dim, interp_order, Particles_t::alloc_mode>{},
                      DomainDeposit{}); // tiles too
 }
 

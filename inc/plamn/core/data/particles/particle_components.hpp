@@ -52,12 +52,16 @@ struct ParticleComponents
 };
 
 template<typename Particles>
-concept HasComponents = std::decay_t<Particles>::options.alloc_mode == damn::AllocatorMode::CPU
-                        and (std::decay_t<Particles>::layout_mode == LayoutMode::AoS
-                             or std::decay_t<Particles>::layout_mode == LayoutMode::AoSMapped
-                             or std::decay_t<Particles>::layout_mode == LayoutMode::SoA
-                             or std::decay_t<Particles>::layout_mode == LayoutMode::SoAVX
-                             or std::decay_t<Particles>::layout_mode == LayoutMode::SoAVXChunked);
+//  (host readable: host memory, or unified memory for the SoAVX columns, read between kernels)
+concept HasComponents
+    = (std::decay_t<Particles>::options.alloc_mode == damn::AllocatorMode::CPU
+       or (std::decay_t<Particles>::options.alloc_mode == damn::AllocatorMode::GPU_UNIFIED
+           and is_soavx(std::decay_t<Particles>::layout_mode)))
+      and (std::decay_t<Particles>::layout_mode == LayoutMode::AoS
+           or std::decay_t<Particles>::layout_mode == LayoutMode::AoSMapped
+           or std::decay_t<Particles>::layout_mode == LayoutMode::SoA
+           or std::decay_t<Particles>::layout_mode == LayoutMode::SoAVX
+           or std::decay_t<Particles>::layout_mode == LayoutMode::SoAVXChunked);
 
 template<typename Particles>
     requires HasComponents<Particles>
