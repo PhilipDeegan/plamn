@@ -45,6 +45,8 @@ template<typename Field, std::uint32_t gw>
 struct FieldResource
 {
     auto static constexpr dimension = Field::dimension;
+    // in unified memory: damn's same rank copies run on the device over box_span (data + box)
+    bool static constexpr on_device = Field::alloc_mode == damn::AllocatorMode::GPU_UNIFIED;
     Field* field;
 };
 
