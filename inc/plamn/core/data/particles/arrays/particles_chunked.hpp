@@ -163,7 +163,9 @@ struct ChunkState
     container_t<chunk_offset_t> starts_; // per cell, see top of file
     container_t<chunk_offset_t> sizes_;  // per cell
     container_t<chunk_offset_t> gaps_;   // per cell, after its chunk, sort() scratch
-    container_t<chunk_offset_t> slots_;  // per particle slot in its cell, sort() scratch
+    container_t<chunk_offset_t> slots_;  // per particle slot in its cell, sort() scratch; the
+                                         //  device sync's fates before it
+    container_t<chunk_offset_t> counts_; // the device sync's counters (kept: no allocation)
     double slack_            = 0;
     box_t slack_domain_      = {};
     double border_weight_    = 3;

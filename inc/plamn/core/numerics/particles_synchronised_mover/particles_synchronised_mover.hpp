@@ -182,14 +182,152 @@ void synced_on_move(Particles_t& domain, Particles_t& patchGhost, Particles_t& l
 {
     post_move_sync(domain, patchGhost, levelGhost, boxing);
 }
-// on the device: for now the generic step (the device's own next)
+namespace detail
+{
+    // PostMoveSyncCells' fates, for a kernel: the boxing's boxes copied into fixed arrays
+    template<std::size_t dim>
+    struct DeviceSyncCells
+    {
+        using Box_t                            = damn::core::Box<int, dim>;
+        static constexpr std::size_t max_boxes = 64;
+
+        Box_t domain, ghost;
+        std::array<Box_t, max_boxes> non_level_ghost{}, non_owned{};
+        std::uint32_t n_non_level_ghost = 0, n_non_owned = 0;
+
+        explicit DeviceSyncCells(auto const& boxing)
+            : domain{boxing.domainBox}
+            , ghost{boxing.ghostBox}
+        {
+            auto const copy = [](auto const& from, auto& to, std::uint32_t& n) {
+                if (from.size() > max_boxes)
+                    throw std::runtime_error("DeviceSyncCells: more boxes than max_boxes");
+                for (auto const& b : from)
+                    to[n++] = b;
+            };
+            copy(boxing.nonLevelGhostBox, non_level_ghost, n_non_level_ghost);
+            copy(boxing.nonOwnedBoxes, non_owned, n_non_owned);
+        }
+
+        static bool in_any(auto const& p, auto const& boxes, std::uint32_t const n) DAMN_ALL
+        {
+            for (std::uint32_t i = 0; i < n; ++i)
+                if (isIn(p, boxes[i]))
+                    return true;
+            return false;
+        }
+        bool owned(auto const& p) const DAMN_ALL
+        {
+            return isIn(p, domain) and !in_any(p, non_owned, n_non_owned);
+        }
+        bool to_patch_ghost(auto const& p) const DAMN_ALL
+        {
+            return isIn(p, domain) or in_any(p, non_level_ghost, n_non_level_ghost);
+        }
+        bool keep_level_ghost(auto const& p) const DAMN_ALL
+        {
+            return !isIn(p, domain) and isIn(p, ghost)
+                   and !in_any(p, non_level_ghost, n_non_level_ghost);
+        }
+    };
+
+    // a slot's fate after a push: stays, moves (to the first or second destination), or deleted
+    enum class Fate : chunk_offset_t { stays = 0, first = 1, second = 2, deleted = 3 };
+
+    // src's particles by fate(cell) on the device: those moving appended to first / second (in no
+    //  particular order), those moving or deleted weight 0 in src (the following sort drops them)
+    template<typename Particles_t>
+    void move_by_fate(Particles_t& src, auto const fate, Particles_t* const first,
+                      Particles_t* const second)
+    {
+        static constexpr auto dim = Particles_t::dimension;
+        using Op            = damn::core::Operators<chunk_offset_t, /*atomic=*/true, /*GPU=*/true>;
+        std::size_t const n = src.size();
+        if (n == 0)
+            return;
+        damn::resize(src.slots_, n, /*copy=*/false);
+        damn::resize(src.counts_, 6, /*copy=*/false);
+        auto* const fates  = src.slots_.data();
+        auto* const counts = src.counts_.data(); // [1], [2]: movers; [4], [5]: cursors
+        auto const columns = [](auto& ps) {
+            return std::apply([](auto&... c) { return std::make_tuple(c.data()...); },
+                              ps.as_tuple());
+        };
+        auto const s       = columns(src);
+        auto const* weight = std::get<0>(s);
+        damn::kernel::launch(6, [=] DAMN_ALL() mutable { counts[damn::kernel::idx()] = 0; });
+        damn::kernel::launch(n, [=] DAMN_ALL() mutable {
+            auto const i = damn::kernel::idx();
+            if (weight[i] == 0) // a gap
+            {
+                fates[i] = static_cast<chunk_offset_t>(Fate::stays);
+                return;
+            }
+            damn::core::Point<int, dim> cell;
+            mkn::kul::for_N<dim>([&](auto d) { cell[d] = std::get<1 + d>(s)[i]; });
+            auto const f = static_cast<chunk_offset_t>(fate(cell));
+            fates[i]     = f;
+            if (f == 1 or f == 2)
+                Op{counts[f]}.increment_return_old();
+        });
+        std::size_t const n_first = counts[1], n_second = counts[2];
+        auto const grow = [](Particles_t* const dst, std::size_t const k) {
+            std::size_t const offset = dst ? dst->size() : 0;
+            if (dst and k)
+                dst->resize(offset + k);
+            return offset;
+        };
+        std::size_t const off_first = grow(first, n_first), off_second = grow(second, n_second);
+        auto const f1 = columns(first ? *first : src), f2 = columns(second ? *second : src);
+        damn::kernel::launch(n, [=] DAMN_ALL() mutable {
+            auto const i = damn::kernel::idx();
+            auto const f = fates[i];
+            if (f == static_cast<chunk_offset_t>(Fate::stays))
+                return;
+            if (f == 1 or f == 2)
+            {
+                auto const slot = Op{counts[3 + f]}.increment_return_old();
+                auto const to   = (f == 1 ? off_first : off_second) + slot;
+                auto& dst       = f == 1 ? f1 : f2;
+                mkn::kul::for_N<std::tuple_size_v<decltype(s)>>(
+                    [&](auto c) { std::get<c>(dst)[to] = std::get<c>(s)[i]; });
+            }
+            std::get<0>(s)[i] = 0; // moved or deleted: dropped by the sort
+        });
+    }
+} // namespace detail
+
+// on the device (no host access to the particles): one kernel per array classifies its slots by
+//  cell (PostMoveSyncCells' rules), the movers appended to their array, the rest left as gaps for
+//  the following sort (on_moved) to drop
 template<typename Particles_t>
     requires(Particles_t::layout_mode == LayoutMode::SoAVXChunked
              and Particles_t::alloc_mode == damn::AllocatorMode::GPU_UNIFIED)
 void synced_on_move(Particles_t& domain, Particles_t& patchGhost, Particles_t& levelGhost,
                     auto const& boxing)
 {
-    detail::post_move_sync_all(domain, patchGhost, levelGhost, boxing);
+    using detail::Fate;
+    detail::DeviceSyncCells<Particles_t::dimension> const cells{boxing};
+    // the domain's: owned stay, else to the patch ghosts or deleted
+    detail::move_by_fate(
+        domain,
+        [=] DAMN_ALL(auto const& p) {
+            return cells.owned(p) ? Fate::stays
+                                  : (cells.to_patch_ghost(p) ? Fate::first : Fate::deleted);
+        },
+        &patchGhost, static_cast<Particles_t*>(nullptr));
+    // the level ghosts': owned to the domain, still in the level ghost layer stay, else to the
+    //  patch ghosts or deleted
+    detail::move_by_fate(
+        levelGhost,
+        [=] DAMN_ALL(auto const& p) {
+            if (cells.owned(p))
+                return Fate::second;
+            if (cells.keep_level_ghost(p))
+                return Fate::stays;
+            return cells.to_patch_ghost(p) ? Fate::first : Fate::deleted;
+        },
+        &patchGhost, &domain);
 }
 
 // after a push with spec: a population's arrays placed, by its layout's own step when it syncs
