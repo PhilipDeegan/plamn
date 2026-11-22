@@ -173,6 +173,43 @@ void post_move_sync(Particles_t& domain, Particles_t& patchGhost, Particles_t& l
 }
 
 
+// a layout's own post push step (is_synced_on_move): the chunks' resettle on the host
+template<typename Particles_t>
+    requires(Particles_t::layout_mode == LayoutMode::SoAVXChunked
+             and Particles_t::alloc_mode == damn::AllocatorMode::CPU)
+void synced_on_move(Particles_t& domain, Particles_t& patchGhost, Particles_t& levelGhost,
+                    auto const& boxing)
+{
+    post_move_sync(domain, patchGhost, levelGhost, boxing);
+}
+// on the device: for now the generic step (the device's own next)
+template<typename Particles_t>
+    requires(Particles_t::layout_mode == LayoutMode::SoAVXChunked
+             and Particles_t::alloc_mode == damn::AllocatorMode::GPU_UNIFIED)
+void synced_on_move(Particles_t& domain, Particles_t& patchGhost, Particles_t& levelGhost,
+                    auto const& boxing)
+{
+    detail::post_move_sync_all(domain, patchGhost, levelGhost, boxing);
+}
+
+// after a push with spec: a population's arrays placed, by its layout's own step when it syncs
+//  on move, else by the generic post_move_sync
+template<MoveSpec spec, typename Particles_t>
+    requires(is_synced_on_move<spec, Particles_t::layout_mode>())
+void post_push_sync(Particles_t& domain, Particles_t& patchGhost, Particles_t& levelGhost,
+                    auto const& boxing)
+{
+    synced_on_move(domain, patchGhost, levelGhost, boxing);
+}
+template<MoveSpec spec, typename Particles_t>
+    requires(!is_synced_on_move<spec, Particles_t::layout_mode>())
+void post_push_sync(Particles_t& domain, Particles_t& patchGhost, Particles_t& levelGhost,
+                    auto const& boxing)
+{
+    post_move_sync(domain, patchGhost, levelGhost, boxing);
+}
+
+
 // tiled layouts: a tile only holds particles whose cell it (clamp) owns, and emplace_back
 // routes by that same owner, so tile ti of each array is only ever written from tile ti:
 // distinct tiles can be synced concurrently, then post_move_sync_finalize once per patch
@@ -512,6 +549,7 @@ public:
 protected:
     // per patch steps, shared with mkn_xyz::ParallelParticlesSynchronisedMover (different dispatch)
     static void reset_moments(auto& accessor);
+    template<MoveSpec spec>
     static void post_move_sync(auto& accessor, auto const& boxings, std::size_t const i);
     static void deposit(auto& accessor, auto const& boxings, std::size_t const i);
 
@@ -521,6 +559,7 @@ private:
     void updateAndDepositDomain_(auto& accessor,
                                  std::unordered_map<std::string, Boxing_t> const& boxings);
     void move_(auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings);
+    template<MoveSpec spec>
     static void sync_(auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings);
     static void deposit_all_(auto& accessor,
                              std::unordered_map<std::string, Boxing_t> const& boxings);
@@ -531,6 +570,7 @@ private:
         return ions.size() ? tile_count(ions[0].particleDensity()) : std::size_t{0};
     }
 
+    template<MoveSpec spec>
     static void post_move_sync_(auto& view, auto const& boxings);
     static void deposit_tile_(auto& view, std::size_t const t);
 };
@@ -555,6 +595,7 @@ void ParallelParticlesSynchronisedMover<Particles_t, Layout>::reset_moments(auto
 
 
 template<typename Particles_t, typename Layout>
+template<MoveSpec spec>
 void ParallelParticlesSynchronisedMover<Particles_t, Layout>::post_move_sync_(auto& view,
                                                                               auto const& boxings)
 {
@@ -563,8 +604,8 @@ void ParallelParticlesSynchronisedMover<Particles_t, Layout>::post_move_sync_(au
 
     for (auto& pop : ions)
     {
-        core::post_move_sync(pop.domainParticles(), pop.patchGhostParticles(),
-                             pop.levelGhostParticles(), patch_boxings);
+        core::post_push_sync<spec>(pop.domainParticles(), pop.patchGhostParticles(),
+                                   pop.levelGhostParticles(), patch_boxings);
         if constexpr (Particles_t::layout_mode == LayoutMode::SoAVXChunked)
         { // offsets stale after the push and the sync
             pop.domainParticles().template on_moved<ParticleType::Domain>();
@@ -575,12 +616,13 @@ void ParallelParticlesSynchronisedMover<Particles_t, Layout>::post_move_sync_(au
 }
 
 template<typename Particles_t, typename Layout>
+template<MoveSpec spec>
 void ParallelParticlesSynchronisedMover<Particles_t, Layout>::post_move_sync(auto& accessor,
                                                                              auto const& boxings,
                                                                              std::size_t const i)
 {
     auto view = accessor[i];
-    post_move_sync_(view, boxings);
+    post_move_sync_<spec>(view, boxings);
 }
 
 
@@ -649,7 +691,7 @@ void ParallelParticlesSynchronisedMover<Particles_t, Layout>::update(
         DAMN_LOG_SCOPE(1, "ParticlesSynchronisedMover::updateAll_");
         move_(accessor, boxings);
         if constexpr (spec.sync)
-            sync_(accessor, boxings);
+            sync_<spec>(accessor, boxings);
         if constexpr (spec.deposit)
             deposit_all_(accessor, boxings);
     }
@@ -702,6 +744,7 @@ void ParallelParticlesSynchronisedMover<Particles_t, Layout>::deposit_all_(
 
 
 template<typename Particles_t, typename Layout>
+template<MoveSpec spec>
 void ParallelParticlesSynchronisedMover<Particles_t, Layout>::sync_(
     auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings)
 {
@@ -734,7 +777,7 @@ void ParallelParticlesSynchronisedMover<Particles_t, Layout>::sync_(
             else
                 tp.patch_exec( // moves particles between tiles
                     accessor.size(), [&](auto const i) { return accessor[i]; },
-                    [&](auto& view) { post_move_sync_(view, boxings); });
+                    [&](auto& view) { post_move_sync_<spec>(view, boxings); });
         }
     }
 }
@@ -774,6 +817,7 @@ public:
 
 private:
     static void per_patch(auto& accessor, auto const& fn);
+    template<MoveSpec spec>
     static void sync_(auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings);
 
     double dt_ = 0;
@@ -837,7 +881,7 @@ void FlatParallelParticlesSynchronisedMover<Particles_t, Layout>::update(
     }
 
     if constexpr (spec.sync)
-        sync_(accessor, boxings);
+        sync_<spec>(accessor, boxings);
 
     if constexpr (spec.deposit)
     {
@@ -859,6 +903,7 @@ void FlatParallelParticlesSynchronisedMover<Particles_t, Layout>::update(
 
 
 template<typename Particles_t, typename Layout>
+template<MoveSpec spec>
 void FlatParallelParticlesSynchronisedMover<Particles_t, Layout>::sync_(
     auto& accessor, std::unordered_map<std::string, Boxing_t> const& boxings)
 {
@@ -869,8 +914,8 @@ void FlatParallelParticlesSynchronisedMover<Particles_t, Layout>::sync_(
         {
             {
                 DAMN_LOG_SCOPE(2, "FlatParallelParticlesSynchronisedMover::post_move_sync");
-                core::post_move_sync(pop.domainParticles(), pop.patchGhostParticles(),
-                                     pop.levelGhostParticles(), boxing);
+                core::post_push_sync<spec>(pop.domainParticles(), pop.patchGhostParticles(),
+                                           pop.levelGhostParticles(), boxing);
             }
             if constexpr (Particles_t::layout_mode == LayoutMode::SoAVXChunked)
             {
@@ -1042,8 +1087,9 @@ void ParallelParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositAl
 
     if constexpr (spec.sync)
     {
-        auto post_move_sync
-            = [&](auto const i) mutable { Super::post_move_sync(accessor, boxings, i); };
+        auto post_move_sync = [&](auto const i) mutable {
+            Super::template post_move_sync<spec>(accessor, boxings, i);
+        };
 
         if constexpr (synchronous)
             for (std::size_t i = 0; i < accessor.size(); ++i)

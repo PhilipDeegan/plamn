@@ -38,6 +38,17 @@ struct MoveSpec
 
 MoveSpec constexpr copy_spec{.copy = true, .deposit = true, .sync = false};
 
+// the layouts which place every particle after a push themselves (the push records the moves,
+//  their own post push step applies them: synced_on_move): with spec's sync, no generic
+//  post_move_sync (its whole array passes: partitions, deletions, moves by box). Not the per cell
+//  arrays: AoSPCTS's push moves particles between cells but not out to the patch ghosts
+//  (test_multi_updater's border moments fail without the generic step); AoSPC untested
+template<MoveSpec spec, LayoutMode layout>
+bool constexpr is_synced_on_move()
+{
+    return spec.sync and layout == LayoutMode::SoAVXChunked;
+}
+
 // how the device deposit after an in place push runs (Interpolating::on_tiles): a block per tile
 //  of `warps` warps, each a contiguous share of the tile's particles (sorted: each warp on its own
 //  cells). The default from PLAMN_DEPOSIT_WARPS, for a bootstrap probe of the local GPU to set
