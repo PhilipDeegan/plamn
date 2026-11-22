@@ -13,6 +13,7 @@
 #include "plamn/core/data/particles/arrays/particles_soa.hpp"
 #include "plamn/core/data/particles/arrays/particles_soavx.hpp"
 #include "plamn/core/data/particles/arrays/particles_soavx_chunked.hpp"
+#include "plamn/core/data/particles/arrays/particles_aos4soavx_chunked.hpp"
 
 #include "magic_enum/magic_enum.hpp"
 #include "magic_enum/magic_enum_switch.hpp"  // IWYU pragma: keep
@@ -84,6 +85,9 @@ namespace detail
         else if constexpr (lm == SoAVXChunked)
             return id<by_storage<opts, SoAVXChunkedParticles<SoAVXChunkedVector<d, am>>,
                                  SoAVXChunkedParticles<SoAVXChunkedSpan<d, am>>>>;
+        else if constexpr (lm == AoS4SoAVXChunked)
+            return id<by_storage<opts, AoS4SoAVXChunkedParticles<AoS4SoAVXChunkedVector, o>,
+                                 AoS4SoAVXChunkedParticles<AoS4SoAVXChunkedSpan, o>>>;
         else if constexpr (lm == AoSPC)
             return id<nested<opts, AoS, PerCellParticles, PerCellVector, PerCellSpan>>;
         else if constexpr (lm == SoAPC)

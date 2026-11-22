@@ -1,7 +1,8 @@
-// SoAVXChunked's gaps (particles_soavx_chunked.hpp), 1D, 2D and 3D: chunks per cell with free slots
-// between them, so particles change cells without a full sort. No updater, no pusher: particles'
-// cells are changed by hand, as a push would, then resettle() puts them back in their cells'
-// chunks.
+// SoAVXChunked's gaps (particles_chunked.hpp), 1D, 2D and 3D: chunks per cell with free slots
+// between them (PLAMN_GAPS_LAYOUT: the layout, default SoAVXChunked;
+// test_aos4soavx_chunked_gaps.cpp: AoS4SoAVXChunked), so particles change cells without a full
+// sort. No updater, no pusher: particles' cells are changed by hand, as a push would, then
+// resettle() puts them back in their cells' chunks.
 //
 // every particle's weight is its id (1, 2, ...): after each operation, each chunk must hold the
 // ids of exactly the particles in its cell (a reference id -> cell), real particles only (weight
@@ -28,15 +29,33 @@
 #include <tuple>
 #include <vector>
 
+#ifndef PLAMN_GAPS_LAYOUT
+#define PLAMN_GAPS_LAYOUT SoAVXChunked
+#endif
+
 namespace plamn::core
 {
+// slot i's cell, writable: a column's (SoAVX) or the particle's (AoS)
+template<typename Particles_t>
+    requires(is_soavx(Particles_t::layout_mode))
+int& cell_ref(Particles_t& ps, std::size_t const i, std::size_t const d)
+{
+    return components(ps).iCell[d][i];
+}
+template<typename Particles_t>
+    requires(!is_soavx(Particles_t::layout_mode))
+int& cell_ref(Particles_t& ps, std::size_t const i, std::size_t const d)
+{
+    return ps.iCell(i)[d];
+}
+
 template<std::size_t dim_>
 struct GapsTest : public ::testing::Test
 {
     auto constexpr static dim  = dim_;
     auto constexpr static opts = SimOpts{.dimension = dim, .layout_mode = LayoutMode::SoAVXChunked};
     using Layout_t             = PLAMN_Types<opts>::Hybrid::Layout_t;
-    using Chunked_t            = Particles<ParticlesOptions{dim, LayoutMode::SoAVXChunked}>;
+    using Chunked_t            = Particles<ParticlesOptions{dim, LayoutMode::PLAMN_GAPS_LAYOUT}>;
     using Box_t                = damn::core::Box<int, dim>;
     using Cell_t               = std::array<int, dim>;
 
@@ -129,7 +148,7 @@ struct GapsTest : public ::testing::Test
         {
             auto const from = ps.iCell(i);
             auto const d    = std::uniform_int_distribution<std::size_t>(0, dim - 1)(rng);
-            components(ps).iCell[d][i] += step(rng) ? 1 : -1;
+            cell_ref(ps, i, d) += step(rng) ? 1 : -1;
             where[ps.weight(i)] = ps.iCell(i);
             ps.add_crosser(i, from);
         }
@@ -146,7 +165,7 @@ struct GapsTest : public ::testing::Test
             if (ps.weight(i) == 0)
                 continue;
             auto const d = std::uniform_int_distribution<std::size_t>(0, dim - 1)(rng);
-            components(ps).iCell[d][i] += step(rng) ? 1 : -1;
+            cell_ref(ps, i, d) += step(rng) ? 1 : -1;
             where[ps.weight(i)] = ps.iCell(i);
             ++k;
         }
@@ -344,7 +363,7 @@ TEST_F(Gaps2D, aMoveAlongXUsesTheGapsOfAChunkARowAway)
     auto const [start, size] = ps.cell_range(Cell_t{4, 4});
     for (std::size_t i = start; i < start + room; ++i)
     {
-        components(ps).iCell[0][i] = 5;
+        cell_ref(ps, i, 0)         = 5;
         where[ps.weight(i)]        = ps.iCell(i);
     }
     EXPECT_FALSE(ps.resettle(box, [](auto const&) { FAIL() << "nothing leaves the box"; }));
@@ -356,7 +375,7 @@ TEST_F(Gaps2D, aMoveAlongXUsesTheGapsOfAChunkARowAway)
     while (ps.cell_range(Cell_t{4, 4}).second)
     {
         auto const [s2, n2]         = ps.cell_range(Cell_t{4, 4});
-        components(ps).iCell[0][s2] = 5;
+        cell_ref(ps, s2, 0)         = 5;
         where[ps.weight(s2)]        = ps.iCell(s2);
         sorts += ps.resettle(box, [](auto const&) {});
         expect_consistent(ps, "move " + std::to_string(++slid));
@@ -419,7 +438,7 @@ TEST_P(Gaps2DWeights, borderArrivalsSortLessWithBorderWeight)
         for (std::size_t i = 0; i < ps.size() and left < 20; ++i)
             if (ps.weight(i) != 0 and ps.iCell(i)[0] == (left % 2 ? box.lower[0] : box.upper[0]))
             {
-                components(ps).iCell[0][i] += left % 2 ? -1 : 1;
+                cell_ref(ps, i, 0) += left % 2 ? -1 : 1;
                 ++left;
             }
         std::vector<Particle<2>> out;
@@ -522,7 +541,7 @@ TEST_P(Gaps3DMotion, bulkMotion)
                 chosen.insert(i);
         for (auto const i : chosen)
         {
-            components(ps).iCell[dir][i] += 1;
+            cell_ref(ps, i, dir) += 1;
             where[ps.weight(i)] = ps.iCell(i);
         }
         std::vector<Particle<3>> out;
