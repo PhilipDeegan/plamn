@@ -18,6 +18,8 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace plamn::core
@@ -57,6 +59,24 @@ public:
         for_each_batch([](T& value) DAMN_ALL { value = T{0}; });
         return *this;
     }
+    // this = average(a, b), value by value ((a + b) * .5, as core::average): the three views of
+    //  the same buffers' shapes (the same quantities of the same patches)
+    LevelFields& average(LevelFields const& a, LevelFields const& b)
+        requires(alloc_mode == damn::AllocatorMode::GPU_UNIFIED)
+    {
+        for_each_batch([](T& out, T const& x, T const& y) DAMN_ALL { out = (x + y) * .5; }, a, b);
+        return *this;
+    }
+    LevelFields& average(LevelFields const& a, LevelFields const& b)
+        requires(alloc_mode == damn::AllocatorMode::CPU)
+    {
+        check_shapes_(a, b);
+        for (std::size_t k = 0; k < buffers_.size(); ++k)
+            for (std::size_t i = 0; i < buffers_[k].size; ++i)
+                buffers_[k].data[i] = (a.buffers_[k].data[i] + b.buffers_[k].data[i]) * .5;
+        return *this;
+    }
+
     LevelFields& zero()
         requires(alloc_mode == damn::AllocatorMode::CPU)
     {
@@ -69,9 +89,12 @@ private:
     // a batch of buffers as one range of values: their prefix offsets (offsets[k]: buffer k's
     //  first value in the range, offsets[n]: the total), passed by value to the kernel
     static constexpr std::size_t batch_size = 128; // ~3 KB of kernel parameters
+    // K views of the same shapes: their buffers' data side by side (inputs[k][b])
+    template<std::size_t K>
     struct Batch
     {
         std::array<T*, batch_size> data{};
+        std::array<std::array<T const*, batch_size>, K> inputs{};
         std::array<std::size_t, batch_size + 1> offsets{};
         std::size_t n = 0;
 
@@ -88,25 +111,46 @@ private:
         }
     };
 
-    // op(value) on every value of every buffer: a launch per batch_size buffers, one thread per
-    //  value (no padding: a thread finds its buffer in the prefix offsets)
-    void for_each_batch(auto const op)
+    // op(value, inputs' values...) on every value of every buffer: a launch per batch_size
+    //  buffers, one thread per value (no padding: a thread finds its buffer in the prefix offsets)
+    void for_each_batch(auto const op, auto const&... inputs)
     {
+        check_shapes_(inputs...);
+        static constexpr std::size_t K = sizeof...(inputs);
         for (std::size_t first = 0; first < buffers_.size(); first += batch_size)
         {
-            Batch batch;
+            Batch<K> batch;
             batch.n = std::min(batch_size, buffers_.size() - first);
-            for (std::size_t k = 0; k < batch.n; ++k)
+            for (std::size_t b = 0; b < batch.n; ++b)
             {
-                batch.data[k]        = buffers_[first + k].data;
-                batch.offsets[k + 1] = batch.offsets[k] + buffers_[first + k].size;
+                batch.data[b]        = buffers_[first + b].data;
+                batch.offsets[b + 1] = batch.offsets[b] + buffers_[first + b].size;
+                std::size_t k        = 0;
+                ((batch.inputs[k++][b] = inputs.buffers_[first + b].data), ...);
             }
             damn::kernel::launch(batch.offsets[batch.n], [=] DAMN_ALL() {
                 auto const i = damn::kernel::idx();
-                auto const k = batch.buffer_of(i);
-                op(batch.data[k][i - batch.offsets[k]]);
+                auto const b = batch.buffer_of(i);
+                auto const j = i - batch.offsets[b];
+                [&]<std::size_t... k>(std::index_sequence<k...>) {
+                    op(batch.data[b][j], batch.inputs[k][b][j]...);
+                }(std::make_index_sequence<K>{});
             });
         }
+    }
+
+    void check_shapes_(auto const&... others) const
+    {
+        auto const same = [&](LevelFields const& o) {
+            if (o.buffers_.size() != buffers_.size())
+                return false;
+            for (std::size_t b = 0; b < buffers_.size(); ++b)
+                if (o.buffers_[b].size != buffers_[b].size)
+                    return false;
+            return true;
+        };
+        if (!(same(others) and ...))
+            throw std::runtime_error("LevelFields: views of different shapes");
     }
 
     std::vector<Buffer> buffers_;

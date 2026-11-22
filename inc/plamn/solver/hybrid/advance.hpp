@@ -108,17 +108,46 @@ void deposit_level_ghosts(auto& level, double const t)
     });
 }
 
+namespace detail
+{
+    // a patch's electromag (em, emPred or emAvg): B then E, component by component
+    template<auto member>
+    inline constexpr auto electromag_of = [](auto& patch, auto& fields) {
+        fields.add((patch.*member).B);
+        fields.add((patch.*member).E);
+    };
+
+    // emAvg = average(em, emPred): unified memory, the whole level's at once (one kernel)
+    template<auto opts>
+        requires(opts.alloc_mode == damn::AllocatorMode::GPU_UNIFIED)
+    void average_electromag(auto& level)
+    {
+        using Patch_t     = HybridModel<opts>::Patch_t;
+        auto constexpr am = opts.alloc_mode;
+        auto const em     = core::level_of<am>(level, electromag_of<&Patch_t::em>);
+        auto const pred   = core::level_of<am>(level, electromag_of<&Patch_t::emPred>);
+        core::level_of<am>(level, electromag_of<&Patch_t::emAvg>).average(em, pred);
+    }
+    // host memory: per patch
+    template<auto opts>
+        requires(opts.alloc_mode == damn::AllocatorMode::CPU)
+    void average_electromag(auto& level)
+    {
+        level.per_patch([](auto& patch) {
+            for (std::size_t i = 0; i < 3; ++i)
+            {
+                core::average(patch.em.B[i], patch.emPred.B[i], patch.emAvg.B[i]);
+                core::average(patch.em.E[i], patch.emPred.E[i], patch.emAvg.E[i]);
+            }
+        });
+    }
+} // namespace detail
+
 template<auto opts>
 void average(auto& level, double const t, double const dt)
 {
     DAMN_LOG_SCOPE(1, "Simulator::average_");
-    level.per_patch([](auto& patch) {
-        for (std::size_t i = 0; i < 3; ++i)
-        {
-            core::average(patch.em.B[i], patch.emPred.B[i], patch.emAvg.B[i]);
-            core::average(patch.em.E[i], patch.emPred.E[i], patch.emAvg.E[i]);
-        }
-    });
+    detail::average_electromag<opts>(level);
     level.fill_electric_ghosts("EMAvg_E", t + dt / 2);
 }
 
