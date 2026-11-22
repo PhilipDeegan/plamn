@@ -70,8 +70,7 @@ Simulator<opts>::decompose_in_(std::string const& partition)
             .partition  = partition,
             .spill      = lb_.spill,
             .block      = rebalance_block,
-            .near_band  = std::max(near_band, 0),
-            .far        = lb_.far};
+            .near_band  = std::max(near_band, 0)};
 }
 
 // level ln from its boxes (that level's cells): planned_[ln] if decomposed with the others

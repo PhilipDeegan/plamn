@@ -1004,13 +1004,10 @@ private:
         //  (damn::amr::spill). simulation/AMR/loadbalancing/partition, spill, or
         //  PLAMN_PARTITION, PLAMN_SPILL. finest: near_band, the level 0 cells about level 1
         //  its step reads (default: a particle ghost width, where its level ghosts split
-        //  from), with level 1's owners; far: level 0 beyond it, "balance" (each
-        //  rank's whole step levelled) or "local" (contiguous, background work); near_band, far
-        //  or PLAMN_NEAR_BAND, PLAMN_FAR
+        //  from), with level 1's owners; near_band or PLAMN_NEAR_BAND
         std::string partition = "levels";
         double spill          = -1;
         int near_band         = -1; // -1: the default
-        std::string far       = "balance";
     } lb_;
     std::optional<amr::CoarsestRebalanceCheck> rebalance_check_;
     int rank_    = 0;
