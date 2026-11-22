@@ -537,7 +537,8 @@ class HybridRefinementTest(unittest.TestCase):
             os.environ.update(PLAMN_PARTITION="finest", PLAMN_SPILL="0.2")
             try:
                 return harris(steps, tagging=True, measure=lambda sim: sim.cpp_sim.n_levels(),
-                              load_balancer=lb, levels=3, cells=(40, 100), patch=(10, 10))
+                              load_balancer=lb, levels=3, cells=(40, 100), patch=(10, 10),
+                              by_node=True)
             finally:
                 for key in ("PLAMN_PARTITION", "PLAMN_SPILL"):
                     os.environ.pop(key)
@@ -545,8 +546,13 @@ class HybridRefinementTest(unittest.TestCase):
         no, lb = run(None), run(dict(every=2, tol=0.05))
         self.assertEqual(no["measured"], [3] * (steps + 1))
         self.assertEqual(lb["measured"], no["measured"])
-        for b_lb, b_no in zip(lb["B"], no["B"]):
-            self.assertLess(np.abs(b_lb - b_no).max(), 1e-12)
+        plamn.etc.mpi_barrier()
+        if plamn.etc.mpi_rank() != 0:
+            return
+        # by node: the rebalanced run's patches differ
+        a, b = lb["final"], no["final"]
+        self.assertEqual(a.keys(), b.keys())
+        self.assertLess(max(abs(a[k] - b[k]) for k in a), 1e-12)
 
     def test_keep_partition(self):
         """PLAMN_PARTITION=keep (with PLAMN_SPILL): a regridded level's patches stay with their
