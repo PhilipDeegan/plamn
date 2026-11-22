@@ -195,6 +195,7 @@ public:
 
     NO_DISCARD Field& pressure() { return Pe_; }
     NO_DISCARD Field const& pressure() const { return Pe_; }
+    NO_DISCARD double Te() const { return Te_; }
 
     void computePressure(Layout const& /*layout*/)
     {
@@ -279,6 +280,7 @@ public:
 
     NO_DISCARD Field const& pressure() const { return pressureClosure_.pressure(); }
     NO_DISCARD Field& pressure() { return pressureClosure_.pressure(); }
+    NO_DISCARD double Te() const { return pressureClosure_.Te(); }
 
 
 
@@ -314,6 +316,13 @@ public:
 
 
     void update(Layout const& layout) { update_(layout); }
+    // Ve only: the pressure from the level's charge density at once (Pe = Ne Te, Te())
+    void update_velocity(Layout const& layout)
+    {
+        momentModel_.computeChargeDensity();
+        momentModel_.computeBulkVelocity(layout);
+    }
+    NO_DISCARD double Te() const { return momentModel_.Te(); }
 
     // one tile's worth of work, tiles can be updated concurrently
     void update(std::size_t const tile_idx)

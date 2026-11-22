@@ -77,6 +77,24 @@ public:
         return *this;
     }
 
+    // this's values = op(inputs' values...), value by value (op(out, in...) assigns out): the
+    //  views of the same buffers' shapes
+    LevelFields& transform(auto const op, auto const&... inputs)
+        requires(alloc_mode == damn::AllocatorMode::GPU_UNIFIED)
+    {
+        for_each_batch(op, inputs...);
+        return *this;
+    }
+    LevelFields& transform(auto const op, auto const&... inputs)
+        requires(alloc_mode == damn::AllocatorMode::CPU)
+    {
+        check_shapes_(inputs...);
+        for (std::size_t k = 0; k < buffers_.size(); ++k)
+            for (std::size_t i = 0; i < buffers_[k].size; ++i)
+                op(buffers_[k].data[i], inputs.buffers_[k].data[i]...);
+        return *this;
+    }
+
     LevelFields& zero()
         requires(alloc_mode == damn::AllocatorMode::CPU)
     {

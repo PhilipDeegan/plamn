@@ -71,6 +71,32 @@ namespace detail
         });
         Transformer_t::run_gpu(items);
     }
+    // the electrons' Ve per patch, their pressure (isothermal: Pe = Ne Te) for the whole level at
+    //  once on unified memory (was a host transform per patch: Ohm then pulled Pe back)
+    template<auto opts>
+        requires(opts.alloc_mode == damn::AllocatorMode::GPU_UNIFIED
+                 and !core::is_tiled(opts.layout_mode))
+    void electrons_level(auto& level)
+    {
+        double Te = 0;
+        level.per_patch([&](auto& patch) {
+            patch.electrons().update_velocity(patch.layout);
+            Te = patch.electrons().Te();
+        });
+        auto constexpr am = opts.alloc_mode;
+        auto const Ne     = core::level_of<am>(
+            level, [](auto& patch, auto& fields) { fields.add(patch.electrons().density()); });
+        core::level_of<am>(level, [](auto& patch, auto& fields) {
+            fields.add(patch.electrons().pressure());
+        }).transform([Te] DAMN_ALL(double& pe, double const n) { pe = n * Te; }, Ne);
+    }
+    template<auto opts>
+        requires(opts.alloc_mode == damn::AllocatorMode::CPU or core::is_tiled(opts.layout_mode))
+    void electrons_level(auto& level)
+    {
+        level.per_patch([&](auto& patch) { patch.electrons().update(patch.layout); });
+    }
+
     // Bnew = B - dt curl E on every patch of the level: unified memory (untiled), one launch, its
     //  item list kept; host memory or tiled fields per patch
     template<auto B_to, auto opts>
@@ -157,7 +183,7 @@ void ampere_ohm(HybridModel<opts> const& model, auto&& level)
     }
     {
         DAMN_LOG_SCOPE(1, "Simulator::electrons");
-        level.per_patch([&](auto& patch) { patch.electrons().update(patch.layout); });
+        detail::electrons_level<opts>(level);
     }
     DAMN_LOG_SCOPE(1, "Simulator::ohm");
     detail::ohm_level<electromag, opts>(model, level);
