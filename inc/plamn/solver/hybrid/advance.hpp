@@ -15,6 +15,7 @@
 //   fill_electric_ghosts(key, t)          at t
 //   alpha(t)                             t within the coarser level's step, in [0, 1]
 
+#include "plamn/core/data/field/level_fields.hpp"
 #include "damn/amr/copy.hpp"
 #include "damn/core/logger.hpp"
 #include "plamn/core/data/field/field_algorithm.hpp"
@@ -121,6 +122,37 @@ void average(auto& level, double const t, double const dt)
     level.fill_electric_ghosts("EMAvg_E", t + dt / 2);
 }
 
+namespace detail
+{
+    // every patch's domain particles deposited (after the exchange), the moments zeroed first:
+    //  unified memory, the whole level's at once (one kernel), then the device deposits
+    template<auto opts>
+        requires(opts.alloc_mode == damn::AllocatorMode::GPU_UNIFIED)
+    void deposit_domains(auto& level)
+    {
+        core::level_of<opts.alloc_mode>(level, core::domain_moments).zero();
+        level.per_patch([](auto& patch) {
+            for (auto& pop : patch.ions)
+                pop.patchGhostParticles().clear();
+            core::depositParticles(
+                patch.ions, patch.layout,
+                core::DepositInterpolating<opts.dimension, opts.interp_order, opts.alloc_mode>{},
+                core::DomainDeposit{});
+        });
+    }
+    // host memory: per patch, as deposit_domain
+    template<auto opts>
+        requires(opts.alloc_mode == damn::AllocatorMode::CPU)
+    void deposit_domains(auto& level)
+    {
+        level.per_patch([](auto& patch) {
+            for (auto& pop : patch.ions)
+                pop.patchGhostParticles().clear();
+            core::deposit_domain<opts.dimension, opts.interp_order>(patch.ions, patch.layout);
+        });
+    }
+} // namespace detail
+
 template<auto opts>
 void move_ions(HybridModel<opts>& model, auto& level, double const t, double const dt,
                core::UpdaterMode const mode)
@@ -156,11 +188,7 @@ void move_ions(HybridModel<opts>& model, auto& level, double const t, double con
             level.copy(damn::amr::gather_leaving, model.particle_routes->gather_leaving);
         }
         DAMN_LOG_SCOPE(2, "Simulator::move_ions::deposit_domain");
-        level.per_patch([](auto& patch) {
-            for (auto& pop : patch.ions)
-                pop.patchGhostParticles().clear();
-            core::deposit_domain<opts.dimension, opts.interp_order>(patch.ions, patch.layout);
-        });
+        detail::deposit_domains<opts>(level);
     }
 
     // as PHARE: each level ghost particle deposited once, by the patch holding it,

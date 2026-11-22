@@ -7,7 +7,7 @@ Build a module with the scopes as NVTX ranges, profile, export, attribute:
         -a "-DPHLOP_NVTX" -l "-ldl"
     nsys profile -o run -t cuda,nvtx --cuda-um-cpu-page-faults=true \\
         --cuda-um-gpu-page-faults=true python3 <case.py>
-    nsys export --type sqlite -o run.sqlite run.nsys-rep
+    nsys stats --report nvtx_sum run.nsys-rep   # writes run.sqlite next to it
     python3 etc/bench/gpu/nvtx_attr.py run.sqlite
 
 Runtime calls go to the innermost range of their own thread; page faults (no thread recorded) to
