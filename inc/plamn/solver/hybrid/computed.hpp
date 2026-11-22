@@ -21,9 +21,11 @@ namespace plamn::solver::hybrid
 {
 // the hybrid model's computed quantities: the momentum tensor (PHARE's FluidDiagnosticWriter),
 //  of all populations ("/ions/momentum_tensor", all deposited into one) and of each
-//  ("/ions/pop/<name>/momentum_tensor", with its mass): domain particles, the border sum, then
-//  the level ghosts at the end of the coarser step (levelGhostParticlesOld, after last_step).
-//  resource(key, names): the grids a border sum adds up
+//  ("/ions/pop/<name>/momentum_tensor", with its mass): domain particles and the level ghosts
+//  at the end of the coarser step (levelGhostParticlesOld, after last_step), then the border
+//  sum: a level ghost is held by one patch, so deposited before the sum completes every
+//  patch's copy (as the moments, deposit_level_ghosts). resource(key, names): the grids a
+//  border sum adds up
 template<auto opts>
 void setup_computed(HybridModel<opts>& model, auto&& resource)
 {
@@ -80,15 +82,14 @@ void setup_computed(HybridModel<opts>& model, auto&& resource)
                   [=](Patch_t& patch, std::vector<Grid_t*> const& g) {
                       zero(g);
                       for (auto& pop : pops(patch))
+                      {
                           deposit(Domain{}, pop.get(), pop.get().domainParticles(),
                                   view(patch, pop.get()), g, patch.layout);
-                  },
-                  key,
-                  [=](Patch_t& patch, std::vector<Grid_t*> const& g) {
-                      for (auto& pop : pops(patch))
                           deposit(LevelGhost{}, pop.get(), pop.get().levelGhostParticlesOld(),
                                   view(patch, pop.get()), g, patch.layout);
-                  }};
+                      }
+                  },
+                  key};
           };
 
     using PopRef = std::reference_wrapper<
