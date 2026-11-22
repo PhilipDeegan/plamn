@@ -390,4 +390,7 @@ NO_DISCARD auto cell(Particle<dim> const& particle)
 }
 } // namespace plamn::core
 
+// damn's device Append hooks (GPU builds), after the resources they use
+#include "plamn/amr/device_append.hpp" // IWYU pragma: export
+
 #endif // PLAMN_AMR_RESOURCES_HPP
