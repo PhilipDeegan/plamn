@@ -15,6 +15,8 @@
 #include <stdexcept>
 #include <cstddef>
 
+#include "damn/core/exec/kernels/region_chunks.hpp"
+
 namespace plamn::core
 {
 
@@ -68,6 +70,38 @@ public:
         else
             for (std::size_t ti = 0; ti < tile_count(Bnew); ++ti)
                 on_tile(ti, B, E, Bnew, dt);
+    }
+
+    // GPU_UNIFIED, an item per untiled patch collected across a level (one launch per run_gpu)
+    template<typename Layout>
+    static auto make_item(Layout const& layout, auto const& B, auto const& E, auto& Bnew)
+    {
+        auto const Bv = untiled_view(B);
+        auto const Ev = untiled_view(E);
+        auto Bnv      = untiled_view(Bnew);
+        auto const boxes
+            = mkn::kul::for_N_make_array<3>([&](auto c) { return box_for(layout, Bnv[c]); });
+        auto const curlE = curl(layout, Ev);
+        using Box_t      = std::decay_t<decltype(boxes)>::value_type;
+        return FaradayTile<std::decay_t<decltype(curlE)>, decltype(Bnv), Box_t>{curlE, Bv, Bnv,
+                                                                                boxes};
+    }
+
+    // every item's Bnew components on the device, one launch (damn's region chunks)
+    static void run_gpu([[maybe_unused]] auto& items, [[maybe_unused]] double const dt)
+    {
+#if DAMN_HAVE_GPU
+        damn::core::run_region_chunks(items, [=] DAMN_ALL(auto& it, auto const c, auto const& ijk) {
+            if (c == 0)
+                Faraday{}(ijk, it.Bnew[0], it.B[0], it.curl.x, dt);
+            else if (c == 1)
+                Faraday{}(ijk, it.Bnew[1], it.B[1], it.curl.y, dt);
+            else
+                Faraday{}(ijk, it.Bnew[2], it.B[2], it.curl.z, dt);
+        });
+#else
+        throw std::runtime_error("FaradayTransformer: run_gpu needs a GPU build");
+#endif
     }
 
     // one tile of tiled B, E and Bnew, eg as one task of a thread pool

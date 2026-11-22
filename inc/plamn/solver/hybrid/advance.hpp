@@ -71,6 +71,33 @@ namespace detail
         });
         Transformer_t::run_gpu(items);
     }
+    // Bnew = B - dt curl E on every patch of the level: unified memory (untiled), one launch, its
+    //  item list kept; host memory or tiled fields per patch
+    template<auto B_to, auto opts>
+        requires(opts.alloc_mode == damn::AllocatorMode::GPU_UNIFIED
+                 and !core::is_tiled(opts.layout_mode))
+    void faraday_level(auto& level, auto const& E_of, double const dt)
+    {
+        auto const item_of = [&](auto& patch) {
+            return core::FaradayTransformer::make_item(patch.layout, patch.em.B, E_of(patch),
+                                                       (patch.*B_to).B);
+        };
+        using Patch_t = HybridModel<opts>::Patch_t;
+        using Item_t  = decltype(item_of(std::declval<Patch_t&>()));
+        static thread_local damn::core::gpu::Vec_t<Item_t> items;
+        items.clear();
+        level.per_patch([&](auto& patch) { items.push_back(item_of(patch)); });
+        core::FaradayTransformer::run_gpu(items, dt);
+    }
+    template<auto B_to, auto opts>
+        requires(opts.alloc_mode == damn::AllocatorMode::CPU or core::is_tiled(opts.layout_mode))
+    void faraday_level(auto& level, auto const& E_of, double const dt)
+    {
+        level.per_patch([&](auto& patch) {
+            core::FaradayTransformer{}(patch.layout, patch.em.B, E_of(patch), (patch.*B_to).B, dt);
+        });
+    }
+
     // E from Ohm's law on every patch of the level: unified memory, one launch for the level,
     //  its item list kept (an item per untiled patch; tiled patches through the transformer's
     //  own tiles path)
@@ -296,9 +323,7 @@ void faraday_ampere_ohm(HybridModel<opts> const& model, auto& level, auto&& E_of
 {
     {
         DAMN_LOG_SCOPE(1, "Simulator::faraday");
-        level.per_patch([&](auto& patch) {
-            core::FaradayTransformer{}(patch.layout, patch.em.B, E_of(patch), (patch.*B_to).B, dt);
-        });
+        faraday_level<B_to, opts>(level, E_of, dt);
     }
     level.fill_magnetic_ghosts(key, t + dt);
     ampere_ohm<B_to>(model, level);
