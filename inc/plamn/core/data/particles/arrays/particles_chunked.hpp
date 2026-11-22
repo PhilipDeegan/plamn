@@ -71,6 +71,40 @@
 #include <thrust/scan.h>
 #endif
 
+#if DAMN_HAVE_THRUST && DAMN_HAVE_MKN_GPU
+namespace plamn::core::detail
+{
+// thrust's temporaries (exclusive_scan's) from one device buffer per host thread, grown as
+//  needed and kept: no cudaMalloc / cudaFree (which synchronizes the device) per call. Not freed
+//  at exit (the context may be gone by then: the process's memory). For mkn.gpu, eventually
+struct ThrustScratch
+{
+    using value_type = char;
+    char* data       = nullptr;
+    std::size_t size = 0;
+
+    char* allocate(std::ptrdiff_t const n)
+    {
+        auto const want = static_cast<std::size_t>(n);
+        if (want > size)
+        {
+            if (data)
+                mkn::gpu::destroy(data);
+            size = want + want / 2;
+            mkn::gpu::alloc(data, size);
+        }
+        return data;
+    }
+    void deallocate(char*, std::size_t) {}
+};
+inline ThrustScratch& thrust_scratch()
+{
+    static thread_local ThrustScratch scratch;
+    return scratch;
+}
+} // namespace plamn::core::detail
+#endif
+
 namespace plamn::core
 {
 
@@ -538,9 +572,16 @@ void ChunkedOps<Derived, dim, alloc_mode>::sort()
         thrust::fill(thrust::device, sizes, sizes + cells, chunk_offset_t{0});
         auto const first = thrust::counting_iterator<std::size_t>(0);
         thrust::for_each(thrust::device, first, first + n, count);
-        thrust::exclusive_scan(thrust::device, sizes, sizes + cells, starts);
-        std::size_t const slots_total
-            = thrust::reduce(thrust::device, sizes, sizes + cells, std::size_t{0});
+        thrust::exclusive_scan(thrust::device(detail::thrust_scratch()), sizes, sizes + cells,
+                               starts);
+        // the total: the last cell's start + size (no reduce: no launch, no temporaries)
+        std::array<chunk_offset_t, 2> last{};
+        if (cells)
+        {
+            mkn::gpu::take(starts + cells - 1, &last[0], 1); // a memcpy: no host page fault
+            mkn::gpu::take(sizes + cells - 1, &last[1], 1);
+        }
+        std::size_t const slots_total = std::size_t{last[0]} + last[1];
         auto const to = [=] DAMN_ALL(std::size_t const i) -> std::size_t {
             return slots[i] == none ? std::numeric_limits<std::size_t>::max()
                                     : starts[cell_idx(i)] + slots[i];
