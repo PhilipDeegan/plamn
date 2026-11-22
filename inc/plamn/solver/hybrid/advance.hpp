@@ -52,6 +52,36 @@ void fill_ion_borders(auto&& level)
     level.copy(damn::amr::sum_borders, "IonPopBorderSum");
 }
 
+namespace detail
+{
+    // J = curl B on every patch of the level: unified memory, one launch for the level, its item
+    //  list kept (no allocation once warm: an item per patch, or per tile of a tiled patch)
+    template<auto electromag, auto opts>
+        requires(opts.alloc_mode == damn::AllocatorMode::GPU_UNIFIED)
+    void ampere_level(auto& level)
+    {
+        using Patch_t       = HybridModel<opts>::Patch_t;
+        using Transformer_t = core::AmpereTransformer<>;
+        using Item_t = Transformer_t::item_t<typename Patch_t::Layout_t,
+                                             std::decay_t<decltype(std::declval<Patch_t&>().J)>>;
+        static thread_local damn::core::gpu::Vec_t<Item_t> items;
+        items.clear();
+        level.per_patch([&](auto& patch) {
+            Transformer_t::gpu_items(patch.layout, (patch.*electromag).B, patch.J, items);
+        });
+        Transformer_t::run_gpu(items);
+    }
+    // host memory: per patch
+    template<auto electromag, auto opts>
+        requires(opts.alloc_mode == damn::AllocatorMode::CPU)
+    void ampere_level(auto& level)
+    {
+        level.per_patch([&](auto& patch) {
+            core::AmpereTransformer{}(patch.layout, (patch.*electromag).B, patch.J);
+        });
+    }
+} // namespace detail
+
 // J from B (Ampere, on the physical box + 1: what Ohm reads, so J is never exchanged), the
 // electrons from the ions and J, then E from Ohm's law; electromag: the HybridPatch member
 // holding the B used and the E computed, the model's (em) or the predicted one (emPred)
@@ -61,9 +91,7 @@ void ampere_ohm(HybridModel<opts> const& model, auto&& level)
     // one loop each, so each has its own scope (time, counters)
     {
         DAMN_LOG_SCOPE(1, "Simulator::ampere");
-        level.per_patch([&](auto& patch) {
-            core::AmpereTransformer{}(patch.layout, (patch.*electromag).B, patch.J);
-        });
+        detail::ampere_level<electromag, opts>(level);
     }
     {
         DAMN_LOG_SCOPE(1, "Simulator::electrons");
