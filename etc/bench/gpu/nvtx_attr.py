@@ -1,4 +1,4 @@
-"""CUDA allocations and unified memory page faults per scope: each event attributed to the
+"""CUDA allocations, host syncs and unified memory page faults per scope: each event attributed to the
 innermost NVTX range open (phlop's scopes with -DPHLOP_NVTX, mkn.gpu's, thrust's / CUB's).
 
 Build a module with the scopes as NVTX ranges, profile, export, attribute:
@@ -20,6 +20,7 @@ import sqlite3
 import sys
 
 ALLOCATIONS = ("cudaMallocManaged", "cudaMalloc", "cudaFree")
+SYNCS = ("cudaStreamSynchronize", "cudaDeviceSynchronize")
 
 
 def load_ranges(db, names):
@@ -61,14 +62,14 @@ def main(path):
     names = dict(db.execute("select id, value from StringIds"))
     per_thread, every = load_ranges(db, names)
 
-    calls = {fn: collections.Counter() for fn in ALLOCATIONS}
+    calls = {fn: collections.Counter() for fn in ALLOCATIONS + SYNCS}
     for start, tid, name_id in db.execute(
         "select start, globalTid, nameId from CUPTI_ACTIVITY_KIND_RUNTIME"
     ):
         fn = names.get(name_id, "?").split("_")[0]
         if fn in calls:
             calls[fn][innermost(per_thread.get(tid, []), start)] += 1
-    for fn in ALLOCATIONS:
+    for fn in ALLOCATIONS + SYNCS:
         show(fn, calls[fn])
 
     tables = {r[0] for r in db.execute("select name from sqlite_master where type='table'")}
