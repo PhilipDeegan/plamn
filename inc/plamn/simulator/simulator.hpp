@@ -26,6 +26,7 @@
 
 #include "damn/amr/clustering.hpp"
 #include "damn/amr/copy.hpp"
+#include "damn/amr/decompose.hpp"
 #include "damn/amr/hierarchy.hpp"
 #include "damn/amr/inter_level.hpp"
 #include "damn/amr/level_data.hpp"
@@ -788,6 +789,10 @@ private:
     // level ln's patches from its boxes (that level's cells): chopped into the largest patch
     //  size, partitioned along the Hilbert curve by the particles they will hold
     NO_DISCARD damn::amr::Level<dimension> level_of_(int ln, std::vector<Box_t> const& boxes);
+    // damn::amr::decompose's settings: this run's topology, patch size, spill, its weights (the
+    //  particles a patch will hold, or holds; MHD levels: cells), `partition`
+    NO_DISCARD damn::amr::Decompose<dimension> decompose_in_(std::string const& partition);
+    // a level made from planned_[ln] if there is one (decomposed with the others), else level_of_
     void make_level_(int ln, std::vector<Box_t> const& boxes);
     void allocate_level_(int ln); // the patch data of hierarchy_'s level ln, linked
     void link_level_(int ln);     // neighbours, map to the coarser level, level ghost cells
@@ -960,6 +965,9 @@ private:
     bool pretag_enabled_ = false;
     // simulation/AMR/refinement/tagging/tag_boxes: levels 1... made from these at initialization
     std::vector<std::vector<Box_t>> supplied_tag_boxes_{};
+    // initialization knowing every level's boxes (pretag, tag_boxes) with a partition that needs
+    //  them all (finest, aligned): every level decomposed together, before any is made
+    std::vector<damn::amr::Level<dimension>> planned_{};
     std::vector<int> level_steps_; // per level > 0: its substeps in the coarser level's step
     int steps_ = 0;
     // simulation/AMR/loadbalancing (pyphare's LoadBalancer), with refinement="tagging"
@@ -973,8 +981,10 @@ private:
         // how a level's patches get their ranks (level_of_; plamn's, not PHARE's: the PHARE
         //  comparisons keep "levels"): "levels" each level along the Hilbert curve on its own,
         //  "keep" where the data is (damn::amr::keep: the old level's owners, else the coarser
-        //  patch's under it, else the curve); spill >= 0: then no rank above (1 + spill) of its
-        //  share (damn::amr::spill). simulation/AMR/loadbalancing/partition, spill, or
+        //  patch's under it, else the curve); "finest" / "aligned" (damn::amr::decompose) every
+        //  level together where all are known (initialization with pretag or tag_boxes), else as
+        //  "levels"; spill >= 0: then no rank above (1 + spill) of its share
+        //  (damn::amr::spill). simulation/AMR/loadbalancing/partition, spill, or
         //  PLAMN_PARTITION, PLAMN_SPILL
         std::string partition = "levels";
         double spill          = -1;

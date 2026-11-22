@@ -44,13 +44,9 @@
 
 namespace plamn
 {
-// level ln from its boxes (that level's cells): chopped and given ranks by
-// damn::amr::decompose_level (lb_.partition, lb_.spill), weighed by the particles each patch
-// will hold (MHD levels: cells); refined levels' patches in whole coarse cells, so their tiles
-// are even, starting on even indices (tile_set_mapper.hpp)
 template<auto opts>
-damn::amr::Level<Simulator<opts>::dimension>
-Simulator<opts>::level_of_(int const ln, std::vector<Box_t> const& boxes)
+damn::amr::Decompose<Simulator<opts>::dimension>
+Simulator<opts>::decompose_in_(std::string const& partition)
 {
     auto weigh = [this](int const l, std::vector<Box_t> const& patches) {
         if constexpr (Models_t::hybrid_on)
@@ -61,19 +57,46 @@ Simulator<opts>::level_of_(int const ln, std::vector<Box_t> const& boxes)
             cells.push_back(static_cast<double>(p.size()));
         return cells;
     };
-    damn::amr::Decompose<dimension> const in{.topology   = topology_,
-                                             .weigh      = weigh,
-                                             .patch_size = patch_size_,
-                                             .partition  = lb_.partition,
-                                             .spill      = lb_.spill,
-                                             .block      = rebalance_block};
-    return damn::amr::decompose_level(hierarchy_, ln, boxes, in);
+    return {.topology   = topology_,
+            .weigh      = weigh,
+            .patch_size = patch_size_,
+            .partition  = partition,
+            .spill      = lb_.spill,
+            .block      = rebalance_block};
+}
+
+// level ln from its boxes (that level's cells): chopped and given ranks by
+// damn::amr::decompose_level (lb_.partition, lb_.spill; "finest" / "aligned" need every level:
+// here, a level alone, as "levels"), weighed by the particles each patch will hold (MHD levels:
+// cells); refined levels' patches in whole coarse cells, so their tiles are even, starting on
+// even indices (tile_set_mapper.hpp)
+template<auto opts>
+damn::amr::Level<Simulator<opts>::dimension>
+Simulator<opts>::level_of_(int const ln, std::vector<Box_t> const& boxes)
+{
+    bool const together = lb_.partition == "finest" or lb_.partition == "aligned";
+    return damn::amr::decompose_level(hierarchy_, ln, boxes,
+                                      decompose_in_(together ? "levels" : lb_.partition));
 }
 
 template<auto opts>
 void Simulator<opts>::make_level_(int const ln, std::vector<Box_t> const& boxes)
 {
-    damn::amr::set_level(hierarchy_, level_of_(ln, boxes));
+    auto const l = static_cast<std::size_t>(ln);
+    if (l < planned_.size())
+    {
+        std::size_t planned = 0, given = 0;
+        for (auto const& p : planned_[l].patches)
+            planned += p.box.size();
+        for (auto const& b : boxes)
+            given += b.size();
+        if (planned != given)
+            throw std::runtime_error("plamn Simulator: level " + std::to_string(ln)
+                                     + " planned on other boxes");
+        damn::amr::set_level(hierarchy_, planned_[l]);
+    }
+    else
+        damn::amr::set_level(hierarchy_, level_of_(ln, boxes));
     allocate_level_(ln);
 }
 
@@ -404,6 +427,21 @@ void Simulator<opts>::initialize_hybrid_()
     else if (tagging_ and pretag_enabled_)
         pretag_boxes = pretag_();
 
+    // every level known (pretag, tag_boxes) and a partition that needs them all: decomposed
+    //  together before any level is made, on the particles they will hold (none exist yet)
+    if (pretag_boxes and refinement_boxes_.empty()
+        and (lb_.partition == "finest" or lb_.partition == "aligned"))
+    {
+        std::vector<std::vector<Box_t>> boxes{{hierarchy_.domain}};
+        for (auto const& b : *pretag_boxes)
+        {
+            if (b.empty() or static_cast<int>(boxes.size()) >= hierarchy_.max_levels)
+                break;
+            boxes.push_back(b);
+        }
+        planned_ = damn::amr::decompose(hierarchy_, 0, boxes, decompose_in_(lb_.partition));
+    }
+
     make_level_(0, {hierarchy_.domain});
     solver::hybrid::initialize_root(models_.hybrid, level_services_(0), dict_["simulation"]);
     for (std::size_t ln = 1; ln <= refinement_boxes_.size(); ++ln)
@@ -427,6 +465,7 @@ void Simulator<opts>::initialize_hybrid_()
             solver::hybrid::initialize_refined(
                 models_.hybrid, level_services_(static_cast<std::size_t>(ln) + 1), startTime_);
         }
+    planned_.clear(); // made: later levels (regrids) level by level
     // every level's E and B at t0, for the finer levels' time interpolation
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
         prepare_step_(static_cast<int>(ln), startTime_);

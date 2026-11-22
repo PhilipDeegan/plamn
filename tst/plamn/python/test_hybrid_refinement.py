@@ -568,6 +568,48 @@ class HybridRefinementTest(unittest.TestCase):
             heaviest = max(last["keep"]["hierarchy"].weights[m["level"]])
             self.assertLessEqual(max(m["weight"]), (1 + spill) * share + heaviest)
 
+    def test_finest_partition(self):
+        """PLAMN_PARTITION=finest with pretag (every level's boxes known at initialization):
+        every level decomposed together, the finest along the curve, each coarser patch with the
+        owner of the fine cells above it, then spilled. The same levels and physics as "levels";
+        on more than one rank fewer of the coarse cells under a fine patch on another rank at
+        initialization"""
+        from plamn.amr import read_decomposition
+
+        ph.startMPI()
+        size, rank = plamn.etc.mpi_size(), plamn.etc.mpi_rank()
+        out, logs = {}, {}
+        for mode in ("levels", "finest"):
+            path = Path("phare_outputs") / f"partition_pretag_{mode}_n{size}.jsonl"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            logs[mode] = path
+            os.environ.update(PLAMN_PARTITION=mode, PLAMN_SPILL="0.2", PLAMN_PRETAG="1",
+                              PLAMN_DECOMPOSITION=str(path))
+            try:
+                out[mode] = harris(4, tagging=True, levels=3, cells=(40, 100),
+                                   patch=(10, 10), by_node=True)
+            finally:
+                for key in ("PLAMN_PARTITION", "PLAMN_SPILL", "PLAMN_PRETAG",
+                            "PLAMN_DECOMPOSITION"):
+                    os.environ.pop(key)
+        self.assertEqual(out["finest"]["levels"], 3)
+        self.assertEqual(out["finest"]["levels"], out["levels"]["levels"])
+        plamn.etc.mpi_barrier()
+        if rank != 0:
+            return
+        a, b = out["finest"]["final"], out["levels"]["final"]
+        self.assertEqual(a.keys(), b.keys())
+        self.assertLess(max(abs(a[k] - b[k]) for k in a), 1e-12)
+        if size == 1:
+            return
+        first = {m: read_decomposition(p)[0] for m, p in logs.items()}
+
+        def crossing(rec):  # coarse cells under fine patches owned by another rank
+            return sum(m["coarse_cells"]["Node"] + m["coarse_cells"]["Remote"]
+                       for m in rec["levels"])
+
+        self.assertLess(crossing(first["finest"]), crossing(first["levels"]))
+
     def test_decomposition_log(self):
         """PLAMN_DECOMPOSITION: a line at initialization, after each regrid or rebalance that
         changes the decomposition, and every PLAMN_DECOMPOSITION_EVERY steps; each level's

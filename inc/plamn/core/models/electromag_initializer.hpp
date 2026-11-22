@@ -10,6 +10,7 @@
 #include "dict.hpp"
 
 #include <cstddef>
+#include <string>
 
 namespace plamn::core
 {
