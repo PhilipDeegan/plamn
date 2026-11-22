@@ -835,8 +835,8 @@ private:
     void check_rebalance_(RebalanceState const& before, double t);
     // regrid_level_'s data, the level's model's: where the old level was, moved; the new cells
     //  (outside old_cells) refined from the coarser level, then the ghosts
-    void regrid_hybrid_data_(int ln, auto const& map, std::vector<Box_t> const& old_cells,
-                             double t, bool moved);
+    void regrid_hybrid_data_(int ln, auto const& map, std::vector<Box_t> const& old_cells, double t,
+                             bool moved);
     // a hybrid level's resources whose ghosts a rebalance moves (every field grid, the old level
     //  ghost particles), from this rank's patches (a rank without any has no transfers)
     NO_DISCARD damn::amr::RegridGhosts moved_ghosts_(int ln);

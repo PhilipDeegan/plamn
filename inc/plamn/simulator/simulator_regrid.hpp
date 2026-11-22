@@ -321,7 +321,7 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
     for (auto const& level : finer)
         damn::amr::set_level(hierarchy_, level);
     bool const hybrid_moved = moved and !models_.is_mhd(fine);
-    auto const map = damn::amr::make_regrid_map(
+    auto const map          = damn::amr::make_regrid_map(
         old_level, hierarchy_.levels[ln], rank_, damn::amr::periodic_shifts(hierarchy_, ln),
         hybrid_moved ? moved_ghosts_(ln) : damn::amr::RegridGhosts{});
 
