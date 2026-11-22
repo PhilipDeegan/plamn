@@ -14,6 +14,7 @@
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/exec/kernels.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
+#include "damn/core/def.hpp"
 
 #include <algorithm>
 #include <array>

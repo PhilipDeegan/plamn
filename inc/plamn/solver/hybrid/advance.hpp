@@ -29,12 +29,18 @@
 #include "plamn/solver/hybrid/model.hpp"
 #include "phlop/timing/scope.hpp"
 #include "damn/core/def.hpp"
+#include "damn/core/def/damn_config.hpp"
+#include "damn/core/exec/kernels.hpp"
+#include "plamn/core/data/particles/particles_def.hpp"
+#include "plamn/core/numerics/moments/moments.hpp"
 
 #include <algorithm>
 #include <cstddef>
 #include <stdexcept>
 #include <string>
-#include <unordered_map>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 namespace plamn::solver::hybrid
 {

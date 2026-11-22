@@ -30,6 +30,7 @@
 #include "plamn/initializer/data_provider.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
+#include "damn/core/def/damn_config.hpp"
 
 #include <array>
 #include <map>

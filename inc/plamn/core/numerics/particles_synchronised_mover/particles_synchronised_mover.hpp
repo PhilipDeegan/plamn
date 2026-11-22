@@ -9,7 +9,6 @@
 #include "damn/core/def/detail/mkn_gpu.hpp"
 #include "damn/core/exec/kernels.hpp"
 #include "damn/core/exec/thread_pool.hpp"
-
 #include "plamn/core/def.hpp"
 #include "plamn/core/errors.hpp"
 #include "plamn/core/numerics/pusher/boris.hpp"
@@ -27,10 +26,13 @@
 #include "mkn/gpu.hpp"
 #include "phlop/timing/scope.hpp"
 #include "damn/core/geometry/point.hpp"
+#include "damn/core/operators.hpp"
+#include "damn/core/vector.hpp"
+#include "mkn/kul/for.hpp"
+#include "plamn/core/data/particles/arrays/particles_chunked.hpp"
 
 #include <string>
 #include <optional>
-#include <unordered_map>
 #include <algorithm>
 #include <cstddef>
 #include <functional>
@@ -38,6 +40,10 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include <array>
+#include <cstdint>
+#include <stdexcept>
+#include <tuple>
 
 namespace plamn::core
 {

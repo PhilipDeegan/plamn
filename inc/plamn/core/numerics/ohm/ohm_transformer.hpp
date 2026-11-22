@@ -4,19 +4,20 @@
 #include "mkn/kul/constexprifier.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/exec/kernels.hpp" // IWYU pragma: keep (gpu::Vec_t, gpu::TileLauncher: GPU builds)
-
 #include "plamn/core/data/grid/detail/detail.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/numerics/ohm/ohm.hpp"
 #include "plamn/core/numerics/differential_operators.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
 #include "plamn/core/data/vecfield/vecfield_component.hpp"
+#include "mkn/kul/for.hpp"
 
 #include <array>
 #include <stdexcept>
 #include <cstddef>
+#include <type_traits>
 
-#include "damn/core/exec/kernels/region_chunks.hpp"
+#include "damn/core/exec/kernels/region_chunks.hpp" // IWYU pragma: keep (run_gpu: GPU builds)
 
 namespace plamn::core
 {
