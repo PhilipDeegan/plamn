@@ -1446,22 +1446,30 @@ void MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>::move_gpu_c
     for (auto& pop : ions)
     {
         double const coef1 = pop.charge() * (0.5 * in.dt / pop.mass());
-        auto rhop          = pop.particleDensity();
-        auto flux          = *pop.flux();
+        // plain views (basic::, no names: device copyable), copied per thread for the deposit
+        auto rhop = untiled_view(pop.particleDensity());
+        auto flux = untiled_view(pop.flux());
 
         auto const launch = [&]<auto type>(auto const& particles) {
             using Span_t = SoAVXConstSpanParticles<dim, alloc_mode>;
             Span_t const ps{particles};
             if (ps.size() == 0)
                 return;
-            damn::kernel::launch(in.streamer.streams[i], ps.size(), [=] DAMN_ALL() mutable {
+            // not mutable: the captures are read in place from the launch's parameters (writing
+            //  through a capture copies the whole closure into each thread's local memory); the
+            //  deposit writes through its own copies of the two views
+            damn::kernel::launch(in.streamer.streams[i], ps.size(), [=] DAMN_ALL() {
                 auto particle = ps.copy(damn::kernel::idx());
                 if (!push_particle<type>(particle, em, layout, ghostBox, halfdt, coef1))
                     return;
 
                 // level ghosts as domain particles: each is held by one patch only
                 if (isIn(particle.iCell(), nlgb))
-                    Deposit_t{}.particleToMesh(particle, rhop, flux, layout);
+                {
+                    auto rho = rhop;
+                    auto F   = flux;
+                    Deposit_t{}.particleToMesh(particle, rho, F, layout);
+                }
             });
         };
 
