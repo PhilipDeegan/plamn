@@ -38,6 +38,11 @@ struct MoveSpec
 
 MoveSpec constexpr copy_spec{.copy = true, .deposit = true, .sync = false};
 
+// a level's patch boxings by patch id: a std::unordered_map, or a level's kept context with
+//  more than the boxings (device box lists: mkn_xyz::MultiBoris borrows them)
+template<typename B>
+concept PatchBoxings = requires(B const& b, std::string const& id) { b.at(id); };
+
 // the layouts which place every particle after a push themselves (the push records the moves,
 //  their own post push step applies them: synced_on_move): with spec's sync, no generic
 //  post_move_sync (its whole array passes: partitions, deletions, moves by box). Not the per cell

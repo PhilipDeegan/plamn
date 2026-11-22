@@ -308,6 +308,10 @@ private:
         double coarse_t = 0, coarse_dt = 0; // the coarser level's step this level subcycles in
         double old_t
             = 0; // the start of its step (prepare_step): an MHD reflux redoes it from there
+        // bumped whenever the level's geometry is (re)built (link_geometry_: init, regrid,
+        //  rebalance): what is kept per decomposition (boxings, device box lists, launch lists)
+        //  is rebuilt when it differs
+        std::uint64_t generation = 0;
     };
 
     // damn::amr::advance's hooks
@@ -900,6 +904,7 @@ private:
         void sums(char const* stage, double const t) { self.sums_(ln, stage, t); } // SUPER_DEBUG
 
         NO_DISCARD std::size_t number() const { return ln; }
+        NO_DISCARD std::uint64_t generation() const { return self.levels_[ln].generation; }
         NO_DISCARD auto& data() { return self.data_(ln); }
         void per_patch(auto&& fn) { self.per_patch_(ln, fn); }
         void copy(auto const how, std::string const& key) { self.copy_(ln, how, key); }

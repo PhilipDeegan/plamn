@@ -227,10 +227,10 @@ void move_ions(HybridModel<opts>& model, auto& level, double const t, double con
             auto& data        = level.data();
             using LevelData_t = HybridModel<opts>::LevelData_t;
             simulator::LevelAccessor<LevelData_t, Patch_t, &Patch_t::emAvg> accessor{data};
-            using Boxing_t = Patch_t::Boxing_t;
-            std::unordered_map<std::string, Boxing_t> boxings;
-            for (std::size_t i = 0; i < accessor.size(); ++i)
-                boxings.try_emplace(accessor.id(i), *data.data[i]->boxing);
+            // the patches' boxings (and their device box lists), kept per decomposition
+            auto& boxings = model.level_boxings[static_cast<int>(level.number())];
+            if (boxings.generation != level.generation())
+                boxings.rebuild(level.generation(), accessor, data);
             model.mover.updatePopulations(accessor, boxings, dt, mode);
         }
     }

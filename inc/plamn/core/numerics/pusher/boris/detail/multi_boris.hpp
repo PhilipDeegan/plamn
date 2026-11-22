@@ -396,8 +396,8 @@ void MultiBorisBackend<layout, ModelAccessor, Interpolator>::move_gpu_copy(
     {
         auto const coef1     = pop.charge() * (0.5 * in.dt / pop.mass());
         auto const halfdt    = in.mesh(view.layout.dx, in.dt);
-        auto const nlgb      = in.gpu_nlgb[i];
-        auto const non_owned = in.gpu_non_owned[i]; // its type: no excluded boxes
+        auto const nlgb      = (*in.nlgb)[i];
+        auto const non_owned = (*in.non_owned)[i]; // its type: no excluded boxes
         auto rhop            = pop.particleDensity();
         auto flux            = *pop.flux();
         auto const n_points  = rhop.max_tile_size(); // largest tile field, incl. ghosts
@@ -1440,7 +1440,7 @@ void MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>::move_gpu_c
     auto const layout   = view.layout;
     auto const halfdt   = in.mesh(layout.dx, in.dt);
     auto const ghostBox = damn::core::grow(layout.cells, Layout_t::options.particle_ghost_width);
-    auto const nlgb     = in.gpu_nlgb[i];
+    auto const nlgb     = (*in.nlgb)[i];
 
     for (auto& pop : ions)
     {
@@ -1950,8 +1950,10 @@ struct MultiBoris : core::MultiBoris<ModelAccessor, Interpolator>
     void move(auto const& boxings);
 
     StreamLauncher streamer{this->accessor, synchronous ? 0u : 1u};
-    GpuBoxSpanSet_t gpu_nlgb;
-    GpuBoxSpanSet_t gpu_non_owned;
+    GpuBoxSpanSet_t gpu_nlgb;      // built per push (prepare_gpu_copy), unless borrowed:
+    GpuBoxSpanSet_t gpu_non_owned; //  the boxings' own (a level's kept LevelBoxings)
+    GpuBoxSpanSet_t const* nlgb      = &gpu_nlgb;
+    GpuBoxSpanSet_t const* non_owned = &gpu_non_owned;
 };
 
 
@@ -1964,7 +1966,18 @@ void MultiBoris<ModelAccessor, Interpolator>::move(auto const& boxings)
     static constexpr auto gpu_copy = copy and is_gpu and Backend::has_gpu_copy;
 
     if constexpr (gpu_copy)
-        Backend::prepare_gpu_copy(*this, boxings);
+    {
+        if constexpr (requires {
+                          boxings.gpu_nlgb;
+                          boxings.gpu_non_owned;
+                      })
+        { // the level's, kept per decomposition: nothing built or allocated per push
+            nlgb      = &boxings.gpu_nlgb;
+            non_owned = &boxings.gpu_non_owned;
+        }
+        else
+            Backend::prepare_gpu_copy(*this, boxings);
+    }
 
     auto move = [&](auto const i) mutable {
         if constexpr (gpu_copy)
