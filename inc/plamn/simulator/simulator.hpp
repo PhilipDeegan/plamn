@@ -42,6 +42,9 @@
 #include "damn/mpi/inter_level.hpp"
 #include "damn/mpi/regrid.hpp"
 #include "damn/core/def/constants.hpp"
+#include "damn/core/exec/thread_pool.hpp"
+#include "damn/mpi/scope_timing.hpp"
+#include "mkn/kul/range.hpp"
 #include "plamn/diagnostic/vtkhdf.hpp"
 #include "plamn/simulator/hybrid_patch_view.hpp"
 #include "plamn/solver/hybrid/advance.hpp"
@@ -436,6 +439,37 @@ private:
             decomposition_.busy_of(ln, ld.patches[i].box)
                 += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
         }
+    }
+
+    // per_patch_ with damn's pool threads taking the patches (untiled layouts: one pool, its
+    //  threads across patches; tiled ones thread over tiles inside the kernels): fn touches only
+    //  its patch and never python. Serial with one thread, and while scope timing (phlop's
+    //  serial timer: scopes on one thread a rank)
+    void per_patch_threaded_(std::size_t const ln, auto&& fn)
+    {
+        using Pool    = damn::core::ThreadPool;
+        auto& ld      = data_(ln);
+        using Patch_t = solver::HybridModel<opts>::Patch_t;
+        auto const n  = ld.data.size();
+        if constexpr (!Patch_t::per_patch_mover)
+            return per_patch_(ln, fn);
+        if (Pool::n_pools * Pool::threads_per_pool < 2 or n < 2
+            or damn::mpi::scope_timing_active())
+            return per_patch_(ln, fn);
+
+        auto& pool = Pool::INSTANCE();
+        std::vector<double> busy(decomposition_.timing ? n : 0, 0.);
+        for (auto const i : mkn::kul::range(n))
+            Pool::pool(i % Pool::n_pools).detach_task(pool.guard([&, i] {
+                auto const t0 = std::chrono::steady_clock::now();
+                fn(*ld.data[i]);
+                if (!busy.empty())
+                    busy[i] = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0)
+                                  .count();
+            }));
+        pool.sync();
+        for (auto const i : mkn::kul::range(busy.size()))
+            decomposition_.busy_of(ln, ld.patches[i].box) += busy[i];
     }
 
     // tiled fields: damn's schedules work on untiled temporaries (amr/untiled.hpp), leased on
@@ -874,6 +908,8 @@ private:
         NO_DISCARD std::size_t number() const { return ln; }
         NO_DISCARD auto& data() { return self.data_(ln); }
         void per_patch(auto&& fn) { self.per_patch_(ln, fn); }
+        // fn touching only its patch, never python: on the pool's threads (per_patch_threaded_)
+        void per_patch_threaded(auto&& fn) { self.per_patch_threaded_(ln, fn); }
         void copy(auto const how, std::string const& key) { self.copy_(ln, how, key); }
         void fill_magnetic_ghosts(std::string const& key, double const t)
         {

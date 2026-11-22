@@ -399,6 +399,18 @@ class HybridRefinementTest(unittest.TestCase):
         self.assertLess(lb["imbalance"][100], 0.15)
         self.assertLess(np.abs(lb["B"] - no["B"]).max(), 1e-12)
 
+    def test_threads_take_patches_not_physics(self):
+        """the pool's threads taking a level's patches (untiled layouts): B at the end as on one
+        thread, digit for digit (each patch's work its own)"""
+        def run(threads):
+            os.environ["PHARE_THREADS_PER_POOL"] = str(threads)
+            try:
+                return drift(None, steps=20)["B"]
+            finally:
+                os.environ.pop("PHARE_THREADS_PER_POOL")
+
+        np.testing.assert_array_equal(run(3), run(1))
+
     def test_load_balancing_moves_computed_quantities(self):
         """a computed quantity (the beam's pressure tensor) dumped before the rebalances: its
         scratch grids on every patch, so a patch moved to another rank unpacks what was packed

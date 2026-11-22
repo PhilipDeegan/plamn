@@ -9,7 +9,8 @@
 // level: the simulator's services for one level (Simulator::LevelServices)
 //   number()                             the level number
 //   data()                               its patch data (LevelData of HybridPatch)
-//   per_patch(fn)                        fn(patch) for every local patch
+//   per_patch_threaded(fn)               fn(patch) for every local patch, on the pool's
+//                                        threads (fn: its patch only, never python)
 //   copy(how, key)                       damn's copy of a resource key between its patches
 //   fill_magnetic_ghosts(key, t),        patch ghosts, then level ghosts from the coarser level
 //   fill_electric_ghosts(key, t)          at t
@@ -41,7 +42,7 @@ namespace plamn::solver::hybrid
 void compute_moments(auto&& level)
 {
     DAMN_LOG_SCOPE(1, "Simulator::compute_moments_");
-    level.per_patch([](auto& patch) { patch.ions.update(); });
+    level.per_patch_threaded([](auto& patch) { patch.ions.update(); });
 }
 
 void fill_ion_borders(auto&& level)
@@ -60,16 +61,16 @@ void ampere_ohm(HybridModel<opts> const& model, auto&& level)
     // one loop each, so each has its own scope (time, counters)
     {
         DAMN_LOG_SCOPE(1, "Simulator::ampere");
-        level.per_patch([&](auto& patch) {
+        level.per_patch_threaded([&](auto& patch) {
             core::AmpereTransformer{}(patch.layout, (patch.*electromag).B, patch.J);
         });
     }
     {
         DAMN_LOG_SCOPE(1, "Simulator::electrons");
-        level.per_patch([&](auto& patch) { patch.electrons().update(patch.layout); });
+        level.per_patch_threaded([&](auto& patch) { patch.electrons().update(patch.layout); });
     }
     DAMN_LOG_SCOPE(1, "Simulator::ohm");
-    level.per_patch([&](auto& patch) {
+    level.per_patch_threaded([&](auto& patch) {
         auto& em = patch.*electromag;
         core::OhmTransformer{*model.ohm}(patch.layout, patch.electrons().density(),
                                          patch.electrons().velocity(), patch.electrons().pressure(),
@@ -95,7 +96,7 @@ void deposit_level_ghosts(auto& level, double const t)
         throw std::runtime_error("plamn Simulator: level ghost time interpolation coefficient "
                                  + std::to_string(alpha));
     alpha = std::clamp(alpha, 0., 1.);
-    level.per_patch([&](auto& patch) {
+    level.per_patch_threaded([&](auto& patch) {
         core::Interpolating<opts.dimension, opts.interp_order> interpolate;
         for (auto& pop : patch.ions)
         {
@@ -111,7 +112,7 @@ template<auto opts>
 void average(auto& level, double const t, double const dt)
 {
     DAMN_LOG_SCOPE(1, "Simulator::average_");
-    level.per_patch([](auto& patch) {
+    level.per_patch_threaded([](auto& patch) {
         for (std::size_t i = 0; i < 3; ++i)
         {
             core::average(patch.em.B[i], patch.emPred.B[i], patch.emAvg.B[i]);
@@ -130,8 +131,10 @@ void move_ions(HybridModel<opts>& model, auto& level, double const t, double con
     {
         DAMN_LOG_SCOPE(1, "Simulator::move_ions::push"); // and deposit
         if constexpr (Patch_t::per_patch_mover)
-            level.per_patch([&](auto& patch) {
-                model.mover.updatePopulations(patch.ions, patch.emAvg, *patch.boxing, dt, mode);
+            level.per_patch_threaded([&](auto& patch) {
+                // the mover keeps push state (mesh, dt, a buffer): a copy a thread
+                thread_local auto mover = model.mover;
+                mover.updatePopulations(patch.ions, patch.emAvg, *patch.boxing, dt, mode);
             });
         else
         { // the level's patches at once, each with its boxing by patch id
@@ -156,7 +159,7 @@ void move_ions(HybridModel<opts>& model, auto& level, double const t, double con
             level.copy(damn::amr::gather_leaving, "IonGhostParticles");
         }
         DAMN_LOG_SCOPE(2, "Simulator::move_ions::deposit_domain");
-        level.per_patch([](auto& patch) {
+        level.per_patch_threaded([](auto& patch) {
             for (auto& pop : patch.ions)
                 pop.patchGhostParticles().clear();
             core::deposit_domain<opts.dimension, opts.interp_order>(patch.ions, patch.layout);
@@ -181,7 +184,7 @@ void faraday_ampere_ohm(HybridModel<opts> const& model, auto& level, auto&& E_of
 {
     {
         DAMN_LOG_SCOPE(1, "Simulator::faraday");
-        level.per_patch([&](auto& patch) {
+        level.per_patch_threaded([&](auto& patch) {
             core::FaradayTransformer{}(patch.layout, patch.em.B, E_of(patch), (patch.*B_to).B, dt);
         });
     }
