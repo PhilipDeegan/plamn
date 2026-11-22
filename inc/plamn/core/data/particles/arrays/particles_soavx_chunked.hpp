@@ -48,6 +48,7 @@ struct SoAVXChunkedSpan : public SoAVXSpan<dim, alloc_mode_, _const_>
 
     template<typename Particles_t>
     SoAVXChunkedSpan(Particles_t& particles)
+        requires(!std::is_same_v<std::remove_const_t<Particles_t>, SoAVXChunkedSpan>) // not copies
         : Super{particles, 0, particles.size()}
         , box_{particles.box()}
         , starts_{particles.starts_data()}

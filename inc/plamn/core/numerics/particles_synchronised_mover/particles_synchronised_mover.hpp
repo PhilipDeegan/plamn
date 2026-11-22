@@ -17,6 +17,7 @@
 #include "plamn/core/numerics/interpolator/interpolating.hpp"
 #include "plamn/core/numerics/boundary_condition/boundary_condition.hpp"
 #include "plamn/core/numerics/pusher/boris/detail/multi_boris.hpp"
+#include "plamn/core/data/particles/particle_components.hpp"
 #include "plamn/core/data/particles/exporting/particles_exporting.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
@@ -237,6 +238,46 @@ namespace detail
         }
     };
 
+    // a SoAVX array's columns as plain pointers (device copyable: no tuple), from its
+    //  components (addresses only, nothing read on the host)
+    template<std::size_t dim>
+    struct ColumnPointers
+    {
+        double* weight;
+        std::array<int*, dim> iCell;
+        std::array<double*, dim> delta;
+        std::array<double*, 3> v;
+
+        static ColumnPointers of(auto& particles)
+        {
+            auto const c = core::components(particles);
+            ColumnPointers p{};
+            p.weight = &c.weight[0];
+            for (std::size_t d = 0; d < dim; ++d)
+            {
+                p.iCell[d] = &c.iCell[d][0];
+                p.delta[d] = &c.delta[d][0];
+            }
+            for (std::size_t d = 0; d < 3; ++d)
+                p.v[d] = &c.v[d][0];
+            return p;
+        }
+
+        // slot to of this = slot i of from
+        void assign(std::size_t const to, ColumnPointers const& from,
+                    std::size_t const i) const DAMN_ALL
+        {
+            weight[to] = from.weight[i];
+            for (std::size_t d = 0; d < dim; ++d)
+            {
+                iCell[d][to] = from.iCell[d][i];
+                delta[d][to] = from.delta[d][i];
+            }
+            for (std::size_t d = 0; d < 3; ++d)
+                v[d][to] = from.v[d][i];
+        }
+    };
+
     // a slot's fate after a push: stays, moves (to the first or second destination), or deleted
     enum class Fate : chunk_offset_t { stays = 0, first = 1, second = 2, deleted = 3 };
 
@@ -255,12 +296,9 @@ namespace detail
         damn::resize(src.counts_, 6, /*copy=*/false);
         auto* const fates  = src.slots_.data();
         auto* const counts = src.counts_.data(); // [1], [2]: movers; [4], [5]: cursors
-        auto const columns = [](auto& ps) {
-            return std::apply([](auto&... c) { return std::make_tuple(c.data()...); },
-                              ps.as_tuple());
-        };
+        auto const columns = [](auto& ps) { return ColumnPointers<dim>::of(ps); };
         auto const s       = columns(src);
-        auto const* weight = std::get<0>(s);
+        auto const* weight = s.weight;
         damn::kernel::launch(6, [=] DAMN_ALL() mutable { counts[damn::kernel::idx()] = 0; });
         damn::kernel::launch(n, [=] DAMN_ALL() mutable {
             auto const i = damn::kernel::idx();
@@ -270,7 +308,8 @@ namespace detail
                 return;
             }
             damn::core::Point<int, dim> cell;
-            mkn::kul::for_N<dim>([&](auto d) { cell[d] = std::get<1 + d>(s)[i]; });
+            for (std::size_t d = 0; d < dim; ++d)
+                cell[d] = s.iCell[d][i];
             auto const f = static_cast<chunk_offset_t>(fate(cell));
             fates[i]     = f;
             if (f == 1 or f == 2)
@@ -294,11 +333,9 @@ namespace detail
             {
                 auto const slot = Op{counts[3 + f]}.increment_return_old();
                 auto const to   = (f == 1 ? off_first : off_second) + slot;
-                auto& dst       = f == 1 ? f1 : f2;
-                mkn::kul::for_N<std::tuple_size_v<decltype(s)>>(
-                    [&](auto c) { std::get<c>(dst)[to] = std::get<c>(s)[i]; });
+                (f == 1 ? f1 : f2).assign(to, s, i);
             }
-            std::get<0>(s)[i] = 0; // moved or deleted: dropped by the sort
+            s.weight[i] = 0; // moved or deleted: dropped by the sort
         });
     }
 } // namespace detail

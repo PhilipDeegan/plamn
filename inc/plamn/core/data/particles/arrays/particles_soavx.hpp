@@ -147,6 +147,7 @@ struct SoAVXSpan
     template<typename Particles, // SFINAE protection to only allow particle arrays
              typename = std::enable_if_t<is_soavx(std::decay_t<Particles>::layout_mode)>>
     SoAVXSpan(Particles& array)
+        requires(!std::is_same_v<std::decay_t<Particles>, SoAVXSpan>) // not copies
         : SoAVXSpan{array, 0, array.size()}
     {
     }
@@ -154,6 +155,7 @@ struct SoAVXSpan
     template<typename Particles, // SFINAE protection to only allow particle arrays
              typename = std::enable_if_t<is_soavx(std::decay_t<Particles>::layout_mode)>>
     SoAVXSpan(Particles&& array)
+        requires(!std::is_same_v<std::decay_t<Particles>, SoAVXSpan>) // not copies
         : SoAVXSpan{array, 0, array.size()}
     {
     }
@@ -300,9 +302,13 @@ public:
     using Super::v_;
 
 
+    // not for copies (a const one would match: copies and moves stay the defaulted, trivial ones,
+    //  as kernels' captures need)
     template<typename... Args>
     SoAVXParticles(Args&&... args)
-        requires std::is_constructible_v<Super, Args&&...>
+        requires(std::is_constructible_v<Super, Args && ...>
+                 and !(sizeof...(Args) == 1
+                       and (std::is_same_v<std::remove_cvref_t<Args>, This> and ...)))
     DAMN_ALL : Super{std::forward<Args>(args)...}
     {
     }

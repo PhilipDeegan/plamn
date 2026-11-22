@@ -1394,6 +1394,7 @@ void MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>::move_rest(
     {
 #if DAMN_HAVE_MKN_GPU
         auto [ions, em]     = view.args;
+        auto const emv      = untiled_view(em); // plain views for the device
         auto const layout   = view.layout;
         auto const ghostBox = boxings.at(view.patchID()).ghostBox;
         auto const halfdt   = in.mesh(layout.dx, in.dt);
@@ -1408,7 +1409,7 @@ void MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>::move_rest(
                 damn::kernel::launch(in.streamer.streams[i], ps.size(), [=] DAMN_ALL() mutable {
                     auto const pi = damn::kernel::idx();
                     auto particle = ps.copy(pi);
-                    push_particle<type>(particle, em, layout, ghostBox, halfdt, coef1);
+                    push_particle<type>(particle, emv, layout, ghostBox, halfdt, coef1);
                     ps.assign(particle, pi);
                 });
             };
@@ -1438,6 +1439,7 @@ void MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>::move_gpu_c
 
     auto view           = in.accessor[i];
     auto [ions, em]     = view.args;
+    auto const emv      = untiled_view(em); // plain views for the device
     auto const layout   = view.layout;
     auto const halfdt   = in.mesh(layout.dx, in.dt);
     auto const ghostBox = damn::core::grow(layout.cells, Layout_t::options.particle_ghost_width);
@@ -1460,7 +1462,7 @@ void MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>::move_gpu_c
             //  deposit writes through its own copies of the two views
             damn::kernel::launch(in.streamer.streams[i], ps.size(), [=] DAMN_ALL() {
                 auto particle = ps.copy(damn::kernel::idx());
-                if (!push_particle<type>(particle, em, layout, ghostBox, halfdt, coef1))
+                if (!push_particle<type>(particle, emv, layout, ghostBox, halfdt, coef1))
                     return;
 
                 // level ghosts as domain particles: each is held by one patch only

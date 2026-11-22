@@ -460,13 +460,28 @@ concept has_view_t_c = requires {
         typename std::remove_cvref_t<T>::vecfield_type>;
 };
 
+namespace basic
+{
+    template<typename VecFieldT>
+    class Electromag; // electromag.hpp
+} // namespace basic
+
 // an untiled (vec)field as plain device copyable views (basic:: types, no names), as tile_at
 //  gives for one tile of a tiled one
 template<typename T>
 auto untiled_view(T&& untiled)
 {
     using T_t = std::remove_cvref_t<T>;
-    if constexpr (not requires { untiled.name(); }) // already a basic:: view
+    if constexpr (requires {
+                      typename T_t::vecfield_type;
+                      untiled.E;
+                      untiled.B;
+                  }) // an electromag: its vecfields' views (no name() of its own)
+    {
+        using V_t = decltype(untiled_view(untiled.E));
+        return basic::Electromag<V_t>{untiled_view(untiled.E), untiled_view(untiled.B)};
+    }
+    else if constexpr (not requires { untiled.name(); }) // already a basic:: view
         return T_t{untiled};
     else if constexpr (not requires { typename T_t::field_type; }) // a field
         return typename T_t::Super{untiled};

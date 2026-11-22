@@ -313,13 +313,18 @@ public:
             if constexpr (is_soavx(Particles::layout_mode))
             {
                 // a thread per particle, loaded from the columns, global atomics
+                // plain views (basic::, device copyable), written through per thread copies
                 DAMN_WITH_MKN_GPU( //
                     SoAVXConstSpanParticles<Particles::dimension, alloc_mode> const ps{
                         particles}; //
+                    auto rho_v  = untiled_view(rhoP);  //
+                    auto flux_v = untiled_view(flux); //
                     damn::kernel::launch(stream..., ps.size(),
-                                         [=] DAMN_ALL() mutable {
+                                         [=] DAMN_ALL() {
+                                             auto rho = rho_v;
+                                             auto F   = flux_v;
                                              Interpolator_t{}.particleToMesh(
-                                                 ps.copy(damn::kernel::idx()), rhoP, flux, layout,
+                                                 ps.copy(damn::kernel::idx()), rho, F, layout,
                                                  coef);
                                          }); //
                 )
