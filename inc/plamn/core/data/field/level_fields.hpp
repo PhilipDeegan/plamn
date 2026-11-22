@@ -3,8 +3,9 @@
 
 // a level's fields as one: the contiguous buffers (for_each_buffer: a tiled field's tiles, an
 //  untiled one's data) of the quantities chosen on every patch, an operation on all of them at
-//  once. Unified memory: one kernel over every buffer (up to 128 a launch, passed by value: no
-//  host access to the values, no allocation); host memory: per buffer.
+//  once. Unified memory: one kernel over the concatenated buffers (up to 128 a launch, their
+//  prefix offsets passed by value: no padding, no host access to the values, no allocation);
+//  host memory: per buffer.
 //
 //   level_of<alloc_mode>(level, quantities).zero()
 //     quantities(patch, fields): fields.add(f) for each field f (or tensor field) of the patch,
@@ -40,7 +41,6 @@ public:
             if (size == 0)
                 return;
             buffers_.push_back({data, size});
-            largest_ = std::max(largest_, size);
         });
     }
     // a tensor field's, component by component
@@ -54,24 +54,7 @@ public:
     LevelFields& zero()
         requires(alloc_mode == damn::AllocatorMode::GPU_UNIFIED)
     {
-        // the buffers passed by value, batch_size at a time (a kernel's parameters: no
-        //  allocation, nothing written to unified memory by the host)
-        for (std::size_t first = 0; first < buffers_.size(); first += batch_size)
-        {
-            Batch batch;
-            batch.n = std::min(batch_size, buffers_.size() - first);
-            for (std::size_t k = 0; k < batch.n; ++k)
-            {
-                batch.buffers[k] = buffers_[first + k];
-                batch.largest    = std::max(batch.largest, batch.buffers[k].size);
-            }
-            damn::kernel::launch(batch.n * batch.largest, [=] DAMN_ALL() {
-                auto const i = damn::kernel::idx();
-                auto const b = batch.buffers[i / batch.largest];
-                if (auto const j = i % batch.largest; j < b.size)
-                    b.data[j] = T{0};
-            });
-        }
+        for_each_batch([](T& value) DAMN_ALL { value = T{0}; });
         return *this;
     }
     LevelFields& zero()
@@ -83,15 +66,50 @@ public:
     }
 
 private:
-    static constexpr std::size_t batch_size = 128; // 2 KB of kernel parameters
+    // a batch of buffers as one range of values: their prefix offsets (offsets[k]: buffer k's
+    //  first value in the range, offsets[n]: the total), passed by value to the kernel
+    static constexpr std::size_t batch_size = 128; // ~3 KB of kernel parameters
     struct Batch
     {
-        std::array<Buffer, batch_size> buffers{};
-        std::size_t n = 0, largest = 0;
+        std::array<T*, batch_size> data{};
+        std::array<std::size_t, batch_size + 1> offsets{};
+        std::size_t n = 0;
+
+        // the buffer holding value i of the range: the last offset <= i
+        std::size_t buffer_of(std::size_t const i) const DAMN_ALL
+        {
+            std::size_t lo = 0, hi = n; // offsets[lo] <= i < offsets[hi]
+            while (hi - lo > 1)
+                if (auto const mid = (lo + hi) / 2; offsets[mid] <= i)
+                    lo = mid;
+                else
+                    hi = mid;
+            return lo;
+        }
     };
 
+    // op(value) on every value of every buffer: a launch per batch_size buffers, one thread per
+    //  value (no padding: a thread finds its buffer in the prefix offsets)
+    void for_each_batch(auto const op)
+    {
+        for (std::size_t first = 0; first < buffers_.size(); first += batch_size)
+        {
+            Batch batch;
+            batch.n = std::min(batch_size, buffers_.size() - first);
+            for (std::size_t k = 0; k < batch.n; ++k)
+            {
+                batch.data[k]        = buffers_[first + k].data;
+                batch.offsets[k + 1] = batch.offsets[k] + buffers_[first + k].size;
+            }
+            damn::kernel::launch(batch.offsets[batch.n], [=] DAMN_ALL() {
+                auto const i = damn::kernel::idx();
+                auto const k = batch.buffer_of(i);
+                op(batch.data[k][i - batch.offsets[k]]);
+            });
+        }
+    }
+
     std::vector<Buffer> buffers_;
-    std::size_t largest_ = 0;
 };
 
 template<auto alloc_mode>
