@@ -536,7 +536,7 @@ template<typename Derived, std::size_t dim, auto alloc_mode>
 void ChunkedOps<Derived, dim, alloc_mode>::sort()
 {
     DAMN_LOG_SCOPE(2, "SoAVXChunked::sort");
-    self().crossers_valid_            = false; // the slots change
+    self().crossers_valid_     = false; // the slots change
     auto static constexpr gpu  = alloc_mode == damn::AllocatorMode::GPU_UNIFIED;
     using Op                   = damn::core::Operators<chunk_offset_t, /*atomic=*/gpu, /*GPU=*/gpu>;
     auto static constexpr none = std::numeric_limits<chunk_offset_t>::max(); // a gap's slot
@@ -584,7 +584,7 @@ void ChunkedOps<Derived, dim, alloc_mode>::sort()
             mkn::gpu::take(sizes + cells - 1, &last[1], 1);
         }
         std::size_t const slots_total = std::size_t{last[0]} + last[1];
-        auto const to = [=] DAMN_ALL(std::size_t const i) -> std::size_t {
+        auto const to                 = [=] DAMN_ALL(std::size_t const i) -> std::size_t {
             return slots[i] == none ? std::numeric_limits<std::size_t>::max()
                                     : starts[cell_idx(i)] + slots[i];
         };

@@ -44,9 +44,8 @@ namespace plamn::amr
 namespace detail
 {
     template<typename P>
-    bool constexpr is_device_chunked
-        = P::layout_mode == core::LayoutMode::SoAVXChunked
-          and P::alloc_mode == damn::AllocatorMode::GPU_UNIFIED;
+    bool constexpr is_device_chunked = P::layout_mode == core::LayoutMode::SoAVXChunked
+                                       and P::alloc_mode == damn::AllocatorMode::GPU_UNIFIED;
 
     template<std::size_t dim>
     struct AppendCells // a piece's source cells
@@ -203,9 +202,8 @@ void append_items_on_device(
         damn::kernel::launch(n, [=] DAMN_ALL() {
             auto const k   = damn::kernel::idx();
             auto const end = k + 1 < n ? pc[k + 1].first : ncells;
-            totals[k]      = pc[k].first == end
-                                 ? 0
-                                 : scan[end - 1] + counts[end - 1] - scan[pc[k].first];
+            totals[k]
+                = pc[k].first == end ? 0 : scan[end - 1] + counts[end - 1] - scan[pc[k].first];
         });
         for (std::size_t k = 0; k < n; ++k)
             total[k] = buffers.totals[k];
@@ -216,7 +214,7 @@ void append_items_on_device(
     std::vector<std::size_t> dst_at(pieces.size());
     for (std::size_t k = 0; k < pieces.size(); ++k)
     {
-        auto* dst = pieces[k].dst.particles;
+        auto* dst        = pieces[k].dst.particles;
         auto [it, fresh] = end_of.try_emplace(dst, dst->size());
         dst_at[k]        = it->second;
         it->second += total[k];
@@ -253,10 +251,10 @@ void append_items_on_device(
     if (nparticles == 0)
         return;
     {
-        auto const* const pc     = cells.data();
-        auto const* const cols   = columns.data();
-        auto const* const scan   = buffers.scan.data();
-        auto const n             = cells.size();
+        auto const* const pc   = cells.data();
+        auto const* const cols = columns.data();
+        auto const* const scan = buffers.scan.data();
+        auto const n           = cells.size();
         damn::kernel::launch(nparticles, [=] DAMN_ALL() {
             auto const i = damn::kernel::idx();
             // its cell: the last with scan <= i and a count (the first of equal scans is empty)
@@ -269,8 +267,8 @@ void append_items_on_device(
             auto const cell = lo;
             auto const k    = detail::last_at_most_first(pc, n, cell);
             auto const p    = detail::point_in(pc[k].cells, cell - pc[k].first);
-            auto const from = pc[k].starts[core::Chunks<dim>::flat(pc[k].shell, p)]
-                              + (i - scan[cell]);
+            auto const from
+                = pc[k].starts[core::Chunks<dim>::flat(pc[k].shell, p)] + (i - scan[cell]);
             auto const& col = cols[k];
             auto const to   = col.dst_at + (i - col.begin);
             for (std::size_t c = 0; c < 1 + dim + 3; ++c)

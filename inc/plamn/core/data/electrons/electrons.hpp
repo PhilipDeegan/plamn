@@ -145,17 +145,18 @@ public:
         auto const Ne  = untiled_view(ions_.chargeDensity());
         auto const box = domain_box(layout, ions_.chargeDensity());
         return VelocityItem<decltype(Ne), decltype(untiled_view(J_)), decltype(untiled_view(Ve_)),
-                            std::decay_t<decltype(box)>>{
-            Ne, untiled_view(J_), untiled_view(ions_.chargeFlux()), untiled_view(Ve_),
-            {box, box, box}};
+                            std::decay_t<decltype(box)>>{Ne,
+                                                         untiled_view(J_),
+                                                         untiled_view(ions_.chargeFlux()),
+                                                         untiled_view(Ve_),
+                                                         {box, box, box}};
     }
 
     // Vxyz's Ve for every item on the device, one launch (damn's region chunks)
     static void run_velocity_gpu([[maybe_unused]] auto& items)
     {
 #if DAMN_HAVE_GPU
-        damn::core::run_region_chunks(items, [] DAMN_ALL(auto& it, auto const c,
-                                                         auto const& ijk) {
+        damn::core::run_region_chunks(items, [] DAMN_ALL(auto& it, auto const c, auto const& ijk) {
             if (c == 0)
                 it.Ve(Component::X)(ijk)
                     = (it.F(Component::X)(ijk)

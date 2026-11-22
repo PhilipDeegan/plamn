@@ -32,8 +32,9 @@ private:
     static void launch_(auto const& fn, auto const& box, auto const... views)
     {
         damn::kernel::launch(box.size(), [=] DAMN_ALL() {
-            [](auto const& f, auto const& p, auto... vs) { f(p, vs...); }(
-                fn, damn::core::point_at(box, damn::kernel::idx()), views...);
+            [](auto const& f, auto const& p, auto... vs) {
+                f(p, vs...);
+            }(fn, damn::core::point_at(box, damn::kernel::idx()), views...);
         });
     }
 };

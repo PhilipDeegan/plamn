@@ -316,8 +316,8 @@ public:
                 // plain views (basic::, device copyable), written through per thread copies
                 DAMN_WITH_MKN_GPU( //
                     SoAVXConstSpanParticles<Particles::dimension, alloc_mode> const ps{
-                        particles}; //
-                    auto rho_v  = untiled_view(rhoP);  //
+                        particles};                   //
+                    auto rho_v  = untiled_view(rhoP); //
                     auto flux_v = untiled_view(flux); //
                     damn::kernel::launch(stream..., ps.size(),
                                          [=] DAMN_ALL() {
