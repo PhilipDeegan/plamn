@@ -71,6 +71,41 @@ namespace detail
         });
         Transformer_t::run_gpu(items);
     }
+    // E from Ohm's law on every patch of the level: unified memory, one launch for the level,
+    //  its item list kept (an item per untiled patch; tiled patches through the transformer's
+    //  own tiles path)
+    template<auto electromag, auto opts>
+        requires(opts.alloc_mode == damn::AllocatorMode::GPU_UNIFIED
+                 and !core::is_tiled(opts.layout_mode))
+    void ohm_level(HybridModel<opts> const& model, auto& level)
+    {
+        core::OhmTransformer const ohm{*model.ohm};
+        auto const item_of = [&](auto& patch) {
+            auto& em = patch.*electromag;
+            return ohm.make_item(patch.layout, patch.electrons().density(),
+                                 patch.electrons().velocity(), patch.electrons().pressure(), em.B,
+                                 patch.J, em.E);
+        };
+        using Patch_t = HybridModel<opts>::Patch_t;
+        using Item_t  = decltype(item_of(std::declval<Patch_t&>()));
+        static thread_local damn::core::gpu::Vec_t<Item_t> items;
+        items.clear();
+        level.per_patch([&](auto& patch) { items.push_back(item_of(patch)); });
+        ohm.run_gpu(items);
+    }
+    // host memory, or tiled fields (the transformer's tiles path): per patch
+    template<auto electromag, auto opts>
+        requires(opts.alloc_mode == damn::AllocatorMode::CPU or core::is_tiled(opts.layout_mode))
+    void ohm_level(HybridModel<opts> const& model, auto& level)
+    {
+        level.per_patch([&](auto& patch) {
+            auto& em = patch.*electromag;
+            core::OhmTransformer{*model.ohm}(patch.layout, patch.electrons().density(),
+                                             patch.electrons().velocity(),
+                                             patch.electrons().pressure(), em.B, patch.J, em.E);
+        });
+    }
+
     // host memory: per patch
     template<auto electromag, auto opts>
         requires(opts.alloc_mode == damn::AllocatorMode::CPU)
@@ -98,12 +133,7 @@ void ampere_ohm(HybridModel<opts> const& model, auto&& level)
         level.per_patch([&](auto& patch) { patch.electrons().update(patch.layout); });
     }
     DAMN_LOG_SCOPE(1, "Simulator::ohm");
-    level.per_patch([&](auto& patch) {
-        auto& em = patch.*electromag;
-        core::OhmTransformer{*model.ohm}(patch.layout, patch.electrons().density(),
-                                         patch.electrons().velocity(), patch.electrons().pressure(),
-                                         em.B, patch.J, em.E);
-    });
+    detail::ohm_level<electromag, opts>(model, level);
 }
 
 } // namespace plamn::solver::hybrid
