@@ -64,6 +64,7 @@
 #include "plamn/simulator/hybrid_patch.hpp"
 #include "plamn/simulator/coupling.hpp"
 #include "plamn/amr/field_access.hpp"
+#include "plamn/amr/particle_access.hpp"
 #include "plamn/simulator/simulator_def.hpp"
 #include "plamn/simulator/timestepper.hpp"
 #include "plamn/amr/tagging.hpp"
@@ -546,6 +547,25 @@ private:
         });
     }
 
+    // copies a hybrid model's particle arrays between the patches of level ln: the route's pairs
+    //  (the plan) and accessors (amr/particle_access.hpp)
+    template<amr::ParticleRoute Copies>
+    void copy_(std::size_t const ln, auto const how, Copies const& copies)
+    {
+        auto& l  = levels_[ln];
+        auto& ld = models_.hybrid.levels[static_cast<int>(ln)];
+        std::vector<std::string> dst, src;
+        for (auto const& r : copies.pairs)
+            dst.push_back(r.dst), src.push_back(r.src);
+        Leases leases;
+        leases.add(ld, dst, lease_of_<std::decay_t<decltype(how)>>()); // first: dst wins
+        leases.add(ld, src, amr::Lease::read);
+        if (n_ranks_ > 1)
+            damn::mpi::copy(how, l.neighbours, copies.pairs, copies.access, ld);
+        else
+            damn::amr::copy(how, l.neighbours, copies.pairs, copies.access, ld);
+    }
+
     // how damn's copy of key reaches the resources: untiled field copies by accessors, resolved
     //  once per model (amr/field_access.hpp); tiled patches (leased temporaries) and particles
     //  by name
@@ -629,6 +649,35 @@ private:
             with_level_access_(ld, coarse, pairs, by);
         });
     }
+
+    // from level ln - 1 into level ln: a hybrid model's particle arrays, by the route's
+    //  accessors when both levels are its (always: particles are split from hybrid levels only;
+    //  any other pair by name, as before)
+    template<amr::ParticleRoute Refines>
+    void refine_(std::size_t const ln, auto const& op, damn::amr::LevelRegion const region,
+                 Refines const& refines)
+    {
+        auto& l = levels_[ln];
+        with_level_pair_(ln, [&](auto& ld, auto& coarse) {
+            Leases leases;
+            lease_level_pairs_(leases, ld, coarse, refines.pairs, /*refine=*/true);
+            auto const by = [&](auto const& access) {
+                if (n_ranks_ > 1)
+                    damn::mpi::refine(op, region, *l.to_coarser, refines.pairs, access, coarse, ld);
+                else
+                    damn::amr::refine(op, region, *l.to_coarser, refines.pairs, access, coarse, ld);
+            };
+            by(particle_access_(ld, coarse, refines));
+        });
+    }
+    template<typename FineLD, typename CoarseLD, typename Refines>
+        requires(std::is_same_v<patch_of_t<FineLD>, typename Refines::Patch_t>
+                 and std::is_same_v<patch_of_t<CoarseLD>, typename Refines::Patch_t>)
+    static auto const& particle_access_(FineLD&, CoarseLD&, Refines const& refines)
+    {
+        return refines.access;
+    }
+    static auto const& particle_access_(auto&, auto&, auto const&) { return damn::amr::by_name; }
 
     // fn(how refine / coarsen reach the pairs' resources): accessors when resolved (untiled
     //  fields), else by name; tiled patches by name only (their accessors are not even compiled:
@@ -854,6 +903,10 @@ private:
         NO_DISCARD auto& data() { return self.data_(ln); }
         void per_patch(auto&& fn) { self.per_patch_(ln, fn); }
         void copy(auto const how, std::string const& key) { self.copy_(ln, how, key); }
+        void copy(auto const how, amr::ParticleRoute auto const& copies)
+        {
+            self.copy_(ln, how, copies);
+        }
         void fill_magnetic_ghosts(std::string const& key, double const t)
         {
             self.fill_magnetic_ghosts_(ln, key, t);
@@ -880,6 +933,11 @@ private:
                     std::vector<damn::amr::LevelPair> const& pairs, double const alpha = 0)
         {
             self.refine_(ln, op, region, pairs, alpha);
+        }
+        void refine(auto const& op, damn::amr::LevelRegion const region,
+                    amr::ParticleRoute auto const& refines)
+        {
+            self.refine_(ln, op, region, refines);
         }
         void coarsen(auto const& op, std::vector<damn::amr::LevelPair> const& pairs)
         {

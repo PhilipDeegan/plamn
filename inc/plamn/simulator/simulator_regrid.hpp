@@ -334,16 +334,14 @@ void Simulator<opts>::regrid_hybrid_data_(int const ln, auto const& map,
         }
     });
     using MaskedSplit = amr::Masked<amr::ParticleSplitter<Splitter_t>, dimension>;
-    for (auto const& name : models_.hybrid.population_names)
-        refine_(fine, MaskedSplit{{}, &old_cells}, LevelRegion::Interior,
-                {{name + "_domain", name + "_domain", ""}});
+    auto const& routes = *models_.hybrid.particle_routes;
+    refine_(fine, MaskedSplit{{}, &old_cells}, LevelRegion::Interior, routes.interior_splits);
 
     // ghosts: patch ghosts from the new neighbours, level ghosts from the coarser level now
     fill_magnetic_ghosts_(fine, "EM_B", t);
     fill_electric_ghosts_(fine, "EM_E", t);
-    for (auto const& name : models_.hybrid.population_names)
-        refine_(fine, amr::ParticleSplitter<Splitter_t>{}, LevelRegion::LevelGhosts,
-                {{name + "_domain", name + "_level_ghost_old", ""}});
+    refine_(fine, amr::ParticleSplitter<Splitter_t>{}, LevelRegion::LevelGhosts,
+            routes.old_ghost_splits);
     solver::hybrid::own_level_ghosts(level_services_(fine), /*new_ghosts=*/false);
     per_patch_(fine, [](auto& patch) {
         for (auto& pop : patch.ions)

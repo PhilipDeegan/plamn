@@ -325,9 +325,8 @@ void Simulator<opts>::register_resources_()
         // the same, as ghost fills (after a synchronization)
         add("IonPopMoments", components(name + "_flux"));
         add("IonPopMoments", damn::amr::same_names({name + "_density", name + "_charge_density"}));
-
-        add("IonGhostParticles", {{name + "_patch_ghost", name + "_domain"}});
     }
+    models_.hybrid.particle_routes.emplace(models_.hybrid.population_names);
 }
 
 

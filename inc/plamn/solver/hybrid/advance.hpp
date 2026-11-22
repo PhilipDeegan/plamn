@@ -153,7 +153,7 @@ void move_ions(HybridModel<opts>& model, auto& level, double const t, double con
         //  domain_only predictor deposits its pushed copies in the updater)
         {
             DAMN_LOG_SCOPE(2, "Simulator::move_ions::gather_leaving");
-            level.copy(damn::amr::gather_leaving, "IonGhostParticles");
+            level.copy(damn::amr::gather_leaving, model.particle_routes->gather_leaving);
         }
         DAMN_LOG_SCOPE(2, "Simulator::move_ions::deposit_domain");
         level.per_patch([](auto& patch) {

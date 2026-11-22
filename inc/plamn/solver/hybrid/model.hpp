@@ -5,7 +5,8 @@
 //  on (the hierarchy's geometry, neighbours and maps between levels are the simulator's, shared
 //  by the models). Empty if the build does not enable it
 
-#include "plamn/amr/field_access.hpp" // IWYU pragma: keep (a member's type)
+#include "plamn/amr/field_access.hpp"    // IWYU pragma: keep (a member's type)
+#include "plamn/amr/particle_access.hpp" // IWYU pragma: keep (a member's type)
 #include "damn/amr/level_data.hpp"
 #include "damn/core/def/constants.hpp"
 #include "plamn/amr/split/split.hpp" // IWYU pragma: keep (the Splitter specializations)
@@ -51,6 +52,8 @@ struct HybridModel<opts, true>
     std::map<std::string, std::vector<amr::FieldAccess<Patch_t::field_ghost_width>>> field_access{};
     std::optional<core::OhmInfo> ohm; // from the input, at setup
     std::vector<std::string> population_names{};
+    // the particle schedules' pairs and accessors, from population_names (Simulator setup)
+    std::optional<amr::ParticleRoutes<Patch_t>> particle_routes{};
     using Grid_t     = Patch_t::Grid_t;
     using Computed_t = Computed<Patch_t, Grid_t, core::HybridQuantity::Scalar>;
     std::map<std::string, Computed_t> computed{}; // by key (solver/hybrid/computed.hpp)

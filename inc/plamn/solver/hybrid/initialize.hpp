@@ -141,13 +141,11 @@ void initialize_refined(HybridModel<opts> const& model, auto&& level, double con
     level.fill_magnetic_ghosts("EM_B", t);
     level.fill_electric_ghosts("EM_E", t);
 
-    for (auto const& name : model.population_names)
-    {
-        level.refine(amr::ParticleSplitter<Splitter_t>{}, LevelRegion::Interior,
-                     {{name + "_domain", name + "_domain", ""}});
-        level.refine(amr::ParticleSplitter<Splitter_t>{}, LevelRegion::LevelGhosts,
-                     {{name + "_domain", name + "_level_ghost_old", ""}});
-    }
+    auto const& routes = *model.particle_routes;
+    level.refine(amr::ParticleSplitter<Splitter_t>{}, LevelRegion::Interior,
+                 routes.interior_splits);
+    level.refine(amr::ParticleSplitter<Splitter_t>{}, LevelRegion::LevelGhosts,
+                 routes.old_ghost_splits);
     own_level_ghosts(level, /*new_ghosts=*/false);
     level.per_patch([](auto& patch) {
         for (auto& pop : patch.ions)
