@@ -128,12 +128,12 @@ template<typename Boxing_t>
 PostMoveSyncCells(Boxing_t const&) -> PostMoveSyncCells<Boxing_t>;
 
 
-// SoAVXChunked (host): the domain's particles that changed cell back into their chunks' gaps
+// chunked layouts (host): the domain's particles that changed cell back into their chunks' gaps
 //  (resettle), level ghosts entering the domain into its gaps, no sort while there is room; the
 //  same fates as post_move_sync's (PostMoveSyncCells). Not sorted yet, or without slack (a sort
 //  each push): post_move_sync's way
 template<typename Particles_t>
-    requires(Particles_t::layout_mode == LayoutMode::SoAVXChunked
+    requires(is_chunked(Particles_t::layout_mode)
              and Particles_t::alloc_mode == damn::AllocatorMode::CPU)
 void post_move_sync(Particles_t& domain, Particles_t& patchGhost, Particles_t& levelGhost,
                     auto const& boxing)
@@ -1055,7 +1055,7 @@ void FlatParallelParticlesSynchronisedMover<Particles_t, Layout>::sync_(
                 core::post_push_sync<spec>(pop.domainParticles(), pop.patchGhostParticles(),
                                            pop.levelGhostParticles(), boxing);
             }
-            if constexpr (Particles_t::layout_mode == LayoutMode::SoAVXChunked)
+            if constexpr (is_chunked(Particles_t::layout_mode))
             {
                 DAMN_LOG_SCOPE(2, "FlatParallelParticlesSynchronisedMover::on_moved");
                 // chunks stale after the push and the sync, but the domain's (resettled)

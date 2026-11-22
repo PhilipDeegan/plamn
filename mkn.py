@@ -48,7 +48,7 @@ VALID_REFINED = {
 }
 # plamn::core::LayoutMode (core/data/particles/particles_def.hpp)
 LAYOUTS = ["AoS", "AoSMapped", "AoSCMTS", "SoA", "AoSTS", "AoSPC", "SoAVX", "SoATS", "SoAVXTS",
-           "SoAPC", "AoSPCTS", "SoAVXChunked"]
+           "SoAPC", "AoSPCTS", "SoAVXChunked", "AoS4SoAVXChunked"]
 ALLOCATORS = ["CPU", "GPU_UNIFIED"]
 
 

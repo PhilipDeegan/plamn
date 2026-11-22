@@ -132,7 +132,13 @@ NO_DISCARD auto ghost_box(ParticleResource<Particles, gw> const&,
 template<typename Particles, std::uint32_t gw>
 void for_each_item(ParticleResource<Particles, gw> const& r, auto&& fn)
 {
-    core::for_each_particle(*r.particles, fn); // tiled arrays tile by tile
+    if constexpr (core::is_chunked(std::remove_const_t<Particles>::layout_mode))
+        core::for_each_particle(*r.particles, [&](auto const& p) {
+            if (p.weight() != 0) // not a chunks' gap
+                fn(p);
+        });
+    else
+        core::for_each_particle(*r.particles, fn); // tiled arrays tile by tile
 }
 
 template<typename Particles, std::uint32_t gw>
@@ -350,14 +356,13 @@ std::vector<typename Particles::value_type> read_items(ParticleResource<Particle
     return out;
 }
 
-// after a copy or a regrid appended to it: SoAVXChunked's offsets rebuilt, once
+// after a copy or a regrid appended to it: a chunked array's offsets rebuilt, once
 template<typename Particles, std::uint32_t gw>
-    requires ParticleColumns<Particles>
+    requires(core::is_chunked(Particles::layout_mode))
 void items_appended(ParticleResource<Particles, gw>& r)
 {
-    if constexpr (Particles::layout_mode == core::LayoutMode::SoAVXChunked)
-        if (!r.particles->sorted()) // appended to, not only inserted into its gaps
-            r.particles->sort();
+    if (!r.particles->sorted()) // appended to, not only inserted into its gaps
+        r.particles->sort();
 }
 
 // the particles' components as checkpoint columns (weight, iCell_x.., delta_x.., v_x..)

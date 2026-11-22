@@ -119,9 +119,9 @@ struct HybridPatch
                    &level_ghost, &level_ghost_old, &level_ghost_new}
         {
             auto&& [F, M, pd, cd, particles] = pop.getCompileTimeResourcesViewList();
-            if constexpr (Particles_t::layout_mode == core::LayoutMode::SoAVXChunked
+            if constexpr (core::is_chunked(Particles_t::layout_mode)
                           and Particles_t::alloc_mode == damn::AllocatorMode::CPU)
-            { // the domain's chunks with gaps between them (particles_soavx_chunked.hpp): changes
+            { // the domain's chunks with gaps between them (particles_chunked.hpp): changes
               //  of cell without a sort (PLAMN_CHUNK_SLACK, a fraction of the particles,
               //  PLAMN_CHUNK_BORDER, the border cells' weight to 1 inside)
                 static double const slack  = mkn::kul::env::get_as("PLAMN_CHUNK_SLACK", .1);
