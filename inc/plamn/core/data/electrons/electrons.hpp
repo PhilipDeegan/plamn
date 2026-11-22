@@ -15,6 +15,8 @@
 
 #include "dict.hpp"
 
+#include "damn/core/exec/kernels/region_chunks.hpp" // IWYU pragma: keep (run_velocity_gpu)
+#include <array>
 #include <tuple>
 #include <cstddef>
 #include <stdexcept>
@@ -26,6 +28,16 @@
 namespace plamn::core
 {
 
+
+// what one patch's Ve needs on the device (make_velocity_item): plain views
+template<typename Field_t, typename VecFieldJ_t, typename VecField_t, typename Box_t>
+struct VelocityItem
+{
+    Field_t Ne;
+    VecFieldJ_t J;
+    VecField_t F, Ve;
+    std::array<Box_t, 3> boxes;
+};
 
 template<typename Ions>
 class StandardHybridElectronFluxComputer
@@ -124,6 +136,45 @@ public:
             Vxyz(layout, ions_.chargeDensity(), J_, ions_.chargeFlux(), Ve_);
 
         check_tensor_field(Ve_, layout);
+    }
+
+    // GPU_UNIFIED, an item per untiled patch collected across a level (run_velocity_gpu: one
+    //  launch): the patch's views, the charge density's domain box for each Ve component
+    NO_DISCARD auto make_velocity_item(Layout const& layout)
+    {
+        auto const Ne  = untiled_view(ions_.chargeDensity());
+        auto const box = domain_box(layout, ions_.chargeDensity());
+        return VelocityItem<decltype(Ne), decltype(untiled_view(J_)), decltype(untiled_view(Ve_)),
+                            std::decay_t<decltype(box)>>{
+            Ne, untiled_view(J_), untiled_view(ions_.chargeFlux()), untiled_view(Ve_),
+            {box, box, box}};
+    }
+
+    // Vxyz's Ve for every item on the device, one launch (damn's region chunks)
+    static void run_velocity_gpu([[maybe_unused]] auto& items)
+    {
+#if DAMN_HAVE_GPU
+        damn::core::run_region_chunks(items, [] DAMN_ALL(auto& it, auto const c,
+                                                         auto const& ijk) {
+            if (c == 0)
+                it.Ve(Component::X)(ijk)
+                    = (it.F(Component::X)(ijk)
+                       - project<Scalar::Jx, Scalar::Vx>(it.J(Component::X), ijk))
+                      / it.Ne(ijk);
+            else if (c == 1)
+                it.Ve(Component::Y)(ijk)
+                    = (it.F(Component::Y)(ijk)
+                       - project<Scalar::Jy, Scalar::Vy>(it.J(Component::Y), ijk))
+                      / it.Ne(ijk);
+            else
+                it.Ve(Component::Z)(ijk)
+                    = (it.F(Component::Z)(ijk)
+                       - project<Scalar::Jz, Scalar::Vz>(it.J(Component::Z), ijk))
+                      / it.Ne(ijk);
+        });
+#else
+        throw std::runtime_error("electrons: run_velocity_gpu needs a GPU build");
+#endif
     }
 
     void computeBulkVelocity(std::size_t const tile_idx)
@@ -285,6 +336,10 @@ public:
 
 
     void computeChargeDensity() { fluxComput_.computeChargeDensity(); }
+    NO_DISCARD auto make_velocity_item(auto const& layout)
+    {
+        return fluxComput_.make_velocity_item(layout);
+    }
     void computeBulkVelocity(auto const& layout_or_tile_idx)
     {
         fluxComput_.computeBulkVelocity(layout_or_tile_idx);
@@ -323,6 +378,16 @@ public:
         momentModel_.computeBulkVelocity(layout);
     }
     NO_DISCARD double Te() const { return momentModel_.Te(); }
+    // update_velocity's Ve for a level at once (GPU_UNIFIED, untiled): an item per patch, one
+    //  launch for the items (run_velocity_gpu)
+    NO_DISCARD auto make_velocity_item(Layout const& layout)
+    {
+        return momentModel_.make_velocity_item(layout);
+    }
+    static void run_velocity_gpu(auto& items)
+    {
+        StandardHybridElectronFluxComputer<Ions>::run_velocity_gpu(items);
+    }
 
     // one tile's worth of work, tiles can be updated concurrently
     void update(std::size_t const tile_idx)

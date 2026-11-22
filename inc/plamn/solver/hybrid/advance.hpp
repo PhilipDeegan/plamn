@@ -145,11 +145,19 @@ namespace detail
                  and !core::is_tiled(opts.layout_mode))
     void electrons_level(auto& level)
     {
-        double Te = 0;
+        double Te         = 0;
+        auto const item_of = [](auto& patch) {
+            return patch.electrons().make_velocity_item(patch.layout);
+        };
+        using Patch_t = HybridModel<opts>::Patch_t;
+        using Item_t  = decltype(item_of(std::declval<Patch_t&>()));
+        static thread_local damn::core::gpu::Vec_t<Item_t> items;
+        items.clear();
         level.per_patch([&](auto& patch) {
-            patch.electrons().update_velocity(patch.layout);
+            items.push_back(item_of(patch));
             Te = patch.electrons().Te();
         });
+        std::decay_t<decltype(std::declval<Patch_t&>().electrons())>::run_velocity_gpu(items);
         auto constexpr am = opts.alloc_mode;
         auto const Ne     = core::level_of<am>(
             level, [](auto& patch, auto& fields) { fields.add(patch.electrons().density()); });
