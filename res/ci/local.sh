@@ -26,6 +26,7 @@ step "python modules (1D, 2D; 1D MHD only, ideal and Hall)"
 ./mkn.py --mhd --no-etc --hall false true -- "${W[@]}"
 ./mkn.py --coupled --no-etc --dim 1 -- "${W[@]}" # MHD under hybrid (test_coupled)
 ./mkn.py --no-etc --dim 1 --layout AoSCMTS -- "${W[@]}" # a tiled layout builds (slow.yml's tiled rows)
+./mkn.py --no-etc --dim 1 --layout SoAVXChunked AoS4SoAVXChunked -- "${W[@]}" # the chunked restarts
 
 step "C++ diagnostics tests (embedded python): 1 rank (mkn test), then 3"
 mkn build test -p test_plamn_diagnostics -dKO -t "$J" "${W[@]}" -x res/mkn/mpi

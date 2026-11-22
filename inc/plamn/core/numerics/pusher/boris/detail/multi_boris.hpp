@@ -26,6 +26,10 @@
 #include "plamn/core/data/grid/ghost_width_calculator.hpp"
 #include "plamn/core/data/particles/particle.hpp"
 
+#if defined(MKN_WITH_MKN_AVX) // the AoS4SoAVXChunked staging
+#include "plamn/core/data/particles/aos_transpose.hpp"
+#endif
+
 #include <cassert>
 #include <algorithm>
 #include <array>
@@ -1401,21 +1405,35 @@ struct MultiBorisBackend<LayoutMode::AoS4SoAVXChunked, ModelAccessor, Interpolat
         SoAVXArray<dim, N> stage;
         auto const cols = boris::avx::columns(stage);
 
-        // slots [b, b + n) of the array (n <= N) through the stage: copied in, pushed a block of
-        //  lanes at a time, the live ones copied back (REF)
+        // the stage's slots [k, k + 8) as transpose columns
+        auto const at = [&](std::size_t const k) {
+            aos_transpose::Cols<dim> c{cols.w + k, {}, {}, {}};
+            for (std::size_t d = 0; d < dim; ++d)
+            {
+                c.c[d] = cols.c[d] + k;
+                c.d[d] = cols.d[d] + k;
+            }
+            for (std::size_t d = 0; d < 3; ++d)
+                c.v[d] = cols.v[d] + k;
+            return c;
+        };
+        // slots [b, b + n) of the array (n <= N) through the stage: transposed in 8 at a time,
+        //  pushed a block of lanes at a time, transposed back (REF; the gaps' slots unchanged)
         auto const run = [&](std::size_t const b, std::size_t const n, auto const* g,
                              auto const& cell, Window* win) {
-            for (std::size_t j = 0; j < n; ++j)
-                stage.assign(particles[b + j], j);
+            auto* const ps = particles.data() + b;
+            for (std::size_t k = 0; k < n; k += 8)
+                aos_transpose::to_columns_each<dim>(ps + k, std::min<std::size_t>(8, n - k),
+                                                    at(k)); // faster here, see aos_transpose.hpp
             auto const crossed = [&](std::size_t const j, auto const& from) {
                 particles.add_crosser(b + j, from);
             };
             for (std::size_t k = 0; k < n; k += L)
                 push(cols, k, std::min(L, n - k), g, cell, win, crossed);
             if constexpr (!copy)
-                for (std::size_t j = 0; j < n; ++j)
-                    if (stage.weight_[j] != 0) // not a gap
-                        particles[b + j] = boris::avx::particle_at(stage, j);
+                for (std::size_t k = 0; k < n; k += 8)
+                    aos_transpose::from_columns<dim>(ps + k, std::min<std::size_t>(8, n - k),
+                                                     at(k));
         };
         // slots [b, b + size) in runs of at most N
         auto const runs = [&](std::size_t const b, std::size_t const size, auto const* g,

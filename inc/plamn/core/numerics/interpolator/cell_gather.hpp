@@ -13,6 +13,7 @@
 
 #if defined(MKN_WITH_MKN_AVX) // the lane kernels below
 #include "mkn/avx.hpp"
+#include "plamn/core/data/particles/aos_transpose.hpp"
 
 #include <algorithm>
 #include <type_traits>
@@ -404,16 +405,12 @@ void cell_deposit_sorted(Particles_t const& particles, auto& density, auto& flux
         for (std::size_t i = b; i < b + size; i += L)
         {
             auto const n = std::min(L, b + size - i);
-            double ws[L]{}, ds[dim][L]{}, vs[3][L]{};
-            for (std::size_t l = 0; l < n; ++l)
-            {
-                auto const& p = particles[i + l];
-                ws[l]         = p.weight();
-                for (std::size_t k = 0; k < dim; ++k)
-                    ds[k][l] = p.delta()[k];
-                for (std::size_t k = 0; k < 3; ++k)
-                    vs[k][l] = p.v()[k];
-            }
+            alignas(64) double ws[L], ds[dim][L], vs[3][L];
+            static_assert(L == 8, "a block is one transpose");
+            aos_transpose::Cols<dim> cols{ws, {}, {}, {vs[0], vs[1], vs[2]}}; // no cells
+            for (std::size_t k = 0; k < dim; ++k)
+                cols.d[k] = ds[k];
+            aos_transpose::to_columns<dim>(particles.data() + i, n, cols); // past n: weight 0
             V const w = mkn::avx::unaligned_load<double, L>(ws);
             V d[dim], v[3];
             for (std::size_t k = 0; k < dim; ++k)
