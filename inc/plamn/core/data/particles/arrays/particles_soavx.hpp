@@ -14,6 +14,10 @@
 
 #include "mkn/gpu.hpp"
 
+#if defined(MKN_WITH_MKN_AVX) // the arrays' alignment
+#include "mkn/avx/def.hpp"
+#endif
+
 #include <cassert>
 #include <tuple>
 #include <type_traits>
@@ -89,10 +93,16 @@ struct SoAVXArray
     auto as_tuple() DAMN_ALL { return soaxv_as_tuple<dim>(*this); }
     auto as_tuple() const DAMN_ALL { return soaxv_as_tuple<dim>(*this); }
 
-    std::array<double, size_> weight_;
-    std::array<std::array<int, size_>, dim> iCell_;
-    std::array<std::array<double, size_>, dim> delta_;
-    std::array<std::array<double, size_>, 3> v_;
+    // aligned as mkn::avx's arrays (a staging buffer's columns loaded on lanes), no fill
+#if defined(MKN_WITH_MKN_AVX)
+    static constexpr std::size_t align = mkn::avx::Options::ALIGN();
+#else
+    static constexpr std::size_t align = alignof(double);
+#endif
+    alignas(align) std::array<double, size_> weight_;
+    alignas(align) std::array<std::array<int, size_>, dim> iCell_;
+    alignas(align) std::array<std::array<double, size_>, dim> delta_;
+    alignas(align) std::array<std::array<double, size_>, 3> v_;
 };
 
 
