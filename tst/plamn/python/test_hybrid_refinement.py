@@ -523,6 +523,31 @@ class HybridRefinementTest(unittest.TestCase):
         for b_lb, b_no in zip(lb["B"], no["B"]):
             self.assertLess(np.abs(b_lb - b_no).max(), 1e-12)
 
+    def test_load_balancing_finest(self):
+        """PLAMN_PARTITION=finest with rebalances (every 2 steps): each rebalance decomposes every
+        level together (their boxes known), the regrids between them level by level (a level to
+        the owners of the coarser cells under it). Three levels throughout, B as without load
+        balancing"""
+        ph.startMPI()
+        if plamn.etc.mpi_size() < 2:
+            self.skipTest("one rank: nothing to balance (--tags mpi runs it on 3)")
+        steps = 4
+
+        def run(lb):
+            os.environ.update(PLAMN_PARTITION="finest", PLAMN_SPILL="0.2")
+            try:
+                return harris(steps, tagging=True, measure=lambda sim: sim.cpp_sim.n_levels(),
+                              load_balancer=lb, levels=3, cells=(40, 100), patch=(10, 10))
+            finally:
+                for key in ("PLAMN_PARTITION", "PLAMN_SPILL"):
+                    os.environ.pop(key)
+
+        no, lb = run(None), run(dict(every=2, tol=0.05))
+        self.assertEqual(no["measured"], [3] * (steps + 1))
+        self.assertEqual(lb["measured"], no["measured"])
+        for b_lb, b_no in zip(lb["B"], no["B"]):
+            self.assertLess(np.abs(b_lb - b_no).max(), 1e-12)
+
     def test_keep_partition(self):
         """PLAMN_PARTITION=keep (with PLAMN_SPILL): a regridded level's patches stay with their
         data's owner, a new one with the coarser patch's under it, then spilled to within the

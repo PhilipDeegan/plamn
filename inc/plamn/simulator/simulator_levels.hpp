@@ -65,22 +65,14 @@ Simulator<opts>::decompose_in_(std::string const& partition)
             .block      = rebalance_block};
 }
 
-// level ln from its boxes (that level's cells): chopped and given ranks by
-// damn::amr::decompose_level (lb_.partition, lb_.spill; "finest" / "aligned" need every level:
-// here, a level alone, as "levels"), weighed by the particles each patch will hold (MHD levels:
-// cells); refined levels' patches in whole coarse cells, so their tiles are even, starting on
-// even indices (tile_set_mapper.hpp)
+// level ln from its boxes (that level's cells): planned_[ln] if decomposed with the others
+// (initialization, rebalance: finest / aligned), else damn::amr::decompose_level (lb_.partition,
+// lb_.spill; finest / aligned, a level alone: to the owners of the coarser cells under it),
+// weighed by the particles each patch will hold (MHD levels: cells); refined levels' patches in
+// whole coarse cells, so their tiles are even, starting on even indices (tile_set_mapper.hpp)
 template<auto opts>
 damn::amr::Level<Simulator<opts>::dimension>
 Simulator<opts>::level_of_(int const ln, std::vector<Box_t> const& boxes)
-{
-    bool const together = lb_.partition == "finest" or lb_.partition == "aligned";
-    return damn::amr::decompose_level(hierarchy_, ln, boxes,
-                                      decompose_in_(together ? "levels" : lb_.partition));
-}
-
-template<auto opts>
-void Simulator<opts>::make_level_(int const ln, std::vector<Box_t> const& boxes)
 {
     auto const l = static_cast<std::size_t>(ln);
     if (l < planned_.size())
@@ -93,10 +85,15 @@ void Simulator<opts>::make_level_(int const ln, std::vector<Box_t> const& boxes)
         if (planned != given)
             throw std::runtime_error("plamn Simulator: level " + std::to_string(ln)
                                      + " planned on other boxes");
-        damn::amr::set_level(hierarchy_, planned_[l]);
+        return planned_[l];
     }
-    else
-        damn::amr::set_level(hierarchy_, level_of_(ln, boxes));
+    return damn::amr::decompose_level(hierarchy_, ln, boxes, decompose_in_(lb_.partition));
+}
+
+template<auto opts>
+void Simulator<opts>::make_level_(int const ln, std::vector<Box_t> const& boxes)
+{
+    damn::amr::set_level(hierarchy_, level_of_(ln, boxes));
     allocate_level_(ln);
 }
 
@@ -466,6 +463,8 @@ void Simulator<opts>::initialize_hybrid_()
                 models_.hybrid, level_services_(static_cast<std::size_t>(ln) + 1), startTime_);
         }
     planned_.clear(); // made: later levels (regrids) level by level
+    // the totals under a finer level the finer one's from the start, as after a synchronization
+    rebuild_moments_(0);
     // every level's E and B at t0, for the finer levels' time interpolation
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
         prepare_step_(static_cast<int>(ln), startTime_);

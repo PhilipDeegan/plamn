@@ -117,6 +117,15 @@ void accumulate_flux_sum(auto&& level, double const coef)
 // coarsened (as PHARE's synchronize: the populations' moments, the mass density and the bulk
 // velocity stay the coarser level's own), then the coarser level's B recomputed from the fine
 // time average of E (reflux), then its ghosts refilled
+// the totals a synchronization coarsens onto the coarser level under this one (PHARE's
+//  chargeDensitySynchronizers_, ionChargeFluxSynchronizers_); their ghosts are the caller's
+void coarsen_moments(auto&& level)
+{
+    auto moments = amr::vector_pairs("ions_charge_flux", "ions_charge_flux");
+    moments.push_back({"ions_charge_density", "ions_charge_density", ""});
+    level.coarsen(amr::MomentsCoarsener{}, moments);
+}
+
 template<auto opts>
 void synchronize(HybridModel<opts> const&, auto&& level, double const t)
 {
@@ -124,9 +133,7 @@ void synchronize(HybridModel<opts> const&, auto&& level, double const t)
     auto coarse = level.coarser();
 
     level.coarsen(amr::ElectricFieldCoarsener{}, amr::vector_pairs("EM_E", "EM_E"));
-    auto moments = amr::vector_pairs("ions_charge_flux", "ions_charge_flux");
-    moments.push_back({"ions_charge_density", "ions_charge_density", ""});
-    level.coarsen(amr::MomentsCoarsener{}, moments);
+    coarsen_moments(level);
 
     // reflux: the coarser Eavg under the fine level is the fine one's time average
     level.coarsen(amr::ElectricFieldCoarsener{}, amr::vector_pairs("EMAvg_E", "EM_fluxSum_E"));
