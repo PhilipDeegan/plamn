@@ -1,6 +1,7 @@
 #ifndef PLAMN_CORE_PUSHER_BORIS_DETAIL_MULTI_BORIS_HPP
 #define PLAMN_CORE_PUSHER_BORIS_DETAIL_MULTI_BORIS_HPP
 
+#include "mkn/kul/env.hpp"
 #include "damn/core/logger.hpp"
 #include "mkn/kul/throw.hpp"
 #include "damn/core/memory/span.hpp"
@@ -1949,7 +1950,13 @@ struct MultiBoris : core::MultiBoris<ModelAccessor, Interpolator>
     template<MultiBorisMode mode = MultiBorisMode::REF>
     void move(auto const& boxings);
 
-    StreamLauncher streamer{this->accessor, synchronous ? 0u : 1u};
+    // host threads for the per patch steps (PLAMN_STREAM_THREADS, default 1): none if synchronous
+    static std::size_t stream_threads()
+    {
+        static std::size_t const n = mkn::kul::env::get_as<std::size_t>("PLAMN_STREAM_THREADS", 1);
+        return synchronous ? 0 : std::max<std::size_t>(n, 1);
+    }
+    StreamLauncher streamer{this->accessor, stream_threads()};
     GpuBoxSpanSet_t gpu_nlgb;      // built per push (prepare_gpu_copy), unless borrowed:
     GpuBoxSpanSet_t gpu_non_owned; //  the boxings' own (a level's kept LevelBoxings)
     GpuBoxSpanSet_t const* nlgb      = &gpu_nlgb;
