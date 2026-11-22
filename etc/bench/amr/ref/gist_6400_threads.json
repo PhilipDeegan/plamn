@@ -20,6 +20,7 @@
    "6400:40"
   ],
   "numa": 2,
+  "backend": "python",
   "partition": [
    "levels",
    "finest"
@@ -69,7 +70,7 @@
      "cells": 112640000.0,
      "particles": 8448000000.0,
      "owners_sha256": "62f6b2f5cf6d4650819f5f88baccba596680f0736e9297b536df1f541af59ed5",
-     "imbalance": 1.234454585105844,
+     "imbalance": 1.2344545851058437,
      "over_coarser": {
       "same process": 0.0073987926136363635,
       "same NUMA": 0.13068004261363636,
@@ -107,8 +108,8 @@
      "patches": 130400,
      "cells": 32000000.0,
      "particles": 3200000000.0,
-     "owners_sha256": "9f9b9e822ec26f31b715d20860675f66093790b3aeba2804caef993e228e1db7",
-     "imbalance": 1.3158384347115089
+     "owners_sha256": "257e322838f2a47e0f1e3e79fef9ff8a6ee4364ec13686f9aeaebccf233cd5fe",
+     "imbalance": 1.315838434711509
     },
     {
      "patches": 64000,
@@ -117,8 +118,8 @@
      "owners_sha256": "09fdd5d7f3a25b550b07193454f9031c456ce7e55edfdd4f9575bb0a990db52b",
      "imbalance": 1.0000000000000002,
      "over_coarser": {
-      "same process": 0.5362269176136364,
-      "same NUMA": 0.4056924715909091,
+      "same process": 0.5362162642045455,
+      "same NUMA": 0.405703125,
       "other NUMA": 0.02329012784090909,
       "other node": 0.034790482954545454
      }
@@ -238,15 +239,15 @@
    "partition": "levels",
    "spill": null,
    "processes": 6400,
-   "serial": 14895.267719360005,
-   "step": 2.7874694952000008,
+   "serial": 14895.267719360001,
+   "step": 2.7874694952000003,
    "levels": [
     {
      "patches": 19920,
      "cells": 32000000.0,
      "particles": 3200000000.0,
      "owners_sha256": "f688e5da89fd5acf874f12af126fbc149ca06621aa8d10f6d80e357e4c0b2201",
-     "imbalance": 4.986849768278385
+     "imbalance": 4.986849768278384
     },
     {
      "patches": 9600,
@@ -266,7 +267,7 @@
      "cells": 409600000.0,
      "particles": 23040000000.0,
      "owners_sha256": "e5d6fa9b40f3138c5496add6e36158dfa14ccf4ab352074ee1b375477a42e3e8",
-     "imbalance": 0.9999999999999998,
+     "imbalance": 1.0,
      "over_coarser": {
       "same process": 0.05734375,
       "same NUMA": 0.5934375,
@@ -284,22 +285,22 @@
    "partition": "finest",
    "spill": 0.05,
    "processes": 6400,
-   "serial": 14895.267719360005,
-   "step": 2.6272648440000004,
+   "serial": 14895.267719360001,
+   "step": 2.627264844,
    "levels": [
     {
      "patches": 19920,
      "cells": 32000000.0,
      "particles": 3200000000.0,
      "owners_sha256": "53167c73a591b4ccde6140c253cb5292b5a1a1c6d970084af47789d66dd68912",
-     "imbalance": 4.986849768278385
+     "imbalance": 4.986849768278384
     },
     {
      "patches": 9600,
      "cells": 112640000.0,
      "particles": 8448000000.0,
      "owners_sha256": "74a03b8549c4c8c66571640ae039f5a6e2ab7311b0bc5c8a4ccc28f8b5949753",
-     "imbalance": 1.0872394633452953,
+     "imbalance": 1.087239463345295,
      "over_coarser": {
       "same process": 0.7673579545454545,
       "same NUMA": 0.1526278409090909,
@@ -312,7 +313,7 @@
      "cells": 409600000.0,
      "particles": 23040000000.0,
      "owners_sha256": "e5d6fa9b40f3138c5496add6e36158dfa14ccf4ab352074ee1b375477a42e3e8",
-     "imbalance": 0.9999999999999998,
+     "imbalance": 1.0,
      "over_coarser": {
       "same process": 0.5,
       "same NUMA": 0.5,
@@ -330,7 +331,7 @@
    "partition": "levels",
    "spill": null,
    "processes": 320,
-   "serial": 14895.267719360005,
+   "serial": 14895.267719360001,
    "step": 2.356759171759683,
    "levels": [
     {
@@ -376,15 +377,15 @@
    "partition": "finest",
    "spill": 0.05,
    "processes": 320,
-   "serial": 14895.267719360005,
-   "step": 2.3363774241711845,
+   "serial": 14895.267719360001,
+   "step": 2.336377424171184,
    "levels": [
     {
      "patches": 19920,
      "cells": 32000000.0,
      "particles": 3200000000.0,
-     "owners_sha256": "65a9f88b01854f809cafa48129aeb1f09f11d3e18ea42e8d960686c36abff12c",
-     "imbalance": 1.0901654307358668
+     "owners_sha256": "a665fe36edad7c72532662e720a6edd30fbdc228f73f5642b35d4f74fe347d55",
+     "imbalance": 1.0902131459066273
     },
     {
      "patches": 9600,
@@ -395,8 +396,8 @@
      "over_coarser": {
       "same process": 0.8594744318181818,
       "same NUMA": 0.0,
-      "other NUMA": 0.07340198863636363,
-      "other node": 0.06712357954545455
+      "other NUMA": 0.073359375,
+      "other node": 0.06716619318181818
      }
     },
     {
