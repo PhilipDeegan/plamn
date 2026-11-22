@@ -10,7 +10,7 @@
 #include "damn/amr/hierarchy.hpp"
 #include "damn/amr/level_data.hpp"
 #include "damn/amr/level_map.hpp"
-#include "damn/amr/partition.hpp"
+#include "damn/amr/decompose.hpp"
 #include "damn/amr/regrid.hpp"
 #include "damn/amr/topology.hpp"
 #include "damn/core/def.hpp"
@@ -148,21 +148,26 @@ bool Simulator<opts>::should_rebalance_()
 }
 
 // level 0 partitioned again by the particles it holds: the domain's patches (as at setup) cut
-// on blocks where a rank's share ends inside one (damn::amr::cut_partition), so level 0's boxes
-// may change; its data moved to the new owners, its ghosts and moments refilled; then each finer
-// level the same (regrid_level_ onto its own boxes: nothing new to refine)
+// on blocks where a rank's share ends inside one (damn::amr::decompose_level, "levels"), so
+// level 0's boxes may change; its data moved to the new owners, its ghosts and moments
+// refilled; then each finer level the same (regrid_level_ onto its own boxes: nothing new to
+// refine)
 template<auto opts>
 void Simulator<opts>::rebalance_(double const t)
 {
     DAMN_LOG_SCOPE(1, "Simulator::rebalance_");
 
-    auto const boxes = damn::amr::chop_evenly(hierarchy_.domain, patch_size_); // as level_of_
-    auto const block = mkn::kul::ConstArray<int, dimension>(rebalance_block);
-    auto const cut = damn::amr::cut_partition(boxes, block,
-                                              particle_weights_(0, damn::amr::blocks(boxes, block)),
-                                              damn::amr::node_share_capacity(topology_));
+    // level 0 afresh ("levels": cut where a rank's share ends in a patch), by its particles
+    auto const weigh = [this](int const ln, std::vector<Box_t> const& boxes) {
+        return particle_weights_(ln, boxes);
+    };
+    damn::amr::Decompose<dimension> const in{.topology   = topology_,
+                                             .weigh      = weigh,
+                                             .patch_size = patch_size_,
+                                             .partition  = "levels",
+                                             .block      = rebalance_block};
     auto const old0 = hierarchy_.levels[0];
-    auto level0     = damn::amr::make_level(0, cut.boxes, cut.ranks);
+    auto level0     = damn::amr::decompose_level(hierarchy_, 0, {hierarchy_.domain}, in);
 
     if (!damn::amr::same_decomposition(old0, level0))
     {

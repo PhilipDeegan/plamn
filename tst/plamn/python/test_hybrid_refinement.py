@@ -435,10 +435,10 @@ class HybridRefinementTest(unittest.TestCase):
         self.assertTrue(np.isfinite(lb["B"]).all())
 
     def test_load_balancing_cuts_patches(self):
-        """6 level 0 patches (20 x 30) for 3 ranks, the beam blob in one: partitioned whole at
-        initialization the ranks are 0.25+ apart (a patch is too coarse a unit); each rebalance
-        (start of steps 0, 30, 60) cuts level 0 on blocks and brings them within 0.15, B the same
-        as without the step 30 and 60 rebalances"""
+        """6 level 0 patches (20 x 30) for 3 ranks, the beam blob in one: initialization cuts
+        them on blocks, the ranks within 0.15; the blob drifts, unbalanced past 0.25 without
+        rebalancing by step 60; each rebalance (start of steps 30, 60) cuts level 0 on blocks
+        and brings them within 0.15 again, B the same as without the rebalances"""
         ph.startMPI()
         if (
             plamn.etc.mpi_size() != 3
@@ -447,8 +447,9 @@ class HybridRefinementTest(unittest.TestCase):
         patch, steps = (20, 30), 61
         no = drift(None, steps, patch)
         lb = drift(dict(every=30, tol=0.05), steps, patch)
-        self.assertGreater(lb["imbalance"][0], 0.25)
-        for step in (1, 31, 61):  # just after each rebalance
+        self.assertLess(lb["imbalance"][0], 0.15)
+        self.assertGreater(no["imbalance"][60], 0.25)
+        for step in (1, 31, 61):  # just after initialization and each rebalance
             self.assertLess(lb["imbalance"][step], 0.15, step)
         self.assertLess(lb["imbalance"][61], no["imbalance"][61])
         self.assertLess(np.abs(lb["B"] - no["B"]).max(), 1e-12)

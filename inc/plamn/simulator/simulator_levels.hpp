@@ -10,8 +10,7 @@
 #include "damn/amr/level_data.hpp"
 #include "damn/amr/level_map.hpp"
 #include "damn/amr/neighbours.hpp"
-#include "damn/amr/partition.hpp"
-#include "damn/amr/keep_partition.hpp"
+#include "damn/amr/decompose.hpp"
 #include "damn/amr/topology.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/logger.hpp"
@@ -45,87 +44,30 @@
 
 namespace plamn
 {
-// level ln from its boxes (that level's cells): chopped into the largest patch size, given
-// ranks (lb_.partition: along the Hilbert curve by the particles they will hold, or where the
-// data is, then spilled), allocated, with their neighbours and the map to the coarser level
+// level ln from its boxes (that level's cells): chopped and given ranks by
+// damn::amr::decompose_level (lb_.partition, lb_.spill), weighed by the particles each patch
+// will hold (MHD levels: cells); refined levels' patches in whole coarse cells, so their tiles
+// are even, starting on even indices (tile_set_mapper.hpp)
 template<auto opts>
 damn::amr::Level<Simulator<opts>::dimension>
 Simulator<opts>::level_of_(int const ln, std::vector<Box_t> const& boxes)
 {
-    // the cells shared evenly (no patch left with a few cells, SAMRAI's patches on one rank);
-    // refined levels: patches of whole coarser cells, the size a multiple of the ratio
-    auto size = patch_size_;
-    if (ln > 0)
-        for (auto& s : size)
-            s = std::max(hierarchy_.ratio, s / hierarchy_.ratio * hierarchy_.ratio);
-    auto const chop = [&](std::vector<Box_t> const& bs) {
-        std::vector<Box_t> patches;
-        for (auto const& box : bs)
-            for (auto const& b : damn::amr::chop_evenly(box, size, ln > 0 ? hierarchy_.ratio : 1))
-                patches.push_back(b);
-        return patches;
-    };
-    auto const weights = [&](std::vector<Box_t> const& patches) {
+    auto weigh = [this](int const l, std::vector<Box_t> const& patches) {
         if constexpr (Models_t::hybrid_on)
-            if (!models_.is_mhd(static_cast<std::size_t>(ln)))
-                return isInitialized_ ? particle_weights_(ln, patches) : box_weights_(ln, patches);
+            if (!models_.is_mhd(static_cast<std::size_t>(l)))
+                return isInitialized_ ? particle_weights_(l, patches) : box_weights_(l, patches);
         std::vector<double> cells; // MHD: the work is per cell
         for (auto const& p : patches)
             cells.push_back(static_cast<double>(p.size()));
         return cells;
     };
-    auto const capacity = damn::amr::node_share_capacity(topology_);
-    auto const curve    = [&](std::vector<Box_t> const& patches) {
-        return damn::amr::partition(patches, weights(patches), capacity);
-    };
-
-    auto const l          = static_cast<std::size_t>(ln);
-    auto const* const old = l < hierarchy_.levels.size() ? &hierarchy_.levels[l].patches : nullptr;
-    auto const* const coarser = ln > 0 ? &hierarchy_.levels[l - 1].patches : nullptr;
-    // a refined level's patches in whole coarse cells (lower and shape multiples of the
-    //  ratio): its tiles are then even, starting on even indices (tile_set_mapper.hpp)
-    auto const whole_coarse = [&](std::vector<Box_t> const& patches) {
-        if (ln == 0)
-            return;
-        auto const r = static_cast<int>(hierarchy_.ratio);
-        for (auto const& p : patches)
-            for (std::size_t d = 0; d < dimension; ++d)
-                if (p.lower[d] % r != 0 or p.shape()[d] % r != 0)
-                    throw std::runtime_error("plamn Simulator: a level " + std::to_string(ln)
-                                             + " patch not in whole coarse cells");
-    };
-    if (lb_.partition != "keep" or (!old and !coarser))
-    {
-        auto const patches = chop(boxes);
-        whole_coarse(patches);
-        return damn::amr::make_level(ln, patches, curve(patches));
-    }
-
-    using Owned   = damn::amr::OwnedBox<dimension>;
-    using Patches = std::vector<damn::amr::Patch<dimension>>;
-    auto const pieces
-        = damn::amr::keep(boxes, old ? *old : Patches{}, coarser ? *coarser : Patches{},
-                          hierarchy_.ratio, [&](std::vector<Box_t> const& rest) {
-                              auto const patches = chop(rest);
-                              auto const ranks   = curve(patches);
-                              std::vector<Owned> out;
-                              for (std::size_t i = 0; i < patches.size(); ++i)
-                                  out.push_back({patches[i], ranks[i]});
-                              return out;
-                          });
-    std::vector<Box_t> patches;
-    std::vector<int> ranks;
-    auto const per_rank = damn::amr::owned_boxes(pieces, n_ranks_);
-    for (std::size_t r = 0; r < per_rank.size(); ++r)
-        for (auto const& b : chop(per_rank[r]))
-        {
-            patches.push_back(b);
-            ranks.push_back(static_cast<int>(r));
-        }
-    if (lb_.spill >= 0)
-        ranks = damn::amr::spill(patches, ranks, weights(patches), topology_, lb_.spill);
-    whole_coarse(patches);
-    return damn::amr::make_level(ln, patches, ranks);
+    damn::amr::Decompose<dimension> const in{.topology   = topology_,
+                                             .weigh      = weigh,
+                                             .patch_size = patch_size_,
+                                             .partition  = lb_.partition,
+                                             .spill      = lb_.spill,
+                                             .block      = rebalance_block};
+    return damn::amr::decompose_level(hierarchy_, ln, boxes, in);
 }
 
 template<auto opts>
