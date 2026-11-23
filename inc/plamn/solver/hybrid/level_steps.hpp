@@ -13,7 +13,8 @@
 //   coarsen(op, pairs)                   from it onto the coarser level
 //   coarser()                            the coarser level's services
 //   coarse_dt()                          the coarser level's step it subcycles in
-//   time_ratio()                         its substeps per step of the coarser level
+//   time_ratio()                         the coarser level's dt over a new level's first substep
+//   substep_weight()                     its last step's share of its coarser level's step
 
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "damn/amr/copy.hpp"
@@ -143,7 +144,7 @@ void synchronize(HybridModel<opts> const&, auto&& level, double const t)
     });
     coarse.fill_magnetic_ghosts("EM_B", t);
     if (coarse.number() > 0)
-        accumulate_flux_sum(coarse, 1. / level.time_ratio());
+        accumulate_flux_sum(coarse, coarse.substep_weight());
 
     // ghosts after the coarsening
     coarse.fill_electric_ghosts("EM_E", t);
