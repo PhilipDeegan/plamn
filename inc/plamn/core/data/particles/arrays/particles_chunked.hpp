@@ -64,8 +64,11 @@
 
 #if DAMN_HAVE_THRUST
 #include <thrust/execution_policy.h>
+#include <thrust/fill.h>
 #include <thrust/for_each.h>
 #include <thrust/iterator/counting_iterator.h>
+#include <thrust/reduce.h>
+#include <thrust/scan.h>
 #endif
 
 namespace plamn::core
@@ -160,7 +163,9 @@ struct ChunkState
     container_t<chunk_offset_t> starts_; // per cell, see top of file
     container_t<chunk_offset_t> sizes_;  // per cell
     container_t<chunk_offset_t> gaps_;   // per cell, after its chunk, sort() scratch
-    container_t<chunk_offset_t> slots_;  // per particle slot in its cell, sort() scratch
+    container_t<chunk_offset_t> slots_;  // per particle slot in its cell, sort() scratch; the
+                                         //  device sync's fates before it
+    container_t<chunk_offset_t> counts_; // the device sync's counters (kept: no allocation)
     double slack_            = 0;
     box_t slack_domain_      = {};
     double border_weight_    = 3;
@@ -524,26 +529,39 @@ void ChunkedOps<Derived, dim, alloc_mode>::sort()
     auto const count = [=] DAMN_ALL(std::size_t const i) {
         slots[i] = weights(i) == 0 ? none : Op{sizes[cell_idx(i)]}.increment_return_old();
     };
-    std::fill(sizes, sizes + cells, chunk_offset_t{0});
+    auto* const starts = s.starts_.data();
     if constexpr (gpu)
-    {
+    { // all on the device, no gaps (the slack serves the host's resettle): the host reads the
+      //  total only
 #if DAMN_HAVE_THRUST
+        DAMN_ASSERT(s.slack_ == 0);
+        thrust::fill(thrust::device, sizes, sizes + cells, chunk_offset_t{0});
         auto const first = thrust::counting_iterator<std::size_t>(0);
         thrust::for_each(thrust::device, first, first + n, count);
+        thrust::exclusive_scan(thrust::device, sizes, sizes + cells, starts);
+        std::size_t const slots_total
+            = thrust::reduce(thrust::device, sizes, sizes + cells, std::size_t{0});
+        auto const to = [=] DAMN_ALL(std::size_t const i) -> std::size_t {
+            return slots[i] == none ? std::numeric_limits<std::size_t>::max()
+                                    : starts[cell_idx(i)] + slots[i];
+        };
+        s.scatter_sorted_(to, n, slots_total);
+        s.sorted_      = true;
+        s.sorted_size_ = slots_total;
+        return;
 #else
         throw std::runtime_error("SoAVXChunked GPU sort needs thrust");
 #endif
     }
-    else
-        for (std::size_t i = 0; i < n; ++i)
-            count(i);
+    std::fill(sizes, sizes + cells, chunk_offset_t{0});
+    for (std::size_t i = 0; i < n; ++i)
+        count(i);
 
     // 2. the gaps (the slack over the box's cells, border cells weighted), the chunks' starts
     std::size_t particles = 0;
     for (std::size_t c = 0; c < cells; ++c)
         particles += sizes[c];
-    auto* const gaps   = s.gaps_.data();
-    auto* const starts = s.starts_.data();
+    auto* const gaps = s.gaps_.data();
     std::fill(gaps, gaps + cells, chunk_offset_t{0});
     if (auto const slack = static_cast<std::size_t>(s.slack_ * static_cast<double>(particles)))
     {

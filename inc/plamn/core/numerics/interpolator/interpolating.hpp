@@ -18,6 +18,7 @@
 #include "plamn/core/data/particles/particles.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/arrays/particles_soavx.hpp"
+#include "plamn/core/numerics/pusher/boris/basics.hpp" // IWYU pragma: keep (GPU builds' push)
 
 #include "interpolator.hpp"
 
@@ -933,6 +934,12 @@ public:
         }
     }
 };
+
+// the deposit of particles of alloc_mode: on the device (atomics) for unified memory, else on
+//  the host (no atomics)
+template<std::size_t dim, std::size_t interpOrder, auto alloc_mode>
+using DepositInterpolating
+    = Interpolating<dim, interpOrder, alloc_mode == damn::AllocatorMode::GPU_UNIFIED>;
 
 } // namespace plamn::core
 

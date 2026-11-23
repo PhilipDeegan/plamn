@@ -17,6 +17,7 @@
 #include "plamn/simulator/hybrid_patch.hpp"
 #include "plamn/simulator/hybrid_patch_view.hpp"
 #include "plamn/solver/computed.hpp"
+#include "plamn/solver/hybrid/level_boxings.hpp" // IWYU pragma: keep (a member's type)
 #include "plamn/solver/model_def.hpp"
 
 #include <cstddef>
@@ -54,6 +55,9 @@ struct HybridModel<opts, true>
     std::vector<std::string> population_names{};
     // the particle schedules' pairs and accessors, from population_names (Simulator setup)
     std::optional<amr::ParticleRoutes<Patch_t>> particle_routes{};
+    // per level, what its push needs of its decomposition (level_boxings.hpp), kept until a
+    //  regrid / rebalance
+    std::map<int, LevelBoxings<typename Patch_t::Boxing_t, opts.alloc_mode>> level_boxings{};
     using Grid_t     = Patch_t::Grid_t;
     using Computed_t = Computed<Patch_t, Grid_t, core::HybridQuantity::Scalar>;
     std::map<std::string, Computed_t> computed{}; // by key (solver/hybrid/computed.hpp)

@@ -234,11 +234,10 @@ struct SoAVXVector
     {
         if constexpr (damn::is_mkn_gpu_vector_v<std::decay_t<std::tuple_element_t<0, std::decay_t<decltype(as_tuple())>>>>)
         {
-            DAMN_WITH_MKN_GPU(std::apply(
-                [&](auto&... container) {
-                    ((mkn::gpu::resize(container, size, /*copy=*/true)), ...);
-                },
-                as_tuple()));
+            // damn::resize: past the capacity half as much again (appends grow a little each step)
+            std::apply(
+                [&](auto&... container) { ((damn::resize(container, size, /*copy=*/true)), ...); },
+                as_tuple());
         }
         else
             std::apply([&](auto&... container) { ((container.resize(size)), ...); }, as_tuple());

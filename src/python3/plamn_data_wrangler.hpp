@@ -479,14 +479,18 @@ void declare_particle_array(nb::module_& m, char const* name)
     }
     else
     {
-        particles.def(
-            "__getitem__",
-            [](Particles_t& self, std::size_t const i) -> auto& {
-                if (i >= self.size())
-                    throw nb::index_error();
-                return core::particle_at(self, i); // tiled: through the tiles
-            },
-            nb::rv_policy::reference_internal);
+        using At_t = decltype(core::particle_at(std::declval<Particles_t&>(), std::size_t{}));
+        // a reference into the array, or a proxy by value (SoAVX's zip particle, thrust builds):
+        //  nanobind's policies are tag objects of their own types, one registration per case
+        auto const at = [](Particles_t& self, std::size_t const i) -> At_t {
+            if (i >= self.size())
+                throw nb::index_error();
+            return core::particle_at(self, i); // tiled: through the tiles
+        };
+        if constexpr (std::is_reference_v<At_t>)
+            particles.def("__getitem__", at, nb::rv_policy::reference_internal);
+        else
+            particles.def("__getitem__", at, nb::rv_policy::move);
         def_tiled_components<Particles_t>(particles);
     }
 }
