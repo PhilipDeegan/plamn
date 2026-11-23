@@ -1149,6 +1149,8 @@ private:
     double first_level0_dt_ = -1; // adaptive: the run's first level 0 dt (shrink limit)
     // the substeps' split (SAMRAI's), kept across steps; made at the first advance
     std::optional<damn::amr::TimeRefinement<dimension>> stepping_;
+    // a restart's split state, for stepping_ when it is made
+    std::optional<damn::amr::TimeRefinementState> restored_stepping_;
     // a start or a restart (its dt or mode may differ): the levels' dts and the split afresh
     void restart_stepping_()
     {

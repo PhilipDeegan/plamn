@@ -14,10 +14,13 @@ needs py_etc and the 1D hybrid module built (./mkn.py --dim 1), then from the pl
 """
 
 import math
+import shutil
 import unittest
+from pathlib import Path
 
 import numpy as np
 
+import plamn
 import plamn.backend.phare as ph
 
 B = (0.3, 0.4, 1.2)
@@ -44,10 +47,11 @@ def split(remaining, bound):
     return n
 
 
-def simulator(dl):
+def simulator(dl, **kwargs):
     ph.global_vars.sim = None
     ph.clearDict()
     sim = ph.Simulation(
+        **kwargs,
         time_step=dict(mode="adaptive", cfl_wave=CFL_WAVE),
         final_time=1e6,
         cells=(64,),
@@ -123,6 +127,42 @@ class AdaptiveLevelsTest(unittest.TestCase):
 
     def test_four_substeps(self):  # 0.28
         self.check(dl=2.0)
+
+    def test_a_restart_continues_the_split(self):
+        """after a restart, level 1 is not new: its substeps those of the run that kept going (a
+        fresh split would take dt0 / 4 first: [0.25, 0.375, 0.375] x dt0, not thirds)"""
+        dl, steps, at = 25.0, 4, 2
+        # per rank count: the 1 and 3 rank cases run at the same time (phlop)
+        name = f"{self.id().split('.')[-1]}_np{plamn.etc.mpi_size()}"
+        out = Path("phare_outputs/plamn_test_adaptive_levels") / name
+        shutil.rmtree(out, ignore_errors=True)
+
+        def substeps(s, n):
+            cpp, dts = s.cpp_sim, []
+            for _ in range(n):
+                s.advance()
+                dts.append(cpp.substep_dts(1))
+            return dts
+
+        self.s = simulator(dl)
+        continued = substeps(self.s, steps)
+        self.s.reset()
+        self.s = simulator(dl)
+        substeps(self.s, at)
+        t_restart = self.s.cpp_sim.currentTime()
+        self.s.reset()
+
+        options = dict(dir=str(out), mode="overwrite", timestamps=[t_restart])
+        self.s = simulator(dl, restart_options=options)
+        substeps(self.s, at)  # writes the restart at t_restart
+        self.s.reset()
+        self.s = simulator(
+            dl, restart_options=dict(dir=str(out), mode="overwrite", restart_time=t_restart)
+        )
+        self.assertEqual(self.s.cpp_sim.currentTime(), t_restart)
+        restarted = substeps(self.s, steps - at)
+        self.assertEqual(restarted, continued[at:])
+        self.assertEqual(len(restarted[0]), 3)
 
 
 if __name__ == "__main__":

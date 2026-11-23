@@ -121,6 +121,12 @@ void Simulator<opts>::write_restart_(std::string const& dir)
         file.write_attribute("/restart", "rebalance_steps_to_next_check",
                              static_cast<std::uint64_t>(rebalance_check_->steps_to_next_check));
     }
+    if (stepping_) // the substeps' split across steps: each level's dt_max, the last regrid's
+    {
+        auto const s = stepping_->state();
+        file.write_attribute("/restart", "stepping_dt_max", s.dt_max);
+        file.write_attribute("/restart", "stepping_last_finest", s.last_finest);
+    }
 
     // each level by its model: what it stores, around the writing (hybrid: restart_writing)
     auto const hybrid_writing = [&](std::size_t const ln, bool const writing) {
@@ -182,6 +188,12 @@ void Simulator<opts>::load_restart_()
         rebalance_check_->steps_to_next_check = static_cast<std::size_t>(
             file.read_attribute<std::uint64_t>("/restart", "rebalance_steps_to_next_check"));
     }
+    // the split as it was (restored at the first advance); none: afresh (an older restart, or one
+    //  dumped before any step)
+    if (file.file().getGroup("/restart").hasAttribute("stepping_dt_max"))
+        restored_stepping_ = damn::amr::TimeRefinementState{
+            .dt_max      = file.read_attribute<std::vector<double>>("/restart", "stepping_dt_max"),
+            .last_finest = file.read_attribute<int>("/restart", "stepping_last_finest")};
 
     auto const n_levels = file.read_attribute<int>("/restart", "levels");
     for (int ln = 0; ln < n_levels; ++ln)

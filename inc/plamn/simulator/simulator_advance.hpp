@@ -180,8 +180,15 @@ double Simulator<opts>::advance()
         throw std::runtime_error(ss.str());
     }
     if (!stepping_) // the substeps' split (SAMRAI's, as with PHARE's integrator: grow_dt 1e3)
+    {
         stepping_.emplace(damn::amr::TimeRefinementOptions{
             .time_ratio = time_ratio(), .regrid_interval = regrid_interval_, .grow_dt = 1e3});
+        if (restored_stepping_) // a restart: the split continues as it was
+        {
+            stepping_->restore(*restored_stepping_);
+            restored_stepping_.reset();
+        }
+    }
     substep_dts_.clear();
     Hooks hooks{*this};
     stepping_->advance(hierarchy_, hooks, currentTime_, dt_);
