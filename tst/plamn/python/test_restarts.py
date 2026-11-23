@@ -191,14 +191,14 @@ class RestartsTest(unittest.TestCase):
         first = self.run_both(steps=10, refinement="tagging", max_nbr_levels=3)
         self.assertGreater(first.cpp_sim.n_levels(), 1)
 
-    # SoAVXChunked: its domains' gaps not written, laid out again after writing as when loading
-    #  (./mkn.py --layout SoAVXChunked, else skipped)
-    def chunked(self):
+    # the chunked layouts: their domains' gaps not written, laid out again after writing as when
+    #  loading (./mkn.py --layout SoAVXChunked AoS4SoAVXChunked, else skipped)
+    def chunked(self, layout="SoAVXChunked"):
         import importlib.util
 
-        if importlib.util.find_spec("plamn.plamn_cpp_1_1_2_SoAVXChunked_CPU") is None:
-            self.skipTest("no 1D SoAVXChunked module (./mkn.py --layout SoAVXChunked)")
-        return dict(model_layout="SoAVXChunked")
+        if importlib.util.find_spec(f"plamn.plamn_cpp_1_1_2_{layout}_CPU") is None:
+            self.skipTest(f"no 1D {layout} module (./mkn.py --layout {layout})")
+        return dict(model_layout=layout)
 
     def test_one_level_chunked(self):
         self.run_both(steps=8, refinement_boxes={}, **self.chunked())
@@ -207,6 +207,14 @@ class RestartsTest(unittest.TestCase):
         first = self.run_both(
             steps=10, refinement="tagging", max_nbr_levels=3, **self.chunked()
         )
+        self.assertGreater(first.cpp_sim.n_levels(), 1)
+
+    def test_one_level_aos4soavx_chunked(self):
+        self.run_both(steps=8, refinement_boxes={}, **self.chunked("AoS4SoAVXChunked"))
+
+    def test_tagging_aos4soavx_chunked(self):
+        chunked = self.chunked("AoS4SoAVXChunked")
+        first = self.run_both(steps=10, refinement="tagging", max_nbr_levels=3, **chunked)
         self.assertGreater(first.cpp_sim.n_levels(), 1)
 
     def test_restarts_elapsed_time(self):

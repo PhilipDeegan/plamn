@@ -51,7 +51,7 @@ template<auto opts>
 void restart_writing(HybridModel<opts> const&, auto&& level, bool const writing)
 {
     using Particles_t = HybridModel<opts>::Patch_t::Particles_t;
-    if constexpr (Particles_t::layout_mode == core::LayoutMode::SoAVXChunked)
+    if constexpr (core::is_chunked(Particles_t::layout_mode))
         level.per_patch([&](auto& patch) {
             for (auto& pop : patch.ions)
                 writing ? pop.domainParticles().compact() : pop.domainParticles().sort();

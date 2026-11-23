@@ -13,7 +13,8 @@ cells, particles per cell, boxes and tolerances. Fields (B, E, every moment) on 
 after initialization and after every step, within atol; the level's domain particles too,
 sorted (layouts keep particles in their own order).
 
-plamn builds one module per layout (./mkn.py --dim 3 --layout AoSMapped AoSCMTS SoAVXChunked):
+plamn builds one module per layout (./mkn.py --dim 3 --layout AoSMapped AoSCMTS SoAVXChunked
+AoS4SoAVXChunked):
 each run is its own process (python3 this_file --run ...), which writes what it holds to an
 npz; a layout whose module is not built is skipped.
 """
@@ -35,7 +36,7 @@ PPC = 15
 DL = 0.2
 TIME_STEP = 0.001
 REF = ("AoSMapped", "CPU")
-LAYOUTS = [("AoSCMTS", "CPU"), ("SoAVXChunked", "CPU")]
+LAYOUTS = [("AoSCMTS", "CPU"), ("SoAVXChunked", "CPU"), ("AoS4SoAVXChunked", "CPU")]
 
 L0_BOX = (1, 12)
 L1_BOX = (4, 21)

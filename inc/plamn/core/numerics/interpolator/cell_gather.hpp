@@ -2,6 +2,7 @@
 #define PLAMN_CORE_NUMERICS_INTERPOLATOR_CELL_GATHER_HPP
 
 #include "plamn/core/data/grid/patch_layout.hpp"
+#include "plamn/core/data/particles/particles_def.hpp" // IWYU pragma: keep (is_soavx)
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 #include "plamn/core/models/quantities/quantity.hpp"
 
@@ -12,6 +13,7 @@
 
 #if defined(MKN_WITH_MKN_AVX) // the lane kernels below
 #include "mkn/avx.hpp"
+#include "plamn/core/data/particles/aos_transpose.hpp"
 
 #include <algorithm>
 #include <type_traits>
@@ -342,10 +344,11 @@ private:
 
 // the deposit of a sorted SoAVXChunked array at order 1: cell by cell, its chunk in blocks of
 //  L slots (masked loads: past the chunk's end weight 0), every particle in its chunk's cell
-template<std::size_t L>
-void cell_deposit_sorted(auto const& particles, auto& density, auto& flux, auto const& layout)
+template<std::size_t L, typename Particles_t>
+    requires(is_soavx(Particles_t::layout_mode))
+void cell_deposit_sorted(Particles_t const& particles, auto& density, auto& flux,
+                         auto const& layout)
 {
-    using Particles_t                = std::decay_t<decltype(particles)>;
     using Layout_t                   = std::decay_t<decltype(layout)>;
     static constexpr std::size_t dim = Particles_t::dimension;
     using V                          = mkn::avx::Type<double, L>;
@@ -375,6 +378,45 @@ void cell_deposit_sorted(auto const& particles, auto& density, auto& flux, auto 
                 d[k] = mkn::avx::mask_load(first, D[k].data() + i);
             for (std::size_t k = 0; k < 3; ++k)
                 v[k] = mkn::avx::mask_load(first, Vc[k].data() + i);
+            win.add(mkn::avx::gt(w, CellDepositV<dim, L>::bc(0.)), w, d, v);
+        }
+        win.flush(density, flux);
+    });
+}
+
+// the same of a sorted AoS4SoAVXChunked array: a block of a chunk's particle structures staged
+//  into lanes (past the chunk's end weight 0: not live)
+template<std::size_t L, typename Particles_t>
+    requires(!is_soavx(Particles_t::layout_mode))
+void cell_deposit_sorted(Particles_t const& particles, auto& density, auto& flux,
+                         auto const& layout)
+{
+    using Layout_t                   = std::decay_t<decltype(layout)>;
+    static constexpr std::size_t dim = Particles_t::dimension;
+    using V                          = mkn::avx::Type<double, L>;
+    auto const moments_box = damn::core::grow(layout.cells, Layout_t::options.field_ghost_width);
+
+    CellDepositV<dim, L> win;
+    damn::core::for_each_point(particles.shell(), [&](auto const& cell) {
+        auto const [b, size] = particles.cell_range(cell);
+        if (size == 0)
+            return;
+        win.reset(cell, moments_box);
+        for (std::size_t i = b; i < b + size; i += L)
+        {
+            auto const n = std::min(L, b + size - i);
+            alignas(64) double ws[L], ds[dim][L], vs[3][L];
+            static_assert(L == 8, "a block is one transpose");
+            aos_transpose::Cols<dim> cols{ws, {}, {}, {vs[0], vs[1], vs[2]}}; // no cells
+            for (std::size_t k = 0; k < dim; ++k)
+                cols.d[k] = ds[k];
+            aos_transpose::to_columns<dim>(particles.data() + i, n, cols); // past n: weight 0
+            V const w = mkn::avx::unaligned_load<double, L>(ws);
+            V d[dim], v[3];
+            for (std::size_t k = 0; k < dim; ++k)
+                d[k] = mkn::avx::unaligned_load<double, L>(ds[k]);
+            for (std::size_t k = 0; k < 3; ++k)
+                v[k] = mkn::avx::unaligned_load<double, L>(vs[k]);
             win.add(mkn::avx::gt(w, CellDepositV<dim, L>::bc(0.)), w, d, v);
         }
         win.flush(density, flux);

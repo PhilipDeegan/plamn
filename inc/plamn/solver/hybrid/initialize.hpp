@@ -90,11 +90,11 @@ void refine_magnetic(HybridModel<opts> const&, auto&& level)
     }
 }
 
-// SoAVXChunked: chunks before the first push
+// chunked layouts: chunks before the first push
 template<auto opts>
 void sort_refined_particles(HybridModel<opts> const&, auto&& level)
 {
-    if constexpr (opts.layout_mode == core::LayoutMode::SoAVXChunked)
+    if constexpr (core::is_chunked(opts.layout_mode))
         level.per_patch([](auto& patch) {
             for (auto& pop : patch.ions)
                 for (auto* ps : {&pop.domainParticles(), &pop.levelGhostParticles(),
