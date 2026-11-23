@@ -1151,6 +1151,16 @@ private:
     std::optional<damn::amr::TimeRefinement<dimension>> stepping_;
     // a restart's split state, for stepping_ when it is made
     std::optional<damn::amr::TimeRefinementState> restored_stepping_;
+    // a restart's timestepper state: resumed (same mode and dt) or not (afresh from the restart)
+    std::optional<Timestepper::State> restored_timestepper_;
+    void start_timestepper_()
+    {
+        if (restored_timestepper_)
+            timestepper_.resume(*restored_timestepper_, startTime_);
+        else
+            timestepper_.start_at(startTime_);
+        restored_timestepper_.reset();
+    }
     // a start or a restart (its dt or mode may differ): the levels' dts and the split afresh
     void restart_stepping_()
     {

@@ -138,10 +138,11 @@ class AdaptiveLevelsTest(unittest.TestCase):
         shutil.rmtree(out, ignore_errors=True)
 
         def substeps(s, n):
+            """per step: level 1's substep dts and the time after it (the Kahan sum's, resumed)"""
             cpp, dts = s.cpp_sim, []
             for _ in range(n):
                 s.advance()
-                dts.append(cpp.substep_dts(1))
+                dts.append((cpp.substep_dts(1), cpp.currentTime()))
             return dts
 
         self.s = simulator(dl)
@@ -162,7 +163,7 @@ class AdaptiveLevelsTest(unittest.TestCase):
         self.assertEqual(self.s.cpp_sim.currentTime(), t_restart)
         restarted = substeps(self.s, steps - at)
         self.assertEqual(restarted, continued[at:])
-        self.assertEqual(len(restarted[0]), 3)
+        self.assertEqual(len(restarted[0][0]), 3)
 
 
 if __name__ == "__main__":

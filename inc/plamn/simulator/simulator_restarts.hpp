@@ -121,6 +121,14 @@ void Simulator<opts>::write_restart_(std::string const& dir)
         file.write_attribute("/restart", "rebalance_steps_to_next_check",
                              static_cast<std::uint64_t>(rebalance_check_->steps_to_next_check));
     }
+    { // the timestepper as it is: a restart of the same mode resumes it (its times bit for bit)
+        auto const ts = timestepper_.state();
+        file.write_attribute("/restart", "timestepper_mode", ts.mode);
+        file.write_attribute("/restart", "timestepper_dt", ts.dt);
+        file.write_attribute("/restart", "timestepper_start", ts.start);
+        file.write_attribute("/restart", "timestepper_steps", ts.steps);
+        file.write_attribute("/restart", "timestepper_compensation", ts.compensation);
+    }
     if (stepping_) // the substeps' split across steps: each level's dt_max, the last regrid's
     {
         auto const s = stepping_->state();
@@ -188,6 +196,14 @@ void Simulator<opts>::load_restart_()
         rebalance_check_->steps_to_next_check = static_cast<std::size_t>(
             file.read_attribute<std::uint64_t>("/restart", "rebalance_steps_to_next_check"));
     }
+    // the timestepper as it was (none: an older restart, started afresh from its time)
+    if (file.file().getGroup("/restart").hasAttribute("timestepper_steps"))
+        restored_timestepper_ = Timestepper::State{
+            .mode         = file.read_attribute<int>("/restart", "timestepper_mode"),
+            .dt           = file.read_attribute<double>("/restart", "timestepper_dt"),
+            .start        = file.read_attribute<double>("/restart", "timestepper_start"),
+            .steps        = file.read_attribute<std::uint64_t>("/restart", "timestepper_steps"),
+            .compensation = file.read_attribute<double>("/restart", "timestepper_compensation")};
     // the split as it was (restored at the first advance); none: afresh (an older restart, or one
     //  dumped before any step)
     if (file.file().getGroup("/restart").hasAttribute("stepping_dt_max"))
