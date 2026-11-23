@@ -46,3 +46,13 @@ test_timestepper.py:
   - {}
   - tags: [mpi]
     prefix: "mpirun --oversubscribe -n 3"
+
+test_mhd_adaptive_dt.py:
+  - {}
+  - tags: [mpi]
+    prefix: "mpirun --oversubscribe -n 3"
+
+test_adaptive_levels.py:
+  - {}
+  - tags: [mpi]
+    prefix: "mpirun --oversubscribe -n 3"

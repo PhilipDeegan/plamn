@@ -268,6 +268,7 @@ void Simulator<opts>::initialize_mhd_()
             prepare_step_(static_cast<int>(ln), startTime_);
         currentTime_ = startTime_;
     }
+    restart_stepping_();
     timestepper_.start_at(startTime_);
     dt_            = timestepper_.next([&](auto const& cfl) { return stable_dt_(cfl); });
     isInitialized_ = true;
@@ -415,6 +416,7 @@ void Simulator<opts>::initialize_hybrid_()
     // the steps from the start (or the restart's time), the first dt (adaptive: from the
     //  initialized levels, as PHARE's for its first dump)
     auto const start_steps = [&]() {
+        restart_stepping_();
         timestepper_.start_at(startTime_);
         dt_ = timestepper_.next([&](auto const& cfl) { return stable_dt_(cfl); });
     };

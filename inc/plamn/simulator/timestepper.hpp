@@ -2,7 +2,8 @@
 #define PLAMN_SIMULATOR_TIMESTEPPER_HPP
 
 // the simulation's time steps, from what pyphare's timestepper.py writes in the dict:
-// simulation/time_step/{mode, value, cfl_wave, cfl_diffusive}, simulation/final_time
+// simulation/time_step/{mode, value, cfl_wave, cfl_diffusive, fine_level_substeps_max,
+// level0_dt_shrink_max}, simulation/final_time
 //
 //   constant  the dict's dt; the time after n steps is start + n * dt (PHARE's
 //             ConstantTimeStamper: no rounding accumulated over the steps)
@@ -43,6 +44,10 @@ public:
         ts.final_time_    = dict["simulation"]["final_time"].template to<double>();
         ts.cfl_.wave      = cppdict::get_value(dict, "simulation/time_step/cfl_wave", 0.);
         ts.cfl_.diffusive = cppdict::get_value(dict, "simulation/time_step/cfl_diffusive", 0.);
+        ts.fine_level_substeps_max_
+            = cppdict::get_value(dict, "simulation/time_step/fine_level_substeps_max", 1000);
+        ts.level0_dt_shrink_max_
+            = cppdict::get_value(dict, "simulation/time_step/level0_dt_shrink_max", 1000);
         if (ts.adaptive() and ts.cfl_.wave <= 0)
             throw std::runtime_error("plamn Timestepper: adaptive needs cfl_wave > 0");
         return ts;
@@ -62,6 +67,10 @@ public:
     NO_DISCARD double time() const { return time_; }
     NO_DISCARD double final_time() const { return final_time_; }
     NO_DISCARD CFL const& cfl() const { return cfl_; }
+    // adaptive run stops: a finer level's stable dt more than this many times smaller than its
+    //  coarser level's; level 0's more than that many times smaller than the run's first
+    NO_DISCARD int fine_level_substeps_max() const { return fine_level_substeps_max_; }
+    NO_DISCARD int level0_dt_shrink_max() const { return level0_dt_shrink_max_; }
 
     // the next step's dt: constant, the dict's; adaptive, stable(cfl) up to final_time
     double next(auto&& stable)
@@ -90,6 +99,8 @@ private:
     double dt_           = 0;
     double final_time_   = 0;
     CFL cfl_             = {};
+    int fine_level_substeps_max_ = 1000;
+    int level0_dt_shrink_max_    = 1000;
     double start_        = 0;
     double time_         = 0;
     std::size_t steps_   = 0;

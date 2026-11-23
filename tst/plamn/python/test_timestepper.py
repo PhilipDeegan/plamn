@@ -2,9 +2,9 @@
 
   constant  the time after n steps is start + n * dt, from 0 or from a restart's time, where dt
             may change (a job restarted at a smaller time step)
-  adaptive  each step's dt is the whistler bound (core/numerics/stable_dt/whistler.hpp) of the
-            levels before it, a refined level's as a level 0 dt (times the time ratio, 4), at
-            most what is left to final_time, which the run ends on
+  adaptive  each step's dt is level 0's whistler bound (core/numerics/stable_dt/whistler.hpp)
+            before it, at most what is left to final_time, which the run ends on; a refined
+            level substeps at its own (test_adaptive_levels.py)
 
 The bound is checked against the same formula over the level's mass density (one population of
 mass 1: its density) and a uniform B, so B projected onto the density nodes is B itself: exactly
@@ -82,7 +82,9 @@ def whistler_dt(cpp, ln):
 
 
 def stable_dt(cpp):
-    return min(whistler_dt(cpp, ln) for ln in range(cpp.n_levels()))
+    """level 0's own bound: each finer level steps at its own (damn::amr::TimeRefinement's
+    substeps, from its stable dt)"""
+    return whistler_dt(cpp, 0)
 
 
 class TimestepperTest(unittest.TestCase):
