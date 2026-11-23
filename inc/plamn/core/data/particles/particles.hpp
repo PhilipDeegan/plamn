@@ -52,24 +52,44 @@ public:
 
     std::string static id() { return std::string{type_id}; }
 
+    // spans own nothing: their copies and moves the defaulted, trivial ones (device kernels
+    //  capture them as plain data), not monitored
+    static constexpr bool is_span = opts.storage_mode == StorageMode::SPAN;
+    Particles(Particles&&)
+        requires(is_span)
+    = default;
+    Particles(Particles const&)
+        requires(is_span)
+    = default;
+    Particles& operator=(Particles&&)
+        requires(is_span)
+    = default;
+    Particles& operator=(Particles const&)
+        requires(is_span)
+    = default;
+
     Particles(Particles&& that)
+        requires(!is_span)
         : Super{std::forward<Super>(that)}
     {
         mon.move();
     }
     Particles(Particles const& that)
+        requires(!is_span)
         : Super{that}
     {
         mon.copy();
     }
 
     Particles& operator=(Particles&& that)
+        requires(!is_span)
     {
         mon.move_assign();
         super() = std::move(that.super());
         return *this;
     }
     Particles& operator=(Particles const& that)
+        requires(!is_span)
     {
         mon.copy_assign();
         super() = that.super();

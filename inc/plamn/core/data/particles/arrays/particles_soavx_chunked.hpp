@@ -17,6 +17,7 @@
 
 #include <tuple>
 #include <array>
+#include <algorithm>
 #include <cstddef>
 #include <limits>
 #include <type_traits>
@@ -47,6 +48,7 @@ struct SoAVXChunkedSpan : public SoAVXSpan<dim, alloc_mode_, _const_>
 
     template<typename Particles_t>
     SoAVXChunkedSpan(Particles_t& particles)
+        requires(!std::is_same_v<std::remove_const_t<Particles_t>, SoAVXChunkedSpan>) // not copies
         : Super{particles, 0, particles.size()}
         , box_{particles.box()}
         , starts_{particles.starts_data()}
@@ -260,6 +262,11 @@ private:
     void scatter_sorted_(auto const& to, std::size_t const n, std::size_t const slots_total)
     {
         auto static constexpr gpu = alloc_mode == damn::AllocatorMode::GPU_UNIFIED;
+        // the scratch columns with at least the live ones' capacity: swapped in, the sort keeps
+        //  the headroom (the initializer's reserve, growth) instead of an exact fit
+        auto const capacity = std::max(slots_total, this->weight_.capacity());
+        std::apply([&](auto&... c) { (damn::reserve(c, capacity, false), ...); },
+                   this->scratch_.as_tuple());
         damn::resize(this->scratch_.weight_, slots_total, false);
         mkn::kul::for_N<dimension>([&](auto d) {
             damn::resize(this->scratch_.iCell_[d], slots_total, false);

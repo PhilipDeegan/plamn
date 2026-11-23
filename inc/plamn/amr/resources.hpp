@@ -15,13 +15,13 @@
 #include "damn/core/memory/box_span.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "mkn/kul/std/array.hpp"
-
 #include "plamn/core/data/particles/particle_components.hpp"
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/layout.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
 #include "plamn/core/data/particles/particle_iteration.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
+#include "damn/core/def/damn_config.hpp"
 
 #include <cstddef>
 #include <stdexcept>
@@ -45,6 +45,8 @@ template<typename Field, std::uint32_t gw>
 struct FieldResource
 {
     auto static constexpr dimension = Field::dimension;
+    // in unified memory: damn's same rank copies run on the device over box_span (data + box)
+    bool static constexpr on_device = Field::alloc_mode == damn::AllocatorMode::GPU_UNIFIED;
     Field* field;
 };
 
@@ -494,5 +496,8 @@ NO_DISCARD auto cell(Particle<dim> const& particle)
     return damn::core::Point<int, dim>{particle.iCell()};
 }
 } // namespace plamn::core
+
+// damn's device Append hooks (GPU builds), after the resources they use
+#include "plamn/amr/device_append.hpp" // IWYU pragma: export
 
 #endif // PLAMN_AMR_RESOURCES_HPP

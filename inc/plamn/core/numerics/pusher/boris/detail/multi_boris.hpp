@@ -1,6 +1,7 @@
 #ifndef PLAMN_CORE_PUSHER_BORIS_DETAIL_MULTI_BORIS_HPP
 #define PLAMN_CORE_PUSHER_BORIS_DETAIL_MULTI_BORIS_HPP
 
+#include "mkn/kul/env.hpp"
 #include "damn/core/logger.hpp"
 #include "mkn/kul/throw.hpp"
 #include "damn/core/memory/span.hpp"
@@ -43,6 +44,7 @@
 #include <vector>
 #include <cmath>
 #include <cstdlib>
+#include <string>
 
 namespace plamn::core
 {
@@ -1572,6 +1574,7 @@ void MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>::move_rest(
     {
 #if DAMN_HAVE_MKN_GPU
         auto [ions, em]     = view.args;
+        auto const emv      = untiled_view(em); // plain views for the device
         auto const layout   = view.layout;
         auto const ghostBox = boxings.at(view.patchID()).ghostBox;
         auto const halfdt   = in.mesh(layout.dx, in.dt);
@@ -1586,7 +1589,7 @@ void MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>::move_rest(
                 damn::kernel::launch(in.streamer.streams[i], ps.size(), [=] DAMN_ALL() mutable {
                     auto const pi = damn::kernel::idx();
                     auto particle = ps.copy(pi);
-                    push_particle<type>(particle, em, layout, ghostBox, halfdt, coef1);
+                    push_particle<type>(particle, emv, layout, ghostBox, halfdt, coef1);
                     ps.assign(particle, pi);
                 });
             };
@@ -1616,6 +1619,7 @@ void MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>::move_gpu_c
 
     auto view           = in.accessor[i];
     auto [ions, em]     = view.args;
+    auto const emv      = untiled_view(em); // plain views for the device
     auto const layout   = view.layout;
     auto const halfdt   = in.mesh(layout.dx, in.dt);
     auto const ghostBox = damn::core::grow(layout.cells, Layout_t::options.particle_ghost_width);
@@ -1624,22 +1628,30 @@ void MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>::move_gpu_c
     for (auto& pop : ions)
     {
         double const coef1 = pop.charge() * (0.5 * in.dt / pop.mass());
-        auto rhop          = pop.particleDensity();
-        auto flux          = *pop.flux();
+        // plain views (basic::, no names: device copyable), copied per thread for the deposit
+        auto rhop = untiled_view(pop.particleDensity());
+        auto flux = untiled_view(pop.flux());
 
         auto const launch = [&]<auto type>(auto const& particles) {
             using Span_t = SoAVXConstSpanParticles<dim, alloc_mode>;
             Span_t const ps{particles};
             if (ps.size() == 0)
                 return;
-            damn::kernel::launch(in.streamer.streams[i], ps.size(), [=] DAMN_ALL() mutable {
+            // not mutable: the captures are read in place from the launch's parameters (writing
+            //  through a capture copies the whole closure into each thread's local memory); the
+            //  deposit writes through its own copies of the two views
+            damn::kernel::launch(in.streamer.streams[i], ps.size(), [=] DAMN_ALL() {
                 auto particle = ps.copy(damn::kernel::idx());
-                if (!push_particle<type>(particle, em, layout, ghostBox, halfdt, coef1))
+                if (!push_particle<type>(particle, emv, layout, ghostBox, halfdt, coef1))
                     return;
 
                 // level ghosts as domain particles: each is held by one patch only
                 if (isIn(particle.iCell(), nlgb))
-                    Deposit_t{}.particleToMesh(particle, rhop, flux, layout);
+                {
+                    auto rho = rhop;
+                    auto F   = flux;
+                    Deposit_t{}.particleToMesh(particle, rho, F, layout);
+                }
             });
         };
 
@@ -2128,7 +2140,13 @@ struct MultiBoris : core::MultiBoris<ModelAccessor, Interpolator>
     template<MultiBorisMode mode = MultiBorisMode::REF>
     void move(auto const& boxings);
 
-    StreamLauncher streamer{this->accessor, synchronous ? 0u : 1u};
+    // host threads for the per patch steps (PLAMN_STREAM_THREADS, default 1): none if synchronous
+    static std::size_t stream_threads()
+    {
+        static std::size_t const n = mkn::kul::env::get_as<std::size_t>("PLAMN_STREAM_THREADS", 1);
+        return synchronous ? 0 : std::max<std::size_t>(n, 1);
+    }
+    StreamLauncher streamer{this->accessor, stream_threads()};
     GpuBoxSpanSet_t gpu_nlgb;      // built per push (prepare_gpu_copy), unless borrowed:
     GpuBoxSpanSet_t gpu_non_owned; //  the boxings' own (a level's kept LevelBoxings)
     GpuBoxSpanSet_t const* nlgb      = &gpu_nlgb;
