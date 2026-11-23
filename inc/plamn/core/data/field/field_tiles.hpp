@@ -442,6 +442,10 @@ concept is_field_tile_set_c = requires(T* p) {
 template<typename T>
 inline constexpr bool is_field_tile_set_v = is_field_tile_set_c<T>;
 
+// a tiled field (a tile set), whatever its cv/ref: what the tile/untiled overloads branch on
+template<typename T>
+concept TiledField = is_field_tile_set_v<std::decay_t<T>>;
+
 template<typename T>
 concept has_tiled_field_type_c = requires {
     typename std::remove_cvref_t<T>::field_type;
@@ -456,13 +460,28 @@ concept has_view_t_c = requires {
         typename std::remove_cvref_t<T>::vecfield_type>;
 };
 
+namespace basic
+{
+    template<typename VecFieldT>
+    class Electromag; // IWYU pragma: keep (electromag.hpp)
+} // namespace basic
+
 // an untiled (vec)field as plain device copyable views (basic:: types, no names), as tile_at
 //  gives for one tile of a tiled one
 template<typename T>
 auto untiled_view(T&& untiled)
 {
     using T_t = std::remove_cvref_t<T>;
-    if constexpr (not requires { untiled.name(); }) // already a basic:: view
+    if constexpr (requires {
+                      typename T_t::vecfield_type;
+                      untiled.E;
+                      untiled.B;
+                  }) // an electromag: its vecfields' views (no name() of its own)
+    {
+        using V_t = decltype(untiled_view(untiled.E));
+        return basic::Electromag<V_t>{untiled_view(untiled.E), untiled_view(untiled.B)};
+    }
+    else if constexpr (not requires { untiled.name(); }) // already a basic:: view
         return T_t{untiled};
     else if constexpr (not requires { typename T_t::field_type; }) // a field
         return typename T_t::Super{untiled};
@@ -565,6 +584,20 @@ void copy_data(auto& dst, auto& src, auto const&... tile_idx)
             for (std::size_t c = 0; c < d.size(); ++c)
                 copy(d[c], s[c]);
     }
+}
+
+// fn(data, size) for each contiguous buffer of a field: a tiled one's tiles (ghosts included) in
+//  tile order, an untiled one's single buffer. Two fields of one tiling give the same buffers
+//  (pointwise operations, saving and restoring values)
+void for_each_buffer(TiledField auto& field, auto&& fn)
+{
+    for (auto& tile : field())
+        fn(tile().data(), tile().size());
+}
+void for_each_buffer(auto& field, auto&& fn)
+    requires(!TiledField<decltype(field)>)
+{
+    fn(field.data(), field.size());
 }
 
 void sync_inner_ghosts(auto& vf, auto const&... tile_idx)

@@ -16,10 +16,17 @@
 //   debug_regrid_(ln, t)     PLAMN_DEBUG_REGRID_TIMES="t0,t1,...": the finest level, just
 //                            synchronized at one of those times, regridded onto its own boxes
 //                            (as SAMRAI does with refinement boxes): to isolate regrid bugs
+//   rebalance_state_(), check_rebalance_(before, t)
+//                            a rebalance moves data: every level's E, B and moments on its
+//                            domain nodes, and its domain and old level ghost particles (count,
+//                            sums of weights, velocities, positions: order independent, every
+//                            rank's) the same after it as before; the moments, deposited again,
+//                            and the sums to round off. Throws naming what changed
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
 #include "damn/core/def.hpp"
 #include "plamn/simulator/simulator.hpp" // IWYU pragma: keep (the class)
+#include "mkn/kul/range.hpp"
 
 #include <algorithm>
 #include <array>
@@ -29,6 +36,7 @@
 #include <cstdlib>
 #include <limits>
 #include <map>
+#include <stdexcept>
 #include <numeric>
 #include <set>
 #include <string>
@@ -174,6 +182,89 @@ void Simulator<opts>::debug_regrid_(int const ln, double const t)
     std::printf("DEBUG_REGRID L%d t=%.10f %zu boxes\n", ln, t, boxes.size());
     std::fflush(stdout);
     regrid_level_(ln, boxes, t);
+}
+
+template<auto opts>
+typename Simulator<opts>::RebalanceState Simulator<opts>::rebalance_state_()
+{
+    RebalanceState out;
+    std::vector<std::string> names;
+    for (auto const* v : {"EM_B_", "EM_E_"})
+        for (auto const* c : {"x", "y", "z"})
+            names.push_back(std::string{v} + c);
+    if constexpr (Models_t::hybrid_on)
+    {
+        names.push_back("ions_charge_density");
+        for (auto const* c : {"x", "y", "z"})
+            names.push_back(std::string{"ions_charge_flux_"} + c);
+        for (auto const& pop : models_.hybrid.population_names)
+        {
+            names.push_back(pop + "_density");
+            for (auto const* c : {"x", "y", "z"})
+                names.push_back(pop + "_flux_" + c);
+        }
+    }
+    for (auto const ln : mkn::kul::range(levels_.size()))
+    {
+        if (models_.is_mhd(ln))
+            continue;
+        for (auto const& name : names)
+            out.values.push_back(level_values(name, ln));
+        if constexpr (Models_t::hybrid_on)
+        {
+            std::array<double, 8> sums{}; // domain, old level ghosts: count, w, v, x
+            auto const add = [&](std::size_t const set, auto const& particles) {
+                core::for_each_particle(particles, [&](auto const& p) {
+                    sums[set * 4] += 1;
+                    sums[set * 4 + 1] += p.weight();
+                    for (auto const v : p.v())
+                        sums[set * 4 + 2] += v;
+                    for (auto const d : mkn::kul::range(dimension))
+                        sums[set * 4 + 3] += p.iCell()[d] + p.delta()[d];
+                });
+            };
+            per_patch_(static_cast<int>(ln), [&](auto& patch) {
+                for (auto& pop : patch.ions)
+                {
+                    add(0, pop.domainParticles());
+                    add(1, pop.levelGhostParticlesOld());
+                }
+            });
+            if (n_ranks_ > 1)
+                MPI_Allreduce(MPI_IN_PLACE, sums.data(), static_cast<int>(sums.size()), MPI_DOUBLE,
+                              MPI_SUM, MPI_COMM_WORLD);
+            out.particles.insert(out.particles.end(), sums.begin(), sums.end());
+        }
+    }
+    return out;
+}
+
+template<auto opts>
+void Simulator<opts>::check_rebalance_(RebalanceState const& before, double const t)
+{
+    auto const after = rebalance_state_();
+    auto const close = [](double const a, double const b) {
+        return std::abs(a - b) <= 1e-12 * std::max(1., std::abs(a));
+    };
+    std::string changed;
+    if (after.values.size() != before.values.size())
+        changed += " (the levels)";
+    for (auto const k : mkn::kul::range(std::min(after.values.size(), before.values.size())))
+    {
+        auto const& a = before.values[k];
+        auto const& b = after.values[k];
+        bool same     = a.size() == b.size();
+        for (auto const i : mkn::kul::range(same ? a.size() : 0))
+            same = same and close(a[i], b[i]);
+        if (!same)
+            changed += " values#" + std::to_string(k);
+    }
+    for (auto const k : mkn::kul::range(std::min(after.particles.size(), before.particles.size())))
+        if (!close(before.particles[k], after.particles[k]))
+            changed += " particles#" + std::to_string(k);
+    if (!changed.empty())
+        throw std::runtime_error("plamn Simulator: the rebalance at t " + std::to_string(t)
+                                 + " changed" + changed);
 }
 
 } // namespace plamn

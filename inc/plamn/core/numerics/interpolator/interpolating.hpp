@@ -18,6 +18,7 @@
 #include "plamn/core/data/particles/particles.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/arrays/particles_soavx.hpp"
+#include "plamn/core/numerics/pusher/boris/basics.hpp" // IWYU pragma: keep (GPU builds' push)
 
 #include "interpolator.hpp"
 
@@ -279,7 +280,8 @@ public:
     void particleToMesh(Particles const& particles, auto const& layout, auto& rhoP, auto& flux,
                         double coef = 1., auto&... stream)
         requires(mkn::kul::any_in(Particles::layout_mode, LayoutMode::AoS, LayoutMode::SoA,
-                                  LayoutMode::SoAVX, LayoutMode::SoAVXChunked))
+                                  LayoutMode::SoAVX, LayoutMode::SoAVXChunked,
+                                  LayoutMode::AoS4SoAVXChunked))
     DAMN_ALL
     {
         auto constexpr static alloc_mode = Particles::alloc_mode;
@@ -303,6 +305,21 @@ public:
                     if (it.weight() != 0) // SoAVXChunked's gaps
                         interp_.particleToMesh(it, rhoP, flux, layout, coef);
             }
+            else if constexpr (Particles::layout_mode == LayoutMode::AoS4SoAVXChunked)
+            {
+#if defined(MKN_WITH_MKN_AVX)
+                if constexpr (interpOrder == 1)
+                    if (particles.sorted() and coef == 1.)
+                    {
+                        cell_deposit_sorted<mkn::avx::Options::N<double>()>(particles, rhoP, flux,
+                                                                            layout);
+                        return;
+                    }
+#endif
+                for (auto const& p : particles)
+                    if (p.weight() != 0) // the chunks' gaps
+                        interp_.particleToMesh(p, rhoP, flux, layout, coef);
+            }
             else
                 interp_(particles, rhoP, flux, layout, coef);
         }
@@ -312,13 +329,18 @@ public:
             if constexpr (is_soavx(Particles::layout_mode))
             {
                 // a thread per particle, loaded from the columns, global atomics
+                // plain views (basic::, device copyable), written through per thread copies
                 DAMN_WITH_MKN_GPU( //
                     SoAVXConstSpanParticles<Particles::dimension, alloc_mode> const ps{
-                        particles}; //
+                        particles};                   //
+                    auto rho_v  = untiled_view(rhoP); //
+                    auto flux_v = untiled_view(flux); //
                     damn::kernel::launch(stream..., ps.size(),
-                                         [=] DAMN_ALL() mutable {
+                                         [=] DAMN_ALL() {
+                                             auto rho = rho_v;
+                                             auto F   = flux_v;
                                              Interpolator_t{}.particleToMesh(
-                                                 ps.copy(damn::kernel::idx()), rhoP, flux, layout,
+                                                 ps.copy(damn::kernel::idx()), rho, F, layout,
                                                  coef);
                                          }); //
                 )
@@ -933,6 +955,12 @@ public:
         }
     }
 };
+
+// the deposit of particles of alloc_mode: on the device (atomics) for unified memory, else on
+//  the host (no atomics)
+template<std::size_t dim, std::size_t interpOrder, auto alloc_mode>
+using DepositInterpolating
+    = Interpolating<dim, interpOrder, alloc_mode == damn::AllocatorMode::GPU_UNIFIED>;
 
 } // namespace plamn::core
 

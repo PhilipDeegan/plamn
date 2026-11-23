@@ -13,8 +13,10 @@
 //   coarsen(op, pairs)                   from it onto the coarser level
 //   coarser()                            the coarser level's services
 //   coarse_dt()                          the coarser level's step it subcycles in
-//   time_ratio()                         its substeps per step of the coarser level
+//   time_ratio()                         the coarser level's dt over a new level's first substep
+//   substep_weight()                     its last step's share of its coarser level's step
 
+#include "plamn/core/data/field/field_tiles.hpp"
 #include "damn/amr/copy.hpp"
 #include "damn/amr/level_map.hpp"
 #include "damn/core/logger.hpp"
@@ -73,9 +75,8 @@ void first_step(HybridModel<opts> const& model, auto&& level)
         for (auto& e : patch.fluxSumE)
             e.zero();
     });
-    for (auto const& name : model.population_names)
-        level.refine(amr::ParticleSplitter<Splitter_t>{}, damn::amr::LevelRegion::LevelGhosts,
-                     {{name + "_domain", name + "_level_ghost_new", ""}});
+    level.refine(amr::ParticleSplitter<Splitter_t>{}, damn::amr::LevelRegion::LevelGhosts,
+                 model.particle_routes->new_ghost_splits);
     own_level_ghosts(level, /*new_ghosts=*/true);
 }
 
@@ -98,12 +99,16 @@ void accumulate_flux_sum(auto&& level, double const coef)
 {
     level.per_patch([&](auto& patch) {
         for (std::size_t i = 0; i < 3; ++i)
-        {
-            auto* sum         = patch.fluxSumE[i].data();
-            auto const* avg   = patch.avgE[i].data();
-            auto const values = patch.fluxSumE[i].size();
-            for (std::size_t k = 0; k < values; ++k)
-                sum[k] += coef * avg[k];
+        { // the same tiling: their buffers pair up
+            std::vector<double const*> avg;
+            core::for_each_buffer(std::as_const(patch.avgE[i]),
+                                  [&](auto const* data, auto) { avg.push_back(data); });
+            std::size_t b = 0;
+            core::for_each_buffer(patch.fluxSumE[i], [&](auto* sum, auto const values) {
+                auto const* a = avg[b++];
+                for (std::size_t k = 0; k < values; ++k)
+                    sum[k] += coef * a[k];
+            });
         }
     });
 }
@@ -112,6 +117,15 @@ void accumulate_flux_sum(auto&& level, double const coef)
 // coarsened (as PHARE's synchronize: the populations' moments, the mass density and the bulk
 // velocity stay the coarser level's own), then the coarser level's B recomputed from the fine
 // time average of E (reflux), then its ghosts refilled
+// the totals a synchronization coarsens onto the coarser level under this one (PHARE's
+//  chargeDensitySynchronizers_, ionChargeFluxSynchronizers_); their ghosts are the caller's
+void coarsen_moments(auto&& level)
+{
+    auto moments = amr::vector_pairs("ions_charge_flux", "ions_charge_flux");
+    moments.push_back({"ions_charge_density", "ions_charge_density", ""});
+    level.coarsen(amr::MomentsCoarsener{}, moments);
+}
+
 template<auto opts>
 void synchronize(HybridModel<opts> const&, auto&& level, double const t)
 {
@@ -119,9 +133,7 @@ void synchronize(HybridModel<opts> const&, auto&& level, double const t)
     auto coarse = level.coarser();
 
     level.coarsen(amr::ElectricFieldCoarsener{}, amr::vector_pairs("EM_E", "EM_E"));
-    auto moments = amr::vector_pairs("ions_charge_flux", "ions_charge_flux");
-    moments.push_back({"ions_charge_density", "ions_charge_density", ""});
-    level.coarsen(amr::MomentsCoarsener{}, moments);
+    coarsen_moments(level);
 
     // reflux: the coarser Eavg under the fine level is the fine one's time average
     level.coarsen(amr::ElectricFieldCoarsener{}, amr::vector_pairs("EMAvg_E", "EM_fluxSum_E"));
@@ -132,7 +144,7 @@ void synchronize(HybridModel<opts> const&, auto&& level, double const t)
     });
     coarse.fill_magnetic_ghosts("EM_B", t);
     if (coarse.number() > 0)
-        accumulate_flux_sum(coarse, 1. / level.time_ratio());
+        accumulate_flux_sum(coarse, coarse.substep_weight());
 
     // ghosts after the coarsening
     coarse.fill_electric_ghosts("EM_E", t);

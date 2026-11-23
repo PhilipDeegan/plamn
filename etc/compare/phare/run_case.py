@@ -107,6 +107,9 @@ def main(argv=None):
     live = a.live_out or a.live_ref
     fmt = "none" if live else a.format
     sim = cases.simulation(a.case, a.out, a.ndim, a.largest_patch_size, fmt, a.fine_dump)
+    if a.code == "plamn":  # its layout and allocator (test_ladder.py: LADDER_LAYOUT, ...)
+        sim.model_layout = os.environ.get("LADDER_LAYOUT", "AoSMapped")
+        sim.allocator = os.environ.get("LADDER_ALLOCATOR", "CPU")
     simulator = Simulator(sim, log_to_file=False).setup().initialize()
     every = cases.dump_every(a.case)
     if live:

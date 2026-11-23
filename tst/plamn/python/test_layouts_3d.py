@@ -5,18 +5,22 @@ refinement boxes (no tagging), on level 0 only, 1 and 2 levels:
   init_L0, init_L1          initialized, fields and particles at t0
   advance_L0, advance_L1    one step
   advance_L2                four steps
+  advance_L1_tiles          one step, 12^3 cells, tiles of at most 6 (DAMN_TILING_MAX_TILE_SIZE):
+                            level 0 6 + 6, level 1 (10 fine cells) 6 + 4, uneven tiles
 
 tiling_gpu's model (a periodic gaussian density bump, B and the bulk velocity cos products), its
 cells, particles per cell, boxes and tolerances. Fields (B, E, every moment) on every level,
 after initialization and after every step, within atol; the level's domain particles too,
 sorted (layouts keep particles in their own order).
 
-plamn builds one module per layout (./mkn.py --dim 3 --layout AoSMapped AoSCMTS SoAVXChunked):
+plamn builds one module per layout (./mkn.py --dim 3 --layout AoSMapped AoSCMTS SoAVXChunked
+AoS4SoAVXChunked):
 each run is its own process (python3 this_file --run ...), which writes what it holds to an
 npz; a layout whose module is not built is skipped.
 """
 
 import importlib.util
+import os
 import shutil
 import subprocess
 import sys
@@ -32,7 +36,7 @@ PPC = 15
 DL = 0.2
 TIME_STEP = 0.001
 REF = ("AoSMapped", "CPU")
-LAYOUTS = [("AoSCMTS", "CPU"), ("SoAVXChunked", "CPU")]
+LAYOUTS = [("AoSCMTS", "CPU"), ("SoAVXChunked", "CPU"), ("AoS4SoAVXChunked", "CPU")]
 
 L0_BOX = (1, 12)
 L1_BOX = (4, 21)
@@ -56,6 +60,13 @@ CASES = {
         steps=4,
         boxes=[L0_BOX, L1_BOX],
         atol=dict(b=5e-15, e=5e-14, moments=1e-14, particles=1e-15),
+    ),
+    "advance_L1_tiles": dict(
+        steps=1,
+        cells=12,
+        boxes=[(3, 7)],  # 5 coarse cells: 10 fine
+        env=dict(DAMN_TILING_MAX_TILE_SIZE="6"),
+        atol=dict(b=1e-15, e=1e-14, moments=1e-14, particles=1e-15),
     ),
 }
 
@@ -139,6 +150,7 @@ def state(simulator, np):
             for q in names:
                 out[f"{q}@{ln}"] = np.asarray(cpp.level_values(q, ln))
         columns = {c: [] for c in PARTICLE_COLUMNS}
+        live_particles(dw.getPatchLevel(ln).getParticles("protons"), np)
         for pd in dw.getPatchLevel(ln).getParticles("protons"):
             components = pd.data.components()
             for c in PARTICLE_COLUMNS:
@@ -148,8 +160,52 @@ def state(simulator, np):
             rows[:, PARTICLE_COLUMNS.index("weight")] != 0
         ]  # SoAVXChunked's gaps
         out[f"particles@{ln}"] = rows[np.lexsort(rows.T[::-1])]
+        for c in "xyz":  # B through the wrangler (tiled layouts: a patch data per tile)
+            values, dup = wrangler_nodes(dw.getPatchLevel(ln).getB(c), c, np)
+            out[f"wrangler_B_{c}@{ln}"] = values
+            out[f"wrangler_dup_B_{c}@{ln}"] = np.array([dup])
     out["levels"] = np.array([cpp.n_levels()])
     return out
+
+
+def live_particles(patch_datas, np):
+    """the wrangler's particles are the simulation's (tiled layouts: each tile's array): a write
+    through components() is read back by __getitem__, then undone"""
+    for pd in patch_datas:
+        if pd.data.size() == 0:
+            continue
+        weight = pd.data.components()["weight"]
+        was = float(weight[0])
+        weight[0] = was + 1
+        seen = pd.data[0].weight
+        weight[0] = was
+        if seen != was + 1:
+            raise RuntimeError(f"particles of {pd.patchID} not live: {seen} after {was + 1}")
+        return
+
+
+def wrangler_nodes(patch_datas, component, np):
+    """the domain nodes of B's component over the patch datas, rows (i, j, k, value) sorted by
+    their AMR index, each once; and the largest difference between two patch datas' copies of
+    a node (primal nodes on their shared faces: tiles of a patch, patches of a level)"""
+    primal = ["xyz".index(component)]  # B_x primal along x, dual along y and z (faces)
+    seen, dup = {}, 0.0
+    for pd in patch_datas:
+        data, g = np.asarray(pd.data), pd.nGhosts
+        lower, upper = list(pd.lower), list(pd.upper)
+        ranges = [
+            range(lower[d], upper[d] + 1 + (1 if d in primal else 0)) for d in range(NDIM)
+        ]
+        for i in ranges[0]:
+            for j in ranges[1]:
+                for k in ranges[2]:
+                    v = float(data[i - lower[0] + g, j - lower[1] + g, k - lower[2] + g])
+                    if (i, j, k) in seen:
+                        dup = max(dup, abs(seen[(i, j, k)] - v))
+                    else:
+                        seen[(i, j, k)] = v
+    rows = np.array([(*ijk, v) for ijk, v in sorted(seen.items())], dtype=float)
+    return rows, dup
 
 
 def run(case, layout, allocator, out):
@@ -165,7 +221,7 @@ def run(case, layout, allocator, out):
     sim = ph.Simulation(
         time_step_nbr=max(c["steps"], 1),
         time_step=TIME_STEP,
-        cells=[CELLS] * NDIM,
+        cells=[c.get("cells", CELLS)] * NDIM,
         dl=[DL] * NDIM,
         interp_order=INTERP,
         refinement_boxes={
@@ -206,6 +262,7 @@ class Layouts3dTest(unittest.TestCase):
                 [sys.executable, __file__, "--run", case, layout, allocator, str(out)],
                 capture_output=True,
                 text=True,
+                env={**os.environ, **CASES[case].get("env", {})},
             )
             self.assertEqual(done.returncode, 0, f"{key}\n{done.stdout}\n{done.stderr}")
             import numpy as np
@@ -225,6 +282,8 @@ class Layouts3dTest(unittest.TestCase):
 
         atol = CASES[case]["atol"]
         kind = {q: k for k, names in FIELDS.items() for q in names}
+        for c in "xyz":
+            kind[f"wrangler_B_{c}"] = kind[f"wrangler_dup_B_{c}"] = "b"
         ref = self.run_case(case, *REF)
         for layout in layouts:
             with self.subTest(layout=layout):
@@ -261,6 +320,9 @@ class Layouts3dTest(unittest.TestCase):
 
     def test_advance_L2(self):
         self.compare("advance_L2")
+
+    def test_advance_L1_tiles(self):
+        self.compare("advance_L1_tiles")
 
 
 if __name__ == "__main__":

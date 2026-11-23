@@ -132,10 +132,26 @@ void Simulator<opts>::write_restart_(std::string const& dir)
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
         hybrid_writing(ln, /*writing=*/true);
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
-        models_.visit(ln, [&](auto& model) {
-            write_checkpoint(file, "/level" + std::to_string(ln), hierarchy_.levels[ln],
-                             model.levels[static_cast<int>(ln)], restart_names_(model));
-        });
+        models_.visit(
+            ln,
+            simulator::detail::Overloaded{
+                [&](auto& model)
+                    requires TiledParticlesPatch<typename std::decay_t<decltype(model)>::Patch_t>
+                             {
+                                 throw std::runtime_error(
+                                     "plamn restarts: tiled particle layouts not yet");
+                             },
+                             [&](auto& model)
+                                 requires(!TiledParticlesPatch<
+                                          typename std::decay_t<decltype(model)>::Patch_t>)
+                {
+                    auto& ld          = model.levels[static_cast<int>(ln)];
+                    auto const& names = restart_names_(model);
+                    Leases leases;                           // tiled fields:
+                    leases.add(ld, names, amr::Lease::read); //  untiled to write
+                    write_checkpoint(file, "/level" + std::to_string(ln), hierarchy_.levels[ln], ld,
+                                     names);
+                }});
     for (std::size_t ln = 0; ln < clustered_.size(); ++ln)
         write_boxes(file, "/clustered" + std::to_string(ln), clustered_[ln]);
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
@@ -174,10 +190,25 @@ void Simulator<opts>::load_restart_()
         auto const stored = read_level<dimension>(file, group + "/level", ln);
         damn::amr::set_level(hierarchy_, stored.level);
         allocate_level_(ln);
-        models_.visit(static_cast<std::size_t>(ln), [&](auto& model) {
-            read_checkpoint(file, group, hierarchy_.levels[ln], model.levels[ln],
-                            restart_names_(model));
-        });
+        models_.visit(
+            static_cast<std::size_t>(ln),
+            simulator::detail::Overloaded{
+                [&](auto& model)
+                    requires TiledParticlesPatch<typename std::decay_t<decltype(model)>::Patch_t>
+                             {
+                                 throw std::runtime_error(
+                                     "plamn restarts: tiled particle layouts not yet");
+                             },
+                             [&](auto& model)
+                                 requires(!TiledParticlesPatch<
+                                          typename std::decay_t<decltype(model)>::Patch_t>)
+                {
+                    auto& ld          = model.levels[ln];
+                    auto const& names = restart_names_(model);
+                    Leases leases;                           // tiled fields: read
+                    leases.add(ld, names, amr::Lease::fill); //  untiled, written back
+                    read_checkpoint(file, group, hierarchy_.levels[ln], ld, names);
+                }});
     }
     clustered_.resize(static_cast<std::size_t>(file.read_attribute<int>("/restart", "clustered")));
     for (std::size_t ln = 0; ln < clustered_.size(); ++ln)

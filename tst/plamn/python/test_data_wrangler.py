@@ -24,6 +24,16 @@ CELLS = 100
 PATCH = 20
 
 
+def assert_patch_count(test, cpp, patches):
+    """patches on one rank; on several, cut where a rank's share ends inside one: at least one
+    a rank, at most a cut per rank boundary more"""
+    if cpp.ranks() == 1:
+        test.assertEqual(cpp.all_patch_count(), patches)
+    else:
+        test.assertGreaterEqual(cpp.all_patch_count(), max(patches, cpp.ranks()))
+        test.assertLessEqual(cpp.all_patch_count(), patches + cpp.ranks() - 1)
+
+
 def domain(hier, qty):
     """qty on the domain nodes of every patch, flattened in C order, in the level's patch
     order: as the simulator's domain_values"""
@@ -51,7 +61,7 @@ class DataWranglerTest(unittest.TestCase):
         self.assertEqual(
             len(hier.level(0).patches), self.cpp.patch_count()
         )  # this rank's
-        self.assertEqual(self.cpp.all_patch_count(), CELLS // PATCH)
+        assert_patch_count(self, self.cpp, CELLS // PATCH)
         np.testing.assert_array_equal(
             domain(hier, "EM_B_y"), self.cpp.domain_values("EM_B_y")
         )
@@ -207,7 +217,7 @@ class DataWrangler2DTest(unittest.TestCase):
         everywhere = {
             name: self.cpp.all_domain_values(name) for name in ["EM_B_x", "EM_B_y"]
         }
-        self.assertEqual(self.cpp.all_patch_count(), (CELLS_2D // PATCH_2D) ** 2)
+        assert_patch_count(self, self.cpp, (CELLS_2D // PATCH_2D) ** 2)
         if self.cpp.rank() != 0:
             return
 

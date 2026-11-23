@@ -62,8 +62,6 @@ void Simulator<opts>::compute(std::size_t const ln, std::string const& key)
     per_patch_(ln, [&](auto& patch) { c.local(patch, computed(patch, key)); });
     if (!c.border_sum.empty())
         copy_(ln, damn::amr::sum_borders, c.border_sum);
-    if (c.after)
-        per_patch_(ln, [&](auto& patch) { c.after(patch, computed(patch, key)); });
 }
 
 } // namespace plamn

@@ -1,6 +1,6 @@
 # clang (22) behind Open MPI's mpicxx: as mpi.yaml (base's HDF5 and host thrust), compiled by clang.
 #  Also for clang's analysis modules, eg
-#    OPT_VIEWER=/bin/true ./mkn.py --dim 2 -- -m clang.llvm-mca,clang.llvm-optrec -x res/mkn/clang
+#    OPT_VIEWER=/bin/true ./mkn.py --dim 2 -- -m llvm.mca,llvm.opt -x res/mkn/clang
 #  (build the modules with gcc first, as their READMEs say: they load into mkn)
 super: base
 

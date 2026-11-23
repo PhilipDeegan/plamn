@@ -27,6 +27,10 @@ Environment (defaults in brackets):
   LADDER_FINE_DUMP  1: fine_dump_lvl_max too (cases.py's _diag_options) [1]
   LADDER_NDIM    the dimension (2 or 3; harris_2d is 2D only), runs in <case>_<variant>_<n>d
                  but for 2D [2]
+  LADDER_LAYOUT, LADDER_ALLOCATOR
+                 plamn's particle layout and allocator (its module: ./mkn.py --layout ...
+                 --allocator ...), every one compared against the same PHARE reference
+                 [AoSMapped, CPU]
 PHARE checkouts built with PHARE_DIAG_DOUBLES=1, plamn's module with
 ./mkn.py --dim <n> --diag-doubles --cell-jump 1: every code writes doubles, PHARE's ghost
 widths. 3D: PHARE's cpp_3_1_6 (master) / cpp_3_1_6_AoSMapped_CPU (tiling branches).

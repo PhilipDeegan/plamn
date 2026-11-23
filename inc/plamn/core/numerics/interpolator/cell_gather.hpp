@@ -2,14 +2,18 @@
 #define PLAMN_CORE_NUMERICS_INTERPOLATOR_CELL_GATHER_HPP
 
 #include "plamn/core/data/grid/patch_layout.hpp"
+#include "plamn/core/data/particles/particles_def.hpp" // IWYU pragma: keep (is_soavx)
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 #include "plamn/core/models/quantities/quantity.hpp"
 
 #include <array>
 #include <cstddef>
+#include <type_traits>
+#include <utility>
 
 #if defined(MKN_WITH_MKN_AVX) // the lane kernels below
 #include "mkn/avx.hpp"
+#include "plamn/core/data/particles/aos_transpose.hpp"
 
 #include <algorithm>
 #include <type_traits>
@@ -115,7 +119,19 @@ private:
                         s[(i * span + j) * span + k] = field(base[0] + i, base[1] + j, base[2] + k);
     }
 
-    // component q at the lanes: the direction's primal or dual weights over the union
+    // fn(i) for i in [0, n), unrolled at compile time
+    template<std::size_t n>
+    static void each(auto&& fn)
+    {
+        [&]<std::size_t... i>(std::index_sequence<i...>) {
+            (fn(std::integral_constant<std::size_t, i>{}), ...);
+        }(std::make_index_sequence<n>{});
+    }
+
+    // component q at the lanes: the direction's primal or dual weights over the union. The lane
+    //  loop outermost, the nodes' unrolled in it (compile time trip counts): it vectorises over
+    //  the lanes (an inner lane loop left gcc vectorising the 2 or 3 nodes, 2 wide). Each lane
+    //  sums in MeshToParticle's order: x outer, the last direction inner
     template<std::size_t q>
     void value_(double const (&P)[dim][2][lanes], double const (&D)[dim][3][lanes],
                 double (&out)[lanes]) const
@@ -125,48 +141,30 @@ private:
         auto const w     = [&](std::size_t const k, std::size_t const i, std::size_t const l) {
             return c[k] == QtyCentering::dual ? D[k][i][l] : P[k][i][l];
         };
-        // the lane loops innermost (vectorised), each lane's sums in MeshToParticle's order
-        double x[lanes];
         for (std::size_t l = 0; l < lanes; ++l)
-            x[l] = 0.;
-        if constexpr (dim == 1)
-            for (std::size_t i = 0; i < nodes(c[0]); ++i)
-                for (std::size_t l = 0; l < lanes; ++l)
-                    x[l] += s[i] * w(0, i, l);
-        else if constexpr (dim == 2)
-            for (std::size_t i = 0; i < nodes(c[0]); ++i)
-            {
-                double y[lanes];
-                for (std::size_t l = 0; l < lanes; ++l)
-                    y[l] = 0.;
-                for (std::size_t j = 0; j < nodes(c[1]); ++j)
-                    for (std::size_t l = 0; l < lanes; ++l)
-                        y[l] += s[i * span + j] * w(1, j, l);
-                for (std::size_t l = 0; l < lanes; ++l)
-                    x[l] += y[l] * w(0, i, l);
-            }
-        else
-            for (std::size_t i = 0; i < nodes(c[0]); ++i)
-            {
-                double y[lanes];
-                for (std::size_t l = 0; l < lanes; ++l)
-                    y[l] = 0.;
-                for (std::size_t j = 0; j < nodes(c[1]); ++j)
-                {
-                    double z[lanes];
-                    for (std::size_t l = 0; l < lanes; ++l)
-                        z[l] = 0.;
-                    for (std::size_t k = 0; k < nodes(c[2]); ++k)
-                        for (std::size_t l = 0; l < lanes; ++l)
-                            z[l] += s[(i * span + j) * span + k] * w(2, k, l);
-                    for (std::size_t l = 0; l < lanes; ++l)
-                        y[l] += z[l] * w(1, j, l);
-                }
-                for (std::size_t l = 0; l < lanes; ++l)
-                    x[l] += y[l] * w(0, i, l);
-            }
-        for (std::size_t l = 0; l < lanes; ++l)
-            out[l] = x[l];
+        {
+            double x = 0.;
+            if constexpr (dim == 1)
+                each<nodes(c[0])>([&](auto i) { x += s[i] * w(0, i, l); });
+            else if constexpr (dim == 2)
+                each<nodes(c[0])>([&](auto i) {
+                    double y = 0.;
+                    each<nodes(c[1])>([&](auto j) { y += s[i * span + j] * w(1, j, l); });
+                    x += y * w(0, i, l);
+                });
+            else
+                each<nodes(c[0])>([&](auto i) {
+                    double y = 0.;
+                    each<nodes(c[1])>([&](auto j) {
+                        double z = 0.;
+                        each<nodes(c[2])>(
+                            [&](auto k) { z += s[(i * span + j) * span + k] * w(2, k, l); });
+                        y += z * w(1, j, l);
+                    });
+                    x += y * w(0, i, l);
+                });
+            out[l] = x;
+        }
     }
 };
 
@@ -346,10 +344,11 @@ private:
 
 // the deposit of a sorted SoAVXChunked array at order 1: cell by cell, its chunk in blocks of
 //  L slots (masked loads: past the chunk's end weight 0), every particle in its chunk's cell
-template<std::size_t L>
-void cell_deposit_sorted(auto const& particles, auto& density, auto& flux, auto const& layout)
+template<std::size_t L, typename Particles_t>
+    requires(is_soavx(Particles_t::layout_mode))
+void cell_deposit_sorted(Particles_t const& particles, auto& density, auto& flux,
+                         auto const& layout)
 {
-    using Particles_t                = std::decay_t<decltype(particles)>;
     using Layout_t                   = std::decay_t<decltype(layout)>;
     static constexpr std::size_t dim = Particles_t::dimension;
     using V                          = mkn::avx::Type<double, L>;
@@ -379,6 +378,45 @@ void cell_deposit_sorted(auto const& particles, auto& density, auto& flux, auto 
                 d[k] = mkn::avx::mask_load(first, D[k].data() + i);
             for (std::size_t k = 0; k < 3; ++k)
                 v[k] = mkn::avx::mask_load(first, Vc[k].data() + i);
+            win.add(mkn::avx::gt(w, CellDepositV<dim, L>::bc(0.)), w, d, v);
+        }
+        win.flush(density, flux);
+    });
+}
+
+// the same of a sorted AoS4SoAVXChunked array: a block of a chunk's particle structures staged
+//  into lanes (past the chunk's end weight 0: not live)
+template<std::size_t L, typename Particles_t>
+    requires(!is_soavx(Particles_t::layout_mode))
+void cell_deposit_sorted(Particles_t const& particles, auto& density, auto& flux,
+                         auto const& layout)
+{
+    using Layout_t                   = std::decay_t<decltype(layout)>;
+    static constexpr std::size_t dim = Particles_t::dimension;
+    using V                          = mkn::avx::Type<double, L>;
+    auto const moments_box = damn::core::grow(layout.cells, Layout_t::options.field_ghost_width);
+
+    CellDepositV<dim, L> win;
+    damn::core::for_each_point(particles.shell(), [&](auto const& cell) {
+        auto const [b, size] = particles.cell_range(cell);
+        if (size == 0)
+            return;
+        win.reset(cell, moments_box);
+        for (std::size_t i = b; i < b + size; i += L)
+        {
+            auto const n = std::min(L, b + size - i);
+            alignas(64) double ws[L], ds[dim][L], vs[3][L];
+            static_assert(L == 8, "a block is one transpose");
+            aos_transpose::Cols<dim> cols{ws, {}, {}, {vs[0], vs[1], vs[2]}}; // no cells
+            for (std::size_t k = 0; k < dim; ++k)
+                cols.d[k] = ds[k];
+            aos_transpose::to_columns<dim>(particles.data() + i, n, cols); // past n: weight 0
+            V const w = mkn::avx::unaligned_load<double, L>(ws);
+            V d[dim], v[3];
+            for (std::size_t k = 0; k < dim; ++k)
+                d[k] = mkn::avx::unaligned_load<double, L>(ds[k]);
+            for (std::size_t k = 0; k < 3; ++k)
+                v[k] = mkn::avx::unaligned_load<double, L>(vs[k]);
             win.add(mkn::avx::gt(w, CellDepositV<dim, L>::bc(0.)), w, d, v);
         }
         win.flush(density, flux);

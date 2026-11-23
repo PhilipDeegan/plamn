@@ -40,6 +40,8 @@ std::vector<double> Simulator<opts>::domain_values(std::string const& name, std:
     std::vector<double> values;
     models_.visit(ln, [&](auto& model) {
         auto& ld = model.levels[static_cast<int>(ln)];
+        Leases leases; // tiled fields: read on untiled temporaries
+        leases.add(ld, {name}, amr::Lease::read);
         for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
         {
             auto const& cells = ld.patches[i].box;
@@ -68,6 +70,8 @@ std::vector<double> Simulator<opts>::all_domain_values(std::string const& name,
     std::vector<int> sizes; // of my patches, in my level order
     models_.visit(ln, [&](auto& model) {
         auto& ld = model.levels[static_cast<int>(ln)];
+        Leases leases; // tiled fields: read on untiled temporaries
+        leases.add(ld, {name}, amr::Lease::read);
         for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
             damn::amr::with_resource(ld.data[i], name, [&](auto& r) {
                 if constexpr (damn::amr::BoxData<std::decay_t<decltype(r)>, dimension>)
@@ -123,6 +127,8 @@ typename Simulator<opts>::LevelField Simulator<opts>::level_field(std::string co
     std::array<int, dimension> dual{}; // 1: dual along that direction (0 on a rank without patch)
     models_.visit(ln, [&](auto& model) {
         auto& ld = model.levels[static_cast<int>(ln)];
+        Leases leases; // tiled fields: read on untiled temporaries
+        leases.add(ld, {name}, amr::Lease::read);
         for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
         {
             auto const& cells = ld.patches[i].box;

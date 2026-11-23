@@ -16,7 +16,8 @@
 //                                          level's sum accumulated if it has a coarser level)
 //
 // level: the simulator's MHD level (Simulator::MHDLevel): per_patch, fill_state_ghosts,
-//  fill_electric_ghosts, number, coarser, coarsen, copy, old_time, time_ratio
+//  fill_electric_ghosts, number, coarser, coarsen, copy, old_time, time_ratio, substep_weight (its
+//  last step's share of its coarser level's step)
 
 #include "damn/amr/copy.hpp"
 #include "damn/amr/level_map.hpp"
@@ -132,7 +133,7 @@ void synchronize(MHDModel<opts> const& model, auto&& level, double const t)
         [](auto& r) -> auto& { return r.patch.butcher; }, t, t - coarse.old_time());
 
     if (coarse.number() > 0)
-        accumulate_flux_sum(model, coarse, 1. / coarse.time_ratio());
+        accumulate_flux_sum(model, coarse, coarse.substep_weight());
 }
 
 } // namespace plamn::solver::mhd

@@ -165,6 +165,10 @@ def main(argv=None):
     p.add_argument("--ref", default="master")
     p.add_argument("--cmp", default="plamn")
     p.add_argument("--np", type=int, default=1, help="MPI ranks per run")
+    p.add_argument("--layout", default="AoSMapped",
+                   help="plamn's particle layout (its module built for it), against the same "
+                   "PHARE reference")
+    p.add_argument("--allocator", default="CPU", help="plamn's allocator (CPU, GPU_UNIFIED)")
     p.add_argument("--no-run", action="store_true", help="compare the runs already there")
     p.add_argument("--all-times", action="store_true", help="B and E at every dump time")
     p.add_argument("--json", default=None, help="the rows written to this file too")
@@ -190,6 +194,8 @@ def main(argv=None):
     import test_ladder
 
     os.environ["LADDER_NP"] = str(a.np)
+    os.environ["LADDER_LAYOUT"] = a.layout
+    os.environ["LADDER_ALLOCATOR"] = a.allocator
     os.environ["LADDER_FINE_DUMP"] = "0"
     os.environ["LADDER_PARTICLES"] = "0"  # B only is compared: no particle dumps
     base = Path(test_ladder.setting("LADDER_OUT", test_ladder.PLAMN / "phare_outputs" / "compare"))
@@ -197,6 +203,8 @@ def main(argv=None):
 
     base = base / f"physics_{a.case}_{a.steps}_ppc{cases.ppc(a.case)}"
     out = {code: base / Path(code).name for code in (a.ref, a.cmp)}
+    if a.cmp == "plamn" and (a.layout, a.allocator) != ("AoSMapped", "CPU"):
+        out[a.cmp] = base / f"plamn_{a.layout}_{a.allocator}"  # beside the default's
     if a.live:
         return live_main(a, base, out, cases, test_ladder)
     if not a.no_run:
@@ -287,14 +295,15 @@ def live_main(a, base, out, cases, test_ladder):
                         extra=["--live-out", npz, "--live-key", json.dumps(key)])
     else:
         print(f"{a.case}: reference {npz.name} (cached)")
-    report_file = base / f"{Path(a.cmp).name}.live.json"
+    report_file = Path(f"{out[a.cmp]}.live.json")
     test_ladder.run(a.cmp, a.case, out[a.cmp], None, steps=a.steps,
                     extra=["--live-ref", npz, "--live-report", report_file])
     report = json.loads(report_file.read_text())
     if not a.all_times:
         last = max(r["t"] for r in report)
         report = [r for r in report if r["t"] == last]
-    print(f"{a.case} {a.ndim}D, {a.steps} steps, {cases.ppc(a.case)} ppc: {a.ref} vs {a.cmp}, "
+    print(f"{a.case} {a.ndim}D, {a.steps} steps, {cases.ppc(a.case)} ppc: {a.ref} vs {a.cmp}"
+          f" ({a.layout}, {a.allocator}), "
           f"B E live{' at every dump' if a.all_times else ', final'} on the finest grid "
           "(differences relative to the quantity's largest |value|)")
     for r in report:

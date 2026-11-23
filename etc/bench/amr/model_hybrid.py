@@ -22,6 +22,7 @@ import argparse
 import hashlib
 import heapq
 import json
+import math
 import time
 
 import numpy as np
@@ -120,8 +121,11 @@ def costs_of(patches, ppc_l, costs, reach):
     cells = n.prod(axis=1).astype(float)
     ghost = (n + 2 * reach).prod(axis=1) - cells
     particles = cells * ppc_l
-    return (costs["particles"] * particles + costs["cells"] * cells + costs["ghost"] * ghost
-            + costs["patch"]), cells, particles
+    # damn::amr::CostModel's nested fused multiply adds (each rounded once: the same doubles)
+    fma = np.frompyfunc(math.fma, 3, 1)
+    w = fma(costs["particles"], particles,
+            fma(costs["cells"], cells, fma(costs["ghost"], ghost.astype(float), costs["patch"])))
+    return w.astype(float), cells, particles
 
 
 CLASSES = ("same process", "same NUMA", "other NUMA", "other node")
@@ -277,7 +281,7 @@ def owner_above(coarse, fine, fine_ranks, ratio, n_ranks):
 
 
 def spill(ranks, weights, node_of_rank, numa_of_rank, tol):
-    """no rank above (1 + tol) of the mean: an overloaded rank, the most loaded first, hands
+    """no rank above (1 + tol) of its share: an overloaded rank, the most loaded first, hands
     patches (the heaviest that fits in its excess, else its lightest) to the least loaded rank
     with room, the closest first (its NUMA zone, its node, any: damn::amr::spill's order); it
     keeps its last patch"""
@@ -285,14 +289,23 @@ def spill(ranks, weights, node_of_rank, numa_of_rank, tol):
     w = np.asarray(weights, dtype=float)
     n = len(node_of_rank)
     load = np.bincount(ranks, weights=w, minlength=n)
-    limit = (1 + tol) * load.sum() / n
+    # each rank's limit as damn's: (1 + tol) of its node's share (node_share_capacity), the
+    #  sums sequential, in its order (the same doubles)
+    per_node = np.bincount(node_of_rank)
+    capacity = [1.0 / per_node[node_of_rank[k]] for k in range(n)]
+    cap_sum, total = 0.0, 0.0
+    for c in capacity:
+        cap_sum += c
+    for x in w.tolist():
+        total += x
+    limit = np.array([(1.0 + tol) * total * c / cap_sum for c in capacity])
     mine = [[] for _ in range(n)]
     for i, rk in enumerate(ranks):
         mine[rk].append(i)
     node, numa = np.asarray(node_of_rank), np.asarray(numa_of_rank)
     for rk in np.argsort(-load, kind="stable"):
-        while load[rk] > limit and len(mine[rk]) > 1:
-            excess = load[rk] - limit
+        while load[rk] > limit[rk] and len(mine[rk]) > 1:
+            excess = load[rk] - limit[rk]
             own = mine[rk]
             fits = [i for i in own if w[i] <= excess]
             i = max(fits, key=lambda j: w[j]) if fits else min(own, key=lambda j: w[j])
@@ -314,6 +327,28 @@ def spill(ranks, weights, node_of_rank, numa_of_rank, tol):
     return ranks
 
 
+def decompose_owners(plamn_etc, a, nd, r, boxes, sizes, levels, mode, tol, node_of_rank,
+                     numa_of_rank, costs):
+    """every level's owners from damn::amr::decompose (partition "levels" whole, "finest",
+    "aligned"), its patches checked against the ones chopped here"""
+    ppc = [a.ppc * (a.refined_nbr / r**nd) ** ln for ln in range(len(boxes))]
+    got = getattr(plamn_etc, f"decompose_{nd}")(
+        [0] * nd, [c - 1 for c in a.cells], [True] * nd, r, [], 0,
+        [[(list(lo), list(up)) for lo, up in b] for b in boxes], node_of_rank, numa_of_rank,
+        [sizes[0][0]] * nd, partition=mode, spill=-1.0 if tol is None else tol, cut=False,
+        level_size=[[s[0]] * nd for s in sizes[:len(boxes)]],
+        under_size=[[s[1] if len(s) > 1 and ln + 1 < len(boxes) else 0] * nd
+                    for ln, s in enumerate(sizes[:len(boxes)])],
+        costs={"particle": costs["particles"], "cell": costs["cells"],
+               "ghost_cell": costs["ghost"], "patch": costs["patch"], "reach": REACH},
+        ppc=ppc)
+    for ln, (lvl, patches) in enumerate(zip(got, levels)):
+        mine = [(list(lo), list(up)) for lo, up, _ in lvl]
+        if mine != [(list(lo), list(up)) for lo, up in patches]:
+            raise SystemExit(f"decompose: level {ln} patches differ from the python chop")
+    return [[rk for _, _, rk in lvl] for lvl in got]
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--cells", type=int, nargs="+", default=[400, 800, 200])
@@ -328,6 +363,9 @@ def main():
     p.add_argument("--topologies", nargs="+", default=["4:2", "100:10", "1000:10"],
                    help="ranks:ranks per node[:NUMA zones per node, default --numa]")
     p.add_argument("--numa", type=int, default=2, help="NUMA zones a node (dual socket)")
+    p.add_argument("--backend", choices=["python", "cpp"], default="python",
+                   help="python: the partitions here (the reference); cpp: damn::amr::decompose "
+                   "through plamn_etc (the simulator's code), the same patches and owners")
     p.add_argument("--partition", nargs="+", default=["levels"],
                    choices=["levels", "aligned", "finest"],
                    help="levels: each level along the curve (plamn's); aligned: level 0 along "
@@ -411,7 +449,10 @@ def main():
                 [(lo, up) for lo, up in patches], list(map(float, w)), node_of_rank,
                 numa_of_rank)
             owners = [None] * len(per_level)
-            if mode == "finest":  # the finest level first, each coarser one under it
+            if a.backend == "cpp":
+                owners = decompose_owners(plamn_etc, a, nd, r, boxes, sizes, levels, mode, tol,
+                                          node_of_rank, numa_of_rank, costs)
+            elif mode == "finest":  # the finest level first, each coarser one under it
                 for ln in reversed(range(len(per_level))):
                     patches, w = per_level[ln][0], per_level[ln][1]
                     if ln == len(per_level) - 1:
@@ -423,8 +464,18 @@ def main():
                         for i, rk in zip(rest, curve([patches[i] for i in rest], w[rest])):
                             ranks[i] = rk
                     owners[ln] = spill(ranks, w, node_of_rank, numa_of_rank, tol)
+            est = None
+            if a.backend == "cpp":  # each process's compute from damn::amr::estimate, no exchange
+                est = getattr(plamn_etc, f"estimate_{nd}")(
+                    [0] * nd, [c - 1 for c in a.cells], [True] * nd, r,
+                    [[(list(lo), list(up), rk) for (lo, up), rk in zip(pl[0], owners[ln])]
+                     for ln, pl in enumerate(per_level)],
+                    node_of_rank, numa_of_rank,
+                    weights=[list(map(float, pl[1])) for pl in per_level],
+                    node_latency=0.0, node_s_per_byte=0.0, threads=threads,
+                    main_busy=a.main_busy, thread_eff=a.thread_eff)
             for ln, (patches, w, _, _) in enumerate(per_level):
-                if mode == "finest":
+                if a.backend == "cpp" or mode == "finest":
                     ranks = owners[ln]
                 elif mode == "aligned" and ln > 0:
                     ranks = majority_owner(patches, per_level[ln - 1][0], owners[ln - 1], r, n)
@@ -432,9 +483,12 @@ def main():
                 else:
                     ranks = curve(patches, w)
                 owners[ln] = ranks
-                load = process_times(ranks, patches, w, n, threads, a.tile, a.main_busy,
-                                     damn_tiles)
-                load /= a.thread_eff if threads > 1 else 1.0
+                if est is not None:
+                    load = np.asarray(est["levels"][ln]["compute"])
+                else:
+                    load = process_times(ranks, patches, w, n, threads, a.tile, a.main_busy,
+                                         damn_tiles)
+                    load /= a.thread_eff if threads > 1 else 1.0
                 step += r**ln * load.max()
                 imbs.append(load.max() / load.mean())
                 if not a.no_exchanges:

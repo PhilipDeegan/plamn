@@ -11,6 +11,7 @@
 #include "damn/core/geometry/box.hpp"
 #include "damn/mpi/scope_timing.hpp"
 #include "damn/mpi/topology.hpp"
+#include "mkn/kul/env.hpp"
 
 #include "plamn/simulator/simulator.hpp" // IWYU pragma: keep (the class)
 #include "plamn/amr/load_balancing.hpp"
@@ -111,11 +112,16 @@ void Simulator<opts>::setup_()
                                        std::string{"levels"});
     if (auto const* env = std::getenv("PLAMN_PARTITION"); env and *env)
         lb_.partition = env;
-    if (lb_.partition != "levels" and lb_.partition != "keep")
-        throw std::runtime_error("plamn Simulator: partition levels or keep, not " + lb_.partition);
+    if (lb_.partition != "levels" and lb_.partition != "keep" and lb_.partition != "finest"
+        and lb_.partition != "aligned")
+        throw std::runtime_error("plamn Simulator: partition levels, keep, finest or aligned, not "
+                                 + lb_.partition);
     lb_.spill = cppdict::get_value(dict_, "simulation/AMR/loadbalancing/spill", -1.);
     if (auto const* env = std::getenv("PLAMN_SPILL"); env and *env)
         lb_.spill = std::stod(env);
+    lb_.near_band = mkn::kul::env::get_as<int>(
+        "PLAMN_NEAR_BAND", cppdict::get_value(dict_, "simulation/AMR/loadbalancing/near_band", -1));
+
     pretag_enabled_ = cppdict::get_value(dict_, "simulation/AMR/refinement/tagging/pretag", false);
     if (auto const* env = std::getenv("PLAMN_PRETAG"))
         pretag_enabled_ = std::string_view{env} == "1";
@@ -325,9 +331,8 @@ void Simulator<opts>::register_resources_()
         // the same, as ghost fills (after a synchronization)
         add("IonPopMoments", components(name + "_flux"));
         add("IonPopMoments", damn::amr::same_names({name + "_density", name + "_charge_density"}));
-
-        add("IonGhostParticles", {{name + "_patch_ghost", name + "_domain"}});
     }
+    models_.hybrid.particle_routes.emplace(models_.hybrid.population_names);
 }
 
 

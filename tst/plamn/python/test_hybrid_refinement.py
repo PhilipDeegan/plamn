@@ -399,6 +399,18 @@ class HybridRefinementTest(unittest.TestCase):
         self.assertLess(lb["imbalance"][100], 0.15)
         self.assertLess(np.abs(lb["B"] - no["B"]).max(), 1e-12)
 
+    def test_threads_take_patches_not_physics(self):
+        """pools taking a level's patches (untiled layouts): B at the end as on one pool, digit
+        for digit (each patch's work its own)"""
+        def run(pools):
+            os.environ["PHARE_THREAD_POOLS"] = str(pools)
+            try:
+                return drift(None, steps=20)["B"]
+            finally:
+                os.environ.pop("PHARE_THREAD_POOLS")
+
+        np.testing.assert_array_equal(run(3), run(1))
+
     def test_load_balancing_moves_computed_quantities(self):
         """a computed quantity (the beam's pressure tensor) dumped before the rebalances: its
         scratch grids on every patch, so a patch moved to another rank unpacks what was packed
@@ -435,10 +447,10 @@ class HybridRefinementTest(unittest.TestCase):
         self.assertTrue(np.isfinite(lb["B"]).all())
 
     def test_load_balancing_cuts_patches(self):
-        """6 level 0 patches (20 x 30) for 3 ranks, the beam blob in one: partitioned whole at
-        initialization the ranks are 0.25+ apart (a patch is too coarse a unit); each rebalance
-        (start of steps 0, 30, 60) cuts level 0 on blocks and brings them within 0.15, B the same
-        as without the step 30 and 60 rebalances"""
+        """6 level 0 patches (20 x 30) for 3 ranks, the beam blob in one: initialization cuts
+        them on blocks, the ranks within 0.15; the blob drifts, unbalanced past 0.25 without
+        rebalancing by step 60; each rebalance (start of steps 30, 60) cuts level 0 on blocks
+        and brings them within 0.15 again, B the same as without the rebalances"""
         ph.startMPI()
         if (
             plamn.etc.mpi_size() != 3
@@ -447,8 +459,9 @@ class HybridRefinementTest(unittest.TestCase):
         patch, steps = (20, 30), 61
         no = drift(None, steps, patch)
         lb = drift(dict(every=30, tol=0.05), steps, patch)
-        self.assertGreater(lb["imbalance"][0], 0.25)
-        for step in (1, 31, 61):  # just after each rebalance
+        self.assertLess(lb["imbalance"][0], 0.15)
+        self.assertGreater(no["imbalance"][60], 0.25)
+        for step in (1, 31, 61):  # just after initialization and each rebalance
             self.assertLess(lb["imbalance"][step], 0.15, step)
         self.assertLess(lb["imbalance"][61], no["imbalance"][61])
         self.assertLess(np.abs(lb["B"] - no["B"]).max(), 1e-12)
@@ -522,6 +535,37 @@ class HybridRefinementTest(unittest.TestCase):
         for b_lb, b_no in zip(lb["B"], no["B"]):
             self.assertLess(np.abs(b_lb - b_no).max(), 1e-12)
 
+    def test_load_balancing_finest(self):
+        """PLAMN_PARTITION=finest with rebalances (every 2 steps): each rebalance decomposes every
+        level together (their boxes known), the regrids between them level by level (a level to
+        the owners of the coarser cells under it). Three levels throughout, B as without load
+        balancing"""
+        ph.startMPI()
+        if plamn.etc.mpi_size() < 2:
+            self.skipTest("one rank: nothing to balance (--tags mpi runs it on 3)")
+        steps = 4
+
+        def run(lb):
+            os.environ.update(PLAMN_PARTITION="finest", PLAMN_SPILL="0.2")
+            try:
+                return harris(steps, tagging=True, measure=lambda sim: sim.cpp_sim.n_levels(),
+                              load_balancer=lb, levels=3, cells=(40, 100), patch=(10, 10),
+                              by_node=True)
+            finally:
+                for key in ("PLAMN_PARTITION", "PLAMN_SPILL"):
+                    os.environ.pop(key)
+
+        no, lb = run(None), run(dict(every=2, tol=0.05))
+        self.assertEqual(no["measured"], [3] * (steps + 1))
+        self.assertEqual(lb["measured"], no["measured"])
+        plamn.etc.mpi_barrier()
+        if plamn.etc.mpi_rank() != 0:
+            return
+        # by node: the rebalanced run's patches differ
+        a, b = lb["final"], no["final"]
+        self.assertEqual(a.keys(), b.keys())
+        self.assertLess(max(abs(a[k] - b[k]) for k in a), 1e-12)
+
     def test_keep_partition(self):
         """PLAMN_PARTITION=keep (with PLAMN_SPILL): a regridded level's patches stay with their
         data's owner, a new one with the coarser patch's under it, then spilled to within the
@@ -566,6 +610,48 @@ class HybridRefinementTest(unittest.TestCase):
             share = sum(m["weight"]) / size
             heaviest = max(last["keep"]["hierarchy"].weights[m["level"]])
             self.assertLessEqual(max(m["weight"]), (1 + spill) * share + heaviest)
+
+    def test_finest_partition(self):
+        """PLAMN_PARTITION=finest with pretag (every level's boxes known at initialization):
+        every level decomposed together, the finest along the curve, each coarser patch with the
+        owner of the fine cells above it, then spilled. The same levels and physics as "levels";
+        on more than one rank fewer of the coarse cells under a fine patch on another rank at
+        initialization"""
+        from plamn.amr import read_decomposition
+
+        ph.startMPI()
+        size, rank = plamn.etc.mpi_size(), plamn.etc.mpi_rank()
+        out, logs = {}, {}
+        for mode in ("levels", "finest"):
+            path = Path("phare_outputs") / f"partition_pretag_{mode}_n{size}.jsonl"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            logs[mode] = path
+            os.environ.update(PLAMN_PARTITION=mode, PLAMN_SPILL="0.2", PLAMN_PRETAG="1",
+                              PLAMN_DECOMPOSITION=str(path))
+            try:
+                out[mode] = harris(4, tagging=True, levels=3, cells=(40, 100),
+                                   patch=(10, 10), by_node=True)
+            finally:
+                for key in ("PLAMN_PARTITION", "PLAMN_SPILL", "PLAMN_PRETAG",
+                            "PLAMN_DECOMPOSITION"):
+                    os.environ.pop(key)
+        self.assertEqual(out["finest"]["levels"], 3)
+        self.assertEqual(out["finest"]["levels"], out["levels"]["levels"])
+        plamn.etc.mpi_barrier()
+        if rank != 0:
+            return
+        a, b = out["finest"]["final"], out["levels"]["final"]
+        self.assertEqual(a.keys(), b.keys())
+        self.assertLess(max(abs(a[k] - b[k]) for k in a), 1e-12)
+        if size == 1:
+            return
+        first = {m: read_decomposition(p)[0] for m, p in logs.items()}
+
+        def crossing(rec):  # coarse cells under fine patches owned by another rank
+            return sum(m["coarse_cells"]["Node"] + m["coarse_cells"]["Remote"]
+                       for m in rec["levels"])
+
+        self.assertLess(crossing(first["finest"]), crossing(first["levels"]))
 
     def test_decomposition_log(self):
         """PLAMN_DECOMPOSITION: a line at initialization, after each regrid or rebalance that

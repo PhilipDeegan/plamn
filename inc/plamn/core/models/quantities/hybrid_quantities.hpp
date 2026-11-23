@@ -41,6 +41,7 @@ public:
         Myy,
         Myz,
         Mzz,
+        AllDual, // scratch at cell centres: an MHD level's primitives refined over it
         count,
         INVALID
     };
@@ -100,16 +101,27 @@ namespace hybrid
 
     // Yee: B on faces, E and J on edges, moments on primal nodes
     auto constexpr static quantities = mkn::kul::make_enum_table<S, Quantity>({
-        {S::Bx, {Phys::B, Comp::x, pdd}},   {S::By, {Phys::B, Comp::y, dpd}},
-        {S::Bz, {Phys::B, Comp::z, ddp}},   {S::Ex, {Phys::E, Comp::x, dpp}},
-        {S::Ey, {Phys::E, Comp::y, pdp}},   {S::Ez, {Phys::E, Comp::z, ppd}},
-        {S::Jx, {Phys::J, Comp::x, dpp}},   {S::Jy, {Phys::J, Comp::y, pdp}},
-        {S::Jz, {Phys::J, Comp::z, ppd}},   {S::rho, {Phys::Rho, Comp::scalar, ppp}},
-        {S::Vx, {Phys::V, Comp::x, ppp}},   {S::Vy, {Phys::V, Comp::y, ppp}},
-        {S::Vz, {Phys::V, Comp::z, ppp}},   {S::P, {Phys::P, Comp::scalar, ppp}},
-        {S::Mxx, {Phys::M, Comp::xx, ppp}}, {S::Mxy, {Phys::M, Comp::xy, ppp}},
-        {S::Mxz, {Phys::M, Comp::xz, ppp}}, {S::Myy, {Phys::M, Comp::yy, ppp}},
-        {S::Myz, {Phys::M, Comp::yz, ppp}}, {S::Mzz, {Phys::M, Comp::zz, ppp}},
+        {S::Bx, {Phys::B, Comp::x, pdd}},
+        {S::By, {Phys::B, Comp::y, dpd}},
+        {S::Bz, {Phys::B, Comp::z, ddp}},
+        {S::Ex, {Phys::E, Comp::x, dpp}},
+        {S::Ey, {Phys::E, Comp::y, pdp}},
+        {S::Ez, {Phys::E, Comp::z, ppd}},
+        {S::Jx, {Phys::J, Comp::x, dpp}},
+        {S::Jy, {Phys::J, Comp::y, pdp}},
+        {S::Jz, {Phys::J, Comp::z, ppd}},
+        {S::rho, {Phys::Rho, Comp::scalar, ppp}},
+        {S::Vx, {Phys::V, Comp::x, ppp}},
+        {S::Vy, {Phys::V, Comp::y, ppp}},
+        {S::Vz, {Phys::V, Comp::z, ppp}},
+        {S::P, {Phys::P, Comp::scalar, ppp}},
+        {S::Mxx, {Phys::M, Comp::xx, ppp}},
+        {S::Mxy, {Phys::M, Comp::xy, ppp}},
+        {S::Mxz, {Phys::M, Comp::xz, ppp}},
+        {S::Myy, {Phys::M, Comp::yy, ppp}},
+        {S::Myz, {Phys::M, Comp::yz, ppp}},
+        {S::Mzz, {Phys::M, Comp::zz, ppp}},
+        {S::AllDual, {Phys::AllDual, Comp::scalar, ddd}},
     });
 } // namespace hybrid
 

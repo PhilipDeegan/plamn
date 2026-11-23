@@ -18,6 +18,7 @@
 //                                        each value at row * n_components + component, the 1D /
 //                                        2D block repeated x_times (a 3D view)
 
+#include "plamn/amr/untiled.hpp"
 #include "damn/core/def.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/box_spans.hpp"
@@ -127,7 +128,7 @@ struct PrimalInto
 };
 
 template<std::uint32_t gw, typename Field, typename Float>
-void primal_into(PrimalInto<Field, Float> const& in)
+void primal_into_untiled_(PrimalInto<Field, Float> const& in)
 {
     auto constexpr dim                                       = Field::dimension;
     auto const& [field, cells, out, n_components, component] = in;
@@ -177,6 +178,16 @@ void primal_into(PrimalInto<Field, Float> const& in)
         auto const f = static_cast<Float>(v * weight);
         for (std::size_t copy = 0; copy < damn::hdf5::vtkhdf::x_times<dim>; ++copy)
             out[(copy * points + row) * n_components + component] = f;
+    });
+}
+
+// tiled fields from an untiled copy of their tiles
+template<std::uint32_t gw, typename Field, typename Float>
+void primal_into(PrimalInto<Field, Float> const& in)
+{
+    amr::with_untiled(in.field, [&](auto const& f) {
+        primal_into_untiled_<gw>(PrimalInto<std::decay_t<decltype(f)>, Float>{
+            f, in.cells, in.out, in.n_components, in.component});
     });
 }
 

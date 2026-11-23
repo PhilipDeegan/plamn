@@ -9,18 +9,14 @@
 //   check_set(key, where)                debug: throws if a ghost of key was not filled
 //   mesh_size()                          the level's
 
+#include "plamn/amr/untiled.hpp"
 #include "damn/amr/copy.hpp"
 #include "damn/amr/level_data.hpp"
 #include "damn/amr/level_map.hpp"
-#include "damn/core/geometry/box_spans.hpp"
-
 #include "plamn/amr/level_pairs.hpp"
 #include "plamn/amr/refine.hpp"
-#include "plamn/amr/resources.hpp"
-#include "plamn/core/data/grid/patch_layout.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/models/electromag_initializer.hpp"
-#include "plamn/core/models/quantities/quantity.hpp"
 #include "plamn/core/numerics/ampere/ampere_transformer.hpp"
 #include "plamn/core/numerics/interpolator/interpolating.hpp"
 #include "plamn/core/numerics/moments/moments.hpp"
@@ -29,13 +25,8 @@
 #include "plamn/solver/hybrid/level_steps.hpp"
 #include "plamn/solver/hybrid/model.hpp"
 
-#include <algorithm>
-#include <array>
 #include <cstddef>
-#include <vector>
-#include <format>
 #include <string>
-#include <type_traits>
 
 namespace plamn::solver::hybrid
 {
@@ -65,12 +56,13 @@ void initialize_root(HybridModel<opts>& model, auto&& level, auto const& sim)
     // moments from the particles, completed across patch borders
     level.per_patch([&](auto& patch) {
         core::resetMoments(patch.ions);
-        core::depositParticles(patch.ions, patch.layout,
-                               core::Interpolating<opts.dimension, opts.interp_order>{},
-                               core::DomainDeposit{});
+        core::depositParticles(
+            patch.ions, patch.layout,
+            core::DepositInterpolating<opts.dimension, opts.interp_order, opts.alloc_mode>{},
+            core::DomainDeposit{});
     });
     fill_ion_borders(level);
-    compute_moments(level);
+    compute_moments<opts>(level);
 
     // J from B, then E from Ohm's law
     ampere_ohm<&Patch_t::em>(model, level);
@@ -89,20 +81,20 @@ void refine_magnetic(HybridModel<opts> const&, auto&& level)
     auto& ld = level.data();
     for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
     {
-        auto& patch = *ld.data[i];
-        auto bx     = amr::field_resource<Patch_t::field_ghost_width>(patch.emB[0]);
-        auto by     = amr::field_resource<Patch_t::field_ghost_width>(patch.emB[1]);
-        auto bz     = amr::field_resource<Patch_t::field_ghost_width>(patch.emB[2]);
-        amr::divergence_free_touch_up(std::array{&bx, &by, &bz}, ld.patches[i].box,
-                                      ld.patches[i].box, level.mesh_size());
+        auto& patch       = *ld.data[i];
+        auto constexpr gw = Patch_t::field_ghost_width;
+        amr::with_untiled_resources<gw>(patch.emB, [&](auto const& B) { // tiled: untiled copies
+            amr::divergence_free_touch_up(B, ld.patches[i].box, ld.patches[i].box,
+                                          level.mesh_size());
+        });
     }
 }
 
-// SoAVXChunked: chunks before the first push
+// chunked layouts: chunks before the first push
 template<auto opts>
 void sort_refined_particles(HybridModel<opts> const&, auto&& level)
 {
-    if constexpr (opts.layout_mode == core::LayoutMode::SoAVXChunked)
+    if constexpr (core::is_chunked(opts.layout_mode))
         level.per_patch([](auto& patch) {
             for (auto& pop : patch.ions)
                 for (auto* ps : {&pop.domainParticles(), &pop.levelGhostParticles(),
@@ -119,12 +111,13 @@ void refined_moments(HybridModel<opts> const&, auto&& level)
 {
     level.per_patch([&](auto& patch) {
         core::deposit_domain<opts.dimension, opts.interp_order>(patch.ions, patch.layout);
-        core::depositParticles(patch.ions, patch.layout,
-                               core::Interpolating<opts.dimension, opts.interp_order>{},
-                               core::LevelGhostDeposit{});
+        core::depositParticles(
+            patch.ions, patch.layout,
+            core::DepositInterpolating<opts.dimension, opts.interp_order, opts.alloc_mode>{},
+            core::LevelGhostDeposit{});
     });
     fill_ion_borders(level);
-    compute_moments(level);
+    compute_moments<opts>(level);
 
     // J from B; E was refined
     level.per_patch(
@@ -143,13 +136,11 @@ void initialize_refined(HybridModel<opts> const& model, auto&& level, double con
     level.fill_magnetic_ghosts("EM_B", t);
     level.fill_electric_ghosts("EM_E", t);
 
-    for (auto const& name : model.population_names)
-    {
-        level.refine(amr::ParticleSplitter<Splitter_t>{}, LevelRegion::Interior,
-                     {{name + "_domain", name + "_domain", ""}});
-        level.refine(amr::ParticleSplitter<Splitter_t>{}, LevelRegion::LevelGhosts,
-                     {{name + "_domain", name + "_level_ghost_old", ""}});
-    }
+    auto const& routes = *model.particle_routes;
+    level.refine(amr::ParticleSplitter<Splitter_t>{}, LevelRegion::Interior,
+                 routes.interior_splits);
+    level.refine(amr::ParticleSplitter<Splitter_t>{}, LevelRegion::LevelGhosts,
+                 routes.old_ghost_splits);
     own_level_ghosts(level, /*new_ghosts=*/false);
     level.per_patch([](auto& patch) {
         for (auto& pop : patch.ions)
@@ -158,58 +149,6 @@ void initialize_refined(HybridModel<opts> const& model, auto&& level, double con
     sort_refined_particles(model, level);
 
     refined_moments(model, level);
-}
-
-// a level regridded (a rebalance: the same cells; a tagging regrid: new boxes): its domain
-//  moments kept where the old level was (old_cells, its periodic images included: they hold the
-//  synchronized moments, which a deposit would lose), from its particles elsewhere (cells new to
-//  the level) and on its ghost nodes
-template<auto opts>
-void moved_moments(HybridModel<opts> const& model, auto&& level, auto const& old_cells)
-{
-    auto const each_moment = [](auto& patch, auto&& fn) {
-        for (auto& pop : patch.populations)
-        {
-            fn(pop->density);
-            fn(pop->charge_density);
-            for (auto& f : pop->flux)
-                fn(f);
-        }
-    };
-    std::vector<std::vector<std::vector<double>>> kept; // per patch, per moment: its values
-    level.per_patch([&](auto& patch) {
-        auto& mine = kept.emplace_back();
-        each_moment(patch,
-                    [&](auto const& f) { mine.emplace_back(f.data(), f.data() + f.size()); });
-    });
-    refined_moments(model, level); // the ghost nodes and new cells; the old domain put back below
-    std::size_t i = 0;
-    level.per_patch([&](auto& patch) {
-        std::size_t m = 0;
-        each_moment(patch, [&](auto& f) {
-            auto const& values = kept[i][m++];
-            auto constexpr dim = std::decay_t<decltype(patch.layout)>::dimension;
-            auto const cent    = core::centering<dim>(f);
-            auto const was_old = [&](auto const& amr) { // a node of the old level's domain
-                return std::any_of(old_cells.begin(), old_cells.end(), [&](auto const& b) {
-                    for (std::size_t d = 0; d < dim; ++d)
-                        if (amr[d] < b.lower[d]
-                            or amr[d] > b.upper[d] + (cent[d] == core::QtyCentering::primal))
-                            return false;
-                    return true;
-                });
-            };
-            damn::core::for_each_point(domain_box(patch.layout, f), [&](auto const& ijk) {
-                if (!was_old(core::to_amr(patch.layout, ijk)))
-                    return;
-                auto& v = f(ijk);
-                v       = values[static_cast<std::size_t>(&v - f.data())];
-            });
-        });
-        ++i;
-    });
-    level.copy(damn::amr::fill_ghosts, "IonPopMoments");
-    compute_moments(level);
 }
 
 } // namespace plamn::solver::hybrid

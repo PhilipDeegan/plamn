@@ -41,18 +41,20 @@ NO_DISCARD auto DAMN_ALL isIn(Particle const& particle,
 
 enum class LayoutMode : std::uint16_t {
     AoS = 0,
-    AoSMapped, // 1
-    AoSCMTS,   // 2
-    SoA,       // 3 - internal only on CPU: HDF5/restart write buffer + python particle-splitting
-               //     interop (zero-copy span over numpy arrays)
-    AoSTS,     // 4 - tiled AoS (MHD only builds: tiled fields without particles)
-    AoSPC,     // 5
-    SoAVX,     // 6
-    SoATS,     // 7
-    SoAVXTS,   // 8
-    SoAPC,     // 9
-    AoSPCTS,   // 10
+    AoSMapped,    // 1
+    AoSCMTS,      // 2
+    SoA,          // 3 - internal only on CPU: HDF5/restart write buffer + python particle-splitting
+                  //     interop (zero-copy span over numpy arrays)
+    AoSTS,        // 4 - tiled AoS (MHD only builds: tiled fields without particles)
+    AoSPC,        // 5
+    SoAVX,        // 6
+    SoATS,        // 7
+    SoAVXTS,      // 8
+    SoAPC,        // 9
+    AoSPCTS,      // 10
     SoAVXChunked, // 11 - SoAVX sorted by cell, per cell offsets (as AoSMapped: AoS + CellMap)
+    // 12 - AoS sorted by cell, per cell offsets, pushed staged as SoAVX blocks
+    AoS4SoAVXChunked,
 };
 
 bool constexpr is_tiled(LayoutMode lm)
@@ -61,11 +63,22 @@ bool constexpr is_tiled(LayoutMode lm)
     return mkn::kul::any_in(lm, AoSCMTS, AoSTS, SoATS, SoAVXTS, AoSPCTS);
 }
 
+// a tiled particle array, whatever its cv/ref: what the tile/untiled overloads branch on
+template<typename P>
+concept TiledParticles = is_tiled(std::decay_t<P>::layout_mode);
+
 // flat SoAVX columns, with or without per cell offsets
 bool constexpr is_soavx(LayoutMode lm)
 {
     using enum LayoutMode;
     return mkn::kul::any_in(lm, SoAVX, SoAVXChunked);
+}
+
+// sorted by cell in per cell chunks, gap slots (weight 0) between them (particles_chunked.hpp)
+bool constexpr is_chunked(LayoutMode lm)
+{
+    using enum LayoutMode;
+    return mkn::kul::any_in(lm, SoAVXChunked, AoS4SoAVXChunked);
 }
 
 // guards a forwarding constructor `template<typename... Args> This(Args&&...)` so that a
@@ -223,7 +236,8 @@ Particles_t make_particles(damn::core::Box<T, D> const& box, std::size_t const g
         return Particles_t{box, ghost_cells};
     else if constexpr (is_tiled(Particles_t::layout_mode))
         return Particles_t{box, ghost_cells};
-    else if constexpr (mkn::kul::any_in(Particles_t::layout_mode, AoSMapped, SoAVXChunked))
+    else if constexpr (mkn::kul::any_in(Particles_t::layout_mode, AoSMapped, SoAVXChunked,
+                                        AoS4SoAVXChunked))
     {
         // !!! TODO(cell-jump-limit): TEMPORARY margin, back to grow(box, ghost_cells) !!!
         int const ghosts = static_cast<int>(ghost_cells);

@@ -48,7 +48,7 @@ VALID_REFINED = {
 }
 # plamn::core::LayoutMode (core/data/particles/particles_def.hpp)
 LAYOUTS = ["AoS", "AoSMapped", "AoSCMTS", "SoA", "AoSTS", "AoSPC", "SoAVX", "SoATS", "SoAVXTS",
-           "SoAPC", "AoSPCTS", "SoAVXChunked"]
+           "SoAPC", "AoSPCTS", "SoAVXChunked", "AoS4SoAVXChunked"]
 ALLOCATORS = ["CPU", "GPU_UNIFIED"]
 
 
@@ -61,6 +61,15 @@ def mhd_module_name(dim, layout, allocator, reconstruction, limiter, riemann, ha
     return (
         f"plamn_cpp_{dim}_{layout}_{allocator}_{reconstruction}_{limiter}_{riemann}_"
         + ("true" if hall else "false")
+    )
+
+
+def coupled_module_name(dim, interp, refined, layout, allocator, reconstruction, limiter,
+                        riemann, hall=False):
+    """MHD and hybrid levels in one simulation (AMR/max_mhd_level): the hybrid id, then MHD's"""
+    return (
+        f"{module_name(dim, interp, refined, layout, allocator)}_{reconstruction}_{limiter}_"
+        f"{riemann}_" + ("true" if hall else "false")
     )
 
 
@@ -121,11 +130,13 @@ def main(argv):
     )
     parser.add_argument("--allocator", nargs="+", default=["CPU"], choices=ALLOCATORS)
     parser.add_argument("--mhd", action="store_true", help="MHD only modules (no hybrid)")
+    parser.add_argument("--coupled", action="store_true",
+                        help="MHD and hybrid modules: MHD levels under hybrid ones")
     parser.add_argument("--reconstruction", nargs="+", default=["Linear"], choices=RECONSTRUCTIONS)
     parser.add_argument("--limiter", nargs="+", default=["VanLeer"], choices=LIMITERS)
     parser.add_argument("--riemann", nargs="+", default=["Rusanov"], choices=RIEMANNS)
     parser.add_argument("--hall", nargs="+", default=["false"], choices=["false", "true"],
-                        help="--mhd: Hall MHD modules (true), ideal (false), or both")
+                        help="--mhd / --coupled: Hall MHD (true), ideal (false), or both")
     parser.add_argument("--no-etc", action="store_true", help="don't build py_etc")
     parser.add_argument("--jobs", type=int, default=8, help="mkn -t (CI: 4)")
     parser.add_argument("--optimise", type=int, default=None,
@@ -221,17 +232,34 @@ def main(argv):
         if refined not in valid:
             print(f"refined {refined} is not valid for {dim}D interp {interp}: {valid}")
             return 1
-        name = module_name(dim, interp, refined, layout, allocator)
         defines = [
             f"-DPLAMN_SIM_DIM={dim}",
             f"-DPLAMN_SIM_INTERP={interp}",
             f"-DPLAMN_SIM_REFINED={refined}",
             f"-DPLAMN_SIM_LAYOUT={layout}",
             f"-DPLAMN_SIM_ALLOCATOR={allocator}",
-            f"-DPLAMN_SIM_MODULE={name}",
         ] + scoping
-        if mkn("py_sim", extra, args.jobs, defines, out=name, own_dir=True):
-            return 1
+        if not args.coupled:
+            name = module_name(dim, interp, refined, layout, allocator)
+            if mkn("py_sim", extra, args.jobs, defines + [f"-DPLAMN_SIM_MODULE={name}"],
+                   out=name, own_dir=True):
+                return 1
+            continue
+        for reconstruction, limiter, riemann, hall in itertools.product(
+            args.reconstruction, args.limiter, args.riemann, args.hall
+        ):
+            hall = hall == "true"
+            name = coupled_module_name(dim, interp, refined, layout, allocator, reconstruction,
+                                       limiter, riemann, hall)
+            mhd = [
+                f"-DPLAMN_SIM_RECONSTRUCTION={reconstruction}",
+                f"-DPLAMN_SIM_LIMITER={limiter}",
+                f"-DPLAMN_SIM_RIEMANN={riemann}",
+                f"-DPLAMN_SIM_HALL={'true' if hall else 'false'}",
+                f"-DPLAMN_SIM_MODULE={name}",
+            ]
+            if mkn("py_sim", extra, args.jobs, defines + mhd, out=name, own_dir=True):
+                return 1
     return 0
 
 

@@ -5,16 +5,19 @@
 // and core::compute_whistler_, behind master's "not ready in hybrid" throw): on every node of
 // the mass density, B projected onto it,
 //
-//   dt <= cfl_wave / sum_d (pi * vw_d / dx_d),  vw_d = |B| / rho * (sqrt(1 + 1 / (4 dx_d^2))
-//                                                                     + 1 / (2 dx_d))
+//   dt <= cfl_wave / sum_d (vw_d / dx_d),  vw_d = vA (sqrt(1 + x_d^2) + x_d),
+//                                           vA = |B| / sqrt(rho),  x_d = pi / (2 dx_d sqrt(rho))
 //
-// vw_d the whistler phase speed at the grid's shortest wavelength along d
+// vw_d the whistler phase speed at the grid's shortest wavelength along d (k = pi / dx_d): the
+//  Alfven speed on coarse grids, pi / dx_d (Hall dominated) on fine ones
 
+#include "plamn/core/data/field/field_tiles.hpp"
 #include "damn/core/def.hpp"
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
 
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <limits>
@@ -26,8 +29,10 @@ namespace plamn::core
 {
 NO_DISCARD inline double whistler_speed(double const inv_dx, double const rho, double const BdotB)
 {
-    auto const vw = std::sqrt(1 + 0.25 * inv_dx * inv_dx) + 0.5 * inv_dx;
-    return std::sqrt(BdotB) * vw / rho;
+    auto const sqrt_rho = std::sqrt(rho);
+    auto const vA       = std::sqrt(BdotB) / sqrt_rho;
+    auto const x        = std::numbers::pi * inv_dx / (2.0 * sqrt_rho);
+    return vA * (std::sqrt(1.0 + x * x) + x);
 }
 
 // a patch's bound: rho its mass density, B its magnetic field components (patch grids, local
@@ -35,6 +40,7 @@ NO_DISCARD inline double whistler_speed(double const inv_dx, double const rho, d
 template<typename Layout>
 NO_DISCARD double whistler_dt(Layout const& layout, auto const& rho, auto const& B,
                               double const cfl_wave)
+    requires(!TiledField<decltype(rho)>)
 {
     auto constexpr dim = Layout::dimension;
     using Scalar       = std::decay_t<decltype(Layout::options)>::FieldOptions::Scalar;
@@ -53,9 +59,24 @@ NO_DISCARD double whistler_dt(Layout const& layout, auto const& rho, auto const&
 
         double inv_dt = 0;
         for (std::size_t d = 0; d < dim; ++d)
-            inv_dt += std::numbers::pi * whistler_speed(1. / layout.dx[d], n, BdotB) / layout.dx[d];
+            inv_dt += whistler_speed(1. / layout.dx[d], n, BdotB) / layout.dx[d];
         dt = std::min(dt, cfl_wave / inv_dt);
     });
+    return dt;
+}
+
+// tiled: tile by tile, on each tile's layout and views (B's tile ghosts current after its ghost
+//  fill)
+template<typename Layout>
+NO_DISCARD double whistler_dt(Layout const&, TiledField auto const& rho, auto const& B,
+                              double const cfl_wave)
+{
+    double dt = std::numeric_limits<double>::max();
+    for (std::size_t ti = 0; ti < rho().size(); ++ti)
+    {
+        std::array const Bt{B[0]()[ti](), B[1]()[ti](), B[2]()[ti]()};
+        dt = std::min(dt, whistler_dt(rho()[ti].layout(), rho()[ti](), Bt, cfl_wave));
+    }
     return dt;
 }
 

@@ -4,17 +4,20 @@
 #include "mkn/kul/constexprifier.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/exec/kernels.hpp" // IWYU pragma: keep (gpu::Vec_t, gpu::TileLauncher: GPU builds)
-
 #include "plamn/core/data/grid/detail/detail.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/numerics/ohm/ohm.hpp"
 #include "plamn/core/numerics/differential_operators.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
 #include "plamn/core/data/vecfield/vecfield_component.hpp"
+#include "mkn/kul/for.hpp"
 
 #include <array>
 #include <stdexcept>
 #include <cstddef>
+#include <type_traits>
+
+#include "damn/core/exec/kernels/region_chunks.hpp" // IWYU pragma: keep (run_gpu: GPU builds)
 
 namespace plamn::core
 {
@@ -51,7 +54,7 @@ public:
                     VecField const& B, VecField const& J, VecField& Enew) const
         requires(not is_field_tile_set_v<Field>)
     {
-        with_flags([&]<bool isResistive, bool isHyperResistive>() {
+        with_flags([&]<bool isResistive, bool isHyperResistive, HyperMode hyper>() {
             auto const gradPe = grad(layout, Pe);
             Ohm<Layout> const ohm{info_, layout};
 
@@ -60,7 +63,8 @@ public:
                 eval_on_box(
                     Enew(c), domain_box(layout, Enew(c)),
                     [] DAMN_ALL(auto const& ijk, auto const& ohm_, auto&&... args) {
-                        ohm_.template operator()<c, isResistive, isHyperResistive>(ijk, args...);
+                        ohm_.template operator()<c, isResistive, isHyperResistive, hyper>(ijk,
+                                                                                          args...);
                     },
                     ohm, n, Ve, gradPe_c, B, J, Enew);
             };
@@ -83,6 +87,50 @@ public:
                 on_tile(ti, n, Ve, Pe, B, J, Enew);
     }
 
+    // GPU_UNIFIED, an item per untiled patch collected across a level (one launch per run_gpu):
+    //  the patch's fields as views, its E components' boxes, Ohm over its layout
+    template<typename Layout>
+    auto make_item(Layout const& layout, auto const& n, auto const& Ve, auto const& Pe,
+                   auto const& B, auto const& J, auto& Enew) const
+    {
+        auto const nv  = untiled_view(n);
+        auto const Pev = untiled_view(Pe);
+        auto const Vev = untiled_view(Ve);
+        auto const Bv  = untiled_view(B);
+        auto const Jv  = untiled_view(J);
+        auto Ev        = untiled_view(Enew);
+        auto const boxes
+            = mkn::kul::for_N_make_array<3>([&](auto c) { return box_for(layout, Ev[c]); });
+        auto const gradPe = grad(layout, Pev);
+        using Box_t       = std::decay_t<decltype(boxes)>::value_type;
+        using Item_t      = OhmTile<Ohm<Layout>, std::decay_t<decltype(gradPe)>,
+                                    std::decay_t<decltype(nv)>, decltype(Ev), Box_t>;
+        return Item_t{Ohm<Layout>{info_, layout}, gradPe, nv, Vev, Bv, Jv, Ev, boxes};
+    }
+
+    // every item's E components on the device, one launch (damn's region chunks)
+    void run_gpu([[maybe_unused]] auto& items) const
+    {
+#if DAMN_HAVE_GPU
+        with_flags([&]<bool isResistive, bool isHyperResistive, HyperMode hyper>() {
+            damn::core::run_region_chunks(items, [] DAMN_ALL(auto& it, auto const c,
+                                                             auto const& ijk) {
+                if (c == 0)
+                    it.ohm.template operator()<Component::X, isResistive, isHyperResistive, hyper>(
+                        ijk, it.n, it.Ve, it.gradPe.x, it.B, it.J, it.E);
+                else if (c == 1)
+                    it.ohm.template operator()<Component::Y, isResistive, isHyperResistive, hyper>(
+                        ijk, it.n, it.Ve, it.gradPe.y, it.B, it.J, it.E);
+                else
+                    it.ohm.template operator()<Component::Z, isResistive, isHyperResistive, hyper>(
+                        ijk, it.n, it.Ve, it.gradPe.z, it.B, it.J, it.E);
+            });
+        });
+#else
+        throw std::runtime_error("OhmTransformer: run_gpu needs a GPU build");
+#endif
+    }
+
     // one tile of the tiled fields, eg as one task of a thread pool
     void on_tile(std::size_t const tile_idx, auto const& n, auto const& Ve, auto const& Pe,
                  auto const& B, auto const& J, auto& Enew) const
@@ -95,10 +143,11 @@ public:
     }
 
 private:
-    // fn<isResistive, isHyperResistive>(): runtime flags as compile-time tags
+    // fn<isResistive, isHyperResistive, hyper mode>(): runtime flags as compile-time tags
     void with_flags(auto&& fn) const
     {
-        mkn::kul::Constexprifier{info_.isResistive(), info_.isHyperResistive()}(fn);
+        mkn::kul::Constexprifier{info_.isResistive(), info_.isHyperResistive(),
+                                 info_.hyper_mode}(fn);
     }
 
     // block per tile, block threads stride each E component's box
@@ -138,12 +187,12 @@ private:
             items.emplace_back(make_item(ti));
         auto* const ip = items.data();
 
-        with_flags([&]<bool isResistive, bool isHyperResistive>() {
+        with_flags([&]<bool isResistive, bool isHyperResistive, HyperMode hyper>() {
             Launcher{n_tiles}([=] DAMN_ALL() mutable {
                 auto& it        = ip[Launcher::tile_idx()];
                 auto const eval = [&]<auto c>(auto const& box, auto const& gradPe_c) {
                     Launcher::for_each_point(box, [&](auto const& ijk) {
-                        it.ohm.template operator()<c, isResistive, isHyperResistive>(
+                        it.ohm.template operator()<c, isResistive, isHyperResistive, hyper>(
                             ijk, it.n, it.Ve, gradPe_c, it.B, it.J, it.E);
                     });
                 };

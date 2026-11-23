@@ -50,6 +50,14 @@ jobs:
     - run: >-
         KLOG=3 ./mkn.py --mhd --no-etc --jobs 4 --hall false true -- -q -x res/mkn/mpi
         -W 9 -a "-Wno-unused-parameter -Wno-unused-variable -Wno-error=strict-aliasing"
+    # MHD under hybrid levels (test_coupled)
+    - run: >-
+        KLOG=3 ./mkn.py --coupled --no-etc --dim 1 --jobs 4 -- -q -x res/mkn/mpi
+        -W 9 -a "-Wno-unused-parameter -Wno-unused-variable -Wno-error=strict-aliasing"
+    # the chunked layouts (test_restarts' chunked cases)
+    - run: >-
+        KLOG=3 ./mkn.py --no-etc --dim 1 --layout SoAVXChunked AoS4SoAVXChunked --jobs 4 -- -q
+        -x res/mkn/mpi -W 9 -a "-Wno-unused-parameter -Wno-unused-variable -Wno-error=strict-aliasing"
     - uses: actions/checkout@v4
       with:
         repository: PhilipDeegan/PHARE

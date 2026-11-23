@@ -26,11 +26,14 @@
 
 #include "damn/amr/clustering.hpp"
 #include "damn/amr/copy.hpp"
+#include "damn/amr/decompose.hpp"
 #include "damn/amr/hierarchy.hpp"
 #include "damn/amr/inter_level.hpp"
 #include "damn/amr/level_data.hpp"
 #include "damn/amr/level_map.hpp"
 #include "damn/amr/neighbours.hpp"
+#include "damn/amr/regrid.hpp"
+#include "damn/amr/time_refinement.hpp"
 #include "damn/amr/topology.hpp"
 #include "damn/hdf5/damn_hdf5.hpp"
 #include "damn/core/vector.hpp"
@@ -38,7 +41,11 @@
 #include "damn/mpi/copy.hpp"
 #include "damn/mpi/damn_mpi.hpp"
 #include "damn/mpi/inter_level.hpp"
+#include "damn/mpi/regrid.hpp"
 #include "damn/core/def/constants.hpp"
+#include "damn/core/exec/thread_pool.hpp"
+#include "damn/mpi/scope_timing.hpp"
+#include "mkn/kul/range.hpp"
 #include "plamn/diagnostic/vtkhdf.hpp"
 #include "plamn/simulator/hybrid_patch_view.hpp"
 #include "plamn/solver/hybrid/advance.hpp"
@@ -60,6 +67,9 @@
 #include "plamn/core/numerics/ohm/ohm.hpp"
 #include "plamn/initializer/data_provider.hpp"
 #include "plamn/simulator/hybrid_patch.hpp"
+#include "plamn/simulator/coupling.hpp"
+#include "plamn/amr/field_access.hpp"
+#include "plamn/amr/particle_access.hpp"
 #include "plamn/simulator/simulator_def.hpp"
 #include "plamn/simulator/timestepper.hpp"
 #include "plamn/amr/tagging.hpp"
@@ -76,6 +86,8 @@
 #include <cstddef>
 #include <format>
 #include <functional>
+#include <tuple>
+#include <any>
 #include <map>
 #include <memory>
 #include <numeric>
@@ -115,6 +127,27 @@ NO_DISCARD inline std::unique_ptr<std::ofstream> rank_log_file()
         return std::make_unique<std::ofstream>(".log/" + std::to_string(rank) + ".out");
     throw std::runtime_error("PHARE_LOG: RANK_FILES, NULL or CLI, not " + mode);
 }
+
+namespace simulator::detail
+{
+    // one callable of several overloads (constrained lambdas: a visit's per case branches)
+    template<typename... Fns>
+    struct Overloaded : Fns...
+    {
+        using Fns::operator()...;
+    };
+} // namespace simulator::detail
+
+// a patch whose fields are tiled (it has untiled temporaries for whole patch operations), a
+//  patch whose particles are tiled: what the Simulator's per patch overloads branch on
+template<typename Patch>
+concept TiledFieldsPatch = requires {
+    typename std::decay_t<Patch>::Grid_t;
+    typename std::decay_t<Patch>::Untiled_t;
+} and core::TiledField<typename std::decay_t<Patch>::Grid_t>;
+template<typename Patch>
+concept TiledParticlesPatch = requires { typename std::decay_t<Patch>::Particles_t; }
+                              and core::TiledParticles<typename std::decay_t<Patch>::Particles_t>;
 
 template<auto opts>
 class Simulator : public ISimulator
@@ -185,6 +218,11 @@ public:
     NO_DISCARD auto& hierarchy() const { return hierarchy_; }
     NO_DISCARD auto& level(std::size_t const ln = 0) { return data_(ln); }
     NO_DISCARD std::size_t n_levels() const { return levels_.size(); }
+    // level ln's substeps' dts in the last advance (tests: their count follows its stable dt)
+    NO_DISCARD std::vector<double> substep_dts(std::size_t const ln) const
+    {
+        return ln < substep_dts_.size() ? substep_dts_[ln] : std::vector<double>{};
+    }
 
     // a field resource's values on the domain nodes of every local patch of level ln, patch by
     // patch
@@ -280,13 +318,19 @@ private:
         double coarse_t = 0, coarse_dt = 0; // the coarser level's step this level subcycles in
         double old_t
             = 0; // the start of its step (prepare_step): an MHD reflux redoes it from there
+        // bumped whenever the level's geometry is (re)built (link_geometry_: init, regrid,
+        //  rebalance): what is kept per decomposition (boxings, device box lists, launch lists)
+        //  is rebuilt when it differs
+        std::uint64_t generation = 0;
     };
 
     // damn::amr::advance's hooks
     struct Hooks
     {
         Simulator& self;
-        void advance(int ln, double t, double dt) { self.advance_level_(ln, t, dt); }
+        void advance(int ln, damn::amr::Step const& step) { self.advance_level_(ln, step); }
+        // the dt level ln asks for after a step (damn::amr::TimeRefinement splits on it)
+        double next_dt(int ln, damn::amr::Step const& step) { return self.next_dt_(ln, step); }
         void prepare_step(int ln, double t) { self.prepare_step_(ln, t); }
         void first_step(int ln, double t, double ct, double cdt)
         {
@@ -308,6 +352,17 @@ private:
     // an MHD level from the coarser one: the advanced state refined (B divergence free), its
     //  ghosts
     void initialize_refined_mhd_(std::size_t ln, double t);
+    // a refined level of whichever model owns it, from the level under it
+    void initialize_refined_(std::size_t ln, double t);
+    // the hybrid level over an MHD one from it: B and E refined, the particles spawned from its
+    //  primitives (domain, level ghosts), the moments, J and E (simulator/coupling.hpp)
+    void initialize_hybrid_over_mhd_(std::size_t ln, double t);
+    // the MHD level ln - 1's primitives now into hybrid level ln's scratch: its level ghosts, and
+    //  its interior too if asked
+    void mhd_prims_over_(std::size_t ln, bool interior);
+    // hybrid level ln's level ghost particles (old or new) spawned from the scratch primitives,
+    //  each kept by its cell's owner
+    void spawn_level_ghosts_(std::size_t ln, bool new_ghosts, std::uint64_t salt);
     // MHD state s's level ghosts from the coarser level at t: rho, rhoV, Etot, B refined from the
     //  coarser level's old and advanced states, linear in time (PHARE's MHDMessenger
     //  stateGhostsRefiners_), B made divergence free
@@ -399,43 +454,368 @@ private:
         }
     }
 
+    // per_patch_ with damn's pools taking the patches (untiled layouts: a patch to the next idle
+    //  pool, round robin, a pool works one patch at a time; tiled ones thread over tiles inside
+    //  the kernels): fn touches only its patch and never python. Serial with one pool, and while
+    //  scope timing (phlop's serial timer: scopes on one thread a rank)
+    void per_patch_threaded_(std::size_t const ln, auto&& fn)
+    {
+        using Pool    = damn::core::ThreadPool;
+        auto& ld      = data_(ln);
+        using Patch_t = solver::HybridModel<opts>::Patch_t;
+        auto const n  = ld.data.size();
+        if constexpr (!Patch_t::per_patch_mover)
+            return per_patch_(ln, fn);
+        if (Pool::n_pools < 2 or n < 2 or damn::mpi::scope_timing_active())
+            return per_patch_(ln, fn);
+
+        std::vector<double> busy(decomposition_.timing ? n : 0, 0.);
+        Pool::INSTANCE().patch_exec(
+            n, [](std::size_t const i) { return i; },
+            [&](std::size_t const i) {
+                auto const t0 = std::chrono::steady_clock::now();
+                fn(*ld.data[i]);
+                if (!busy.empty())
+                    busy[i] = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0)
+                                  .count();
+            });
+        for (auto const i : mkn::kul::range(busy.size()))
+            decomposition_.busy_of(ln, ld.patches[i].box) += busy[i];
+    }
+
+    // tiled fields: damn's schedules work on untiled temporaries (amr/untiled.hpp), leased on
+    //  every patch of a level for the names an operation reads (read) or writes (fill, sum:
+    //  written back into every tile's ghost box when released, inner tile ghosts included)
+    static void lease_(auto& ld, std::vector<std::string> const& names, amr::Lease const how)
+    {
+        for (auto& patch : ld.data)
+            lease_patch_(*patch, names, how);
+    }
+    static void release_(auto& ld)
+    {
+        for (auto& patch : ld.data)
+            release_patch_(*patch);
+    }
+    static void lease_patch_(TiledFieldsPatch auto& patch, std::vector<std::string> const& names,
+                             amr::Lease const how)
+    {
+        simulator::for_each_field_grid(patch, [&](std::string const& name, auto& grid) {
+            if (std::find(names.begin(), names.end(), name) != names.end())
+                patch.untiled.lease(name, grid, patch.layout, how);
+        });
+    }
+    static void lease_patch_(auto&, std::vector<std::string> const&, amr::Lease) {}
+    static void release_patch_(TiledFieldsPatch auto& patch) { patch.untiled.release(); }
+    static void release_patch_(auto&) {}
+    // every tiled field of a patch leased (a regrid moves them all)
+    static void lease_all_(TiledFieldsPatch auto& patch, amr::Lease const how)
+    {
+        simulator::for_each_field_grid(patch, [&](std::string const& name, auto& grid) {
+            patch.untiled.lease(name, grid, patch.layout, how);
+        });
+    }
+    static void lease_all_(auto&, amr::Lease) {}
+    // the field type a patch's field resources hold: a tiled patch's leased untiled temporaries
+    template<typename Patch>
+    struct resource_field_
+    {
+        using type = Patch::Grid_t;
+    };
+    template<TiledFieldsPatch Patch>
+    struct resource_field_<Patch>
+    {
+        using type = Patch::Untiled_t::field_type;
+    };
+    // damn's regrid of ld (MPI when there are ranks): tiled fields moved on untiled temporaries,
+    //  the old patches' read, each new one's leased as made and written back after
+    auto regrid_leased_(auto const& map, auto&& ld, auto const& make) const
+    {
+        return regrid_leased_(map, std::move(ld), make, n_ranks_ > 1);
+    }
+    auto regrid_leased_(auto const& map, auto&& ld, auto const& make, bool const mpi) const
+    {
+        for (auto& patch : ld.data)
+            lease_all_(*patch, amr::Lease::read);
+        auto const made = [&](auto const& p) {
+            auto patch = make(p);
+            lease_all_(*patch, amr::Lease::fill);
+            return patch;
+        };
+        auto out = mpi ? damn::mpi::regrid(map, std::move(ld), made)
+                       : damn::amr::regrid(map, std::move(ld), made);
+        release_(out);
+        return out;
+    }
+
+    // the leases of one operation, released when it ends (an exception too)
+    struct Leases
+    {
+        // a level's release, any model's (a refine leases levels of two patch types)
+        std::vector<std::function<void()>> releases;
+        ~Leases()
+        {
+            for (auto const& release : releases)
+                release();
+        }
+        void add(auto& ld, std::vector<std::string> const& names, amr::Lease const how)
+        {
+            lease_(ld, names, how);
+            releases.emplace_back([&ld] { release_(ld); });
+        }
+    };
+    template<typename How>
+    static amr::Lease constexpr lease_of_()
+    {
+        if constexpr (std::is_same_v<How, std::decay_t<decltype(damn::amr::sum_borders)>>)
+            return amr::Lease::sum;
+        return amr::Lease::fill;
+    }
+
     // copies key's resources between the patches of level ln (its model's), see
     //  register_resources_
     void copy_(std::size_t const ln, auto const how, std::string const& key)
     {
-        auto& l = levels_[ln];
+        auto& l               = levels_[ln];
+        auto const& resources = resources_.at(key);
         models_.visit(ln, [&](auto& model) {
             auto& ld = model.levels[static_cast<int>(ln)];
+            std::vector<std::string> dst, src;
+            for (auto const& r : resources)
+                dst.push_back(r.dst), src.push_back(r.src);
+            Leases leases;
+            leases.add(ld, dst, lease_of_<std::decay_t<decltype(how)>>()); // first: dst wins
+            leases.add(ld, src, amr::Lease::read);
             if (n_ranks_ > 1)
-                damn::mpi::copy(how, l.neighbours, resources_.at(key), ld);
+                damn::mpi::copy(how, l.neighbours, resources, access_(model, ld, key, how), ld);
             else
-                damn::amr::copy(how, l.neighbours, resources_.at(key), ld);
+                damn::amr::copy(how, l.neighbours, resources, access_(model, ld, key, how), ld);
         });
     }
 
-    // fn(level ln's data, level ln - 1's) of their model (one model on both: a model change
-    //  between them is not yet)
+    // copies a hybrid model's particle arrays between the patches of level ln: the route's pairs
+    //  (the plan) and accessors (amr/particle_access.hpp)
+    template<amr::ParticleRoute Copies>
+    void copy_(std::size_t const ln, auto const how, Copies const& copies)
+    {
+        auto& l  = levels_[ln];
+        auto& ld = models_.hybrid.levels[static_cast<int>(ln)];
+        std::vector<std::string> dst, src;
+        for (auto const& r : copies.pairs)
+            dst.push_back(r.dst), src.push_back(r.src);
+        Leases leases;
+        leases.add(ld, dst, lease_of_<std::decay_t<decltype(how)>>()); // first: dst wins
+        leases.add(ld, src, amr::Lease::read);
+        if (n_ranks_ > 1)
+            damn::mpi::copy(how, l.neighbours, copies.pairs, copies.access, ld);
+        else
+            damn::amr::copy(how, l.neighbours, copies.pairs, copies.access, ld);
+    }
+
+    // how damn's copy of key reaches the resources: untiled field copies by accessors, resolved
+    //  once per model (amr/field_access.hpp); tiled patches (leased temporaries) and particles
+    //  by name
+    template<typename Model, typename LD, damn::amr::Region region, damn::amr::Arrival arrival>
+        requires(region != damn::amr::Region::Leaving
+                 and !TiledFieldsPatch<std::decay_t<decltype(*std::declval<LD&>().data[0])>>)
+    auto const& access_(Model& model, LD& ld, std::string const& key,
+                        damn::amr::CopyOp<region, arrival>)
+    {
+        using Patch_t = std::decay_t<decltype(*ld.data[0])>;
+        auto it       = model.field_access.find(key);
+        if (it == model.field_access.end())
+        {
+            if (damn::amr::size(ld) == 0) // no patch here: never called, one per pair all the same
+            {
+                static thread_local std::vector<amr::FieldAccess<Patch_t::field_ghost_width>> none;
+                none.resize(resources_.at(key).size());
+                return none;
+            }
+            it = model.field_access
+                     .emplace(key, amr::field_access<Patch_t::field_ghost_width>(
+                                       *ld.data[0], resources_.at(key)))
+                     .first;
+        }
+        return it->second;
+    }
+    static auto const& access_(auto&, auto&, std::string const&, auto)
+    {
+        return damn::amr::by_name;
+    }
+
+    // fn(level ln's data, level ln - 1's), each of its own model: across the model boundary
+    //  (MHD under hybrid) two patch types, which damn's refine / coarsen take
     void with_level_pair_(std::size_t const ln, auto&& fn)
     {
-        if (models_.is_mhd(ln) != models_.is_mhd(ln - 1))
-            throw std::runtime_error("plamn: MHD and hybrid levels together not yet");
-        models_.visit(ln, [&](auto& model) {
-            fn(model.levels[static_cast<int>(ln)], model.levels[static_cast<int>(ln) - 1]);
+        models_.visit(ln, [&](auto& fine) {
+            models_.visit(ln - 1, [&](auto& coarse) {
+                fn(fine.levels[static_cast<int>(ln)], coarse.levels[static_cast<int>(ln) - 1]);
+            });
         });
     }
+
+    // a fine level's pairs as the coarser level names them: the same model's, its own names; a
+    //  hybrid level over an MHD one, MHD's (simulator/coupling.hpp)
+    static auto const& coarse_pairs_(auto const&, auto const&,
+                                     std::vector<damn::amr::LevelPair> const& pairs)
+    {
+        return pairs;
+    }
+    template<typename Fine, typename Coarse>
+        requires(!simulator::coupling::is_mhd_level_v<Fine>
+                 and simulator::coupling::is_mhd_level_v<Coarse>)
+    static std::vector<damn::amr::LevelPair>
+    coarse_pairs_(Fine const&, Coarse const&, std::vector<damn::amr::LevelPair> const& pairs)
+    {
+        return simulator::coupling::to_mhd_coarse(pairs);
+    }
+
+    // a level data's patch type; either level of a pair tiled (their schedules go by name)
+    template<typename LD>
+    using patch_of_t = std::decay_t<decltype(*std::declval<LD&>().data[0])>;
+    template<typename FineLD, typename CoarseLD>
+    static constexpr bool any_tiled_v
+        = TiledFieldsPatch<patch_of_t<FineLD>> or TiledFieldsPatch<patch_of_t<CoarseLD>>;
 
     // from level ln - 1 into level ln
     void refine_(std::size_t const ln, auto const& op, damn::amr::LevelRegion const region,
-                 std::vector<damn::amr::LevelPair> const& pairs, double const alpha = 0)
+                 std::vector<damn::amr::LevelPair> const& level_pairs, double const alpha = 0)
     {
         auto& l = levels_[ln];
         with_level_pair_(ln, [&](auto& ld, auto& coarse) {
-            if (n_ranks_ > 1)
-                damn::mpi::refine(op, region, *l.to_coarser, pairs, coarse, ld, alpha);
-            else
-                damn::amr::refine(op, region, *l.to_coarser, pairs, coarse, ld, alpha);
+            auto const& pairs = coarse_pairs_(ld, coarse, level_pairs);
+            Leases leases;
+            lease_level_pairs_(leases, ld, coarse, pairs, /*refine=*/true);
+            auto const by = [&](auto const& access) {
+                if (n_ranks_ > 1)
+                    damn::mpi::refine(op, region, *l.to_coarser, pairs, access, coarse, ld, alpha);
+                else
+                    damn::amr::refine(op, region, *l.to_coarser, pairs, access, coarse, ld, alpha);
+            };
+            with_level_access_(ld, coarse, pairs, by);
         });
     }
+
+    // from level ln - 1 into level ln: a hybrid model's particle arrays, by the route's
+    //  accessors when both levels are its (always: particles are split from hybrid levels only;
+    //  any other pair by name, as before)
+    template<amr::ParticleRoute Refines>
+    void refine_(std::size_t const ln, auto const& op, damn::amr::LevelRegion const region,
+                 Refines const& refines)
+    {
+        auto& l = levels_[ln];
+        with_level_pair_(ln, [&](auto& ld, auto& coarse) {
+            Leases leases;
+            lease_level_pairs_(leases, ld, coarse, refines.pairs, /*refine=*/true);
+            auto const by = [&](auto const& access) {
+                if (n_ranks_ > 1)
+                    damn::mpi::refine(op, region, *l.to_coarser, refines.pairs, access, coarse, ld);
+                else
+                    damn::amr::refine(op, region, *l.to_coarser, refines.pairs, access, coarse, ld);
+            };
+            by(particle_access_(ld, coarse, refines));
+        });
+    }
+    template<typename FineLD, typename CoarseLD, typename Refines>
+        requires(std::is_same_v<patch_of_t<FineLD>, typename Refines::Patch_t>
+                 and std::is_same_v<patch_of_t<CoarseLD>, typename Refines::Patch_t>)
+    static auto const& particle_access_(FineLD&, CoarseLD&, Refines const& refines)
+    {
+        return refines.access;
+    }
+    static auto const& particle_access_(auto&, auto&, auto const&) { return damn::amr::by_name; }
+
+    // fn(how refine / coarsen reach the pairs' resources): accessors when resolved (untiled
+    //  fields), else by name; tiled patches by name only (their accessors are not even compiled:
+    //  a tiled grid has no point access)
+    template<typename FineLD, typename CoarseLD>
+        requires any_tiled_v<FineLD, CoarseLD>
+    void with_level_access_(FineLD&, CoarseLD&, std::vector<damn::amr::LevelPair> const&, auto&& fn)
+    {
+        fn(damn::amr::by_name);
+    }
+    template<typename FineLD, typename CoarseLD>
+        requires(!any_tiled_v<FineLD, CoarseLD>)
+    void with_level_access_(FineLD& fine, CoarseLD& coarse,
+                            std::vector<damn::amr::LevelPair> const& pairs, auto&& fn)
+    {
+        if (auto const* access = level_access_(fine, coarse, pairs))
+            fn(*access);
+        else
+            fn(damn::amr::by_name);
+    }
+
+    // tiled fields: the pairs' names leased on both levels (damn's plans read them on both),
+    //  the written ones first: fill (refine: the fine ones, coarsen: the coarse ones)
+    template<typename FineLD, typename CoarseLD>
+        requires any_tiled_v<FineLD, CoarseLD>
+    static void lease_level_pairs_(Leases& leases, FineLD& fine_ld, CoarseLD& coarse_ld,
+                                   std::vector<damn::amr::LevelPair> const& pairs,
+                                   bool const refine)
+    {
+        {
+            std::vector<std::string> fine, coarser;
+            for (auto const& p : pairs)
+            {
+                fine.push_back(p.fine);
+                coarser.push_back(p.coarse);
+                if (!p.coarse_new.empty())
+                    coarser.push_back(p.coarse_new);
+            }
+            auto all = fine;
+            all.insert(all.end(), coarser.begin(), coarser.end());
+            if (refine)
+                leases.add(fine_ld, fine, amr::Lease::fill);
+            else
+                leases.add(coarse_ld, coarser, amr::Lease::fill);
+            leases.add(fine_ld, all, amr::Lease::read);
+            leases.add(coarse_ld, all, amr::Lease::read);
+        }
+    }
+    template<typename FineLD, typename CoarseLD>
+        requires(!any_tiled_v<FineLD, CoarseLD>)
+    static void lease_level_pairs_(Leases&, FineLD&, CoarseLD&,
+                                   std::vector<damn::amr::LevelPair> const&, bool)
+    {
+    }
+
+    // refine / coarsen's accessors of pairs between a level's data and the coarser level's:
+    //  untiled fields, resolved once per models and pairs (amr/field_access.hpp); null: by
+    //  name (particle arrays, tiled patches, or no patch of either level here yet)
+    template<typename FineLD, typename CoarseLD>
+    using level_access_t
+        = std::vector<amr::LevelFieldAccess<patch_of_t<CoarseLD>::field_ghost_width,
+                                            patch_of_t<FineLD>::field_ghost_width>>;
+
+    template<typename FineLD, typename CoarseLD>
+        requires(!any_tiled_v<FineLD, CoarseLD>)
+    auto const* level_access_(FineLD& fine, CoarseLD& coarse,
+                              std::vector<damn::amr::LevelPair> const& pairs)
+    {
+        using F        = patch_of_t<FineLD>;
+        using C        = patch_of_t<CoarseLD>;
+        using Access_t = level_access_t<FineLD, CoarseLD>;
+        using Cached_t = std::optional<Access_t>;
+        {
+            auto const key = LevelAccessKey{simulator::coupling::is_mhd_patch_v<F>,
+                                            simulator::coupling::is_mhd_patch_v<C>, pairs};
+            auto it        = level_access_cache_.find(key);
+            if (it == level_access_cache_.end())
+            {
+                if (damn::amr::size(fine) == 0 or damn::amr::size(coarse) == 0)
+                    return static_cast<Access_t const*>(nullptr);
+                it = level_access_cache_
+                         .emplace(
+                             key,
+                             amr::level_field_access<C::field_ghost_width, F::field_ghost_width>(
+                                 *coarse.data[0], *fine.data[0], pairs))
+                         .first;
+            }
+            auto const& cached = std::any_cast<Cached_t const&>(it->second);
+            return cached ? &*cached : static_cast<Access_t const*>(nullptr);
+        }
+    }
+    using LevelAccessKey = std::tuple<bool, bool, std::vector<damn::amr::LevelPair>>;
+    std::map<LevelAccessKey, std::any> level_access_cache_; // level_access_'s
 
     // from level ln onto level ln - 1
     void coarsen_(std::size_t const ln, auto const& op,
@@ -443,10 +823,15 @@ private:
     {
         auto& l = levels_[ln];
         with_level_pair_(ln, [&](auto& ld, auto& coarse) {
-            if (n_ranks_ > 1)
-                damn::mpi::coarsen(op, *l.to_coarser, pairs, ld, coarse);
-            else
-                damn::amr::coarsen(op, *l.to_coarser, pairs, ld, coarse);
+            Leases leases;
+            lease_level_pairs_(leases, ld, coarse, pairs, /*refine=*/false);
+            auto const by = [&](auto const& access) {
+                if (n_ranks_ > 1)
+                    damn::mpi::coarsen(op, *l.to_coarser, pairs, access, ld, coarse);
+                else
+                    damn::amr::coarsen(op, *l.to_coarser, pairs, access, ld, coarse);
+            };
+            with_level_access_(ld, coarse, pairs, by);
         });
     }
 
@@ -497,7 +882,13 @@ private:
     // level ln's patches from its boxes (that level's cells): chopped into the largest patch
     //  size, partitioned along the Hilbert curve by the particles they will hold
     NO_DISCARD damn::amr::Level<dimension> level_of_(int ln, std::vector<Box_t> const& boxes);
+    // damn::amr::decompose's settings: this run's topology, patch size, spill, its weights (the
+    //  particles a patch will hold, or holds; MHD levels: cells), `partition`
+    NO_DISCARD damn::amr::Decompose<dimension> decompose_in_(std::string const& partition);
     void make_level_(int ln, std::vector<Box_t> const& boxes);
+    // the levels' total moments after a regrid / rebalance, finest down to lowest: from their
+    //  populations, coarsened from the finer level (rebuild_moments_)
+    void rebuild_moments_(int lowest);
     void allocate_level_(int ln); // the patch data of hierarchy_'s level ln, linked
     void link_level_(int ln);     // neighbours, map to the coarser level, level ghost cells
     void link_hybrid_level_(int ln);
@@ -518,16 +909,30 @@ private:
     //  of ln to t (last: ln's last substep of its coarser level's step)
     void after_step_(int ln, double t, bool last);
     void regrid_after_step_(int ln, double t); // after_step_'s regrid, at a regrid point
-    // keep_finer: the finer levels stay (each to be regridded onto its own boxes in turn)
-    void regrid_level_(int ln, std::vector<Box_t> const& boxes, double t, bool keep_finer = false);
+    // keep_finer: the finer levels stay (each to be regridded onto its own boxes in turn);
+    //  moved: the same cells (a rebalance), the old ghosts valid: moved with the data
+    //  (damn::amr::RegridGhosts), nothing refined or refilled from the coarser level
+    void regrid_level_(int ln, std::vector<Box_t> const& boxes, double t, bool keep_finer = false,
+                       bool moved = false);
     // heavy debugging (-DDAMN_SUPER_DEBUG only, simulator_sums.hpp): every resource of level ln
     //  summed and printed, at stage; the finest level regridded onto its boxes at given times
     void sums_(std::size_t ln, char const* stage, double t);
     void debug_regrid_(int ln, double t);
+    // a rebalance moves data: what must survive it (rebalance_state_), checked after it
+    struct RebalanceState
+    {
+        std::vector<std::vector<double>> values; // per level and quantity, its domain values
+        std::vector<double> particles;           // per level and set: count, sums of w, v, x
+    };
+    NO_DISCARD RebalanceState rebalance_state_();
+    void check_rebalance_(RebalanceState const& before, double t);
     // regrid_level_'s data, the level's model's: where the old level was, moved; the new cells
     //  (outside old_cells) refined from the coarser level, then the ghosts
-    void regrid_hybrid_data_(int ln, auto const& map, std::vector<Box_t> const& old_cells,
-                             double t);
+    void regrid_hybrid_data_(int ln, auto const& map, std::vector<Box_t> const& old_cells, double t,
+                             bool moved);
+    // a hybrid level's resources whose ghosts a rebalance moves (every field grid, the old level
+    //  ghost particles), from this rank's patches (a rank without any has no transfers)
+    NO_DISCARD damn::amr::RegridGhosts moved_ghosts_(int ln);
     void regrid_mhd_data_(int ln, auto const& map, std::vector<Box_t> const& old_cells, double t);
     // a new level ln's data, from the coarser level (regrid_, initialization)
     void initialize_refined_level_(int ln, double t);
@@ -560,9 +965,16 @@ private:
         void sums(char const* stage, double const t) { self.sums_(ln, stage, t); } // SUPER_DEBUG
 
         NO_DISCARD std::size_t number() const { return ln; }
+        NO_DISCARD std::uint64_t generation() const { return self.levels_[ln].generation; }
         NO_DISCARD auto& data() { return self.data_(ln); }
         void per_patch(auto&& fn) { self.per_patch_(ln, fn); }
+        // fn touching only its patch, never python: on damn's pools (per_patch_threaded_)
+        void per_patch_threaded(auto&& fn) { self.per_patch_threaded_(ln, fn); }
         void copy(auto const how, std::string const& key) { self.copy_(ln, how, key); }
+        void copy(auto const how, amr::ParticleRoute auto const& copies)
+        {
+            self.copy_(ln, how, copies);
+        }
         void fill_magnetic_ghosts(std::string const& key, double const t)
         {
             self.fill_magnetic_ghosts_(ln, key, t);
@@ -585,10 +997,17 @@ private:
         NO_DISCARD LevelServices coarser() const { return {self, ln - 1}; }
         NO_DISCARD double coarse_dt() const { return self.levels_[ln].coarse_dt; }
         NO_DISCARD int time_ratio() const { return self.time_ratio(); }
+        // its last step's share of its coarser level's step (flux sums' weight)
+        NO_DISCARD double substep_weight() const { return self.substep_weight_(ln); }
         void refine(auto const& op, damn::amr::LevelRegion const region,
                     std::vector<damn::amr::LevelPair> const& pairs, double const alpha = 0)
         {
             self.refine_(ln, op, region, pairs, alpha);
+        }
+        void refine(auto const& op, damn::amr::LevelRegion const region,
+                    amr::ParticleRoute auto const& refines)
+        {
+            self.refine_(ln, op, region, refines);
         }
         void coarsen(auto const& op, std::vector<damn::amr::LevelPair> const& pairs)
         {
@@ -626,6 +1045,8 @@ private:
         void copy(auto const how, std::string const& key) { self.copy_(ln, how, key); }
         NO_DISCARD double old_time() const { return self.levels_[ln].old_t; }
         NO_DISCARD int time_ratio() const { return self.time_ratio(); }
+        // its last step's share of its coarser level's step (flux sums' weight)
+        NO_DISCARD double substep_weight() const { return self.substep_weight_(ln); }
     };
     // patch ghosts, then the physical boundaries' (simulator_ghosts.hpp)
     void fill_mhd_state_ghosts_(std::size_t ln, std::size_t s, double t);
@@ -634,7 +1055,7 @@ private:
     void mhd_physical_boundaries_(std::size_t ln, auto&& fn);
 
     // damn::amr::advance's hooks, see damn/amr/time_refinement.hpp
-    void advance_level_(int ln, double t, double dt);
+    void advance_level_(int ln, damn::amr::Step const& step);
     void prepare_step_(int ln, double t);
     void first_step_(int ln, double t, double coarse_t, double coarse_dt);
     void last_step_(int ln);
@@ -669,6 +1090,9 @@ private:
     bool pretag_enabled_ = false;
     // simulation/AMR/refinement/tagging/tag_boxes: levels 1... made from these at initialization
     std::vector<std::vector<Box_t>> supplied_tag_boxes_{};
+    // levels decomposed together (finest, aligned) where every level's boxes are known
+    //  (initialization with pretag or tag_boxes, rebalance), taken by level_of_, then cleared
+    std::vector<damn::amr::Level<dimension>> planned_{};
     std::vector<int> level_steps_; // per level > 0: its substeps in the coarser level's step
     int steps_ = 0;
     // simulation/AMR/loadbalancing (pyphare's LoadBalancer), with refinement="tagging"
@@ -682,11 +1106,17 @@ private:
         // how a level's patches get their ranks (level_of_; plamn's, not PHARE's: the PHARE
         //  comparisons keep "levels"): "levels" each level along the Hilbert curve on its own,
         //  "keep" where the data is (damn::amr::keep: the old level's owners, else the coarser
-        //  patch's under it, else the curve); spill >= 0: then no rank above (1 + spill) of its
-        //  share (damn::amr::spill). simulation/AMR/loadbalancing/partition, spill, or
-        //  PLAMN_PARTITION, PLAMN_SPILL
+        //  patch's under it, else the curve); "finest" / "aligned" (damn::amr::decompose) every
+        //  level together where all are known (initialization with pretag or tag_boxes,
+        //  rebalance), a level alone to the owners of the coarser cells under it; spill >= 0:
+        //  then no rank above (1 + spill) of its share
+        //  (damn::amr::spill). simulation/AMR/loadbalancing/partition, spill, or
+        //  PLAMN_PARTITION, PLAMN_SPILL. finest: near_band, the level 0 cells about level 1
+        //  its step reads (default: a particle ghost width, where its level ghosts split
+        //  from), with level 1's owners; near_band or PLAMN_NEAR_BAND
         std::string partition = "levels";
         double spill          = -1;
+        int near_band         = -1; // -1: the default
     } lb_;
     std::optional<amr::CoarsestRebalanceCheck> rebalance_check_;
     int rank_    = 0;
@@ -700,8 +1130,33 @@ private:
     std::vector<int> domainBox_;
     std::vector<double> cellWidth_;
     Timestepper timestepper_; // each step's dt, the time after it
-    // the adaptive dt: every level's whistler bound as a level 0 dt, the smallest (all ranks)
+    // the adaptive dt: level 0's stable dt (each level steps at its own: next_dt_)
     double stable_dt_(Timestepper::CFL const& cfl);
+    // level ln's stable dt at t (hybrid: whistler, MHD: fast + Hall, diffusive), all ranks; the
+    //  adaptive run stops (non-finite speed, Timestepper's substep / shrink limits) throw
+    double level_stable_dt_(std::size_t ln, double t);
+    // this rank's bound of level ln (-1: a non-finite speed)
+    double level_bound_(std::size_t ln, Timestepper::CFL const& cfl);
+    // damn::amr::TimeRefinement's next_dt: constant, the level's dt of the table (dt /
+    //  time_ratio^ln); adaptive, level 0 its step's, a finer level min(its coarser step, stable)
+    double next_dt_(int ln, damn::amr::Step const& step);
+    // level ln's last step's share of its coarser level's step
+    NO_DISCARD double substep_weight_(std::size_t ln) const;
+    // per level: its last step (damn's), its dt (constant: the table; adaptive: its last stable)
+    std::vector<damn::amr::Step> level_step_;
+    std::vector<std::vector<double>> substep_dts_; // per level, in the last advance
+    std::vector<double> level_dts_;
+    double first_level0_dt_ = -1; // adaptive: the run's first level 0 dt (shrink limit)
+    // the substeps' split (SAMRAI's), kept across steps; made at the first advance
+    std::optional<damn::amr::TimeRefinement<dimension>> stepping_;
+    // a start or a restart (its dt or mode may differ): the levels' dts and the split afresh
+    void restart_stepping_()
+    {
+        level_step_.clear();
+        level_dts_.clear();
+        first_level0_dt_ = -1;
+        stepping_.reset();
+    }
     double dt_          = 0; // this step's
     int timeStepNbr_    = 0;
     double startTime_   = 0;

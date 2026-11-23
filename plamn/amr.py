@@ -8,8 +8,8 @@ without) running it, to compare decompositions.
     h.hierarchy()                                       # pharesee PatchHierarchy, "rank" field
 
 chop: each level's boxes cut into patches as the simulator does (largest_patch_size; refined
-levels in whole coarser cells), mode "even" (SAMRAI's on one rank, the simulator's) or "chop"
-(from the lower corner); each level partitioned along the Hilbert curve by patch weight, each
+levels in whole coarser cells), mode "even" (the simulator's: the count nearest the size, cells
+shared evenly, up to 25% past it) or "chop" (from the lower corner, at most the size); each level partitioned along the Hilbert curve by patch weight, each
 node an equal share split over its ranks. A patch weighs its cells times the particles per cell,
 or on level 0, given a work map per level 0 cell (Tagger.weights(): the work above it too), its
 cells' sum of the map, so level 0 is cut by the work the levels above will bring.

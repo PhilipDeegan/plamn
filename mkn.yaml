@@ -1,6 +1,10 @@
 #! clean build test -p test_plamn_core -dKO -t 8 -x res/mkn/thrust
 
 name: plamn
+property:
+  # dependency versions: master on master, latest on latest (a bare dep is the default branch)
+  clang.tidy.version: master
+  cpp.iwyu.version: master
 
 profile:
 
@@ -12,14 +16,15 @@ profile:
   sub: cppdict&tpp/cppdict(https://github.com/LaboratoryOfPlasmaPhysics/cppdict)
        menum&tpp/menum(https://github.com/Neargye/magic_enum)
   self: damn
-  arg: -std=c++20
+  # nothing reads errno: sqrt, pow ... stay inline, their loops vectorise (results unchanged)
+  arg: -std=c++20 -fno-math-errno
 
 # python module: pyphare's dict and enums, installed into plamn
 - name: py_etc
   parent: base
   self: damn_hdf5
   dep: lang.nanobind
-  mod: lang.python3 python3.module
+  mod: lang.python3#master python3.module#master
   src: src/python3/plamn_etc.cpp
   mode: shared
   out: plamn_etc
@@ -31,7 +36,7 @@ profile:
   parent: base
   self: damn_hdf5
   dep: lang.nanobind
-  mod: lang.python3 python3.module
+  mod: lang.python3#master python3.module#master
   src: src/python3/plamn_sim.cpp
   mode: shared
   out: plamn_cpp_1_1_2_AoSMapped_CPU
@@ -46,6 +51,8 @@ profile:
         tst/plamn/core/data/particles/test_particle_components.cpp
         tst/plamn/core/data/particles/test_particle_synchronisation.cpp
         tst/plamn/core/data/particles/test_soavx_chunked_gaps.cpp
+        tst/plamn/core/data/particles/test_aos4soavx_chunked_gaps.cpp
+        tst/plamn/core/data/particles/test_aos_transpose.cpp
         tst/plamn/core/numerics/interpolator/test_interpolator.cpp
         tst/plamn/core/numerics/boundary_condition/test_field_boundary_condition.cpp
         tst/plamn/core/numerics/boundary_condition/test_field_conditions_none.cpp
@@ -67,6 +74,7 @@ profile:
         tst/plamn/core/numerics/ampere/test_tileset_ampere.cpp
         tst/plamn/core/numerics/primitive_conservative/test_primitive_conservative.cpp
         tst/plamn/core/numerics/godunov/test_godunov.cpp
+        tst/plamn/core/numerics/stable_dt/test_wave_speeds.cpp
         tst/plamn/core/numerics/constrained_transport/test_upwind_ct.cpp
         tst/plamn/core/numerics/finite_volume/test_finite_volume_euler.cpp
         tst/plamn/core/numerics/time_integrator/test_mhd_time_integrator.cpp
@@ -91,7 +99,7 @@ profile:
   - name: MKN_PYTHON_LIB_EMBED
     mode: replace
     value: 1
-  mod: lang.python3
+  mod: lang.python3#master
   mode: none
   test: tst/plamn/simulator/test_diagnostics_1d.cpp
         tst/plamn/simulator/test_diagnostics_2d.cpp
@@ -109,6 +117,12 @@ profile:
   mode: none
   main: etc/bench/particles/bench_mover.cpp
 
+- name: bench_ohm
+  inc: . tpp/damn
+  self: base
+  mode: none
+  main: etc/bench/numerics/bench_ohm.cpp
+
 # tpp/damn may be a symlink to a local damn checkout, otherwise it is cloned
 - name: damn
   dep: damn&tpp/damn(https://github.com/PhilipDeegan/damn)[damn_core]
@@ -123,6 +137,7 @@ profile:
   parent: test_plamn_core
   mod:
   - name: clang.tidy
+    version: ${clang.tidy.version}
 
 # include-what-you-use report for inc/, needs iwyu on PATH
 - name: iwyu
@@ -130,6 +145,7 @@ profile:
   mode: none
   mod:
   - name: cpp.iwyu
+    version: ${cpp.iwyu.version}
     compile:
       paths: inc
       headers: -x c++-header
@@ -144,6 +160,7 @@ profile:
   mode: none
   mod:
   - name: cpp.iwyu
+    version: ${cpp.iwyu.version}
     compile:
       paths: inc
       # fragments (of particles_sorting.hpp, particles_partitioning.hpp)

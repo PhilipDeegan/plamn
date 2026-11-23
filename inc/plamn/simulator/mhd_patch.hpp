@@ -26,13 +26,13 @@
 //
 // for_each_resource names what damn's schedules may move (PHARE's MHD names for the advanced
 //  state): rho, rhoV_x..., B_x..., Etot, V_x..., P; a stage s > 0: rho_s<s>, rhoV_s<s>_x...;
-//  the old state: rho_old, rhoV_old_x..., B_old_x..., Etot_old; E_x...; per direction d < dim
-//  the refluxed step fluxes and their sums: F_rho_butcher_<d>, F_rhoV_butcher_<d>_x...,
+//  the old state: rho_old, rhoV_old_x..., B_old_x..., Etot_old; E_x..., E_old_x...; per direction d
+//  < dim the refluxed step fluxes and their sums: F_rho_butcher_<d>, F_rhoV_butcher_<d>_x...,
 //  F_Etot_butcher_<d>, F_rho_sum_<d>...; butcherE_x..., E_sum_x... (the last fluxes and the
 //  constrained transport inputs never move)
 
 #include "damn/core/def.hpp"
-#include "plamn/amr/resources.hpp"
+#include "plamn/amr/untiled.hpp"
 #include "plamn/core/models/mhd_state.hpp"
 #include "plamn/core/models/quantities/mhd_quantities.hpp"
 #include "plamn/plamn_core.hpp"
@@ -203,6 +203,8 @@ struct MHDPatch
                 VecField{"B_old", layout, V::B},   Grid_t{"Etot_old", layout, S::Etot},
                 VecField{"V_old", layout, V::V},   Grid_t{"P_old", layout, S::P}};
     VecField E{"E", layout, V::E, 0.}, butcherE{"butcherE", layout, V::E, 0.};
+    // E at the step's start: a hybrid level over this one interpolates its E ghosts in time
+    VecField E_old{"E_old", layout, V::E, 0.};
     std::array<Fluxes_t, 3> fluxes{fluxes_("x", S::ScalarFlux_x, V::VecFlux_x),
                                    fluxes_("y", S::ScalarFlux_y, V::VecFlux_y),
                                    fluxes_("z", S::ScalarFlux_z, V::VecFlux_z)};
@@ -235,6 +237,13 @@ struct MHDPatch
             fn(*g);
     }
 
+    // tiled fields: their untiled temporaries while a whole patch operation (damn's schedules)
+    //  works on them, see amr/untiled.hpp and Simulator::lease_
+    using Untiled_t = amr::UntiledFor_t<Grid_t>;
+    Untiled_t untiled;
+    // the grids for_each_field_grid moves, in its order (see grid_table)
+    std::vector<Grid_t*> grid_table_;
+
 private:
     Fluxes_t fluxes_(std::string const& d, S const sf, V const vf) const
     {
@@ -265,16 +274,11 @@ private:
     }
 };
 
+// fn(name, grid) for each field grid damn's schedules may move, by its name
 template<auto opts>
-void for_each_resource(MHDPatch<opts>& patch, auto&& fn)
+void for_each_field_grid(MHDPatch<opts>& patch, auto&& fn)
 {
-    using Patch   = MHDPatch<opts>;
-    auto const gw = Patch::field_ghost_width;
-
-    auto const scalar = [&](auto& grid) {
-        auto r = amr::field_resource<gw>(grid);
-        fn(grid.name(), r);
-    };
+    auto const scalar = [&](auto& grid) { fn(grid.name(), grid); };
     auto const vector = [&](auto& v) {
         for (auto& g : v.grids)
             scalar(g);
@@ -293,7 +297,8 @@ void for_each_resource(MHDPatch<opts>& patch, auto&& fn)
     vector(patch.old.B);
     scalar(patch.old.Etot);
     vector(patch.E);
-    for (std::size_t d = 0; d < Patch::dimension; ++d)
+    vector(patch.E_old);
+    for (std::size_t d = 0; d < MHDPatch<opts>::dimension; ++d)
         for (auto* f : {&patch.butcher[d], &patch.flux_sum[d]})
         {
             scalar(f->F_rho);
@@ -302,6 +307,23 @@ void for_each_resource(MHDPatch<opts>& patch, auto&& fn)
         }
     vector(patch.butcherE);
     vector(patch.flux_sum_E);
+}
+
+// MHD patches have no scratch grids: every one is fixed (grid_table)
+template<auto opts>
+void for_each_fixed_field_grid(MHDPatch<opts>& patch, auto&& fn)
+{
+    for_each_field_grid(patch, fn);
+}
+
+template<auto opts>
+void for_each_resource(MHDPatch<opts>& patch, auto&& fn)
+{
+    using Patch   = MHDPatch<opts>;
+    auto const gw = Patch::field_ghost_width;
+    for_each_field_grid(patch, [&](std::string const& name, auto& grid) {
+        amr::field_resource_for<gw>(patch.untiled, name, grid, fn);
+    });
 }
 
 // LevelData holds patches by unique_ptr

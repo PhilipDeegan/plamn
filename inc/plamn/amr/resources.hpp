@@ -15,12 +15,13 @@
 #include "damn/core/memory/box_span.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "mkn/kul/std/array.hpp"
-
 #include "plamn/core/data/particles/particle_components.hpp"
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/layout.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
+#include "plamn/core/data/particles/particle_iteration.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
+#include "damn/core/def/damn_config.hpp"
 
 #include <cstddef>
 #include <stdexcept>
@@ -29,6 +30,8 @@
 #include <cstring>
 #include <utility>
 #include <format>
+#include <concepts>
+#include <type_traits>
 
 namespace plamn::core
 {
@@ -42,6 +45,8 @@ template<typename Field, std::uint32_t gw>
 struct FieldResource
 {
     auto static constexpr dimension = Field::dimension;
+    // in unified memory: damn's same rank copies run on the device over box_span (data + box)
+    bool static constexpr on_device = Field::alloc_mode == damn::AllocatorMode::GPU_UNIFIED;
     Field* field;
 };
 
@@ -129,12 +134,13 @@ NO_DISCARD auto ghost_box(ParticleResource<Particles, gw> const&,
 template<typename Particles, std::uint32_t gw>
 void for_each_item(ParticleResource<Particles, gw> const& r, auto&& fn)
 {
-    auto const& particles = *r.particles;
-    for (std::size_t i = 0; i < particles.size(); ++i)
-        if constexpr (requires { particles.copy(i); }) // columns (SoA family): a Particle
-            fn(particles.copy(i));
-        else
-            fn(particles[i]);
+    if constexpr (core::is_chunked(std::remove_const_t<Particles>::layout_mode))
+        core::for_each_particle(*r.particles, [&](auto const& p) {
+            if (p.weight() != 0) // not a chunks' gap
+                fn(p);
+        });
+    else
+        core::for_each_particle(*r.particles, fn); // tiled arrays tile by tile
 }
 
 template<typename Particles, std::uint32_t gw>
@@ -151,8 +157,10 @@ void append(ParticleResource<Particles, gw>& r, typename Particles::value_type p
 //  each component's values contiguously, in components()' order (weight, iCell_x.., delta_x..,
 //  v_x, v_y, v_z). A selection reads the iCell columns only, or SoAVXChunked's per cell ranges
 //  when sorted; appends are column wise, SoAVXChunked sorted once after all of them
+//  A resource over Particles const (a read only source, amr/particle_access.hpp) packs too
 template<typename Particles>
-concept ParticleColumns = core::HasComponents<Particles> and core::is_soavx(Particles::layout_mode);
+concept ParticleColumns = core::HasComponents<std::remove_const_t<Particles>>
+                          and core::is_soavx(Particles::layout_mode);
 
 namespace detail
 {
@@ -164,7 +172,7 @@ namespace detail
     {
         auto constexpr dim = Particles::dimension;
         std::vector<std::size_t> out;
-        if constexpr (Particles::layout_mode == core::LayoutMode::SoAVXChunked)
+        if constexpr (core::is_chunked(Particles::layout_mode))
             if (particles.sorted())
             {
                 damn::core::Point<int, dim> back; // box in the particles' cells
@@ -285,11 +293,11 @@ void unpack_items(ParticleResource<Particles, gw>& r, std::byte const*& at,
             c.iCell[d][was + k] += shift[d];
 }
 
-// as pack_items then unpack_items, without the bytes (src may be dst: its first particles stay)
-template<typename Particles, std::uint32_t gw>
-    requires ParticleColumns<Particles>
-void append_items_from(ParticleResource<Particles, gw>& dst,
-                       ParticleResource<Particles, gw> const& src,
+// as pack_items then unpack_items, without the bytes (src may be dst: its first particles stay;
+//  src may be over Particles const)
+template<typename Particles, typename Src, std::uint32_t gw>
+    requires ParticleColumns<Particles> and std::same_as<std::remove_const_t<Src>, Particles>
+void append_items_from(ParticleResource<Particles, gw>& dst, ParticleResource<Src, gw> const& src,
                        damn::core::Box<int, Particles::dimension> const& box,
                        damn::core::Point<int, Particles::dimension> const& shift)
 {
@@ -350,14 +358,115 @@ std::vector<typename Particles::value_type> read_items(ParticleResource<Particle
     return out;
 }
 
-// after a copy or a regrid appended to it: SoAVXChunked's offsets rebuilt, once
+// AoS4SoAVXChunked (host memory): moved between patches as whole particle structures, damn's
+//  particle_items hooks as the columns' above. The bytes: the number of particles, then the
+//  structures. A selection reads the per cell ranges when sorted; arrivals go into their chunks'
+//  gaps when sorted with slack (else appended, sorted once after all of them: items_appended)
+template<typename Particles>
+concept ParticleStructs
+    = std::remove_const_t<Particles>::layout_mode == core::LayoutMode::AoS4SoAVXChunked;
+
+namespace detail
+{
+    // p, its cells moved by shift, into dst: its chunk's gaps if it can, else appended
+    template<typename Particles>
+    void arrive(Particles& dst, typename Particles::value_type p,
+                damn::core::Point<int, Particles::dimension> const& shift, bool const gaps)
+    {
+        for (std::size_t d = 0; d < Particles::dimension; ++d)
+            p.iCell()[d] += shift[d];
+        if (!gaps or !dst.insert(p))
+            dst.push_back(p);
+    }
+} // namespace detail
+
 template<typename Particles, std::uint32_t gw>
-    requires ParticleColumns<Particles>
+    requires ParticleStructs<Particles>
+void pack_items(ParticleResource<Particles, gw> const& r,
+                damn::core::Box<int, Particles::dimension> const& box,
+                damn::core::Point<int, Particles::dimension> const& shift,
+                std::vector<std::byte>& out)
+{
+    using P               = typename Particles::value_type;
+    auto const& particles = *r.particles;
+    auto const index      = detail::selected(particles, box, shift);
+    std::uint64_t const n = index.size();
+    auto at               = out.size();
+    out.resize(at + sizeof(n) + n * sizeof(P));
+    std::memcpy(out.data() + at, &n, sizeof(n));
+    at += sizeof(n);
+    for (auto const i : index)
+    {
+        std::memcpy(out.data() + at, &particles[i], sizeof(P));
+        at += sizeof(P);
+    }
+}
+
+template<typename Particles, std::uint32_t gw>
+    requires ParticleStructs<Particles>
+void unpack_items(ParticleResource<Particles, gw>& r, std::byte const*& at,
+                  damn::core::Point<int, Particles::dimension> const& shift)
+{
+    using P         = typename Particles::value_type;
+    auto& particles = *r.particles;
+    std::uint64_t n;
+    std::memcpy(&n, at, sizeof(n));
+    at += sizeof(n);
+    bool const gaps = particles.sorted() and particles.has_slack();
+    for (std::uint64_t k = 0; k < n; ++k)
+    {
+        P p;
+        std::memcpy(&p, at, sizeof(P));
+        at += sizeof(P);
+        detail::arrive(particles, p, shift, gaps);
+    }
+}
+
+// as pack_items then unpack_items, without the bytes (src may be dst: the selection copied first)
+template<typename Particles, typename Src, std::uint32_t gw>
+    requires ParticleStructs<Particles> and std::same_as<std::remove_const_t<Src>, Particles>
+void append_items_from(ParticleResource<Particles, gw>& dst, ParticleResource<Src, gw> const& src,
+                       damn::core::Box<int, Particles::dimension> const& box,
+                       damn::core::Point<int, Particles::dimension> const& shift)
+{
+    using P          = typename Particles::value_type;
+    auto const index = detail::selected(*src.particles, box, shift);
+    if (index.empty())
+        return;
+    std::vector<P> moving;
+    moving.reserve(index.size());
+    for (auto const i : index)
+        moving.push_back((*src.particles)[i]);
+    bool const gaps = static_cast<void const*>(src.particles) != dst.particles
+                      and dst.particles->sorted() and dst.particles->has_slack();
+    for (auto const& p : moving)
+        detail::arrive(*dst.particles, p, shift, gaps);
+}
+
+// what pack_items wrote, as particles (refine's coarse particles, split into new ones)
+template<typename Particles, std::uint32_t gw>
+    requires ParticleStructs<Particles>
+std::vector<typename Particles::value_type> read_items(ParticleResource<Particles, gw> const&,
+                                                       std::byte const*& at)
+{
+    using P = typename Particles::value_type;
+    std::uint64_t n;
+    std::memcpy(&n, at, sizeof(n));
+    at += sizeof(n);
+    std::vector<P> out(n);
+    if (n)
+        std::memcpy(out.data(), at, n * sizeof(P));
+    at += n * sizeof(P);
+    return out;
+}
+
+// after a copy or a regrid appended to it: a chunked array's offsets rebuilt, once
+template<typename Particles, std::uint32_t gw>
+    requires(core::is_chunked(Particles::layout_mode))
 void items_appended(ParticleResource<Particles, gw>& r)
 {
-    if constexpr (Particles::layout_mode == core::LayoutMode::SoAVXChunked)
-        if (!r.particles->sorted()) // appended to, not only inserted into its gaps
-            r.particles->sort();
+    if (!r.particles->sorted()) // appended to, not only inserted into its gaps
+        r.particles->sort();
 }
 
 // the particles' components as checkpoint columns (weight, iCell_x.., delta_x.., v_x..)
@@ -387,5 +496,8 @@ NO_DISCARD auto cell(Particle<dim> const& particle)
     return damn::core::Point<int, dim>{particle.iCell()};
 }
 } // namespace plamn::core
+
+// damn's device Append hooks (GPU builds), after the resources they use
+#include "plamn/amr/device_append.hpp" // IWYU pragma: export
 
 #endif // PLAMN_AMR_RESOURCES_HPP
