@@ -313,9 +313,9 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
                 old_cells.push_back(damn::core::shift(p.box, shift));
     }
     auto const old_level = hierarchy_.levels[ln];
-    auto const finer     = keep_finer ? std::vector<damn::amr::Level<dimension>>(
+    auto const finer = keep_finer ? std::vector<damn::amr::Level<dimension>>(
                                         hierarchy_.levels.begin() + ln + 1, hierarchy_.levels.end())
-                                      : std::vector<damn::amr::Level<dimension>>{};
+                                  : std::vector<damn::amr::Level<dimension>>{};
     resize_levels_(keep_finer ? std::max(levels_.size(), fine + 1) : fine + 1);
     damn::amr::set_level(hierarchy_, level_of_(ln, boxes)); // drops the finer: put back below
     for (auto const& level : finer)

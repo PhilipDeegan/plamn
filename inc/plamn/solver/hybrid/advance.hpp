@@ -60,7 +60,7 @@ namespace detail
         auto constexpr am = opts.alloc_mode;
         auto const of     = [&](auto const get) {
             return core::level_of<am>(level,
-                                          [&](auto& patch, auto& fields) { fields.add(get(patch)); });
+                                      [&](auto& patch, auto& fields) { fields.add(get(patch)); });
         };
         std::vector<std::pair<double, double>> pops; // (charge, mass), every patch the same
         level.per_patch([&](auto& patch) {
@@ -130,8 +130,8 @@ namespace detail
     {
         using Patch_t       = HybridModel<opts>::Patch_t;
         using Transformer_t = core::AmpereTransformer<>;
-        using Item_t        = Transformer_t::item_t<typename Patch_t::Layout_t,
-                                                    std::decay_t<decltype(std::declval<Patch_t&>().J)>>;
+        using Item_t = Transformer_t::item_t<typename Patch_t::Layout_t,
+                                             std::decay_t<decltype(std::declval<Patch_t&>().J)>>;
         static thread_local damn::core::gpu::Vec_t<Item_t> items;
         items.clear();
         level.per_patch([&](auto& patch) {
