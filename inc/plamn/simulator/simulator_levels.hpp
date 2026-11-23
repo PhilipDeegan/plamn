@@ -269,7 +269,7 @@ void Simulator<opts>::initialize_mhd_()
         currentTime_ = startTime_;
     }
     restart_stepping_();
-    timestepper_.start_at(startTime_);
+    start_timestepper_();
     dt_            = timestepper_.next([&](auto const& cfl) { return stable_dt_(cfl); });
     isInitialized_ = true;
 }
@@ -417,7 +417,7 @@ void Simulator<opts>::initialize_hybrid_()
     //  initialized levels, as PHARE's for its first dump)
     auto const start_steps = [&]() {
         restart_stepping_();
-        timestepper_.start_at(startTime_);
+        start_timestepper_();
         dt_ = timestepper_.next([&](auto const& cfl) { return stable_dt_(cfl); });
     };
 

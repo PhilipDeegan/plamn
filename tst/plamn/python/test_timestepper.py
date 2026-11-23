@@ -1,7 +1,8 @@
 """plamn's Timestepper (inc/plamn/simulator/timestepper.hpp) through pyphare's time_step options:
 
-  constant  the time after n steps is start + n * dt, from 0 or from a restart's time, where dt
-            may change (a job restarted at a smaller time step)
+  constant  the time after n steps is start + n * dt, from 0; a restart with the same dt resumes
+            those steps (its times the run's that kept going), one with another dt (a job
+            restarted at a smaller time step) counts from the restart's time
   adaptive  each step's dt is level 0's whistler bound (core/numerics/stable_dt/whistler.hpp)
             before it, at most what is left to final_time, which the run ends on; a refined
             level substeps at its own (test_adaptive_levels.py)
@@ -112,6 +113,36 @@ class TimestepperTest(unittest.TestCase):
             s.advance()
             self.assertEqual(s.cpp_sim.currentTime(), n * dt)
             self.assertEqual(s.cpp_sim.timeStep(), dt)
+
+    def test_a_restart_resumes_the_steps(self):
+        """the same dt after a restart: the times those of the run that kept going, n * dt from
+        its start (at 7 steps of 0.01: 0.07 + k * 0.01 != (7 + k) * 0.01 for k 2, 4, 5)"""
+        dt, at, steps = 0.01, 7, 13
+        first = self.keep(
+            simulation(
+                time_step=dt,
+                time_step_nbr=steps,
+                restart_options=dict(
+                    dir=self.dir, mode="overwrite", timestamps=[at * dt]
+                ),
+            )
+        )
+        for _ in range(at):
+            first.advance()
+        second = self.keep(
+            simulation(
+                time_step=dt,
+                time_step_nbr=steps,
+                restart_options=dict(
+                    dir=self.dir, mode="overwrite", restart_time=at * dt
+                ),
+            )
+        )
+        cpp = second.cpp_sim
+        self.assertEqual(cpp.currentTime(), at * dt)
+        for n in range(at + 1, steps + 1):
+            second.advance()
+            self.assertEqual(cpp.currentTime(), n * dt, f"step {n}")
 
     def test_restart_with_a_smaller_dt(self):
         dt, at = 0.001, 4

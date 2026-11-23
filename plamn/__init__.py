@@ -128,6 +128,57 @@ def set_tag_boxes(sim, tag_boxes):
     }
 
 
+# adaptive time_step keys plamn reads that pyphare's time_step check does not know (it rejects
+#  unknown keys): taken out before it, written to the dict after it
+_PLAMN_TIME_STEP_INTS = ("fine_level_substeps_max", "level0_dt_shrink_max")
+_PLAMN_TIME_STEP_DOUBLES = ("cfl_particles",)
+
+
+def _patch_time_step_keys():
+    """time_step=dict(mode="adaptive", cfl_wave=..., cfl_particles=..., ...): cfl_particles (the
+    hybrid particle bound, core/numerics/stable_dt/particles.hpp; default 0.5, 0: off) and the run
+    stops' limits fine_level_substeps_max / level0_dt_shrink_max (default 1000)"""
+    from pyphare.pharein import timestepper
+
+    resolve = getattr(
+        timestepper._resolve_dict_time_step,
+        "_plamn_original",
+        timestepper._resolve_dict_time_step,
+    )
+
+    def resolve_dict_time_step(ts, **kwargs):
+        extra = {
+            k: ts[k] for k in _PLAMN_TIME_STEP_INTS + _PLAMN_TIME_STEP_DOUBLES if k in ts
+        }
+        stepper = resolve({k: v for k, v in ts.items() if k not in extra}, **kwargs)
+        if extra and stepper.mode != "adaptive":
+            raise ValueError(f"Error: {sorted(extra)} are adaptive time_step keys")
+        for k in _PLAMN_TIME_STEP_INTS:
+            if k in extra and (isinstance(extra[k], bool) or int(extra[k]) < 1):
+                raise ValueError(f"Error: adaptive time_step '{k}' must be an int >= 1")
+        if "cfl_particles" in extra and extra["cfl_particles"] < 0:
+            raise ValueError("Error: adaptive time_step 'cfl_particles' must be >= 0")
+        stepper._plamn_extra = extra
+        return stepper
+
+    resolve_dict_time_step._plamn_original = resolve
+    timestepper._resolve_dict_time_step = resolve_dict_time_step
+
+    Adaptive = timestepper.AdaptiveTimeStepper
+    populate = getattr(Adaptive.populate_dict, "_plamn_original", Adaptive.populate_dict)
+
+    def populate_dict(self, dp):
+        populate(self, dp)
+        for k, v in (getattr(self, "_plamn_extra", None) or {}).items():
+            if k in _PLAMN_TIME_STEP_INTS:
+                dp.add_int(f"simulation/time_step/{k}", int(v))
+            else:
+                dp.add_double(f"simulation/time_step/{k}", float(v))
+
+    populate_dict._plamn_original = populate
+    Adaptive.populate_dict = populate_dict
+
+
 def _patch_tag_boxes():
     from pyphare.pharein.initialize import general
 
@@ -329,6 +380,7 @@ def patch():
     _patch_live_simulators()
     _patch_density_background()
     _patch_tag_boxes()
+    _patch_time_step_keys()
     _patch_coupled_input()
 
     # restart directories: 10 digits each side of the point, as the C++ restart_path_for_time

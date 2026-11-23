@@ -694,10 +694,18 @@ struct TileSetParticles : public Super_
     using Super::size;
 
 
+    // spans own nothing: their copies and moves the defaulted, trivial ones (device kernels
+    //  capture them as plain data)
+    static constexpr bool is_span = storage_mode == StorageMode::SPAN;
+
     TileSetParticles(TileSetParticles&& that)
+        requires(!is_span)
         : Super{std::forward<Super>(that)}
     {
     }
+    TileSetParticles(TileSetParticles&&)
+        requires(is_span)
+    = default;
 
     TileSetParticles& operator=(TileSetParticles&&)      = default;
     TileSetParticles(TileSetParticles const&)            = default;

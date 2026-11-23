@@ -56,3 +56,8 @@ test_adaptive_levels.py:
   - {}
   - tags: [mpi]
     prefix: "mpirun --oversubscribe -n 3"
+
+test_particle_dt.py:
+  - {}
+  - tags: [mpi]
+    prefix: "mpirun --oversubscribe -n 3"

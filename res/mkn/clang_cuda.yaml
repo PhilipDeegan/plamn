@@ -32,6 +32,6 @@ path: /usr/local/cuda/targets/x86_64-linux/lib
 
 file:
   - type: cpp:cxx:cc
-    archiver: ar -cr
+    archiver: llvm-ar-22 -cr
     compiler:  clang++ ${cxx.flags}
     linker:  clang++ ${lnk.flags}

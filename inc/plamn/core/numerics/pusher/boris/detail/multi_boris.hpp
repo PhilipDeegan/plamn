@@ -397,6 +397,7 @@ void MultiBorisBackend<layout, ModelAccessor, Interpolator>::move_gpu_copy(
 
     auto view       = in.accessor[i];
     auto [ions, em] = view.args;
+    auto const emv  = untiled_view(em); // plain views for the device
 
     for (auto& pop : ions)
     {
@@ -404,8 +405,8 @@ void MultiBorisBackend<layout, ModelAccessor, Interpolator>::move_gpu_copy(
         auto const halfdt    = in.mesh(view.layout.dx, in.dt);
         auto const nlgb      = (*in.nlgb)[i];
         auto const non_owned = (*in.non_owned)[i]; // its type: no excluded boxes
-        auto rhop            = pop.particleDensity();
-        auto flux            = *pop.flux();
+        auto rhop            = untiled_view(pop.particleDensity()); // plain views
+        auto flux            = untiled_view(pop.flux());
         auto const n_points  = rhop.max_tile_size(); // largest tile field, incl. ghosts
         auto const extra
             = Interpolating_::template push_deposit_extra_bytes<typename Particles_t::Particle_t>(
@@ -436,7 +437,7 @@ void MultiBorisBackend<layout, ModelAccessor, Interpolator>::move_gpu_copy(
                     Interpolating_::template on_tiles_push_deposit<Tile_vt_, ParticleType::Domain,
                                                                    Particles_t::alloc_mode,
                                                                    decltype(deposit_c)::value>(
-                        parts, em, flux, rhop, filter_box, exclude_boxes, coef1, halfdt);
+                        parts, emv, flux, rhop, filter_box, exclude_boxes, coef1, halfdt);
                 });
             });
         };
@@ -1726,10 +1727,10 @@ struct MultiBorisFunctors
 
     MultiBorisFunctors(auto& in, auto& view, auto& pop, auto& parts, auto& em)
         : pps{*parts}
-        , electromag{em}
+        , electromag{untiled_view(em)}
         , coef1{pop.charge() * (0.5 * in.dt / pop.mass())}
         , halfdt{in.mesh(view.layout.dx, in.dt)}
-        , particles{parts}
+        , particles{&parts}
     {
         check_particles(parts);
         check_particles_views(parts);
@@ -1883,7 +1884,7 @@ struct MultiBorisFunctors
     void move_check(auto const& pt, std::size_t const pidx, auto& particle)
         requires(Particles_t::layout_mode == LayoutMode::AoSCMTS)
     {
-        particles.template move_check<particle_type>(pt, pidx, particle);
+        particles->template move_check<particle_type>(pt, pidx, particle);
     }
 
     // other flat tiles: domain particles staying in the patch box register, level ghosts
@@ -2100,11 +2101,12 @@ struct MultiBorisFunctors
     }
 
 
+    // plain data: the kernels copy the functor (self = *this)
     Particles_v pps;
-    Electromag_t::Super const electromag;
+    decltype(untiled_view(std::declval<Electromag_t&>())) const electromag; // basic:: views
     double const coef1;
     std::array<double, dim> halfdt;
-    Particles_t& particles;
+    Particles_t* particles; // the array itself: AoSCMTS's CPU move_check
 };
 
 } // namespace plamn::core

@@ -2,8 +2,9 @@
 #define PLAMN_SIMULATOR_TIMESTEPPER_HPP
 
 // the simulation's time steps, from what pyphare's timestepper.py writes in the dict:
-// simulation/time_step/{mode, value, cfl_wave, cfl_diffusive, fine_level_substeps_max,
-// level0_dt_shrink_max}, simulation/final_time
+// simulation/time_step/{mode, value, cfl_wave, cfl_diffusive, cfl_particles,
+// fine_level_substeps_max, level0_dt_shrink_max}, simulation/final_time (cfl_particles: plamn's,
+// see core/numerics/stable_dt/particles.hpp; plamn/__init__.py lets pyphare pass it)
 //
 //   constant  the dict's dt; the time after n steps is start + n * dt (PHARE's
 //             ConstantTimeStamper: no rounding accumulated over the steps)
@@ -12,7 +13,9 @@
 //             KahanTimeStamper)
 //
 // start is 0, or a restart's time: the steps are counted from it, so a restart may change dt
-// (or the mode)
+// (or the mode). A restart of the same mode (and, constant, dt) resumes the stepper as it was
+// (state / resume: its start, steps and Kahan compensation): the times those of the run that kept
+// going, bit for bit
 
 #include "damn/core/def.hpp"
 #include "plamn/initializer/data_provider.hpp"
@@ -21,6 +24,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <stdexcept>
 #include <string>
 
@@ -33,6 +37,7 @@ public:
     {
         double wave      = 0;
         double diffusive = 0;
+        double particles = 0.5; // a hybrid level's domain particles: this share of a cell jump
     };
 
     // dict: the whole dict (its "simulation" node)
@@ -44,6 +49,7 @@ public:
         ts.final_time_    = dict["simulation"]["final_time"].template to<double>();
         ts.cfl_.wave      = cppdict::get_value(dict, "simulation/time_step/cfl_wave", 0.);
         ts.cfl_.diffusive = cppdict::get_value(dict, "simulation/time_step/cfl_diffusive", 0.);
+        ts.cfl_.particles = cppdict::get_value(dict, "simulation/time_step/cfl_particles", 0.5);
         ts.fine_level_substeps_max_
             = cppdict::get_value(dict, "simulation/time_step/fine_level_substeps_max", 1000);
         ts.level0_dt_shrink_max_
@@ -51,6 +57,34 @@ public:
         if (ts.adaptive() and ts.cfl_.wave <= 0)
             throw std::runtime_error("plamn Timestepper: adaptive needs cfl_wave > 0");
         return ts;
+    }
+
+    // what a restart keeps: the mode and dt it was for, its start, steps, Kahan compensation
+    struct State
+    {
+        int mode            = 0;
+        double dt           = 0;
+        double start        = 0;
+        std::uint64_t steps = 0;
+        double compensation = 0;
+    };
+    NO_DISCARD State state() const
+    {
+        return {.mode         = static_cast<int>(mode_),
+                .dt           = dt_,
+                .start        = start_,
+                .steps        = static_cast<std::uint64_t>(steps_),
+                .compensation = compensation_};
+    }
+    // a restart at t: the steps resumed if the mode is the same (constant: and dt), else from t
+    void resume(State const& s, double const t)
+    {
+        if (s.mode != static_cast<int>(mode_) or (!adaptive() and s.dt != dt_))
+            return start_at(t);
+        start_        = s.start;
+        time_         = t;
+        steps_        = static_cast<std::size_t>(s.steps);
+        compensation_ = s.compensation;
     }
 
     // steps counted from t (the start, or a restart's time)
