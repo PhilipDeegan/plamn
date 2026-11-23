@@ -4,6 +4,7 @@ chop_<dim>, partition_<dim>, metrics_<dim> on damn's data free hierarchy code).
     python3 -m unittest tst.plamn.python.test_amr
 """
 
+import math
 import unittest
 
 import numpy as np
@@ -84,9 +85,10 @@ class AmrTest(unittest.TestCase):
         ph.global_vars.sim = None
 
     def test_chop_modes(self):
-        # 122 cells by 60, in units of 2: SAMRAI's 42 40 40, chop's 60 60 2
+        # 122 cells by 60, in units of 2: even's 62 60 (the count nearest, up to 25% over),
+        #  chop's 60 60 2
         even = plamn_etc.chop_1([100], [221], [60], 2, "even")
-        self.assertEqual(even, [([100], [141]), ([142], [181]), ([182], [221])])
+        self.assertEqual(even, [([100], [161]), ([162], [221])])
         chop = plamn_etc.chop_1([100], [221], [60], 1, "chop")
         self.assertEqual([up[0] - lo[0] + 1 for lo, up in chop], [60, 60, 2])
         with self.assertRaises(RuntimeError):
@@ -227,6 +229,44 @@ class AmrTest(unittest.TestCase):
             for k in ("moved", "refined")
         )
         self.assertEqual(cells, 60)
+
+    def test_decompose_weighs_from_python_or_its_cost_model(self):
+        # damn::amr::decompose through plamn_etc: a python weigh(ln, boxes) and the C++ cost
+        # model over cells times ppc give the same levels; finest puts each coarse patch under
+        # the fine level with the owner of the fine cells above it (no spill)
+        costs = {"particle": 2.0, "cell": 1.0, "ghost_cell": 0.5, "patch": 3.0, "reach": 2}
+        ppc = [10.0, 5.0]
+
+        def weigh(ln, boxes):
+            out = []
+            for lo, up in boxes:
+                n = np.asarray(up) - lo + 1
+                cells = float(np.prod(n))
+                ghost = float(np.prod(n + 4)) - cells
+                out.append(math.fma(2.0, cells * ppc[ln], math.fma(1.0, cells, math.fma(0.5, ghost, 3.0))))
+            return out
+
+        args = ([0, 0], [63, 63], [True, True], 2, [], 0,
+                [[([0, 0], [63, 63])], [([32, 32], [95, 95])]], [0, 0, 1, 1])
+        for partition in ("levels", "finest", "aligned"):
+            a = plamn_etc.decompose_2(*args, patch_size=[8, 8], partition=partition,
+                                      weigh=weigh)
+            b = plamn_etc.decompose_2(*args, patch_size=[8, 8], partition=partition,
+                                      costs=costs, ppc=ppc)
+            self.assertEqual(a, b, partition)
+        fine = plamn_etc.decompose_2(*args, patch_size=[8, 8], partition="finest",
+                                     costs=costs, ppc=ppc)
+        for lo, up, rk in fine[0]:
+            owners = {}
+            for flo, fup, frk in fine[1]:
+                ilo = np.maximum(np.asarray(lo) * 2, flo)
+                iup = np.minimum((np.asarray(up) + 1) * 2 - 1, fup)
+                if (ilo <= iup).all():
+                    owners[frk] = owners.get(frk, 0) + np.prod(iup - ilo + 1)
+            if owners:
+                self.assertEqual(rk, max(sorted(owners), key=lambda k: owners[k]))
+        with self.assertRaises(RuntimeError):
+            plamn_etc.decompose_2(*args, patch_size=[8, 8], partition="nope", ppc=ppc)
 
 
 if __name__ == "__main__":

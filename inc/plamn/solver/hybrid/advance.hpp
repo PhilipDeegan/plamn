@@ -9,7 +9,8 @@
 // level: the simulator's services for one level (Simulator::LevelServices)
 //   number()                             the level number
 //   data()                               its patch data (LevelData of HybridPatch)
-//   per_patch(fn)                        fn(patch) for every local patch
+//   per_patch_threaded(fn)               fn(patch) for every local patch, on the pool's
+//                                        threads (fn: its patch only, never python)
 //   copy(how, key)                       damn's copy of a resource key between its patches
 //   fill_magnetic_ghosts(key, t),        patch ghosts, then level ghosts from the coarser level
 //   fill_electric_ghosts(key, t)          at t
@@ -101,7 +102,7 @@ namespace detail
         requires(opts.alloc_mode == damn::AllocatorMode::CPU or core::is_tiled(opts.layout_mode))
     void compute_moments_level(auto& level)
     {
-        level.per_patch([](auto& patch) { patch.ions.update(); });
+        level.per_patch_threaded([](auto& patch) { patch.ions.update(); });
     }
 } // namespace detail
 
@@ -161,7 +162,7 @@ namespace detail
         requires(opts.alloc_mode == damn::AllocatorMode::CPU or core::is_tiled(opts.layout_mode))
     void electrons_level(auto& level)
     {
-        level.per_patch([&](auto& patch) { patch.electrons().update(patch.layout); });
+        level.per_patch_threaded([&](auto& patch) { patch.electrons().update(patch.layout); });
     }
 
     // Bnew = B - dt curl E on every patch of the level: unified memory (untiled), one launch, its
@@ -186,7 +187,7 @@ namespace detail
         requires(opts.alloc_mode == damn::AllocatorMode::CPU or core::is_tiled(opts.layout_mode))
     void faraday_level(auto& level, auto const& E_of, double const dt)
     {
-        level.per_patch([&](auto& patch) {
+        level.per_patch_threaded([&](auto& patch) {
             core::FaradayTransformer{}(patch.layout, patch.em.B, E_of(patch), (patch.*B_to).B, dt);
         });
     }
@@ -218,7 +219,7 @@ namespace detail
         requires(opts.alloc_mode == damn::AllocatorMode::CPU or core::is_tiled(opts.layout_mode))
     void ohm_level(HybridModel<opts> const& model, auto& level)
     {
-        level.per_patch([&](auto& patch) {
+        level.per_patch_threaded([&](auto& patch) {
             auto& em = patch.*electromag;
             core::OhmTransformer{*model.ohm}(patch.layout, patch.electrons().density(),
                                              patch.electrons().velocity(),
@@ -231,7 +232,7 @@ namespace detail
         requires(opts.alloc_mode == damn::AllocatorMode::CPU)
     void ampere_level(auto& level)
     {
-        level.per_patch([&](auto& patch) {
+        level.per_patch_threaded([&](auto& patch) {
             core::AmpereTransformer{}(patch.layout, (patch.*electromag).B, patch.J);
         });
     }
@@ -274,7 +275,7 @@ void deposit_level_ghosts(auto& level, double const t)
         throw std::runtime_error("plamn Simulator: level ghost time interpolation coefficient "
                                  + std::to_string(alpha));
     alpha = std::clamp(alpha, 0., 1.);
-    level.per_patch([&](auto& patch) {
+    level.per_patch_threaded([&](auto& patch) {
         core::DepositInterpolating<opts.dimension, opts.interp_order, opts.alloc_mode> interpolate;
         for (auto& pop : patch.ions)
         {
@@ -311,7 +312,7 @@ namespace detail
         requires(opts.alloc_mode == damn::AllocatorMode::CPU)
     void average_electromag(auto& level)
     {
-        level.per_patch([](auto& patch) {
+        level.per_patch_threaded([](auto& patch) {
             for (std::size_t i = 0; i < 3; ++i)
             {
                 core::average(patch.em.B[i], patch.emPred.B[i], patch.emAvg.B[i]);
@@ -352,7 +353,7 @@ namespace detail
         requires(opts.alloc_mode == damn::AllocatorMode::CPU)
     void deposit_domains(auto& level)
     {
-        level.per_patch([](auto& patch) {
+        level.per_patch_threaded([](auto& patch) {
             for (auto& pop : patch.ions)
                 pop.patchGhostParticles().clear();
             core::deposit_domain<opts.dimension, opts.interp_order>(patch.ions, patch.layout);
@@ -369,8 +370,10 @@ void move_ions(HybridModel<opts>& model, auto& level, double const t, double con
     {
         DAMN_LOG_SCOPE(1, "Simulator::move_ions::push"); // and deposit
         if constexpr (Patch_t::per_patch_mover)
-            level.per_patch([&](auto& patch) {
-                model.mover.updatePopulations(patch.ions, patch.emAvg, *patch.boxing, dt, mode);
+            level.per_patch_threaded([&](auto& patch) {
+                // the mover keeps push state (mesh, dt, a buffer): a copy a thread
+                thread_local auto mover = model.mover;
+                mover.updatePopulations(patch.ions, patch.emAvg, *patch.boxing, dt, mode);
             });
         else
         { // the level's patches at once, each with its boxing by patch id

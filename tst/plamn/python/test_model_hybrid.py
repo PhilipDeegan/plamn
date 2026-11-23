@@ -3,7 +3,9 @@ the decomposition emulation's partitions (levels, finest + spill, processes and 
 under finer levels) as the python first wrote them, kept so the same steps moved into damn give
 the same owners and numbers, or show where and why they differ.
 
-Owners compare exactly (a partition is deterministic); a difference names the row, the level and
+Both backends (--backend python: the partitions in model_hybrid.py; cpp: damn::amr::decompose
+through plamn_etc, the simulator's code) against the same references. Owners compare exactly (a
+partition is deterministic); a difference names the row, the level and
 the patches that moved. Times, imbalances and shares compare at a relative 1e-9 (summation order
 differs between python and C++), the largest difference printed.
 
@@ -44,8 +46,8 @@ REFERENCES = {
 }
 
 
-def run(case, out):
-    args = REFERENCES[case][0].split()
+def run(case, out, backend):
+    args = REFERENCES[case][0].split() + ["--backend", backend]
     subprocess.run([sys.executable, str(BENCH), *args, "--json", str(out / f"{case}.json"),
                     "--owners", str(out / f"{case}.npz")], check=True, cwd=ROOT,
                    stdout=subprocess.DEVNULL)
@@ -67,10 +69,15 @@ class ModelHybridTest(unittest.TestCase):
     def check(self, case):
         if REFERENCES[case][1] and not os.environ.get("PLAMN_MODEL_HYBRID_SLOW"):
             self.skipTest("big case: PLAMN_MODEL_HYBRID_SLOW=1")
+        for backend in ("python", "cpp"):  # the reference, and damn's decompose (a run's)
+            with self.subTest(backend=backend):
+                self.check_backend(case, backend)
+
+    def check_backend(self, case, backend):
         ref = json.loads((REF / f"{case}.json").read_text())
         ref_owners = np.load(REF / f"{case}.npz")
         with tempfile.TemporaryDirectory() as tmp:
-            got, got_owners = run(case, Path(tmp))
+            got, got_owners = run(case, Path(tmp), backend)
             rows = {r["key"]: r for r in got["rows"]}
             self.assertEqual(sorted(rows), sorted(r["key"] for r in ref["rows"]))
             problems, worst = [], (0.0, "")
@@ -92,7 +99,7 @@ class ModelHybridTest(unittest.TestCase):
                     worst = max(worst, (diff, f"{want['key']} {k}"))
                     if diff > RTOL:
                         problems.append(f"{want['key']} {k}: {gs[k]} vs {v} (rel {diff:.3e})")
-            print(f"{case}: largest relative difference {worst[0]:.3e} ({worst[1]})")
+            print(f"{case} ({backend}): largest relative difference {worst[0]:.3e} ({worst[1]})")
             self.assertEqual(problems, [], "\n".join(problems))
 
     def test_gist_800(self):

@@ -8,9 +8,8 @@
 //   grids        the scratch grids' names and quantities, components in file order
 //   local        per patch: zeroes and fills its grids (required)
 //   border_sum   optional: a resource key, the grids' contributions to the nodes patches share
-//                summed (collective)
-//   after        optional: per patch, after the sum (e.g. the level ghosts' deposit, which only
-//                the patch at the level border gets)
+//                summed (collective): local deposits what one patch holds (a level ghost is
+//                held by one), the sum completes every patch's copy
 
 #include <functional>
 #include <string>
@@ -27,7 +26,6 @@ struct Computed
     std::vector<std::pair<std::string, Scalar>> grids{};
     Step local{};
     std::string border_sum{}; // empty: none
-    Step after{};
 };
 
 } // namespace plamn::solver

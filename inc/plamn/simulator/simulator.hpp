@@ -26,6 +26,7 @@
 
 #include "damn/amr/clustering.hpp"
 #include "damn/amr/copy.hpp"
+#include "damn/amr/decompose.hpp"
 #include "damn/amr/hierarchy.hpp"
 #include "damn/amr/inter_level.hpp"
 #include "damn/amr/level_data.hpp"
@@ -41,6 +42,9 @@
 #include "damn/mpi/inter_level.hpp"
 #include "damn/mpi/regrid.hpp"
 #include "damn/core/def/constants.hpp"
+#include "damn/core/exec/thread_pool.hpp"
+#include "damn/mpi/scope_timing.hpp"
+#include "mkn/kul/range.hpp"
 #include "plamn/diagnostic/vtkhdf.hpp"
 #include "plamn/simulator/hybrid_patch_view.hpp"
 #include "plamn/solver/hybrid/advance.hpp"
@@ -442,6 +446,35 @@ private:
         }
     }
 
+    // per_patch_ with damn's pools taking the patches (untiled layouts: a patch to the next idle
+    //  pool, round robin, a pool works one patch at a time; tiled ones thread over tiles inside
+    //  the kernels): fn touches only its patch and never python. Serial with one pool, and while
+    //  scope timing (phlop's serial timer: scopes on one thread a rank)
+    void per_patch_threaded_(std::size_t const ln, auto&& fn)
+    {
+        using Pool    = damn::core::ThreadPool;
+        auto& ld      = data_(ln);
+        using Patch_t = solver::HybridModel<opts>::Patch_t;
+        auto const n  = ld.data.size();
+        if constexpr (!Patch_t::per_patch_mover)
+            return per_patch_(ln, fn);
+        if (Pool::n_pools < 2 or n < 2 or damn::mpi::scope_timing_active())
+            return per_patch_(ln, fn);
+
+        std::vector<double> busy(decomposition_.timing ? n : 0, 0.);
+        Pool::INSTANCE().patch_exec(
+            n, [](std::size_t const i) { return i; },
+            [&](std::size_t const i) {
+                auto const t0 = std::chrono::steady_clock::now();
+                fn(*ld.data[i]);
+                if (!busy.empty())
+                    busy[i] = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0)
+                                  .count();
+            });
+        for (auto const i : mkn::kul::range(busy.size()))
+            decomposition_.busy_of(ln, ld.patches[i].box) += busy[i];
+    }
+
     // tiled fields: damn's schedules work on untiled temporaries (amr/untiled.hpp), leased on
     //  every patch of a level for the names an operation reads (read) or writes (fill, sum:
     //  written back into every tile's ghost box when released, inner tile ghosts included)
@@ -841,7 +874,13 @@ private:
     // level ln's patches from its boxes (that level's cells): chopped into the largest patch
     //  size, partitioned along the Hilbert curve by the particles they will hold
     NO_DISCARD damn::amr::Level<dimension> level_of_(int ln, std::vector<Box_t> const& boxes);
+    // damn::amr::decompose's settings: this run's topology, patch size, spill, its weights (the
+    //  particles a patch will hold, or holds; MHD levels: cells), `partition`
+    NO_DISCARD damn::amr::Decompose<dimension> decompose_in_(std::string const& partition);
     void make_level_(int ln, std::vector<Box_t> const& boxes);
+    // the levels' total moments after a regrid / rebalance, finest down to lowest: from their
+    //  populations, coarsened from the finer level (rebuild_moments_)
+    void rebuild_moments_(int lowest);
     void allocate_level_(int ln); // the patch data of hierarchy_'s level ln, linked
     void link_level_(int ln);     // neighbours, map to the coarser level, level ghost cells
     void link_hybrid_level_(int ln);
@@ -862,16 +901,30 @@ private:
     //  of ln to t (last: ln's last substep of its coarser level's step)
     void after_step_(int ln, double t, bool last);
     void regrid_after_step_(int ln, double t); // after_step_'s regrid, at a regrid point
-    // keep_finer: the finer levels stay (each to be regridded onto its own boxes in turn)
-    void regrid_level_(int ln, std::vector<Box_t> const& boxes, double t, bool keep_finer = false);
+    // keep_finer: the finer levels stay (each to be regridded onto its own boxes in turn);
+    //  moved: the same cells (a rebalance), the old ghosts valid: moved with the data
+    //  (damn::amr::RegridGhosts), nothing refined or refilled from the coarser level
+    void regrid_level_(int ln, std::vector<Box_t> const& boxes, double t, bool keep_finer = false,
+                       bool moved = false);
     // heavy debugging (-DDAMN_SUPER_DEBUG only, simulator_sums.hpp): every resource of level ln
     //  summed and printed, at stage; the finest level regridded onto its boxes at given times
     void sums_(std::size_t ln, char const* stage, double t);
     void debug_regrid_(int ln, double t);
+    // a rebalance moves data: what must survive it (rebalance_state_), checked after it
+    struct RebalanceState
+    {
+        std::vector<std::vector<double>> values; // per level and quantity, its domain values
+        std::vector<double> particles;           // per level and set: count, sums of w, v, x
+    };
+    NO_DISCARD RebalanceState rebalance_state_();
+    void check_rebalance_(RebalanceState const& before, double t);
     // regrid_level_'s data, the level's model's: where the old level was, moved; the new cells
     //  (outside old_cells) refined from the coarser level, then the ghosts
-    void regrid_hybrid_data_(int ln, auto const& map, std::vector<Box_t> const& old_cells,
-                             double t);
+    void regrid_hybrid_data_(int ln, auto const& map, std::vector<Box_t> const& old_cells, double t,
+                             bool moved);
+    // a hybrid level's resources whose ghosts a rebalance moves (every field grid, the old level
+    //  ghost particles), from this rank's patches (a rank without any has no transfers)
+    NO_DISCARD damn::amr::RegridGhosts moved_ghosts_(int ln);
     void regrid_mhd_data_(int ln, auto const& map, std::vector<Box_t> const& old_cells, double t);
     // a new level ln's data, from the coarser level (regrid_, initialization)
     void initialize_refined_level_(int ln, double t);
@@ -907,6 +960,8 @@ private:
         NO_DISCARD std::uint64_t generation() const { return self.levels_[ln].generation; }
         NO_DISCARD auto& data() { return self.data_(ln); }
         void per_patch(auto&& fn) { self.per_patch_(ln, fn); }
+        // fn touching only its patch, never python: on damn's pools (per_patch_threaded_)
+        void per_patch_threaded(auto&& fn) { self.per_patch_threaded_(ln, fn); }
         void copy(auto const how, std::string const& key) { self.copy_(ln, how, key); }
         void copy(auto const how, amr::ParticleRoute auto const& copies)
         {
@@ -1023,6 +1078,9 @@ private:
     bool pretag_enabled_ = false;
     // simulation/AMR/refinement/tagging/tag_boxes: levels 1... made from these at initialization
     std::vector<std::vector<Box_t>> supplied_tag_boxes_{};
+    // levels decomposed together (finest, aligned) where every level's boxes are known
+    //  (initialization with pretag or tag_boxes, rebalance), taken by level_of_, then cleared
+    std::vector<damn::amr::Level<dimension>> planned_{};
     std::vector<int> level_steps_; // per level > 0: its substeps in the coarser level's step
     int steps_ = 0;
     // simulation/AMR/loadbalancing (pyphare's LoadBalancer), with refinement="tagging"
@@ -1036,11 +1094,17 @@ private:
         // how a level's patches get their ranks (level_of_; plamn's, not PHARE's: the PHARE
         //  comparisons keep "levels"): "levels" each level along the Hilbert curve on its own,
         //  "keep" where the data is (damn::amr::keep: the old level's owners, else the coarser
-        //  patch's under it, else the curve); spill >= 0: then no rank above (1 + spill) of its
-        //  share (damn::amr::spill). simulation/AMR/loadbalancing/partition, spill, or
-        //  PLAMN_PARTITION, PLAMN_SPILL
+        //  patch's under it, else the curve); "finest" / "aligned" (damn::amr::decompose) every
+        //  level together where all are known (initialization with pretag or tag_boxes,
+        //  rebalance), a level alone to the owners of the coarser cells under it; spill >= 0:
+        //  then no rank above (1 + spill) of its share
+        //  (damn::amr::spill). simulation/AMR/loadbalancing/partition, spill, or
+        //  PLAMN_PARTITION, PLAMN_SPILL. finest: near_band, the level 0 cells about level 1
+        //  its step reads (default: a particle ghost width, where its level ghosts split
+        //  from), with level 1's owners; near_band or PLAMN_NEAR_BAND
         std::string partition = "levels";
         double spill          = -1;
+        int near_band         = -1; // -1: the default
     } lb_;
     std::optional<amr::CoarsestRebalanceCheck> rebalance_check_;
     int rank_    = 0;
