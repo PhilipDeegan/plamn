@@ -4,17 +4,20 @@
 #include "mkn/kul/constexprifier.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/exec/kernels.hpp" // IWYU pragma: keep (gpu::Vec_t, gpu::TileLauncher: GPU builds)
-
 #include "plamn/core/data/grid/detail/detail.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/numerics/ohm/ohm.hpp"
 #include "plamn/core/numerics/differential_operators.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
 #include "plamn/core/data/vecfield/vecfield_component.hpp"
+#include "mkn/kul/for.hpp"
 
 #include <array>
 #include <stdexcept>
 #include <cstddef>
+#include <type_traits>
+
+#include "damn/core/exec/kernels/region_chunks.hpp" // IWYU pragma: keep (run_gpu: GPU builds)
 
 namespace plamn::core
 {
@@ -82,6 +85,50 @@ public:
         else
             for (std::size_t ti = 0; ti < tile_count(Enew); ++ti)
                 on_tile(ti, n, Ve, Pe, B, J, Enew);
+    }
+
+    // GPU_UNIFIED, an item per untiled patch collected across a level (one launch per run_gpu):
+    //  the patch's fields as views, its E components' boxes, Ohm over its layout
+    template<typename Layout>
+    auto make_item(Layout const& layout, auto const& n, auto const& Ve, auto const& Pe,
+                   auto const& B, auto const& J, auto& Enew) const
+    {
+        auto const nv  = untiled_view(n);
+        auto const Pev = untiled_view(Pe);
+        auto const Vev = untiled_view(Ve);
+        auto const Bv  = untiled_view(B);
+        auto const Jv  = untiled_view(J);
+        auto Ev        = untiled_view(Enew);
+        auto const boxes
+            = mkn::kul::for_N_make_array<3>([&](auto c) { return box_for(layout, Ev[c]); });
+        auto const gradPe = grad(layout, Pev);
+        using Box_t       = std::decay_t<decltype(boxes)>::value_type;
+        using Item_t      = OhmTile<Ohm<Layout>, std::decay_t<decltype(gradPe)>,
+                                    std::decay_t<decltype(nv)>, decltype(Ev), Box_t>;
+        return Item_t{Ohm<Layout>{info_, layout}, gradPe, nv, Vev, Bv, Jv, Ev, boxes};
+    }
+
+    // every item's E components on the device, one launch (damn's region chunks)
+    void run_gpu([[maybe_unused]] auto& items) const
+    {
+#if DAMN_HAVE_GPU
+        with_flags([&]<bool isResistive, bool isHyperResistive, HyperMode hyper>() {
+            damn::core::run_region_chunks(items, [] DAMN_ALL(auto& it, auto const c,
+                                                             auto const& ijk) {
+                if (c == 0)
+                    it.ohm.template operator()<Component::X, isResistive, isHyperResistive, hyper>(
+                        ijk, it.n, it.Ve, it.gradPe.x, it.B, it.J, it.E);
+                else if (c == 1)
+                    it.ohm.template operator()<Component::Y, isResistive, isHyperResistive, hyper>(
+                        ijk, it.n, it.Ve, it.gradPe.y, it.B, it.J, it.E);
+                else
+                    it.ohm.template operator()<Component::Z, isResistive, isHyperResistive, hyper>(
+                        ijk, it.n, it.Ve, it.gradPe.z, it.B, it.J, it.E);
+            });
+        });
+#else
+        throw std::runtime_error("OhmTransformer: run_gpu needs a GPU build");
+#endif
     }
 
     // one tile of the tiled fields, eg as one task of a thread pool

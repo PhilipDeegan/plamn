@@ -56,12 +56,13 @@ void initialize_root(HybridModel<opts>& model, auto&& level, auto const& sim)
     // moments from the particles, completed across patch borders
     level.per_patch([&](auto& patch) {
         core::resetMoments(patch.ions);
-        core::depositParticles(patch.ions, patch.layout,
-                               core::Interpolating<opts.dimension, opts.interp_order>{},
-                               core::DomainDeposit{});
+        core::depositParticles(
+            patch.ions, patch.layout,
+            core::DepositInterpolating<opts.dimension, opts.interp_order, opts.alloc_mode>{},
+            core::DomainDeposit{});
     });
     fill_ion_borders(level);
-    compute_moments(level);
+    compute_moments<opts>(level);
 
     // J from B, then E from Ohm's law
     ampere_ohm<&Patch_t::em>(model, level);
@@ -110,12 +111,13 @@ void refined_moments(HybridModel<opts> const&, auto&& level)
 {
     level.per_patch([&](auto& patch) {
         core::deposit_domain<opts.dimension, opts.interp_order>(patch.ions, patch.layout);
-        core::depositParticles(patch.ions, patch.layout,
-                               core::Interpolating<opts.dimension, opts.interp_order>{},
-                               core::LevelGhostDeposit{});
+        core::depositParticles(
+            patch.ions, patch.layout,
+            core::DepositInterpolating<opts.dimension, opts.interp_order, opts.alloc_mode>{},
+            core::LevelGhostDeposit{});
     });
     fill_ion_borders(level);
-    compute_moments(level);
+    compute_moments<opts>(level);
 
     // J from B; E was refined
     level.per_patch(
@@ -134,13 +136,11 @@ void initialize_refined(HybridModel<opts> const& model, auto&& level, double con
     level.fill_magnetic_ghosts("EM_B", t);
     level.fill_electric_ghosts("EM_E", t);
 
-    for (auto const& name : model.population_names)
-    {
-        level.refine(amr::ParticleSplitter<Splitter_t>{}, LevelRegion::Interior,
-                     {{name + "_domain", name + "_domain", ""}});
-        level.refine(amr::ParticleSplitter<Splitter_t>{}, LevelRegion::LevelGhosts,
-                     {{name + "_domain", name + "_level_ghost_old", ""}});
-    }
+    auto const& routes = *model.particle_routes;
+    level.refine(amr::ParticleSplitter<Splitter_t>{}, LevelRegion::Interior,
+                 routes.interior_splits);
+    level.refine(amr::ParticleSplitter<Splitter_t>{}, LevelRegion::LevelGhosts,
+                 routes.old_ghost_splits);
     own_level_ghosts(level, /*new_ghosts=*/false);
     level.per_patch([](auto& patch) {
         for (auto& pop : patch.ions)

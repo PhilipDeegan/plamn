@@ -30,6 +30,8 @@
 #include <cstring>
 #include <utility>
 #include <format>
+#include <concepts>
+#include <type_traits>
 
 namespace plamn::core
 {
@@ -147,8 +149,10 @@ void append(ParticleResource<Particles, gw>& r, typename Particles::value_type p
 //  each component's values contiguously, in components()' order (weight, iCell_x.., delta_x..,
 //  v_x, v_y, v_z). A selection reads the iCell columns only, or SoAVXChunked's per cell ranges
 //  when sorted; appends are column wise, SoAVXChunked sorted once after all of them
+//  A resource over Particles const (a read only source, amr/particle_access.hpp) packs too
 template<typename Particles>
-concept ParticleColumns = core::HasComponents<Particles> and core::is_soavx(Particles::layout_mode);
+concept ParticleColumns = core::HasComponents<std::remove_const_t<Particles>>
+                          and core::is_soavx(Particles::layout_mode);
 
 namespace detail
 {
@@ -281,11 +285,11 @@ void unpack_items(ParticleResource<Particles, gw>& r, std::byte const*& at,
             c.iCell[d][was + k] += shift[d];
 }
 
-// as pack_items then unpack_items, without the bytes (src may be dst: its first particles stay)
-template<typename Particles, std::uint32_t gw>
-    requires ParticleColumns<Particles>
-void append_items_from(ParticleResource<Particles, gw>& dst,
-                       ParticleResource<Particles, gw> const& src,
+// as pack_items then unpack_items, without the bytes (src may be dst: its first particles stay;
+//  src may be over Particles const)
+template<typename Particles, typename Src, std::uint32_t gw>
+    requires ParticleColumns<Particles> and std::same_as<std::remove_const_t<Src>, Particles>
+void append_items_from(ParticleResource<Particles, gw>& dst, ParticleResource<Src, gw> const& src,
                        damn::core::Box<int, Particles::dimension> const& box,
                        damn::core::Point<int, Particles::dimension> const& shift)
 {

@@ -77,9 +77,8 @@ void restart_loaded(HybridModel<opts> const& model, auto&& level)
     });
     if (level.number() > 0)
     {
-        for (auto const& name : model.population_names)
-            level.refine(amr::ParticleSplitter<Splitter_t>{}, LevelRegion::LevelGhosts,
-                         {{name + "_domain", name + "_level_ghost_old", ""}});
+        level.refine(amr::ParticleSplitter<Splitter_t>{}, LevelRegion::LevelGhosts,
+                     model.particle_routes->old_ghost_splits);
         own_level_ghosts(level, /*new_ghosts=*/false);
         level.per_patch([](auto& patch) {
             for (auto& pop : patch.ions)

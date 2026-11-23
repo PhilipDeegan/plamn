@@ -181,6 +181,7 @@ void Simulator<opts>::link_geometry_(int const ln, int const reach, int const co
                                      int const gw)
 {
     auto& l      = levels_[ln];
+    ++l.generation; // a new decomposition: what is kept per decomposition is stale
     l.neighbours = damn::amr::make_neighbours(hierarchy_, ln, rank_, topology_, reach);
     if (ln == 0)
         return;

@@ -74,9 +74,8 @@ void first_step(HybridModel<opts> const& model, auto&& level)
         for (auto& e : patch.fluxSumE)
             e.zero();
     });
-    for (auto const& name : model.population_names)
-        level.refine(amr::ParticleSplitter<Splitter_t>{}, damn::amr::LevelRegion::LevelGhosts,
-                     {{name + "_domain", name + "_level_ghost_new", ""}});
+    level.refine(amr::ParticleSplitter<Splitter_t>{}, damn::amr::LevelRegion::LevelGhosts,
+                 model.particle_routes->new_ghost_splits);
     own_level_ghosts(level, /*new_ghosts=*/true);
 }
 

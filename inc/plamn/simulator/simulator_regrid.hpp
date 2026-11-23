@@ -161,7 +161,7 @@ void Simulator<opts>::rebuild_moments_(int const lowest)
             auto const l = static_cast<std::size_t>(ln);
             if (models_.is_mhd(l))
                 continue;
-            solver::hybrid::compute_moments(level_services_(l));
+            solver::hybrid::compute_moments<opts>(level_services_(l));
             if (l + 1 < levels_.size() and !models_.is_mhd(l + 1))
                 solver::hybrid::coarsen_moments(level_services_(l + 1));
             copy_(ln, damn::amr::fill_ghosts, "IonMoments");
@@ -210,10 +210,10 @@ void Simulator<opts>::rebalance_(double const t)
         for (auto const& level : finer)
             damn::amr::set_level(hierarchy_, level);
 
-        auto const map  = damn::amr::make_regrid_map(old0, hierarchy_.levels[0], rank_,
-                                                     damn::amr::periodic_shifts(hierarchy_, 0));
-        auto& ld        = data_(0);
-        ld              = regrid_leased_(
+        auto const map = damn::amr::make_regrid_map(old0, hierarchy_.levels[0], rank_,
+                                                    damn::amr::periodic_shifts(hierarchy_, 0));
+        auto& ld       = data_(0);
+        ld             = regrid_leased_(
             map, std::move(ld),
             [&](auto const& p) { return make_patch_(models_.hybrid, 0, p.box); }, /*mpi=*/true);
         for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
@@ -275,7 +275,7 @@ void Simulator<opts>::regrid_(double const t, int const from, bool const always)
             damn::amr::remove_finer_levels(hierarchy_, ln);
             break;
         }
-        clustered_[fine] = boxes;
+        clustered_[fine]  = boxes;
         coarser_regridded = true;
         if (fine < levels_.size())
             regrid_level_(ln + 1, boxes, t, /*keep_finer=*/true);
@@ -313,9 +313,9 @@ void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxe
                 old_cells.push_back(damn::core::shift(p.box, shift));
     }
     auto const old_level = hierarchy_.levels[ln];
-    auto const finer = keep_finer ? std::vector<damn::amr::Level<dimension>>(
+    auto const finer     = keep_finer ? std::vector<damn::amr::Level<dimension>>(
                                         hierarchy_.levels.begin() + ln + 1, hierarchy_.levels.end())
-                                  : std::vector<damn::amr::Level<dimension>>{};
+                                      : std::vector<damn::amr::Level<dimension>>{};
     resize_levels_(keep_finer ? std::max(levels_.size(), fine + 1) : fine + 1);
     damn::amr::set_level(hierarchy_, level_of_(ln, boxes)); // drops the finer: put back below
     for (auto const& level : finer)
@@ -364,7 +364,7 @@ void Simulator<opts>::regrid_hybrid_data_(int const ln, auto const& map,
     auto const fine   = static_cast<std::size_t>(ln);
     auto constexpr gw = Patch_t::field_ghost_width;
     auto const make   = [&](auto const& p) { return make_patch_(models_.hybrid, ln, p.box); };
-    auto& l = levels_[fine];
+    auto& l           = levels_[fine];
     auto& ld          = data_(fine);
     ld                = regrid_leased_(map, std::move(ld), make);
     for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
@@ -420,17 +420,15 @@ void Simulator<opts>::regrid_hybrid_data_(int const ln, auto const& map,
             pop.levelGhostParticlesNew().clear();
         }
     });
-    using MaskedSplit = amr::Masked<amr::ParticleSplitter<Splitter_t>, dimension>;
-    for (auto const& name : models_.hybrid.population_names)
-        refine_(fine, MaskedSplit{{}, &old_cells}, LevelRegion::Interior,
-                {{name + "_domain", name + "_domain", ""}});
+    using MaskedSplit  = amr::Masked<amr::ParticleSplitter<Splitter_t>, dimension>;
+    auto const& routes = *models_.hybrid.particle_routes;
+    refine_(fine, MaskedSplit{{}, &old_cells}, LevelRegion::Interior, routes.interior_splits);
 
     // ghosts: patch ghosts from the new neighbours, level ghosts from the coarser level now
     fill_magnetic_ghosts_(fine, "EM_B", t);
     fill_electric_ghosts_(fine, "EM_E", t);
-    for (auto const& name : models_.hybrid.population_names)
-        refine_(fine, amr::ParticleSplitter<Splitter_t>{}, LevelRegion::LevelGhosts,
-                {{name + "_domain", name + "_level_ghost_old", ""}});
+    refine_(fine, amr::ParticleSplitter<Splitter_t>{}, LevelRegion::LevelGhosts,
+            routes.old_ghost_splits);
     solver::hybrid::own_level_ghosts(level_services_(fine), /*new_ghosts=*/false);
     per_patch_(fine, [](auto& patch) {
         for (auto& pop : patch.ions)

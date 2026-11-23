@@ -30,6 +30,7 @@
 #include "plamn/initializer/data_provider.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
+#include "damn/core/def/damn_config.hpp"
 
 #include <array>
 #include <map>
@@ -118,7 +119,8 @@ struct HybridPatch
                    &level_ghost, &level_ghost_old, &level_ghost_new}
         {
             auto&& [F, M, pd, cd, particles] = pop.getCompileTimeResourcesViewList();
-            if constexpr (Particles_t::layout_mode == core::LayoutMode::SoAVXChunked)
+            if constexpr (Particles_t::layout_mode == core::LayoutMode::SoAVXChunked
+                          and Particles_t::alloc_mode == damn::AllocatorMode::CPU)
             { // the domain's chunks with gaps between them (particles_soavx_chunked.hpp): changes
               //  of cell without a sort (PLAMN_CHUNK_SLACK, a fraction of the particles,
               //  PLAMN_CHUNK_BORDER, the border cells' weight to 1 inside)

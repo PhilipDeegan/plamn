@@ -14,6 +14,10 @@
 
 #include "mkn/gpu.hpp"
 
+#if defined(MKN_WITH_MKN_AVX) // the arrays' alignment
+#include "mkn/avx/def.hpp"
+#endif
+
 #include <cassert>
 #include <tuple>
 #include <type_traits>
@@ -89,10 +93,16 @@ struct SoAVXArray
     auto as_tuple() DAMN_ALL { return soaxv_as_tuple<dim>(*this); }
     auto as_tuple() const DAMN_ALL { return soaxv_as_tuple<dim>(*this); }
 
-    std::array<double, size_> weight_;
-    std::array<std::array<int, size_>, dim> iCell_;
-    std::array<std::array<double, size_>, dim> delta_;
-    std::array<std::array<double, size_>, 3> v_;
+    // aligned as mkn::avx's arrays (a staging buffer's columns loaded on lanes), no fill
+#if defined(MKN_WITH_MKN_AVX)
+    static constexpr std::size_t align = mkn::avx::Options::ALIGN();
+#else
+    static constexpr std::size_t align = alignof(double);
+#endif
+    alignas(align) std::array<double, size_> weight_;
+    alignas(align) std::array<std::array<int, size_>, dim> iCell_;
+    alignas(align) std::array<std::array<double, size_>, dim> delta_;
+    alignas(align) std::array<std::array<double, size_>, 3> v_;
 };
 
 
@@ -224,11 +234,10 @@ struct SoAVXVector
     {
         if constexpr (damn::is_mkn_gpu_vector_v<std::decay_t<std::tuple_element_t<0, std::decay_t<decltype(as_tuple())>>>>)
         {
-            DAMN_WITH_MKN_GPU(std::apply(
-                [&](auto&... container) {
-                    ((mkn::gpu::resize(container, size, /*copy=*/true)), ...);
-                },
-                as_tuple()));
+            // damn::resize: past the capacity half as much again (appends grow a little each step)
+            std::apply(
+                [&](auto&... container) { ((damn::resize(container, size, /*copy=*/true)), ...); },
+                as_tuple());
         }
         else
             std::apply([&](auto&... container) { ((container.resize(size)), ...); }, as_tuple());
