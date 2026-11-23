@@ -85,9 +85,10 @@ class AmrTest(unittest.TestCase):
         ph.global_vars.sim = None
 
     def test_chop_modes(self):
-        # 122 cells by 60, in units of 2: SAMRAI's 42 40 40, chop's 60 60 2
+        # 122 cells by 60, in units of 2: even's 62 60 (the count nearest, up to 25% over),
+        #  chop's 60 60 2
         even = plamn_etc.chop_1([100], [221], [60], 2, "even")
-        self.assertEqual(even, [([100], [141]), ([142], [181]), ([182], [221])])
+        self.assertEqual(even, [([100], [161]), ([162], [221])])
         chop = plamn_etc.chop_1([100], [221], [60], 1, "chop")
         self.assertEqual([up[0] - lo[0] + 1 for lo, up in chop], [60, 60, 2])
         with self.assertRaises(RuntimeError):

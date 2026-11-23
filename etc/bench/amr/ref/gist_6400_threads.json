@@ -20,7 +20,7 @@
    "6400:40"
   ],
   "numa": 2,
-  "backend": "python",
+  "backend": "cpp",
   "partition": [
    "levels",
    "finest"
@@ -55,15 +55,15 @@
    "partition": "levels",
    "spill": null,
    "processes": 6400,
-   "serial": 15365.395692160004,
-   "step": 2.5370694008,
+   "serial": 15354.158684800002,
+   "step": 2.5343707512,
    "levels": [
     {
-     "patches": 130400,
+     "patches": 104800,
      "cells": 32000000.0,
      "particles": 3200000000.0,
-     "owners_sha256": "643481139817d7e8a003ac4cfbf276f8025e0457a152a7926f6dc1fe092ab588",
-     "imbalance": 1.6633752320112016
+     "owners_sha256": "550c435cf135322a03e68894ecfb92a89c20f644773f67470891a053e0399baf",
+     "imbalance": 1.6663612908548164
     },
     {
      "patches": 64000,
@@ -72,10 +72,10 @@
      "owners_sha256": "62f6b2f5cf6d4650819f5f88baccba596680f0736e9297b536df1f541af59ed5",
      "imbalance": 1.2344545851058437,
      "over_coarser": {
-      "same process": 0.0073987926136363635,
-      "same NUMA": 0.13068004261363636,
-      "other NUMA": 0.13808771306818182,
-      "other node": 0.7238334517045455
+      "same process": 0.008826349431818183,
+      "same NUMA": 0.14118607954545453,
+      "other NUMA": 0.1435262784090909,
+      "other node": 0.7064612926136363
      }
     },
     {
@@ -101,15 +101,15 @@
    "partition": "finest",
    "spill": 0.05,
    "processes": 6400,
-   "serial": 15365.395692160004,
+   "serial": 15354.158684800002,
    "step": 2.4248655992,
    "levels": [
     {
-     "patches": 130400,
+     "patches": 104800,
      "cells": 32000000.0,
      "particles": 3200000000.0,
-     "owners_sha256": "257e322838f2a47e0f1e3e79fef9ff8a6ee4364ec13686f9aeaebccf233cd5fe",
-     "imbalance": 1.315838434711509
+     "owners_sha256": "3bb699648fc335f50b1e3f6a6fe409218ee9b0fd145888d98268d9729ce20d30",
+     "imbalance": 1.3469314293263146
     },
     {
      "patches": 64000,
@@ -118,10 +118,10 @@
      "owners_sha256": "09fdd5d7f3a25b550b07193454f9031c456ce7e55edfdd4f9575bb0a990db52b",
      "imbalance": 1.0000000000000002,
      "over_coarser": {
-      "same process": 0.5362162642045455,
-      "same NUMA": 0.405703125,
-      "other NUMA": 0.02329012784090909,
-      "other node": 0.034790482954545454
+      "same process": 0.5981906960227272,
+      "same NUMA": 0.3826846590909091,
+      "other NUMA": 0.0075656960227272725,
+      "other node": 0.011558948863636363
      }
     },
     {
@@ -147,15 +147,15 @@
    "partition": "levels",
    "spill": null,
    "processes": 320,
-   "serial": 15365.395692160004,
-   "step": 2.4177740058912267,
+   "serial": 15354.158684800002,
+   "step": 2.416336136642104,
    "levels": [
     {
-     "patches": 130400,
+     "patches": 104800,
      "cells": 32000000.0,
      "particles": 3200000000.0,
-     "owners_sha256": "eab29a197c69b0fa80b848604f128ed9f666efb0df86238fde492238a75addd2",
-     "imbalance": 1.0515093370080941
+     "owners_sha256": "ed776ee47d378c8063d213148d978c95a5853ceb13ad683728cedba7a9f7bab3",
+     "imbalance": 1.0542184744331988
     },
     {
      "patches": 64000,
@@ -164,10 +164,10 @@
      "owners_sha256": "ab76305faaef02f69c3668eaa14d3e9182cff63b228ad34850bcb96edfa99314",
      "imbalance": 1.0179961534959996,
      "over_coarser": {
-      "same process": 0.13807883522727274,
+      "same process": 0.15001242897727274,
       "same NUMA": 0.0,
-      "other NUMA": 0.13808771306818182,
-      "other node": 0.7238334517045455
+      "other NUMA": 0.1435262784090909,
+      "other node": 0.7064612926136363
      }
     },
     {
@@ -193,15 +193,15 @@
    "partition": "finest",
    "spill": 0.05,
    "processes": 320,
-   "serial": 15365.395692160004,
-   "step": 2.4058424105157883,
+   "serial": 15354.158684800002,
+   "step": 2.403252881442104,
    "levels": [
     {
-     "patches": 130400,
+     "patches": 104800,
      "cells": 32000000.0,
      "particles": 3200000000.0,
-     "owners_sha256": "e840d0b8d0270d1687fb9f17b37538d650574a0aebcb52b2e009bec7fe764416",
-     "imbalance": 1.0540782946698661
+     "owners_sha256": "543e98a3b584f92548b922deb7f40894eb19c89ba7ffc1a645f39b4bce07c7b4",
+     "imbalance": 1.0423148778455975
     },
     {
      "patches": 64000,
@@ -210,10 +210,10 @@
      "owners_sha256": "df54399634a5169bc5abf73ed6cd43e11f0c68179447d00f4b34e321f972af63",
      "imbalance": 1.0,
      "over_coarser": {
-      "same process": 0.9406356534090909,
+      "same process": 0.9808753551136363,
       "same NUMA": 0.0,
-      "other NUMA": 0.024573863636363637,
-      "other node": 0.034790482954545454
+      "other NUMA": 0.0075656960227272725,
+      "other node": 0.011558948863636363
      }
     },
     {
@@ -239,15 +239,15 @@
    "partition": "levels",
    "spill": null,
    "processes": 6400,
-   "serial": 14895.267719360001,
+   "serial": 14891.10696672,
    "step": 2.7874694952000003,
    "levels": [
     {
-     "patches": 19920,
+     "patches": 13520,
      "cells": 32000000.0,
      "particles": 3200000000.0,
-     "owners_sha256": "f688e5da89fd5acf874f12af126fbc149ca06621aa8d10f6d80e357e4c0b2201",
-     "imbalance": 4.986849768278384
+     "owners_sha256": "a38254a63ef6bb8058106e17d55a26c0b0250e7e1e4f8f1a9df959d459ae5a48",
+     "imbalance": 5.035321070267118
     },
     {
      "patches": 9600,
@@ -256,10 +256,10 @@
      "owners_sha256": "232bb93583c00be3bfe9d1052e9dea62f9e84342d9ee50229f90548e7e9d1018",
      "imbalance": 1.5436197316726477,
      "over_coarser": {
-      "same process": 0.00948153409090909,
-      "same NUMA": 0.13596590909090908,
-      "other NUMA": 0.13063920454545455,
-      "other node": 0.7239133522727272
+      "same process": 0.008394886363636363,
+      "same NUMA": 0.09404119318181818,
+      "other NUMA": 0.11859375,
+      "other node": 0.7789701704545454
      }
     },
     {
@@ -285,15 +285,15 @@
    "partition": "finest",
    "spill": 0.05,
    "processes": 6400,
-   "serial": 14895.267719360001,
+   "serial": 14891.10696672,
    "step": 2.627264844,
    "levels": [
     {
-     "patches": 19920,
+     "patches": 13520,
      "cells": 32000000.0,
      "particles": 3200000000.0,
-     "owners_sha256": "53167c73a591b4ccde6140c253cb5292b5a1a1c6d970084af47789d66dd68912",
-     "imbalance": 4.986849768278384
+     "owners_sha256": "62c223979b50189cb74d55d15fa7a61b0849c08c0ebe510407f84021a2a3f1dd",
+     "imbalance": 5.035321070267118
     },
     {
      "patches": 9600,
@@ -302,10 +302,10 @@
      "owners_sha256": "74a03b8549c4c8c66571640ae039f5a6e2ab7311b0bc5c8a4ccc28f8b5949753",
      "imbalance": 1.087239463345295,
      "over_coarser": {
-      "same process": 0.7673579545454545,
-      "same NUMA": 0.1526278409090909,
-      "other NUMA": 0.030738636363636364,
-      "other node": 0.049275568181818184
+      "same process": 0.48675426136363636,
+      "same NUMA": 0.24612926136363636,
+      "other NUMA": 0.10220170454545455,
+      "other node": 0.16491477272727273
      }
     },
     {
@@ -331,15 +331,15 @@
    "partition": "levels",
    "spill": null,
    "processes": 320,
-   "serial": 14895.267719360001,
-   "step": 2.356759171759683,
+   "serial": 14891.10696672,
+   "step": 2.3585753706491097,
    "levels": [
     {
-     "patches": 19920,
+     "patches": 13520,
      "cells": 32000000.0,
      "particles": 3200000000.0,
-     "owners_sha256": "61b917ebf377e25058550f4e0cb928dfce65bbc988bf98ba3e5bf97e03b587b6",
-     "imbalance": 1.146714990156254
+     "owners_sha256": "99c3d45ed83d4e438f980ec6a80e8b3836a9cd189713cacabb1cc78e0aa25339",
+     "imbalance": 1.1870907617406996
     },
     {
      "patches": 9600,
@@ -348,10 +348,10 @@
      "owners_sha256": "985ddd7fc88a1d5da4cd03803e2474dab7bf96bcb573ad737238f8b31e91a2ca",
      "imbalance": 1.035834468323233,
      "over_coarser": {
-      "same process": 0.14544744318181818,
+      "same process": 0.10243607954545454,
       "same NUMA": 0.0,
-      "other NUMA": 0.13063920454545455,
-      "other node": 0.7239133522727272
+      "other NUMA": 0.11859375,
+      "other node": 0.7789701704545454
      }
     },
     {
@@ -377,15 +377,15 @@
    "partition": "finest",
    "spill": 0.05,
    "processes": 320,
-   "serial": 14895.267719360001,
-   "step": 2.336377424171184,
+   "serial": 14891.10696672,
+   "step": 2.3346224014494403,
    "levels": [
     {
-     "patches": 19920,
+     "patches": 13520,
      "cells": 32000000.0,
      "particles": 3200000000.0,
-     "owners_sha256": "a665fe36edad7c72532662e720a6edd30fbdc228f73f5642b35d4f74fe347d55",
-     "imbalance": 1.0902131459066273
+     "owners_sha256": "df048d9363edb8b3b9ed81b1f27a9448ddf6515045f333e09ea65a3cfe38bffb",
+     "imbalance": 1.066232001068137
     },
     {
      "patches": 9600,
@@ -394,10 +394,10 @@
      "owners_sha256": "ff41c237a8f68a9ea00ae53d2a8d907f089ed23a278345227f6b1d532b43d8d9",
      "imbalance": 1.0000000000000002,
      "over_coarser": {
-      "same process": 0.8594744318181818,
+      "same process": 0.6817826704545454,
       "same NUMA": 0.0,
-      "other NUMA": 0.073359375,
-      "other node": 0.06716619318181818
+      "other NUMA": 0.1351775568181818,
+      "other node": 0.18303977272727273
      }
     },
     {

@@ -21,7 +21,7 @@
    "1000:10"
   ],
   "numa": 2,
-  "backend": "python",
+  "backend": "cpp",
   "partition": [
    "finest"
   ],
