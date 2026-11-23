@@ -26,8 +26,10 @@ NO_DISCARD inline double fast_magnetosonic(double const gamma, double const rho,
     auto const c02        = sound * sound;
     auto const cA2        = alfven * alfven;
     auto const cAdir2     = alfven_dir * alfven_dir;
-    return std::sqrt((c02 + cA2) * 0.5
-                     + std::sqrt((c02 + cA2) * (c02 + cA2) - 4.0 * c02 * cAdir2) * 0.5);
+    // the discriminant clamped at 0: round off makes it negative (NaN) where the sound speed is
+    //  the Alfven speed along B (PHARE's compute_fast_magnetosonic_)
+    auto const disc = (c02 + cA2) * (c02 + cA2) - 4.0 * c02 * cAdir2;
+    return std::sqrt((c02 + cA2) * 0.5 + std::sqrt(disc > 0. ? disc : 0.) * 0.5);
 }
 
 // a face's flux and what upwind constrained transport needs from it

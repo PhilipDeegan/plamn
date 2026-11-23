@@ -73,6 +73,7 @@ profile:
         tst/plamn/core/numerics/ampere/test_tileset_ampere.cpp
         tst/plamn/core/numerics/primitive_conservative/test_primitive_conservative.cpp
         tst/plamn/core/numerics/godunov/test_godunov.cpp
+        tst/plamn/core/numerics/stable_dt/test_wave_speeds.cpp
         tst/plamn/core/numerics/constrained_transport/test_upwind_ct.cpp
         tst/plamn/core/numerics/finite_volume/test_finite_volume_euler.cpp
         tst/plamn/core/numerics/time_integrator/test_mhd_time_integrator.cpp

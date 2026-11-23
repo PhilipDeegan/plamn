@@ -71,9 +71,13 @@ def whistler_dt(cpp, ln):
     dx = dl / 2**ln
     rho = np.min(np.asarray(cpp.level_values("protons_density", ln)))
     B2 = B[0] * B[0] + B[1] * B[1] + B[2] * B[2]
+    # as whistler_speed (stable_dt/whistler.hpp), operation for operation: the dt is compared
+    #  exactly
     inv_dx = 1.0 / dx
-    vw = math.sqrt(1 + 0.25 * inv_dx * inv_dx) + 0.5 * inv_dx
-    inv_dt = 0 + math.pi * (math.sqrt(B2) * vw / rho) / dx
+    sqrt_rho = math.sqrt(rho)
+    vA = math.sqrt(B2) / sqrt_rho
+    x = math.pi * inv_dx / (2.0 * sqrt_rho)
+    inv_dt = vA * (math.sqrt(1.0 + x * x) + x) / dx
     return cfl_wave / inv_dt * 4**ln
 
 
