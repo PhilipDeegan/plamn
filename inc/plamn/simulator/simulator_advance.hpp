@@ -21,6 +21,7 @@
 #include "plamn/core/numerics/ohm/ohm.hpp"
 #include "plamn/core/numerics/ohm/ohm_transformer.hpp"
 #include "plamn/core/numerics/stable_dt/mhd.hpp"
+#include "plamn/core/numerics/stable_dt/particles.hpp"
 #include "plamn/core/numerics/stable_dt/whistler.hpp"
 #include "plamn/core/numerics/particles_synchronised_mover/particles_synchronised_mover_def.hpp"
 #include "plamn/solver/advance.hpp"
@@ -81,6 +82,10 @@ double Simulator<opts>::level_bound_(std::size_t const ln, Timestepper::CFL cons
             per_patch_(ln, [&](auto& patch) {
                 level = std::min(
                     level, core::whistler_dt(patch.layout, patch.massDensity, patch.emB, cfl.wave));
+                if (cfl.particles > 0) // no domain particle further than cfl * the cell jump
+                    for (auto const& pop : patch.populations)
+                        level = std::min(
+                            level, core::particles_dt(patch.layout.dx, pop->domain, cfl.particles));
             });
     });
     return level;

@@ -2,8 +2,9 @@
 #define PLAMN_SIMULATOR_TIMESTEPPER_HPP
 
 // the simulation's time steps, from what pyphare's timestepper.py writes in the dict:
-// simulation/time_step/{mode, value, cfl_wave, cfl_diffusive, fine_level_substeps_max,
-// level0_dt_shrink_max}, simulation/final_time
+// simulation/time_step/{mode, value, cfl_wave, cfl_diffusive, cfl_particles,
+// fine_level_substeps_max, level0_dt_shrink_max}, simulation/final_time (cfl_particles: plamn's,
+// see core/numerics/stable_dt/particles.hpp; plamn/__init__.py lets pyphare pass it)
 //
 //   constant  the dict's dt; the time after n steps is start + n * dt (PHARE's
 //             ConstantTimeStamper: no rounding accumulated over the steps)
@@ -36,6 +37,7 @@ public:
     {
         double wave      = 0;
         double diffusive = 0;
+        double particles = 0.5; // a hybrid level's domain particles: this share of a cell jump
     };
 
     // dict: the whole dict (its "simulation" node)
@@ -47,6 +49,7 @@ public:
         ts.final_time_    = dict["simulation"]["final_time"].template to<double>();
         ts.cfl_.wave      = cppdict::get_value(dict, "simulation/time_step/cfl_wave", 0.);
         ts.cfl_.diffusive = cppdict::get_value(dict, "simulation/time_step/cfl_diffusive", 0.);
+        ts.cfl_.particles = cppdict::get_value(dict, "simulation/time_step/cfl_particles", 0.5);
         ts.fine_level_substeps_max_
             = cppdict::get_value(dict, "simulation/time_step/fine_level_substeps_max", 1000);
         ts.level0_dt_shrink_max_
