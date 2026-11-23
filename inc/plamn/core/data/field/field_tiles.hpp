@@ -463,7 +463,7 @@ concept has_view_t_c = requires {
 namespace basic
 {
     template<typename VecFieldT>
-    class Electromag; // electromag.hpp
+    class Electromag; // IWYU pragma: keep (electromag.hpp)
 } // namespace basic
 
 // an untiled (vec)field as plain device copyable views (basic:: types, no names), as tile_at

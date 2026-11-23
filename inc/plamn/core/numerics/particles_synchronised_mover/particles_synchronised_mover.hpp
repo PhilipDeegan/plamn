@@ -29,7 +29,6 @@
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/operators.hpp"
 #include "damn/core/vector.hpp"
-#include "mkn/kul/for.hpp"
 #include "plamn/core/data/particles/arrays/particles_chunked.hpp"
 
 #include <string>

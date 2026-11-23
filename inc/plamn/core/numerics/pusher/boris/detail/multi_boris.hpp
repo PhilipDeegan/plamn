@@ -40,6 +40,7 @@
 #include <vector>
 #include <cmath>
 #include <cstdlib>
+#include <string>
 
 namespace plamn::core
 {

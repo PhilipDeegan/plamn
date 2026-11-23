@@ -49,6 +49,7 @@
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/particles/particle.hpp"
 #include "phlop/timing/scope.hpp"
+#include "damn/core/def/detail/mkn_gpu.hpp"
 
 #include <algorithm>
 #include <array>

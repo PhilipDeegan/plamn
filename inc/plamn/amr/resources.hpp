@@ -15,13 +15,13 @@
 #include "damn/core/memory/box_span.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "mkn/kul/std/array.hpp"
-
 #include "plamn/core/data/particles/particle_components.hpp"
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/layout.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
 #include "plamn/core/data/particles/particle_iteration.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
+#include "damn/core/def/damn_config.hpp"
 
 #include <cstddef>
 #include <stdexcept>
