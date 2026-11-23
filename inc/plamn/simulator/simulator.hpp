@@ -441,10 +441,10 @@ private:
         }
     }
 
-    // per_patch_ with damn's pool threads taking the patches (untiled layouts: one pool, its
-    //  threads across patches; tiled ones thread over tiles inside the kernels): fn touches only
-    //  its patch and never python. Serial with one thread, and while scope timing (phlop's
-    //  serial timer: scopes on one thread a rank)
+    // per_patch_ with damn's pools taking the patches (untiled layouts: a patch to the next idle
+    //  pool, round robin, a pool works one patch at a time; tiled ones thread over tiles inside
+    //  the kernels): fn touches only its patch and never python. Serial with one pool, and while
+    //  scope timing (phlop's serial timer: scopes on one thread a rank)
     void per_patch_threaded_(std::size_t const ln, auto&& fn)
     {
         using Pool    = damn::core::ThreadPool;
@@ -453,21 +453,19 @@ private:
         auto const n  = ld.data.size();
         if constexpr (!Patch_t::per_patch_mover)
             return per_patch_(ln, fn);
-        if (Pool::n_pools * Pool::threads_per_pool < 2 or n < 2
-            or damn::mpi::scope_timing_active())
+        if (Pool::n_pools < 2 or n < 2 or damn::mpi::scope_timing_active())
             return per_patch_(ln, fn);
 
-        auto& pool = Pool::INSTANCE();
         std::vector<double> busy(decomposition_.timing ? n : 0, 0.);
-        for (auto const i : mkn::kul::range(n))
-            Pool::pool(i % Pool::n_pools).detach_task(pool.guard([&, i] {
+        Pool::INSTANCE().patch_exec(
+            n, [](std::size_t const i) { return i; },
+            [&](std::size_t const i) {
                 auto const t0 = std::chrono::steady_clock::now();
                 fn(*ld.data[i]);
                 if (!busy.empty())
                     busy[i] = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0)
                                   .count();
-            }));
-        pool.sync();
+            });
         for (auto const i : mkn::kul::range(busy.size()))
             decomposition_.busy_of(ln, ld.patches[i].box) += busy[i];
     }
@@ -908,7 +906,7 @@ private:
         NO_DISCARD std::size_t number() const { return ln; }
         NO_DISCARD auto& data() { return self.data_(ln); }
         void per_patch(auto&& fn) { self.per_patch_(ln, fn); }
-        // fn touching only its patch, never python: on the pool's threads (per_patch_threaded_)
+        // fn touching only its patch, never python: on damn's pools (per_patch_threaded_)
         void per_patch_threaded(auto&& fn) { self.per_patch_threaded_(ln, fn); }
         void copy(auto const how, std::string const& key) { self.copy_(ln, how, key); }
         void fill_magnetic_ghosts(std::string const& key, double const t)

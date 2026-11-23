@@ -400,14 +400,14 @@ class HybridRefinementTest(unittest.TestCase):
         self.assertLess(np.abs(lb["B"] - no["B"]).max(), 1e-12)
 
     def test_threads_take_patches_not_physics(self):
-        """the pool's threads taking a level's patches (untiled layouts): B at the end as on one
-        thread, digit for digit (each patch's work its own)"""
-        def run(threads):
-            os.environ["PHARE_THREADS_PER_POOL"] = str(threads)
+        """pools taking a level's patches (untiled layouts): B at the end as on one pool, digit
+        for digit (each patch's work its own)"""
+        def run(pools):
+            os.environ["PHARE_THREAD_POOLS"] = str(pools)
             try:
                 return drift(None, steps=20)["B"]
             finally:
-                os.environ.pop("PHARE_THREADS_PER_POOL")
+                os.environ.pop("PHARE_THREAD_POOLS")
 
         np.testing.assert_array_equal(run(3), run(1))
 
