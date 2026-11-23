@@ -20,6 +20,7 @@
 #include "plamn/core/numerics/faraday/faraday_transformer.hpp"
 #include "plamn/core/numerics/ohm/ohm.hpp"
 #include "plamn/core/numerics/ohm/ohm_transformer.hpp"
+#include "plamn/core/numerics/stable_dt/mhd.hpp"
 #include "plamn/core/numerics/stable_dt/whistler.hpp"
 #include "plamn/core/numerics/particles_synchronised_mover/particles_synchronised_mover_def.hpp"
 #include "plamn/solver/advance.hpp"
@@ -67,16 +68,31 @@ double Simulator<opts>::stable_dt_(Timestepper::CFL const& cfl)
         double level = std::numeric_limits<double>::max();
         models_.visit(ln, [&](auto& model) {
             if constexpr (solver::is_mhd_model_v<std::remove_cvref_t<decltype(model)>>)
-                throw std::runtime_error("plamn: adaptive time steps of MHD levels not yet");
+            {
+                core::MHDStableDt const in{.gamma         = model.gamma,
+                                           .resistivity   = model.resistivity,
+                                           .hall          = model.hall,
+                                           .cfl_wave      = cfl.wave,
+                                           .cfl_diffusive = cfl.diffusive};
+                for (auto& patch : model.levels[static_cast<int>(ln)].data)
+                {
+                    auto const& u = patch->states[0];
+                    level = std::min(level,
+                                     core::mhd_dt(patch->layout, u.rho, u.rhoV, u.B, u.Etot, in));
+                }
+            }
             else
                 per_patch_(ln, [&](auto& patch) {
                     level = std::min(level, core::whistler_dt(patch.layout, patch.massDensity,
                                                               patch.emB, cfl.wave));
                 });
         });
-        dt0 = std::min(dt0, level * to_0);
+        dt0 = std::min(dt0, level * to_0); // a non-finite speed's -1 stays negative
     }
-    return n_ranks_ > 1 ? damn::mpi::min(dt0) : dt0;
+    auto const dt = n_ranks_ > 1 ? damn::mpi::min(dt0) : dt0;
+    if (dt < 0) // every rank: the first such cell logged by the rank that has it
+        throw std::runtime_error("plamn: non-finite MHD wave speed, no stable time step");
+    return dt;
 }
 
 template<auto opts>

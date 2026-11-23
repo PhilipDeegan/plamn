@@ -1118,7 +1118,8 @@ private:
     std::vector<int> domainBox_;
     std::vector<double> cellWidth_;
     Timestepper timestepper_; // each step's dt, the time after it
-    // the adaptive dt: every level's whistler bound as a level 0 dt, the smallest (all ranks)
+    // the adaptive dt: every level's bound (hybrid: whistler, MHD: fast + Hall, diffusive) as a
+    //  level 0 dt, the smallest (all ranks)
     double stable_dt_(Timestepper::CFL const& cfl);
     double dt_          = 0; // this step's
     int timeStepNbr_    = 0;
