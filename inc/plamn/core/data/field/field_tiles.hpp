@@ -466,8 +466,9 @@ namespace basic
     class Electromag; // IWYU pragma: keep (electromag.hpp)
 } // namespace basic
 
-// an untiled (vec)field as plain device copyable views (basic:: types, no names), as tile_at
-//  gives for one tile of a tiled one
+// a (vec)field as plain device copyable views (basic:: types, no names): an untiled one, or a
+//  tiled one as its tile set view (basic::FieldTileSet: pointers to its tiles); tile_at gives
+//  one tile of a tiled one
 template<typename T>
 auto untiled_view(T&& untiled)
 {
@@ -483,14 +484,15 @@ auto untiled_view(T&& untiled)
     }
     else if constexpr (not requires { untiled.name(); }) // already a basic:: view
         return T_t{untiled};
-    else if constexpr (not requires { typename T_t::field_type; }) // a field
-        return typename T_t::Super{untiled};
-    else // a tensor field
+    else if constexpr (requires { T_t::rank; }) // a tensor field
     {
         using Field_t = typename T_t::field_type::Super;
         using V_t     = basic::TensorField<Field_t, T_t::rank>;
-        return untiled.template as<V_t>([](auto& c) { return Field_t{c}; });
+        return untiled.template as<V_t>(
+            [](auto& c) { return Field_t{static_cast<Field_t const&>(c)}; });
     }
+    else // a field: its view base (a cast: a tile set's base also takes a quantity)
+        return typename T_t::Super{static_cast<typename T_t::Super const&>(untiled)};
 }
 
 template<typename T>

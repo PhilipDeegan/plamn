@@ -35,6 +35,6 @@ compiler:
 
 file:
   - type: cpp:cxx:cc
-    archiver: ar -cr
+    archiver: llvm-ar-22 -cr
     compiler:  mpicxx ${cxx.flags}
     linker:  mpicxx ${lnk.flags}

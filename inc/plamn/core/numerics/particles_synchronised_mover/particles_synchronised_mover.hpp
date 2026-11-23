@@ -1293,8 +1293,8 @@ void ParallelParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositAl
                             return;
 
                         std::size_t const threads = damn::kernel::warp_size();
-                        auto pdensity             = pop.particleDensity();
-                        auto flux                 = *pop.flux();
+                        auto pdensity = untiled_view(pop.particleDensity()); // plain views
+                        auto flux     = untiled_view(pop.flux());
                         Launcher{parts().size(), max_cells, threads}.stream(
                             in.streamer.streams[i], [=] __device__() mutable {
                                 Interpolating_t::template on_tile_cells<Tile_vt, Launcher>(
@@ -1309,8 +1309,8 @@ void ParallelParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositAl
                     // largest tile field, incl. ghosts
                     auto const n_points = pop.particleDensity().max_tile_size();
                     auto const domain   = *pop.domainParticles();
-                    auto pdensity       = pop.particleDensity();
-                    auto flux           = *pop.flux();
+                    auto pdensity       = untiled_view(pop.particleDensity()); // plain views
+                    auto flux           = untiled_view(pop.flux());
                     auto const mode     = tile_deposit_mode(
                         n_points, 0, damn::core::gpu::max_dynamic_shared_bytes());
                     with_tile_deposit(mode, [&](auto deposit_c) {
