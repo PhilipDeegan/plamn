@@ -27,6 +27,10 @@
 #include "plamn/core/data/grid/ghost_width_calculator.hpp"
 #include "plamn/core/data/particles/particle.hpp"
 
+#if defined(MKN_WITH_MKN_AVX) // the AoS4SoAVXChunked staging
+#include "plamn/core/data/particles/aos_transpose.hpp"
+#endif
+
 #include <cassert>
 #include <algorithm>
 #include <array>
@@ -1299,6 +1303,181 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
 
         for (std::size_t i = 0; i < particles.size(); i += L)
             block(i, std::min(L, particles.size() - i), none, no_cell, nullptr);
+    }
+#endif // MKN_WITH_MKN_AVX
+};
+
+
+// AoS4SoAVXChunked: AoS sorted by cell (particles_aos4soavx_chunked.hpp), pushed as SoAVXChunked's
+//  batched_avx: a cell's run (contiguous) staged into a SoAVXArray of stage_size slots at a time,
+//  pushed there (boris::avx::Push: the cell's gather loaded once, its deposit window), written
+//  back (REF: the live slots; the crossings recorded against the array's slots). Unsorted, or
+//  above interpolation order 1: the whole array staged, no gather. Without mkn.avx, or not host
+//  memory: the AoS backend's per particle push. PLAMN_AVX_STAGE: stage_size (a multiple of the
+//  lanes, default 256)
+template<typename ModelAccessor, typename Interpolator>
+struct MultiBorisBackend<LayoutMode::AoS4SoAVXChunked, ModelAccessor, Interpolator>
+    : public MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>
+{
+    using Super               = MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>;
+    using MultiBoris_t        = Super::MultiBoris_t;
+    using Interpolator_t      = Super::Interpolator_t;
+    static constexpr auto dim = Super::dim;
+    static constexpr bool cpu = Super::alloc_mode == damn::AllocatorMode::CPU;
+
+#if defined(MKN_WITH_MKN_AVX)
+    static constexpr std::size_t lanes = mkn::avx::Options::N<double>();
+#if defined(PLAMN_AVX_STAGE)
+    static constexpr std::size_t stage_size = PLAMN_AVX_STAGE;
+#else
+    static constexpr std::size_t stage_size = 256;
+#endif
+    static_assert(stage_size % lanes == 0 and stage_size > 0);
+
+    template<MultiBorisMode mode>
+    static void move_pooled(MultiBoris_t& in, auto const& boxings)
+    {
+        static_assert(cpu, "AoS4SoAVXChunked: host only");
+        damn::core::ThreadPool::INSTANCE().patch_exec(
+            in.accessor.size(), [&](auto const i) { return in.accessor[i]; },
+            [&](auto& view) { move_patch<mode>(in, view, boxings); });
+    }
+
+    template<MultiBorisMode mode>
+    static void move_cpu_copy(auto& in, auto const& boxings, auto const i)
+    {
+        auto view = in.accessor[i];
+        move_patch<mode>(in, view, boxings);
+    }
+
+    template<MultiBorisMode mode>
+    static void move_rest(auto& in, auto const& boxings, auto const i)
+    {
+        auto view = in.accessor[i];
+        move_patch<mode>(in, view, boxings);
+    }
+
+    template<MultiBorisMode mode>
+    static void move_patch(auto& in, auto& view, auto const& boxings)
+    {
+        DAMN_LOG_SCOPE(3, "MultiBoris::aos4soavx::move_patch");
+
+        auto [ions, em]    = view.args;
+        auto const& layout = view.layout;
+        auto const& boxing = boxings.at(view.patchID());
+        auto const halfdt  = in.mesh(layout.dx, in.dt);
+
+        for (auto& pop : ions)
+        {
+            double const coef1 = pop.charge() * (0.5 * in.dt / pop.mass());
+            staged<ParticleType::Domain, mode>(pop.domainParticles(), pop, em, layout, boxing,
+                                               halfdt, coef1);
+            staged<ParticleType::LevelGhost, mode>(pop.levelGhostParticles(), pop, em, layout,
+                                                   boxing, halfdt, coef1);
+        }
+    }
+
+    template<auto type, MultiBorisMode mode>
+    static void staged(auto& particles, auto& pop, auto const& em, auto const& layout,
+                       auto const& boxing, auto const& halfdt, double const coef1)
+    {
+        static constexpr std::size_t L = lanes;
+        static constexpr std::size_t N = stage_size;
+        static constexpr bool copy     = mode == MultiBorisMode::COPY;
+        // the REF push of a domain array records its crossings (ChunkedOps::resettle)
+        static constexpr bool record = !copy and type == ParticleType::Domain;
+        if constexpr (record)
+            particles.begin_crossers();
+
+        auto& rhoP = pop.particleDensity();
+        auto& flux = pop.flux();
+
+        using Window       = boris::avx::Window<dim, L>;
+        auto const dep_box = damn::core::grow(
+            layout.cells, std::decay_t<decltype(layout)>::options.field_ghost_width);
+        auto const reset = [&](Window& win, auto const& cell) {
+            win.reset(cell, dep_box);
+            win.deposits = isIn(cell, boxing.nonLevelGhostBox);
+        };
+        auto const flush = [&](Window const& win) { win.flush(rhoP, flux); };
+
+        auto const push = boris::avx::push<type, mode, Interpolator_t, L, record>(
+            em, layout, boxing, halfdt, coef1, rhoP, flux);
+
+        SoAVXArray<dim, N> stage;
+        auto const cols = boris::avx::columns(stage);
+
+        // the stage's slots [k, k + 8) as transpose columns
+        auto const at = [&](std::size_t const k) {
+            aos_transpose::Cols<dim> c{cols.w + k, {}, {}, {}};
+            for (std::size_t d = 0; d < dim; ++d)
+            {
+                c.c[d] = cols.c[d] + k;
+                c.d[d] = cols.d[d] + k;
+            }
+            for (std::size_t d = 0; d < 3; ++d)
+                c.v[d] = cols.v[d] + k;
+            return c;
+        };
+        // slots [b, b + n) of the array (n <= N) through the stage: transposed in 8 at a time,
+        //  pushed a block of lanes at a time, transposed back (REF; the gaps' slots unchanged)
+        auto const run = [&](std::size_t const b, std::size_t const n, auto const* g,
+                             auto const& cell, Window* win) {
+            auto* const ps = particles.data() + b;
+            for (std::size_t k = 0; k < n; k += 8)
+                aos_transpose::to_columns_each<dim>(ps + k, std::min<std::size_t>(8, n - k),
+                                                    at(k)); // faster here, see aos_transpose.hpp
+            auto const crossed = [&](std::size_t const j, auto const& from) {
+                particles.add_crosser(b + j, from);
+            };
+            for (std::size_t k = 0; k < n; k += L)
+                push(cols, k, std::min(L, n - k), g, cell, win, crossed);
+            if constexpr (!copy)
+                for (std::size_t k = 0; k < n; k += 8)
+                    aos_transpose::from_columns<dim>(ps + k, std::min<std::size_t>(8, n - k),
+                                                     at(k));
+        };
+        // slots [b, b + size) in runs of at most N
+        auto const runs = [&](std::size_t const b, std::size_t const size, auto const* g,
+                              auto const& cell, Window* win) {
+            for (std::size_t i = b; i < b + size; i += N)
+                run(i, std::min(N, b + size - i), g, cell, win);
+        };
+
+        using Gather_t = CellGatherV<dim, L>;
+        // sorted arrays (domain, and level ghosts: on_moved / on_appended sort them too)
+        static constexpr bool per_cell = Interpolator_t::interp_order == 1;
+        Gather_t const* const none     = nullptr;
+        std::array<int, dim> const no_cell{};
+
+        if constexpr (per_cell)
+            if (particles.sorted())
+            {
+                Gather_t g;
+                Window win;
+                damn::core::for_each_point(particles.shell(), [&](auto const& cell) {
+                    auto const [b, size] = particles.cell_range(cell);
+                    if (size == 0)
+                        return;
+                    if (!isIn(cell, boxing.ghostBox)) // the stencils would leave the fields:
+                    {                                 //  per lane (not accelerated anyway)
+                        runs(b, size, none, no_cell, nullptr);
+                        return;
+                    }
+                    g.load(em, layout, cell);
+                    std::array<int, dim> amr;
+                    for (std::size_t k = 0; k < dim; ++k)
+                        amr[k] = cell[k];
+                    if constexpr (copy)
+                        reset(win, cell);
+                    runs(b, size, &g, amr, copy ? &win : nullptr);
+                    if constexpr (copy)
+                        flush(win);
+                });
+                return;
+            }
+
+        runs(0, particles.size(), none, no_cell, nullptr);
     }
 #endif // MKN_WITH_MKN_AVX
 };

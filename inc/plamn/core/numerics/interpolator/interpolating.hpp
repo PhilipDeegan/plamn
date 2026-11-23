@@ -280,7 +280,8 @@ public:
     void particleToMesh(Particles const& particles, auto const& layout, auto& rhoP, auto& flux,
                         double coef = 1., auto&... stream)
         requires(mkn::kul::any_in(Particles::layout_mode, LayoutMode::AoS, LayoutMode::SoA,
-                                  LayoutMode::SoAVX, LayoutMode::SoAVXChunked))
+                                  LayoutMode::SoAVX, LayoutMode::SoAVXChunked,
+                                  LayoutMode::AoS4SoAVXChunked))
     DAMN_ALL
     {
         auto constexpr static alloc_mode = Particles::alloc_mode;
@@ -303,6 +304,21 @@ public:
                 for (auto const& it : particles)
                     if (it.weight() != 0) // SoAVXChunked's gaps
                         interp_.particleToMesh(it, rhoP, flux, layout, coef);
+            }
+            else if constexpr (Particles::layout_mode == LayoutMode::AoS4SoAVXChunked)
+            {
+#if defined(MKN_WITH_MKN_AVX)
+                if constexpr (interpOrder == 1)
+                    if (particles.sorted() and coef == 1.)
+                    {
+                        cell_deposit_sorted<mkn::avx::Options::N<double>()>(particles, rhoP, flux,
+                                                                            layout);
+                        return;
+                    }
+#endif
+                for (auto const& p : particles)
+                    if (p.weight() != 0) // the chunks' gaps
+                        interp_.particleToMesh(p, rhoP, flux, layout, coef);
             }
             else
                 interp_(particles, rhoP, flux, layout, coef);

@@ -19,6 +19,8 @@
 #include "BS_thread_pool.hpp"
 
 #include <cmath>
+#include <cstdio>
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 
@@ -198,8 +200,11 @@ DAMN_WITH_GPU(
 TYPED_TEST_SUITE(PrimitiveConservativeTileTest, Tiled_t, );
 
 // every point of every tile's ghost box against the untiled field at the same AMR index: points
-//  (not compare_fields' reduce, which sums the tiles' overlapping ghosts as for deposits)
-std::size_t tile_mismatches(auto const& ref_layout, auto const& ref, auto const& cmp)
+//  (not compare_fields' reduce, which sums the tiles' overlapping ghosts as for deposits), within
+//  rel_tol of max(|ref|, 1) (0: bit for bit)
+double static max_diff = 0;
+std::size_t tile_mismatches(auto const& ref_layout, auto const& ref, auto const& cmp,
+                            double const rel_tol)
 {
     std::size_t n = 0, bad = 0;
     for (auto const& tile : cmp())
@@ -207,14 +212,18 @@ std::size_t tile_mismatches(auto const& ref_layout, auto const& ref, auto const&
         auto const& layout = tile.layout();
         damn::core::for_each_point(ghost_box(layout, tile), [&](auto const& ijk) {
             ++n;
-            bad += tile(ijk) != ref(to_local(ref_layout, to_amr(layout, ijk)));
+            double const t = tile(ijk), r = ref(to_local(ref_layout, to_amr(layout, ijk)));
+            double const d = t == r ? 0 : std::abs(t - r) / std::max(std::abs(r), 1.0);
+            max_diff       = std::max(max_diff, d);
+            bad += d > rel_tol;
         });
     }
     EXPECT_GT(n, 0u);
     return bad;
 }
 
-// tiled (per tile pool tasks, or one GPU launch) == untiled, bit for bit
+// tiled (per tile pool tasks, or one GPU launch) == untiled: bit for bit on the CPU (the same
+//  code per point); on the GPU within 1e-14 (device code contracts to FMAs its own way)
 TYPED_TEST(PrimitiveConservativeTileTest, tiled_matches_untiled)
 {
     using Ref_t = MHDPatch<TypeParam::dim>;
@@ -228,13 +237,16 @@ TYPED_TEST(PrimitiveConservativeTileTest, tiled_matches_untiled)
     convert(ref);
     convert(cmp);
 
-    EXPECT_EQ(tile_mismatches(ref_layout, ref.Etot, cmp.Etot), 0u) << "Etot";
-    EXPECT_EQ(tile_mismatches(ref_layout, ref.P2, cmp.P2), 0u) << "P";
+    double const tol = TypeParam::alloc_mode == damn::AllocatorMode::GPU_UNIFIED ? 1e-14 : 0;
+    max_diff         = 0;
+    EXPECT_EQ(tile_mismatches(ref_layout, ref.Etot, cmp.Etot, tol), 0u) << "Etot";
+    EXPECT_EQ(tile_mismatches(ref_layout, ref.P2, cmp.P2, tol), 0u) << "P";
     for (std::size_t c = 0; c < 3; ++c)
     {
-        EXPECT_EQ(tile_mismatches(ref_layout, ref.rhoV[c], cmp.rhoV[c]), 0u) << "rhoV " << c;
-        EXPECT_EQ(tile_mismatches(ref_layout, ref.V2[c], cmp.V2[c]), 0u) << "V " << c;
+        EXPECT_EQ(tile_mismatches(ref_layout, ref.rhoV[c], cmp.rhoV[c], tol), 0u) << "rhoV " << c;
+        EXPECT_EQ(tile_mismatches(ref_layout, ref.V2[c], cmp.V2[c], tol), 0u) << "V " << c;
     }
+    std::printf("primitive / conservative: tiled vs untiled max relative diff %g\n", max_diff);
 }
 
 } // namespace plamn::core

@@ -74,6 +74,13 @@ bool constexpr is_soavx(LayoutMode lm)
     return mkn::kul::any_in(lm, SoAVX, SoAVXChunked);
 }
 
+// sorted by cell in per cell chunks, gap slots (weight 0) between them (particles_chunked.hpp)
+bool constexpr is_chunked(LayoutMode lm)
+{
+    using enum LayoutMode;
+    return mkn::kul::any_in(lm, SoAVXChunked, AoS4SoAVXChunked);
+}
+
 // guards a forwarding constructor `template<typename... Args> This(Args&&...)` so that a
 // single self-type argument (e.g. a non-const `This&`) is excluded and falls through to the
 // real copy/move constructor instead - otherwise the forwarding ctor is an exact match that

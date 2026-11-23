@@ -356,10 +356,12 @@ TYPED_TEST(AmpereTileTest, faraday_then_ampere)
                 ampere.on_tile(ti, cmp_new.B, cmp.J);
         }
 
+        // the GPU's device code contracts to FMAs its own way: ulps apart (1.8e-15 seen)
+        double const diff = Cmp::alloc_mode == damn::AllocatorMode::GPU_UNIFIED ? 1e-14 : 1e-15;
         std::size_t n_bad = 0;
         for (std::size_t c = 0; c < 3; ++c)
         {
-            auto const eq = compare_fields(ref.J[c], cmp.J[c]);
+            auto const eq = compare_fields(ref.J[c], cmp.J[c], diff);
             if (!eq)
             {
                 ++n_bad;

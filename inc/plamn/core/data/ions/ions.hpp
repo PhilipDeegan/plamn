@@ -213,7 +213,7 @@ namespace core
             {
                 delete_particles_in(pop.domainParticles(), boxes);
                 using Particles_t = std::decay_t<decltype(pop.domainParticles())>;
-                if constexpr (Particles_t::layout_mode == LayoutMode::SoAVXChunked)
+                if constexpr (is_chunked(Particles_t::layout_mode))
                     pop.domainParticles().template on_moved<ParticleType::Domain>();
             }
         }

@@ -224,7 +224,8 @@ NB_MODULE(plamn_etc, m)
         .value("SoAVXTS", plamn::core::LayoutMode::SoAVXTS)
         .value("SoAPC", plamn::core::LayoutMode::SoAPC)
         .value("AoSPCTS", plamn::core::LayoutMode::AoSPCTS)
-        .value("SoAVXChunked", plamn::core::LayoutMode::SoAVXChunked);
+        .value("SoAVXChunked", plamn::core::LayoutMode::SoAVXChunked)
+        .value("AoS4SoAVXChunked", plamn::core::LayoutMode::AoS4SoAVXChunked);
 
     nb::enum_<damn::AllocatorMode>(m, "AllocatorMode", nb::is_arithmetic())
         .value("CPU", damn::AllocatorMode::CPU)

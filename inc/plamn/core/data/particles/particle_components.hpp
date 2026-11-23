@@ -61,7 +61,8 @@ concept HasComponents
            or std::decay_t<Particles>::layout_mode == LayoutMode::AoSMapped
            or std::decay_t<Particles>::layout_mode == LayoutMode::SoA
            or std::decay_t<Particles>::layout_mode == LayoutMode::SoAVX
-           or std::decay_t<Particles>::layout_mode == LayoutMode::SoAVXChunked);
+           or std::decay_t<Particles>::layout_mode == LayoutMode::SoAVXChunked
+           or std::decay_t<Particles>::layout_mode == LayoutMode::AoS4SoAVXChunked);
 
 template<typename Particles>
     requires HasComponents<Particles>
@@ -78,7 +79,8 @@ NO_DISCARD auto components(Particles& particles)
     if (n == 0)
         return c;
 
-    if constexpr (layout == LayoutMode::AoS or layout == LayoutMode::AoSMapped)
+    if constexpr (layout == LayoutMode::AoS or layout == LayoutMode::AoSMapped
+                  or layout == LayoutMode::AoS4SoAVXChunked)
     {
         auto* const p         = particles.data();
         auto constexpr stride = sizeof(*p);

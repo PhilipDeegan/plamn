@@ -7,6 +7,7 @@
 #include "plamn/core/data/particles/exporting/detail/def_exporting.hpp"
 #include "plamn/core/data/particles/exporting/detail/aos_exporting.hpp"   // IWYU pragma: keep
 #include "plamn/core/data/particles/exporting/detail/soavx_exporting.hpp" // IWYU pragma: keep
+#include "plamn/core/data/particles/exporting/detail/aos4soavx_chunked_exporting.hpp" // IWYU pragma: keep
 
 #include <cstddef>
 #include <string_view>

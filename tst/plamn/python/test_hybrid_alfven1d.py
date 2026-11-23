@@ -1,4 +1,4 @@
-"""a serial 1 level hybrid run of pyphare's 1D Alfven wave input, on plamn
+"""a 1 level hybrid run of pyphare's 1D Alfven wave input, on plamn (one or several ranks)
 
 needs the py_etc and py_sim modules built (mkn build -p py_etc / -p py_sim), then from
 the plamn root:
@@ -10,6 +10,7 @@ import unittest
 import alfven1d
 import numpy as np
 
+import plamn
 import plamn.backend.phare as ph
 
 CELLS = 100
@@ -61,7 +62,14 @@ def run(largest_patch_size):
 
 class HybridAlfven1DTest(unittest.TestCase):
     def check(self, result, patches):
-        self.assertEqual(result["patches"], patches)
+        # on several ranks the patches are cut where a rank's share ends inside one: at least
+        #  one a rank, at most a cut per rank boundary more
+        ranks = plamn.etc.mpi_size()
+        if ranks == 1:
+            self.assertEqual(result["patches"], patches)
+        else:
+            self.assertGreaterEqual(result["patches"], max(patches, ranks))
+            self.assertLessEqual(result["patches"], patches + ranks - 1)
         self.assertTrue(result["finite"])
         self.assertEqual(result["particles"][0], result["particles"][-1])
         np.testing.assert_allclose(result["amplitude"], 0.01, rtol=0.05)

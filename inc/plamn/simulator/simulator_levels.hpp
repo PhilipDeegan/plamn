@@ -10,8 +10,7 @@
 #include "damn/amr/level_data.hpp"
 #include "damn/amr/level_map.hpp"
 #include "damn/amr/neighbours.hpp"
-#include "damn/amr/partition.hpp"
-#include "damn/amr/keep_partition.hpp"
+#include "damn/amr/decompose.hpp"
 #include "damn/amr/topology.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/logger.hpp"
@@ -45,87 +44,58 @@
 
 namespace plamn
 {
-// level ln from its boxes (that level's cells): chopped into the largest patch size, given
-// ranks (lb_.partition: along the Hilbert curve by the particles they will hold, or where the
-// data is, then spilled), allocated, with their neighbours and the map to the coarser level
 template<auto opts>
-damn::amr::Level<Simulator<opts>::dimension>
-Simulator<opts>::level_of_(int const ln, std::vector<Box_t> const& boxes)
+damn::amr::Decompose<Simulator<opts>::dimension>
+Simulator<opts>::decompose_in_(std::string const& partition)
 {
-    // the cells shared evenly (no patch left with a few cells, SAMRAI's patches on one rank);
-    // refined levels: patches of whole coarser cells, the size a multiple of the ratio
-    auto size = patch_size_;
-    if (ln > 0)
-        for (auto& s : size)
-            s = std::max(hierarchy_.ratio, s / hierarchy_.ratio * hierarchy_.ratio);
-    auto const chop = [&](std::vector<Box_t> const& bs) {
-        std::vector<Box_t> patches;
-        for (auto const& box : bs)
-            for (auto const& b : damn::amr::chop_evenly(box, size, ln > 0 ? hierarchy_.ratio : 1))
-                patches.push_back(b);
-        return patches;
-    };
-    auto const weights = [&](std::vector<Box_t> const& patches) {
+    auto weigh = [this](int const l, std::vector<Box_t> const& patches) {
         if constexpr (Models_t::hybrid_on)
-            if (!models_.is_mhd(static_cast<std::size_t>(ln)))
-                return isInitialized_ ? particle_weights_(ln, patches) : box_weights_(ln, patches);
+            if (!models_.is_mhd(static_cast<std::size_t>(l)))
+                return isInitialized_ ? particle_weights_(l, patches) : box_weights_(l, patches);
         std::vector<double> cells; // MHD: the work is per cell
         for (auto const& p : patches)
             cells.push_back(static_cast<double>(p.size()));
         return cells;
     };
-    auto const capacity = damn::amr::node_share_capacity(topology_);
-    auto const curve    = [&](std::vector<Box_t> const& patches) {
-        return damn::amr::partition(patches, weights(patches), capacity);
-    };
+    // the level 0 cells about level 1 its coarse step reads: where its level ghost particles
+    //  split from (a particle ghost width, in coarse cells at most); running level 0's far part
+    //  out of order would need the stages' ghost exchanges on top
+    int near_band = lb_.near_band;
+    if constexpr (Models_t::hybrid_on)
+        if (near_band < 0)
+            near_band = static_cast<int>(solver::HybridModel<opts>::Patch_t::particle_ghost_width);
+    return {.topology   = topology_,
+            .weigh      = weigh,
+            .patch_size = patch_size_,
+            .partition  = partition,
+            .spill      = lb_.spill,
+            .block      = rebalance_block,
+            .near_band  = std::max(near_band, 0)};
+}
 
-    auto const l          = static_cast<std::size_t>(ln);
-    auto const* const old = l < hierarchy_.levels.size() ? &hierarchy_.levels[l].patches : nullptr;
-    auto const* const coarser = ln > 0 ? &hierarchy_.levels[l - 1].patches : nullptr;
-    // a refined level's patches in whole coarse cells (lower and shape multiples of the
-    //  ratio): its tiles are then even, starting on even indices (tile_set_mapper.hpp)
-    auto const whole_coarse = [&](std::vector<Box_t> const& patches) {
-        if (ln == 0)
-            return;
-        auto const r = static_cast<int>(hierarchy_.ratio);
-        for (auto const& p : patches)
-            for (std::size_t d = 0; d < dimension; ++d)
-                if (p.lower[d] % r != 0 or p.shape()[d] % r != 0)
-                    throw std::runtime_error("plamn Simulator: a level " + std::to_string(ln)
-                                             + " patch not in whole coarse cells");
-    };
-    if (lb_.partition != "keep" or (!old and !coarser))
+// level ln from its boxes (that level's cells): planned_[ln] if decomposed with the others
+// (initialization, rebalance: finest / aligned), else damn::amr::decompose_level (lb_.partition,
+// lb_.spill; finest / aligned, a level alone: to the owners of the coarser cells under it),
+// weighed by the particles each patch will hold (MHD levels: cells); refined levels' patches in
+// whole coarse cells, so their tiles are even, starting on even indices (tile_set_mapper.hpp)
+template<auto opts>
+damn::amr::Level<Simulator<opts>::dimension>
+Simulator<opts>::level_of_(int const ln, std::vector<Box_t> const& boxes)
+{
+    auto const l = static_cast<std::size_t>(ln);
+    if (l < planned_.size())
     {
-        auto const patches = chop(boxes);
-        whole_coarse(patches);
-        return damn::amr::make_level(ln, patches, curve(patches));
+        std::size_t planned = 0, given = 0;
+        for (auto const& p : planned_[l].patches)
+            planned += p.box.size();
+        for (auto const& b : boxes)
+            given += b.size();
+        if (planned != given)
+            throw std::runtime_error("plamn Simulator: level " + std::to_string(ln)
+                                     + " planned on other boxes");
+        return planned_[l];
     }
-
-    using Owned   = damn::amr::OwnedBox<dimension>;
-    using Patches = std::vector<damn::amr::Patch<dimension>>;
-    auto const pieces
-        = damn::amr::keep(boxes, old ? *old : Patches{}, coarser ? *coarser : Patches{},
-                          hierarchy_.ratio, [&](std::vector<Box_t> const& rest) {
-                              auto const patches = chop(rest);
-                              auto const ranks   = curve(patches);
-                              std::vector<Owned> out;
-                              for (std::size_t i = 0; i < patches.size(); ++i)
-                                  out.push_back({patches[i], ranks[i]});
-                              return out;
-                          });
-    std::vector<Box_t> patches;
-    std::vector<int> ranks;
-    auto const per_rank = damn::amr::owned_boxes(pieces, n_ranks_);
-    for (std::size_t r = 0; r < per_rank.size(); ++r)
-        for (auto const& b : chop(per_rank[r]))
-        {
-            patches.push_back(b);
-            ranks.push_back(static_cast<int>(r));
-        }
-    if (lb_.spill >= 0)
-        ranks = damn::amr::spill(patches, ranks, weights(patches), topology_, lb_.spill);
-    whole_coarse(patches);
-    return damn::amr::make_level(ln, patches, ranks);
+    return damn::amr::decompose_level(hierarchy_, ln, boxes, decompose_in_(lb_.partition));
 }
 
 template<auto opts>
@@ -463,6 +433,21 @@ void Simulator<opts>::initialize_hybrid_()
     else if (tagging_ and pretag_enabled_)
         pretag_boxes = pretag_();
 
+    // every level known (pretag, tag_boxes) and a partition that needs them all: decomposed
+    //  together before any level is made, on the particles they will hold (none exist yet)
+    if (pretag_boxes and refinement_boxes_.empty()
+        and (lb_.partition == "finest" or lb_.partition == "aligned"))
+    {
+        std::vector<std::vector<Box_t>> boxes{{hierarchy_.domain}};
+        for (auto const& b : *pretag_boxes)
+        {
+            if (b.empty() or static_cast<int>(boxes.size()) >= hierarchy_.max_levels)
+                break;
+            boxes.push_back(b);
+        }
+        planned_ = damn::amr::decompose(hierarchy_, 0, boxes, decompose_in_(lb_.partition));
+    }
+
     make_level_(0, {hierarchy_.domain});
     solver::hybrid::initialize_root(models_.hybrid, level_services_(0), dict_["simulation"]);
     for (std::size_t ln = 1; ln <= refinement_boxes_.size(); ++ln)
@@ -486,6 +471,9 @@ void Simulator<opts>::initialize_hybrid_()
             solver::hybrid::initialize_refined(
                 models_.hybrid, level_services_(static_cast<std::size_t>(ln) + 1), startTime_);
         }
+    planned_.clear(); // made: later levels (regrids) level by level
+    // the totals under a finer level the finer one's from the start, as after a synchronization
+    rebuild_moments_(0);
     // every level's E and B at t0, for the finer levels' time interpolation
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
         prepare_step_(static_cast<int>(ln), startTime_);
