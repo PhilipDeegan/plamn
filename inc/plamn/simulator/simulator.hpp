@@ -33,6 +33,7 @@
 #include "damn/amr/level_map.hpp"
 #include "damn/amr/neighbours.hpp"
 #include "damn/amr/regrid.hpp"
+#include "damn/amr/time_refinement.hpp"
 #include "damn/amr/topology.hpp"
 #include "damn/hdf5/damn_hdf5.hpp"
 #include "damn/core/vector.hpp"
@@ -217,6 +218,11 @@ public:
     NO_DISCARD auto& hierarchy() const { return hierarchy_; }
     NO_DISCARD auto& level(std::size_t const ln = 0) { return data_(ln); }
     NO_DISCARD std::size_t n_levels() const { return levels_.size(); }
+    // level ln's substeps' dts in the last advance (tests: their count follows its stable dt)
+    NO_DISCARD std::vector<double> substep_dts(std::size_t const ln) const
+    {
+        return ln < substep_dts_.size() ? substep_dts_[ln] : std::vector<double>{};
+    }
 
     // a field resource's values on the domain nodes of every local patch of level ln, patch by
     // patch
@@ -322,7 +328,9 @@ private:
     struct Hooks
     {
         Simulator& self;
-        void advance(int ln, double t, double dt) { self.advance_level_(ln, t, dt); }
+        void advance(int ln, damn::amr::Step const& step) { self.advance_level_(ln, step); }
+        // the dt level ln asks for after a step (damn::amr::TimeRefinement splits on it)
+        double next_dt(int ln, damn::amr::Step const& step) { return self.next_dt_(ln, step); }
         void prepare_step(int ln, double t) { self.prepare_step_(ln, t); }
         void first_step(int ln, double t, double ct, double cdt)
         {
@@ -989,6 +997,8 @@ private:
         NO_DISCARD LevelServices coarser() const { return {self, ln - 1}; }
         NO_DISCARD double coarse_dt() const { return self.levels_[ln].coarse_dt; }
         NO_DISCARD int time_ratio() const { return self.time_ratio(); }
+        // its last step's share of its coarser level's step (flux sums' weight)
+        NO_DISCARD double substep_weight() const { return self.substep_weight_(ln); }
         void refine(auto const& op, damn::amr::LevelRegion const region,
                     std::vector<damn::amr::LevelPair> const& pairs, double const alpha = 0)
         {
@@ -1035,6 +1045,8 @@ private:
         void copy(auto const how, std::string const& key) { self.copy_(ln, how, key); }
         NO_DISCARD double old_time() const { return self.levels_[ln].old_t; }
         NO_DISCARD int time_ratio() const { return self.time_ratio(); }
+        // its last step's share of its coarser level's step (flux sums' weight)
+        NO_DISCARD double substep_weight() const { return self.substep_weight_(ln); }
     };
     // patch ghosts, then the physical boundaries' (simulator_ghosts.hpp)
     void fill_mhd_state_ghosts_(std::size_t ln, std::size_t s, double t);
@@ -1043,7 +1055,7 @@ private:
     void mhd_physical_boundaries_(std::size_t ln, auto&& fn);
 
     // damn::amr::advance's hooks, see damn/amr/time_refinement.hpp
-    void advance_level_(int ln, double t, double dt);
+    void advance_level_(int ln, damn::amr::Step const& step);
     void prepare_step_(int ln, double t);
     void first_step_(int ln, double t, double coarse_t, double coarse_dt);
     void last_step_(int ln);
@@ -1118,9 +1130,33 @@ private:
     std::vector<int> domainBox_;
     std::vector<double> cellWidth_;
     Timestepper timestepper_; // each step's dt, the time after it
-    // the adaptive dt: every level's bound (hybrid: whistler, MHD: fast + Hall, diffusive) as a
-    //  level 0 dt, the smallest (all ranks)
+    // the adaptive dt: level 0's stable dt (each level steps at its own: next_dt_)
     double stable_dt_(Timestepper::CFL const& cfl);
+    // level ln's stable dt at t (hybrid: whistler, MHD: fast + Hall, diffusive), all ranks; the
+    //  adaptive run stops (non-finite speed, Timestepper's substep / shrink limits) throw
+    double level_stable_dt_(std::size_t ln, double t);
+    // this rank's bound of level ln (-1: a non-finite speed)
+    double level_bound_(std::size_t ln, Timestepper::CFL const& cfl);
+    // damn::amr::TimeRefinement's next_dt: constant, the level's dt of the table (dt /
+    //  time_ratio^ln); adaptive, level 0 its step's, a finer level min(its coarser step, stable)
+    double next_dt_(int ln, damn::amr::Step const& step);
+    // level ln's last step's share of its coarser level's step
+    NO_DISCARD double substep_weight_(std::size_t ln) const;
+    // per level: its last step (damn's), its dt (constant: the table; adaptive: its last stable)
+    std::vector<damn::amr::Step> level_step_;
+    std::vector<std::vector<double>> substep_dts_; // per level, in the last advance
+    std::vector<double> level_dts_;
+    double first_level0_dt_ = -1; // adaptive: the run's first level 0 dt (shrink limit)
+    // the substeps' split (SAMRAI's), kept across steps; made at the first advance
+    std::optional<damn::amr::TimeRefinement<dimension>> stepping_;
+    // a start or a restart (its dt or mode may differ): the levels' dts and the split afresh
+    void restart_stepping_()
+    {
+        level_step_.clear();
+        level_dts_.clear();
+        first_level0_dt_ = -1;
+        stepping_.reset();
+    }
     double dt_          = 0; // this step's
     int timeStepNbr_    = 0;
     double startTime_   = 0;

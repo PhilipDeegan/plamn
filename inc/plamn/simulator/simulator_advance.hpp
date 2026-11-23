@@ -31,7 +31,9 @@
 #include <algorithm>
 #include <cstddef>
 #include <limits>
+#include <iomanip>
 #include <optional>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -54,45 +56,109 @@ void Simulator<opts>::step_model_(std::size_t const ln, auto&& hybrid, auto&& mh
     });
 }
 
-// PHARE's MultiPhysicsIntegrator::computeStableDt: a level's dt (its model's bound) as a level 0
-//  one, times the substeps of each coarser level (the time ratio per level)
+// this rank's bound of level ln, by its model: hybrid the whistler bound, MHD fast + Hall and the
+//  diffusive one (-1: a non-finite MHD wave speed, logged)
 template<auto opts>
-double Simulator<opts>::stable_dt_(Timestepper::CFL const& cfl)
+double Simulator<opts>::level_bound_(std::size_t const ln, Timestepper::CFL const& cfl)
 {
-    double dt0  = std::numeric_limits<double>::max();
-    double to_0 = 1;
-    for (std::size_t ln = 0; ln < levels_.size(); ++ln)
-    {
-        if (ln > 0)
-            to_0 *= time_ratio();
-        double level = std::numeric_limits<double>::max();
-        models_.visit(ln, [&](auto& model) {
-            if constexpr (solver::is_mhd_model_v<std::remove_cvref_t<decltype(model)>>)
+    double level = std::numeric_limits<double>::max();
+    models_.visit(ln, [&](auto& model) {
+        if constexpr (solver::is_mhd_model_v<std::remove_cvref_t<decltype(model)>>)
+        {
+            core::MHDStableDt const in{.gamma         = model.gamma,
+                                       .resistivity   = model.resistivity,
+                                       .hall          = model.hall,
+                                       .cfl_wave      = cfl.wave,
+                                       .cfl_diffusive = cfl.diffusive};
+            for (auto& patch : model.levels[static_cast<int>(ln)].data)
             {
-                core::MHDStableDt const in{.gamma         = model.gamma,
-                                           .resistivity   = model.resistivity,
-                                           .hall          = model.hall,
-                                           .cfl_wave      = cfl.wave,
-                                           .cfl_diffusive = cfl.diffusive};
-                for (auto& patch : model.levels[static_cast<int>(ln)].data)
-                {
-                    auto const& u = patch->states[0];
-                    level = std::min(level,
-                                     core::mhd_dt(patch->layout, u.rho, u.rhoV, u.B, u.Etot, in));
-                }
+                auto const& u = patch->states[0];
+                level
+                    = std::min(level, core::mhd_dt(patch->layout, u.rho, u.rhoV, u.B, u.Etot, in));
             }
-            else
-                per_patch_(ln, [&](auto& patch) {
-                    level = std::min(level, core::whistler_dt(patch.layout, patch.massDensity,
-                                                              patch.emB, cfl.wave));
-                });
-        });
-        dt0 = std::min(dt0, level * to_0); // a non-finite speed's -1 stays negative
+        }
+        else
+            per_patch_(ln, [&](auto& patch) {
+                level = std::min(
+                    level, core::whistler_dt(patch.layout, patch.massDensity, patch.emB, cfl.wave));
+            });
+    });
+    return level;
+}
+
+// a level's stable dt over the ranks, with the adaptive run stops: a non-finite wave speed, level
+//  0's dt more than level0_dt_shrink_max times under the run's first one, a finer level's more
+//  than fine_level_substeps_max times under its coarser level's last
+template<auto opts>
+double Simulator<opts>::level_stable_dt_(std::size_t const ln, double const t)
+{
+    auto const local = level_bound_(ln, timestepper_.cfl());
+    auto const dt    = n_ranks_ > 1 ? damn::mpi::min(local) : local;
+    auto const at    = [&] {
+        std::ostringstream ss;
+        ss << std::setprecision(17) << " on level " << ln << " at t = " << t;
+        return ss.str();
+    };
+    if (!(dt > 0)) // every rank: the first such cell logged by the rank that has it
+        throw std::runtime_error("plamn: non-finite wave speed" + at());
+    if (level_dts_.size() <= ln)
+        level_dts_.resize(ln + 1, -1);
+    if (ln == 0)
+    {
+        if (first_level0_dt_ < 0)
+            first_level0_dt_ = dt;
+        else if (!(first_level0_dt_ <= timestepper_.level0_dt_shrink_max() * dt))
+        {
+            std::ostringstream ss;
+            ss << std::setprecision(17) << "plamn: stable dt" << at() << " is " << dt
+               << ", more than level0_dt_shrink_max = " << timestepper_.level0_dt_shrink_max()
+               << " times smaller than the run's first (" << first_level0_dt_ << ")";
+            throw std::runtime_error(ss.str());
+        }
     }
-    auto const dt = n_ranks_ > 1 ? damn::mpi::min(dt0) : dt0;
-    if (dt < 0) // every rank: the first such cell logged by the rank that has it
-        throw std::runtime_error("plamn: non-finite MHD wave speed, no stable time step");
-    return dt;
+    else if (auto const coarser = level_dts_[ln - 1];
+             !(coarser <= timestepper_.fine_level_substeps_max() * dt))
+    {
+        std::ostringstream ss;
+        ss << std::setprecision(17) << "plamn: stable dt" << at() << " is " << dt
+           << ", more than fine_level_substeps_max = " << timestepper_.fine_level_substeps_max()
+           << " times smaller than on level " << ln - 1 << " (" << coarser << ")";
+        throw std::runtime_error(ss.str());
+    }
+    return level_dts_[ln] = dt;
+}
+
+// the adaptive dt of a step: level 0's stable dt (its finer levels step at their own, next_dt_)
+template<auto opts>
+double Simulator<opts>::stable_dt_(Timestepper::CFL const&)
+{
+    return level_stable_dt_(0, currentTime_);
+}
+
+template<auto opts>
+double Simulator<opts>::next_dt_(int const level_number, damn::amr::Step const& step)
+{
+    auto const ln = static_cast<std::size_t>(level_number);
+    if (!timestepper_.adaptive())
+    {
+        if (level_dts_.empty()) // the table, from the input's dt: dt / time_ratio per level
+        {
+            level_dts_.push_back(timestepper_.dt());
+            for (int l = 1; l < hierarchy_.max_levels; ++l)
+                level_dts_.push_back(level_dts_.back() / time_ratio());
+        }
+        return level_dts_.at(ln);
+    }
+    if (ln == 0)
+        return step.dt;
+    return std::min(step.coarse_dt, level_stable_dt_(ln, step.t + step.dt));
+}
+
+template<auto opts>
+double Simulator<opts>::substep_weight_(std::size_t const ln) const
+{
+    auto const& step = level_step_.at(ln);
+    return step.coarse_dt > 0 ? step.dt / step.coarse_dt : 0.;
 }
 
 template<auto opts>
@@ -107,8 +173,18 @@ double Simulator<opts>::advance()
             rebalance_(currentTime_);
 
     dt_ = timestepper_.next([&](auto const& cfl) { return stable_dt_(cfl); });
+    if (!(dt_ > 0))
+    {
+        std::ostringstream ss;
+        ss << std::setprecision(17) << "plamn: zero-length step on level 0 at t = " << currentTime_;
+        throw std::runtime_error(ss.str());
+    }
+    if (!stepping_) // the substeps' split (SAMRAI's, as with PHARE's integrator: grow_dt 1e3)
+        stepping_.emplace(damn::amr::TimeRefinementOptions{
+            .time_ratio = time_ratio(), .regrid_interval = regrid_interval_, .grow_dt = 1e3});
+    substep_dts_.clear();
     Hooks hooks{*this};
-    damn::amr::advance(hierarchy_, hooks, currentTime_, dt_, time_ratio());
+    stepping_->advance(hierarchy_, hooks, currentTime_, dt_);
     currentTime_ = timestepper_.end_step();
     ++steps_;
     if (regrid_mode_ == RegridMode::normal and tagging_ and steps_ % regrid_interval_ == 0)
@@ -156,9 +232,15 @@ void Simulator<opts>::regrid_after_step_(int const ln, double const t)
 }
 
 template<auto opts>
-void Simulator<opts>::advance_level_(int const level_number, double const t, double const dt)
+void Simulator<opts>::advance_level_(int const level_number, damn::amr::Step const& step)
 {
     auto const ln = static_cast<std::size_t>(level_number);
+    auto const t  = step.t;
+    auto const dt = step.dt;
+    level_step_.resize(std::max(level_step_.size(), ln + 1));
+    level_step_[ln] = step;
+    substep_dts_.resize(std::max(substep_dts_.size(), ln + 1));
+    substep_dts_[ln].push_back(dt);
     level_steps_.resize(std::max(level_steps_.size(), ln + 1));
     ++level_steps_[ln];
     DAMN_SUPER_DEBUG_DO(sums_(ln, "start", t);)
@@ -179,16 +261,16 @@ void Simulator<opts>::advance_level_(int const level_number, double const t, dou
     if (ln + 1 == levels_.size()) // the finest; coarser ones after their synchronization
         fine_dump_(ln, t + dt);
 
-    // the finest level's share of the coarser level's reflux, per substep: the time average of
-    //  E over them (coarser finer levels accumulate theirs when synchronized)
+    // the finest level's share of the coarser level's reflux, per substep, weighted by its share
+    //  of the coarser level's step (coarser finer levels accumulate theirs when synchronized)
     if (ln > 0 and ln + 1 == levels_.size())
         step_model_(
             ln,
             [&](auto&) {
-                solver::hybrid::accumulate_flux_sum(level_services_(ln), 1. / time_ratio());
+                solver::hybrid::accumulate_flux_sum(level_services_(ln), substep_weight_(ln));
             },
             [&](auto& model, auto level) {
-                solver::mhd::accumulate_flux_sum(model, level, 1. / time_ratio());
+                solver::mhd::accumulate_flux_sum(model, level, substep_weight_(ln));
             });
 }
 

@@ -110,6 +110,7 @@ NB_MODULE(PLAMN_SIM_MODULE, m)
         // read back, for tests
         .def("domain_values", &Simulator::domain_values, nb::arg("name"), nb::arg("level") = 0)
         .def("n_levels", &Simulator::n_levels)
+        .def("substep_dts", &Simulator::substep_dts, nb::arg("level"))
         // over ranks (collective)
         .def("all_domain_values", &Simulator::all_domain_values, nb::arg("name"),
              nb::arg("level") = 0)
