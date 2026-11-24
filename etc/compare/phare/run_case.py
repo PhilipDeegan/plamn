@@ -96,6 +96,9 @@ def main(argv=None):
         # PHARE's regrid points (SAMRAI's): a regrid refills the level ghost fields after the
         #  synchronization, plamn's default skips it where the boxes do not change
         os.environ.setdefault("PLAMN_REGRID_MODE", "high")
+        # a case's own plamn settings for PHARE's behaviour (cases.py's plamn_env)
+        for k, v in cases.CASES[a.case].get("plamn_env", {}).items():
+            os.environ.setdefault(k, v)
         import plamn
 
         plamn.patch()

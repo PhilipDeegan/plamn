@@ -4,6 +4,7 @@
 // plamn::Simulator: making and initializing levels (PHARE's HybridLevelInitializer)
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
+#include "mkn/kul/env.hpp"
 #include "plamn/amr/untiled.hpp"
 #include "damn/amr/copy.hpp"
 #include "damn/amr/hierarchy.hpp"
@@ -475,7 +476,11 @@ void Simulator<opts>::initialize_hybrid_()
         }
     planned_.clear(); // made: later levels (regrids) level by level
     // the totals under a finer level the finer one's from the start, as after a synchronization
-    rebuild_moments_(0);
+    //  (PLAMN_INIT_SYNC=0: each level's own deposit until the first synchronization, as PHARE
+    //  master's initialization with refinement boxes: for comparisons)
+    static bool const init_sync = mkn::kul::env::get_as("PLAMN_INIT_SYNC", 1) != 0;
+    if (init_sync)
+        rebuild_moments_(0);
     // every level's E and B at t0, for the finer levels' time interpolation
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
         prepare_step_(static_cast<int>(ln), startTime_);
