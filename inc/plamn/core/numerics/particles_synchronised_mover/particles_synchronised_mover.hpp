@@ -1320,8 +1320,9 @@ void ParallelParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositAl
                         launcher.g.x = domain().size();
                         launcher.ds  = tile_deposit_bytes(deposit_c(), n_points);
                         launcher.stream(in.streamer.streams[i], [=] __device__() mutable {
-                            Interpolating_t::template on_tiles<Tile_vt, decltype(deposit_c)::value>(
-                                domain, flux, pdensity);
+                            Interpolating_t::template on_tiles<Tile_vt, decltype(deposit_c)::value,
+                                                               deposit_spec.warps>(domain, flux,
+                                                                                   pdensity);
                         });
                     });
                 }
