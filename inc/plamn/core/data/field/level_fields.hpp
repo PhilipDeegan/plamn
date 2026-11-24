@@ -57,7 +57,7 @@ public:
     LevelFields& zero()
         requires(alloc_mode == damn::AllocatorMode::GPU_UNIFIED)
     {
-        for_each_batch([](T& value) DAMN_ALL { value = T{0}; });
+        for_each_batch([] DAMN_ALL(auto& value) { value = T{0}; });
         return *this;
     }
     // this = average(a, b), value by value ((a + b) * .5, as core::average): the three views of
@@ -65,7 +65,8 @@ public:
     LevelFields& average(LevelFields const& a, LevelFields const& b)
         requires(alloc_mode == damn::AllocatorMode::GPU_UNIFIED)
     {
-        for_each_batch([](T& out, T const& x, T const& y) DAMN_ALL { out = (x + y) * .5; }, a, b);
+        for_each_batch([] DAMN_ALL(auto& out, auto const& x, auto const& y) { out = (x + y) * .5; },
+                       a, b);
         return *this;
     }
     LevelFields& average(LevelFields const& a, LevelFields const& b)
