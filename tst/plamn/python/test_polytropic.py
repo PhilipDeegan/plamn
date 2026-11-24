@@ -14,6 +14,9 @@ Pe = P0 + dP sin(2 pi x / L), Bz^2 = B0^2 + 2 (P0 + dP - Pe)): s follows s0(x - 
 better than left in place (0) or carried three times too far (3 V0: a push per PPC stage), on
 one level and across a refined box's borders, whose coarse nodes take the fine Pe (the
 synchronization) to round off.
+
+layouts: the translation on every other 1D layout / allocator built (tiled, chunked, unified
+memory) as on AoSMapped, to round off.
 """
 
 import unittest
@@ -225,6 +228,49 @@ class PolytropicClosureTest(unittest.TestCase):
 
     def test_translation_refined_box(self):
         self.translation(1, refinement_boxes={"L0": {"B0": [(40,), (120,)]}})
+
+    def test_layouts_agree(self):
+        # the closure's kernels on every layout built (tiled: on untiled copies; unified memory:
+        #  one launch per level): the same as AoSMapped's to round off (deposit order, device
+        #  atomics), relative to each quantity's largest value
+        import importlib.util
+
+        T = Translation
+        quantities = ["Pe", "Se", "EM_B_z", "EM_E_x", "ions_charge_density"]
+
+        def fields(cpp):
+            return {
+                f"{q}@{ln}": np.asarray(cpp.level_field(q, ln)[1])
+                for ln in range(cpp.n_levels())
+                for q in quantities
+            }
+
+        steps, box = 50, {"L0": {"B0": [(40,), (120,)]}}
+        ref = run(T.config, steps, at={steps: fields}, refinement_boxes=box)[steps]
+        compared = 0
+        for layout, allocator in [
+            ("AoSCMTS", "CPU"),
+            ("SoAVXChunked", "CPU"),
+            ("SoAVXChunked", "GPU_UNIFIED"),
+        ]:
+            if importlib.util.find_spec(f"plamn.plamn_cpp_1_1_2_{layout}_{allocator}") is None:
+                print(f"no 1D {layout} {allocator} module: skipped")
+                continue
+            got = run(
+                T.config,
+                steps,
+                at={steps: fields},
+                refinement_boxes=box,
+                model_layout=layout,
+                **({"allocator": allocator} if allocator != "CPU" else {}),
+            )[steps]
+            worst = {k: np.max(np.abs(got[k] - ref[k])) / np.max(np.abs(ref[k])) for k in ref}
+            print(layout, allocator, {k: f"{v:.1e}" for k, v in worst.items()})
+            for k, v in worst.items():
+                self.assertLess(v, 1e-12, f"{layout} {allocator} {k}")
+            compared += 1
+        if compared == 0:
+            self.skipTest("no other 1D layout built (./mkn.py --layout AoSCMTS SoAVXChunked)")
 
 
 if __name__ == "__main__":

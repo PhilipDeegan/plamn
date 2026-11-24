@@ -15,6 +15,8 @@
 #include "plamn/initializer/data_provider.hpp"
 #include "dict.hpp"
 
+#include <array>
+#include <cstdint>
 #include <stdexcept>
 #include <string>
 #include <variant>
@@ -33,11 +35,12 @@ struct PolytropicClosure
     static constexpr char const* name = "polytropic";
     double gamma                      = 5. / 3.;
 
-    // s at the start of a step (from Pe / Ne^gamma on the domain, ghosts filled), and s within
-    //  a stage (from Se_old; after a stage, at its end: what a finer level's ghosts interpolate
-    //  to)
-    static constexpr char const* step_state     = "Se_old";
-    static constexpr char const* subcycle_state = "Se";
+    // its fields (closure_fields, in this order: the index of each in a patch's closure
+    //  storage, all scalars): s at the start of a step (from Pe / Ne^gamma on the domain, ghosts
+    //  filled), s within a stage (from Se_old; after a stage, at its end: what a finer level's
+    //  ghosts interpolate to), a sub-step's output (the upwind stencil reads s's neighbours)
+    enum Field : std::uint8_t { step, subcycle, scratch, count };
+    static constexpr std::array<char const*, count> names{"Se_old", "Se", "Se_tmp"};
     // most sub-steps a stage takes (beyond: the step is refused)
     static constexpr double max_subcycled_courant = 10;
     static constexpr double courant_tolerance     = 1e-12;
@@ -81,8 +84,11 @@ inline std::vector<ClosureField> closure_fields(IsothermalClosure const&)
 }
 inline std::vector<ClosureField> closure_fields(PolytropicClosure const&)
 { // s is primal, as the moments and Pe
-    return {ClosureScalarField{PolytropicClosure::step_state, HybridQuantity::Scalar::P},
-            ClosureScalarField{PolytropicClosure::subcycle_state, HybridQuantity::Scalar::P}};
+    std::vector<ClosureField> fields;
+    fields.reserve(PolytropicClosure::count);
+    for (auto const* name : PolytropicClosure::names)
+        fields.emplace_back(ClosureScalarField{name, HybridQuantity::Scalar::P});
+    return fields;
 }
 inline std::vector<ClosureField> closure_fields(ElectronClosure const& closure)
 {

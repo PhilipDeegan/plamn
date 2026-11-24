@@ -33,6 +33,7 @@
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 #include "damn/core/def/damn_config.hpp"
+#include "dict.hpp"
 
 #include <array>
 #include <map>
@@ -42,7 +43,6 @@
 #include <cstddef>
 #include <limits>
 #include <optional>
-#include <stdexcept>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -131,20 +131,18 @@ struct HybridPatch
     static ClosureStorage storage(core::ClosureVectorField const& f, Layout_t const& layout)
     {
         auto const qties = core::HybridQuantity::componentsQuantities(f.qty);
-        return ClosureVector{f.name, mkn::kul::for_N<3, mkn::kul::for_N_R_mode::make_array>(
-                                         [&](auto i) {
-                                             return Grid_t{f.name + vector_suffixes[i], layout,
-                                                           qties[i]};
-                                         })};
+        return ClosureVector{f.name,
+                             mkn::kul::for_N<3, mkn::kul::for_N_R_mode::make_array>([&](auto i) {
+                                 return Grid_t{f.name + vector_suffixes[i], layout, qties[i]};
+                             })};
     }
     static ClosureStorage storage(core::ClosureTensorField const& f, Layout_t const& layout)
     {
         auto const qties = core::HybridQuantity::componentsQuantities(f.qty);
-        return ClosureTensor{f.name, mkn::kul::for_N<6, mkn::kul::for_N_R_mode::make_array>(
-                                         [&](auto i) {
-                                             return Grid_t{f.name + tensor_suffixes[i], layout,
-                                                           qties[i]};
-                                         })};
+        return ClosureTensor{f.name,
+                             mkn::kul::for_N<6, mkn::kul::for_N_R_mode::make_array>([&](auto i) {
+                                 return Grid_t{f.name + tensor_suffixes[i], layout, qties[i]};
+                             })};
     }
     static constexpr std::array<char const*, 3> vector_suffixes{"_x", "_y", "_z"};
     static constexpr std::array<char const*, 6> tensor_suffixes{"_xx", "_xy", "_xz",
@@ -261,7 +259,8 @@ struct HybridPatch
             = core::closure_fields(core::make_closure(dict["electrons"]["pressure_closure"]));
         closure_storage.reserve(fields.size());
         for (auto const& f : fields)
-            closure_storage.push_back(std::visit([&](auto const& d) { return storage(d, layout); }, f));
+            closure_storage.push_back(
+                std::visit([&](auto const& d) { return storage(d, layout); }, f));
 
         // debug: every value NaN until set, so a point nothing filled is found (Simulator's
         //  check_set_) rather than read
@@ -350,17 +349,18 @@ struct HybridPatch
                 },
                 storage);
     }
-    // a closure grid by name (a scalar's, or a component's)
-    MKN_KUL_FN_SIG_RET Grid_t& closure_grid(std::string const& name)
+    // a closure field by its index (the closure's Field enum: its declared order and type)
+    MKN_KUL_FN_SIG_RET Grid_t& closure_scalar(std::size_t const i)
     {
-        Grid_t* found = nullptr;
-        for_each_closure_grid([&](std::string const& n, auto& g) {
-            if (n == name)
-                found = std::addressof(g);
-        });
-        if (!found)
-            throw std::runtime_error("plamn HybridPatch: no closure grid " + name);
-        return *found;
+        return std::get<ClosureScalar>(closure_storage[i]).grid;
+    }
+    MKN_KUL_FN_SIG_RET Grids<3>& closure_vector(std::size_t const i)
+    {
+        return std::get<ClosureVector>(closure_storage[i]).grids;
+    }
+    MKN_KUL_FN_SIG_RET Grids<6>& closure_tensor(std::size_t const i)
+    {
+        return std::get<ClosureTensor>(closure_storage[i]).grids;
     }
 
     // tiled fields: their untiled temporaries while a whole patch operation (damn's schedules)

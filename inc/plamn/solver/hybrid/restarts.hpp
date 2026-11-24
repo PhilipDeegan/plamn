@@ -6,13 +6,14 @@
 
 #include "damn/amr/level_map.hpp"
 #include "damn/core/def.hpp"
-
 #include "plamn/amr/refine.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/numerics/ampere/ampere_transformer.hpp"
 #include "plamn/solver/hybrid/level_steps.hpp"
 #include "plamn/solver/hybrid/model.hpp"
+#include "plamn/core/data/electrons/closures.hpp"
+#include "plamn/solver/hybrid/closures.hpp"
 
 #include <algorithm>
 #include <cstddef>

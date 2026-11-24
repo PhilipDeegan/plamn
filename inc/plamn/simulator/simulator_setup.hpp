@@ -265,10 +265,6 @@ void Simulator<opts>::setup_hybrid_()
     models_.hybrid.ohm.emplace(core::OhmInfo::FROM(dict_["simulation"]["algo"]["ohm"]));
     models_.hybrid.closure.emplace(
         core::make_closure(dict_["simulation"]["electrons"]["pressure_closure"]));
-    if (std::holds_alternative<core::PolytropicClosure>(*models_.hybrid.closure)
-        and !solver::hybrid::polytropic::supported<opts>)
-        throw std::runtime_error(
-            "plamn: the polytropic electron closure runs on host memory, untiled layouts (#91)");
     register_resources_();
     solver::hybrid::setup_computed(models_.hybrid, [&](std::string const& key, auto const& names) {
         resources_[key] = damn::amr::same_names(names);
@@ -337,9 +333,9 @@ void Simulator<opts>::register_resources_()
                 else if constexpr (std::is_same_v<F, core::ClosureVectorField>)
                     add(f.name, components(f.name));
                 else
-                    add(f.name, damn::amr::same_names({f.name + "_xx", f.name + "_xy",
-                                                       f.name + "_xz", f.name + "_yy",
-                                                       f.name + "_yz", f.name + "_zz"}));
+                    add(f.name,
+                        damn::amr::same_names({f.name + "_xx", f.name + "_xy", f.name + "_xz",
+                                               f.name + "_yy", f.name + "_yz", f.name + "_zz"}));
             },
             field);
 
