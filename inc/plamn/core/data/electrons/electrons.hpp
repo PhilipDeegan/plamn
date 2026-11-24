@@ -60,19 +60,22 @@ public:
     //-------------------------------------------------------------------------
 
 
-    NO_DISCARD bool isUsable() const { return ions_.isUsable() && J_.isUsable() && Ve_.isUsable(); }
+    MKN_KUL_FN_SIG_RET bool isUsable() const
+    {
+        return ions_.isUsable() && J_.isUsable() && Ve_.isUsable();
+    }
 
-    NO_DISCARD bool isSettable() const
+    MKN_KUL_FN_SIG_RET bool isSettable() const
     {
         return Ve_.isSettable() && ions_.isSettable() && J_.isSettable();
     }
 
-    NO_DISCARD auto getCompileTimeResourcesViewList() const
+    MKN_KUL_FN_SIG_RET auto getCompileTimeResourcesViewList() const
     {
         return std::forward_as_tuple(Ve_, ions_, J_);
     }
 
-    NO_DISCARD auto getCompileTimeResourcesViewList()
+    MKN_KUL_FN_SIG_RET auto getCompileTimeResourcesViewList()
     {
         return std::forward_as_tuple(Ve_, ions_, J_);
     }
@@ -84,12 +87,12 @@ public:
 
 
 
-    NO_DISCARD Field const& density() const { return ions_.chargeDensity(); }
+    MKN_KUL_FN_SIG_RET Field const& density() const { return ions_.chargeDensity(); }
 
-    NO_DISCARD Field& density() { return ions_.chargeDensity(); }
+    MKN_KUL_FN_SIG_RET Field& density() { return ions_.chargeDensity(); }
 
 
-    NO_DISCARD VecField& velocity() { return Ve_; }
+    MKN_KUL_FN_SIG_RET VecField& velocity() { return Ve_; }
 
 
     void computeChargeDensity() {}
@@ -140,7 +143,7 @@ public:
 
     // GPU_UNIFIED, an item per untiled patch collected across a level (run_velocity_gpu: one
     //  launch): the patch's views, the charge density's domain box for each Ve component
-    NO_DISCARD auto make_velocity_item(Layout const& layout)
+    MKN_KUL_FN_SIG_RET auto make_velocity_item(Layout const& layout)
     {
         auto const Ne  = untiled_view(ions_.chargeDensity());
         auto const box = domain_box(layout, ions_.chargeDensity());
@@ -220,9 +223,9 @@ public:
     //-------------------------------------------------------------------------
 
 
-    NO_DISCARD bool isUsable() const { return Pe_.isUsable() and ions_.isUsable(); }
+    MKN_KUL_FN_SIG_RET bool isUsable() const { return Pe_.isUsable() and ions_.isUsable(); }
 
-    NO_DISCARD bool isSettable() const { return Pe_.isSettable(); }
+    MKN_KUL_FN_SIG_RET bool isSettable() const { return Pe_.isSettable(); }
 
     struct PressureProperty
     {
@@ -232,12 +235,15 @@ public:
 
     using PressureProperties = std::vector<PressureProperty>;
 
-    NO_DISCARD auto getCompileTimeResourcesViewList() const
+    MKN_KUL_FN_SIG_RET auto getCompileTimeResourcesViewList() const
     {
         return std::forward_as_tuple(ions_, Pe_);
     }
 
-    NO_DISCARD auto getCompileTimeResourcesViewList() { return std::forward_as_tuple(ions_, Pe_); }
+    MKN_KUL_FN_SIG_RET auto getCompileTimeResourcesViewList()
+    {
+        return std::forward_as_tuple(ions_, Pe_);
+    }
 
     //-------------------------------------------------------------------------
     //                  ends the ResourcesUser interface
@@ -245,9 +251,9 @@ public:
 
 
 
-    NO_DISCARD Field& pressure() { return Pe_; }
-    NO_DISCARD Field const& pressure() const { return Pe_; }
-    NO_DISCARD double Te() const { return Te_; }
+    MKN_KUL_FN_SIG_RET Field& pressure() { return Pe_; }
+    MKN_KUL_FN_SIG_RET Field const& pressure() const { return Pe_; }
+    MKN_KUL_FN_SIG_RET double Te() const { return Te_; }
 
     void computePressure(Layout const& /*layout*/)
     {
@@ -298,19 +304,19 @@ public:
     //                  start the ResourcesUser interface
     //-------------------------------------------------------------------------
 
-    NO_DISCARD bool isUsable() const
+    MKN_KUL_FN_SIG_RET bool isUsable() const
     {
         return fluxComput_.isUsable() and pressureClosure_.isUsable();
     }
 
-    NO_DISCARD bool isSettable() const { return fluxComput_.isSettable(); }
+    MKN_KUL_FN_SIG_RET bool isSettable() const { return fluxComput_.isSettable(); }
 
-    NO_DISCARD auto getCompileTimeResourcesViewList() const
+    MKN_KUL_FN_SIG_RET auto getCompileTimeResourcesViewList() const
     {
         return std::forward_as_tuple(fluxComput_, pressureClosure_);
     }
 
-    NO_DISCARD auto getCompileTimeResourcesViewList()
+    MKN_KUL_FN_SIG_RET auto getCompileTimeResourcesViewList()
     {
         return std::forward_as_tuple(fluxComput_, pressureClosure_);
     }
@@ -320,24 +326,24 @@ public:
     //-------------------------------------------------------------------------
 
 
-    NO_DISCARD Field const& density() const { return fluxComput_.density(); }
+    MKN_KUL_FN_SIG_RET Field const& density() const { return fluxComput_.density(); }
 
-    NO_DISCARD Field& density() { return fluxComput_.density(); }
-
-
-    NO_DISCARD VecField const& velocity() const { return fluxComput_.velocity(); }
-
-    NO_DISCARD VecField& velocity() { return fluxComput_.velocity(); }
+    MKN_KUL_FN_SIG_RET Field& density() { return fluxComput_.density(); }
 
 
-    NO_DISCARD Field const& pressure() const { return pressureClosure_.pressure(); }
-    NO_DISCARD Field& pressure() { return pressureClosure_.pressure(); }
-    NO_DISCARD double Te() const { return pressureClosure_.Te(); }
+    MKN_KUL_FN_SIG_RET VecField const& velocity() const { return fluxComput_.velocity(); }
+
+    MKN_KUL_FN_SIG_RET VecField& velocity() { return fluxComput_.velocity(); }
+
+
+    MKN_KUL_FN_SIG_RET Field const& pressure() const { return pressureClosure_.pressure(); }
+    MKN_KUL_FN_SIG_RET Field& pressure() { return pressureClosure_.pressure(); }
+    MKN_KUL_FN_SIG_RET double Te() const { return pressureClosure_.Te(); }
 
 
 
     void computeChargeDensity() { fluxComput_.computeChargeDensity(); }
-    NO_DISCARD auto make_velocity_item(auto const& layout)
+    MKN_KUL_FN_SIG_RET auto make_velocity_item(auto const& layout)
     {
         return fluxComput_.make_velocity_item(layout);
     }
@@ -378,10 +384,10 @@ public:
         momentModel_.computeChargeDensity();
         momentModel_.computeBulkVelocity(layout);
     }
-    NO_DISCARD double Te() const { return momentModel_.Te(); }
+    MKN_KUL_FN_SIG_RET double Te() const { return momentModel_.Te(); }
     // update_velocity's Ve for a level at once (GPU_UNIFIED, untiled): an item per patch, one
     //  launch for the items (run_velocity_gpu)
-    NO_DISCARD auto make_velocity_item(Layout const& layout)
+    MKN_KUL_FN_SIG_RET auto make_velocity_item(Layout const& layout)
     {
         return momentModel_.make_velocity_item(layout);
     }
@@ -402,16 +408,16 @@ public:
     //                  start the ResourcesUser interface
     //-------------------------------------------------------------------------
 
-    NO_DISCARD bool isUsable() const { return momentModel_.isUsable(); }
+    MKN_KUL_FN_SIG_RET bool isUsable() const { return momentModel_.isUsable(); }
 
-    NO_DISCARD bool isSettable() const { return momentModel_.isSettable(); }
+    MKN_KUL_FN_SIG_RET bool isSettable() const { return momentModel_.isSettable(); }
 
-    NO_DISCARD auto getCompileTimeResourcesViewList() const
+    MKN_KUL_FN_SIG_RET auto getCompileTimeResourcesViewList() const
     {
         return std::forward_as_tuple(momentModel_);
     }
 
-    NO_DISCARD auto getCompileTimeResourcesViewList()
+    MKN_KUL_FN_SIG_RET auto getCompileTimeResourcesViewList()
     {
         return std::forward_as_tuple(momentModel_);
     }
@@ -425,14 +431,14 @@ public:
 
 
 
-    NO_DISCARD Field const& density() const { return momentModel_.density(); }
-    NO_DISCARD VecField const& velocity() const { return momentModel_.velocity(); }
-    NO_DISCARD Field const& pressure() const { return momentModel_.pressure(); }
+    MKN_KUL_FN_SIG_RET Field const& density() const { return momentModel_.density(); }
+    MKN_KUL_FN_SIG_RET VecField const& velocity() const { return momentModel_.velocity(); }
+    MKN_KUL_FN_SIG_RET Field const& pressure() const { return momentModel_.pressure(); }
 
 
-    NO_DISCARD Field& density() { return momentModel_.density(); }
-    NO_DISCARD VecField& velocity() { return momentModel_.velocity(); }
-    NO_DISCARD Field& pressure() { return momentModel_.pressure(); }
+    MKN_KUL_FN_SIG_RET Field& density() { return momentModel_.density(); }
+    MKN_KUL_FN_SIG_RET VecField& velocity() { return momentModel_.velocity(); }
+    MKN_KUL_FN_SIG_RET Field& pressure() { return momentModel_.pressure(); }
 
 private:
     void update_(auto const& layout_or_tile_idx)

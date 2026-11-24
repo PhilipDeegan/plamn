@@ -9,7 +9,7 @@
 
 namespace plamn::core
 {
-NO_DISCARD inline std::array<double, 3>
+MKN_KUL_FN_SIG_RET inline std::array<double, 3>
 basisTransform(std::array<std::array<double, 3>, 3> const& basis, std::array<double, 3> const& vec)
 {
     std::array<double, 3> newVec;

@@ -43,76 +43,76 @@ namespace core
         auto& name() const { return _name; }
 
 
-        NO_DISCARD bool isUsable() const
+        MKN_KUL_FN_SIG_RET bool isUsable() const
         {
             return damn::core::isUsable(_domainParticles, _patchGhostParticles, _levelGhostParticles);
         }
 
 
-        NO_DISCARD bool isSettable() const
+        MKN_KUL_FN_SIG_RET bool isSettable() const
         {
             return damn::core::isSettable(_domainParticles, _patchGhostParticles, _levelGhostParticles);
         }
 
 
-        NO_DISCARD auto& domainParticles() const
+        MKN_KUL_FN_SIG_RET auto& domainParticles() const
         {
             if (_domainParticles)
                 return *_domainParticles;
             throw std::runtime_error("Error - cannot provide access to domainParticles");
         }
-        NO_DISCARD auto& domainParticles()
+        MKN_KUL_FN_SIG_RET auto& domainParticles()
         {
             return const_cast<Particles&>(
                 static_cast<ParticlesPack const*>(this)->domainParticles());
         }
 
 
-        NO_DISCARD auto& patchGhostParticles() const
+        MKN_KUL_FN_SIG_RET auto& patchGhostParticles() const
         {
             if (_patchGhostParticles)
                 return *_patchGhostParticles;
             throw std::runtime_error("Error - cannot provide access to patchGhostParticles");
         }
-        NO_DISCARD auto& patchGhostParticles()
+        MKN_KUL_FN_SIG_RET auto& patchGhostParticles()
         {
             return const_cast<Particles&>(
                 static_cast<ParticlesPack const*>(this)->patchGhostParticles());
         }
 
 
-        NO_DISCARD auto& levelGhostParticles() const
+        MKN_KUL_FN_SIG_RET auto& levelGhostParticles() const
         {
             if (_levelGhostParticles)
                 return *_levelGhostParticles;
             throw std::runtime_error("Error - cannot provide access to levelGhostParticles");
         }
-        NO_DISCARD auto& levelGhostParticles()
+        MKN_KUL_FN_SIG_RET auto& levelGhostParticles()
         {
             return const_cast<Particles&>(
                 static_cast<ParticlesPack const*>(this)->levelGhostParticles());
         }
 
 
-        NO_DISCARD Particles& levelGhostParticlesOld()
+        MKN_KUL_FN_SIG_RET Particles& levelGhostParticlesOld()
         {
             if (_levelGhostParticlesOld)
                 return *_levelGhostParticlesOld;
             throw std::runtime_error("Error - cannot provide access to levelGhostParticlesOld");
         }
-        NO_DISCARD Particles const& levelGhostParticlesOld() const
+        MKN_KUL_FN_SIG_RET Particles const& levelGhostParticlesOld() const
         {
             return const_cast<ParticlesPack*>(this)->levelGhostParticlesOld();
         }
 
 
-        NO_DISCARD Particles& levelGhostParticlesNew()
+        MKN_KUL_FN_SIG_RET Particles& levelGhostParticlesNew()
         {
             if (_levelGhostParticlesNew)
                 return *_levelGhostParticlesNew;
             throw std::runtime_error("Error - cannot provide access to levelGhostParticlesNew");
         }
-        NO_DISCARD Particles const& levelGhostParticlesNew() const
+        MKN_KUL_FN_SIG_RET Particles const& levelGhostParticlesNew() const
         {
             return const_cast<ParticlesPack*>(this)->levelGhostParticlesNew();
         }

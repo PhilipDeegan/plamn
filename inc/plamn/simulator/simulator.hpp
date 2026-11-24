@@ -111,7 +111,7 @@ namespace plamn
 //  RANK_FILES (log_to_file, its default) after making .log/: .log/<rank>.out; NULL: discarded,
 //  CLI or unset: the terminal. Eg with -DDAMN_LOG_SCOPE_PRINT (mkn.py --scope-print, a build
 //  without NDEBUG): every scope's name, a rank stuck in a collective is the one whose file stops
-NO_DISCARD inline std::unique_ptr<std::ofstream> rank_log_file()
+MKN_KUL_FN_SIG_RET inline std::unique_ptr<std::ofstream> rank_log_file()
 {
     auto const* const env  = std::getenv("PHARE_LOG");
     std::string const mode = env ? env : "CLI";
@@ -185,10 +185,10 @@ public:
     //  when the simulator goes (pyphare's reset): python3 -m phlop.timing.scope_timer ...
     inline static std::string const timings_prefix = ".phare/timings/rank.";
 
-    NO_DISCARD double startTime() override { return startTime_; }
-    NO_DISCARD double endTime() override { return finalTime_; }
-    NO_DISCARD double timeStep() override { return dt_; }
-    NO_DISCARD double currentTime() override { return currentTime_; }
+    MKN_KUL_FN_SIG_RET double startTime() override { return startTime_; }
+    MKN_KUL_FN_SIG_RET double endTime() override { return finalTime_; }
+    MKN_KUL_FN_SIG_RET double timeStep() override { return dt_; }
+    MKN_KUL_FN_SIG_RET double currentTime() override { return currentTime_; }
 
     void initialize() override;
     double advance() override;
@@ -204,32 +204,34 @@ public:
 
     // computed quantities by key (simulator_computed.hpp): compute is collective when the
     //  quantity sums borders
-    NO_DISCARD bool is_computed(std::string const& key) const;
+    MKN_KUL_FN_SIG_RET bool is_computed(std::string const& key) const;
     void compute(std::size_t ln, std::string const& key);
-    NO_DISCARD auto computed(auto& patch, std::string const& key); // the hybrid model's grids
+    MKN_KUL_FN_SIG_RET auto computed(auto& patch,
+                                     std::string const& key); // the hybrid model's grids
 
     std::vector<int> const& domainBox() const override { return domainBox_; }
     std::vector<double> const& cellWidth() const override { return cellWidth_; }
     std::size_t interporder() const override { return interp_order; }
 
-    NO_DISCARD std::string to_str() const override;
+    MKN_KUL_FN_SIG_RET std::string to_str() const override;
 
     // for tests and diagnostics
-    NO_DISCARD auto& hierarchy() const { return hierarchy_; }
-    NO_DISCARD auto& level(std::size_t const ln = 0) { return data_(ln); }
-    NO_DISCARD std::size_t n_levels() const { return levels_.size(); }
+    MKN_KUL_FN_SIG_RET auto& hierarchy() const { return hierarchy_; }
+    MKN_KUL_FN_SIG_RET auto& level(std::size_t const ln = 0) { return data_(ln); }
+    MKN_KUL_FN_SIG_RET std::size_t n_levels() const { return levels_.size(); }
     // level ln's substeps' dts in the last advance (tests: their count follows its stable dt)
-    NO_DISCARD std::vector<double> substep_dts(std::size_t const ln) const
+    MKN_KUL_FN_SIG_RET std::vector<double> substep_dts(std::size_t const ln) const
     {
         return ln < substep_dts_.size() ? substep_dts_[ln] : std::vector<double>{};
     }
 
     // a field resource's values on the domain nodes of every local patch of level ln, patch by
     // patch
-    NO_DISCARD std::vector<double> domain_values(std::string const& name, std::size_t const ln = 0);
+    MKN_KUL_FN_SIG_RET std::vector<double> domain_values(std::string const& name,
+                                                         std::size_t const ln = 0);
 
     // domain particles of every population of every local patch of level ln
-    NO_DISCARD std::size_t particle_count(std::size_t const ln = 0)
+    MKN_KUL_FN_SIG_RET std::size_t particle_count(std::size_t const ln = 0)
     {
         std::size_t n = 0;
         per_patch_(ln, [&](auto& patch) {
@@ -240,7 +242,7 @@ public:
     }
 
     // an array's particles: SoAVXChunked's without its gaps (weight 0)
-    NO_DISCARD static std::size_t real_particles_(auto const& particles)
+    MKN_KUL_FN_SIG_RET static std::size_t real_particles_(auto const& particles)
     {
         if constexpr (requires { particles.nbr_particles(); })
         {
@@ -255,18 +257,18 @@ public:
             return particles.size();
     }
 
-    NO_DISCARD int rank() const { return rank_; }
-    NO_DISCARD int ranks() const { return n_ranks_; }
+    MKN_KUL_FN_SIG_RET int rank() const { return rank_; }
+    MKN_KUL_FN_SIG_RET int ranks() const { return n_ranks_; }
 
     // over every rank (collective)
-    NO_DISCARD std::size_t total_particle_count(std::size_t const ln = 0)
+    MKN_KUL_FN_SIG_RET std::size_t total_particle_count(std::size_t const ln = 0)
     {
         auto const per_rank = particle_counts_per_rank(ln);
         return std::accumulate(per_rank.begin(), per_rank.end(), std::size_t{0});
     }
 
     // particle_count of every rank, on every rank (collective)
-    NO_DISCARD std::vector<std::size_t> particle_counts_per_rank(std::size_t const ln = 0)
+    MKN_KUL_FN_SIG_RET std::vector<std::size_t> particle_counts_per_rank(std::size_t const ln = 0)
     {
         std::vector<unsigned long long> all(n_ranks_);
         unsigned long long const mine = particle_count(ln);
@@ -279,11 +281,12 @@ public:
     }
 
     // domain_values of every patch of level ln, in level order, on every rank (collective)
-    NO_DISCARD std::vector<double> all_domain_values(std::string const& name,
-                                                     std::size_t const ln = 0);
+    MKN_KUL_FN_SIG_RET std::vector<double> all_domain_values(std::string const& name,
+                                                             std::size_t const ln = 0);
     // every rank's domain values of level ln, one per point (a point patches share once), in
     //  point order: the same for any decomposition (collective)
-    NO_DISCARD std::vector<double> level_values(std::string const& name, std::size_t ln = 0);
+    MKN_KUL_FN_SIG_RET std::vector<double> level_values(std::string const& name,
+                                                        std::size_t ln = 0);
     // level_values with where each value is: the points' indices in the level's AMR index space
     //  (dimension per point, the same order), and per direction whether the field is dual there
     //  (a point at (index + 1/2) cells) or primal (at index cells): what a plot needs (collective)
@@ -293,18 +296,18 @@ public:
         std::vector<double> values;
         std::array<bool, dimension> dual{};
     };
-    NO_DISCARD LevelField level_field(std::string const& name, std::size_t ln = 0);
+    MKN_KUL_FN_SIG_RET LevelField level_field(std::string const& name, std::size_t ln = 0);
 
     // per level, on rank 0 (collective, "" on other ranks), as PHARE's Simulator::summary:
     //   lvl:<n> (<patches>,<cells>,<patch ghost cells>,<level ghost cells>) parts(<particles>),
     //   tot:<particles>
     // ghost cells: field_ghost_width around each patch, patch ghosts where a neighbour (or a
     // periodic image) has them, level ghosts the rest
-    NO_DISCARD std::string summary();
+    MKN_KUL_FN_SIG_RET std::string summary();
 
     // substeps of a level per step of the coarser one: whistler waves need dt ~ dx^2 (PHARE's
     //  getMaxFinerLevelDt)
-    NO_DISCARD int time_ratio() const { return hierarchy_.ratio * hierarchy_.ratio; }
+    MKN_KUL_FN_SIG_RET int time_ratio() const { return hierarchy_.ratio * hierarchy_.ratio; }
 
 private:
     // one level, whatever its model: how its data moves (the data: the models')
@@ -401,7 +404,7 @@ private:
     void setup_restarts_();
     void write_restart_(std::string const& dir);
     // the resources a restart stores of a level of the model's
-    NO_DISCARD static auto restart_names_(auto const& model)
+    MKN_KUL_FN_SIG_RET static auto restart_names_(auto const& model)
     {
         if constexpr (solver::is_mhd_model_v<std::remove_cvref_t<decltype(model)>>)
             return solver::mhd::restart_names(model);
@@ -422,7 +425,7 @@ private:
     // the models and the levels each owns (their levels' patch data)
     solver::Models<opts> models_;
     // level ln's patch data (made if new)
-    NO_DISCARD auto& data_(std::size_t const ln)
+    MKN_KUL_FN_SIG_RET auto& data_(std::size_t const ln)
     {
         return models_.hybrid.levels[static_cast<int>(ln)];
     }
@@ -844,7 +847,7 @@ private:
     //  rank counts its patches', then they are summed over ranks
     std::vector<double> particle_weights_(int ln, std::vector<Box_t> const& boxes);
     // PHARE's: a rebalance of level 0 (and so of the finer levels) due at this step
-    NO_DISCARD bool should_rebalance_();
+    MKN_KUL_FN_SIG_RET bool should_rebalance_();
     void rebalance_(double t); // level 0 onto new owners, then each finer level
 
     // the decomposition log (simulator_decomposition.hpp): one JSON line per init, changing
@@ -867,24 +870,25 @@ private:
         }
     } decomposition_;
     void setup_decomposition_log_();
-    NO_DISCARD static int decomposition_reach_();
-    NO_DISCARD static bool busy_push_();
-    NO_DISCARD static std::array<int, 2 * dimension> d_key_(Box_t const& box);
+    MKN_KUL_FN_SIG_RET static int decomposition_reach_();
+    MKN_KUL_FN_SIG_RET static bool busy_push_();
+    MKN_KUL_FN_SIG_RET static std::array<int, 2 * dimension> d_key_(Box_t const& box);
     void record_decomposition_(std::string const& event, double t, bool always = false);
 
     void register_resources_();
     // the MHD states' (conservative) and E's resources: MHDState_<s>, MHD_E, MHD_B (state 0's B)
     void register_mhd_resources_();
-    NO_DISCARD static std::string mhd_state_key(std::size_t const s)
+    MKN_KUL_FN_SIG_RET static std::string mhd_state_key(std::size_t const s)
     {
         return "MHDState_" + std::to_string(s);
     }
     // level ln's patches from its boxes (that level's cells): chopped into the largest patch
     //  size, partitioned along the Hilbert curve by the particles they will hold
-    NO_DISCARD damn::amr::Level<dimension> level_of_(int ln, std::vector<Box_t> const& boxes);
+    MKN_KUL_FN_SIG_RET damn::amr::Level<dimension> level_of_(int ln,
+                                                             std::vector<Box_t> const& boxes);
     // damn::amr::decompose's settings: this run's topology, patch size, spill, its weights (the
     //  particles a patch will hold, or holds; MHD levels: cells), `partition`
-    NO_DISCARD damn::amr::Decompose<dimension> decompose_in_(std::string const& partition);
+    MKN_KUL_FN_SIG_RET damn::amr::Decompose<dimension> decompose_in_(std::string const& partition);
     void make_level_(int ln, std::vector<Box_t> const& boxes);
     // the levels' total moments after a regrid / rebalance, finest down to lowest: from their
     //  populations, coarsened from the finer level (rebuild_moments_)
@@ -897,11 +901,11 @@ private:
     //  cells of each local patch (gw: its field ghosts)
     void link_geometry_(int ln, int reach, int coarser_reach, int gw);
     // a patch of level ln (its cells): its particle ghost box among the level's other patches
-    NO_DISCARD auto layout_of_(int ln, Box_t const& box) const;
-    NO_DISCARD auto make_patch_(auto const& model, int ln, Box_t const& box) const;
+    MKN_KUL_FN_SIG_RET auto layout_of_(int ln, Box_t const& box) const;
+    MKN_KUL_FN_SIG_RET auto make_patch_(auto const& model, int ln, Box_t const& box) const;
     // the boxes of level ln + 1 from level ln's tagged cells (collective)
-    NO_DISCARD std::vector<Box_t> cluster_(int ln);
-    NO_DISCARD std::vector<std::vector<Box_t>> pretag_();
+    MKN_KUL_FN_SIG_RET std::vector<Box_t> cluster_(int ln);
+    MKN_KUL_FN_SIG_RET std::vector<std::vector<Box_t>> pretag_();
     // the levels finer than from re-clustered (tagging) at t; always: re-made even where their
     //  boxes did not change (SAMRAI's, see RegridMode)
     void regrid_(double t, int from = 0, bool always = false);
@@ -924,7 +928,7 @@ private:
         std::vector<std::vector<double>> values; // per level and quantity, its domain values
         std::vector<double> particles;           // per level and set: count, sums of w, v, x
     };
-    NO_DISCARD RebalanceState rebalance_state_();
+    MKN_KUL_FN_SIG_RET RebalanceState rebalance_state_();
     void check_rebalance_(RebalanceState const& before, double t);
     // regrid_level_'s data, the level's model's: where the old level was, moved; the new cells
     //  (outside old_cells) refined from the coarser level, then the ghosts
@@ -932,7 +936,7 @@ private:
                              bool moved);
     // a hybrid level's resources whose ghosts a rebalance moves (every field grid, the old level
     //  ghost particles), from this rank's patches (a rank without any has no transfers)
-    NO_DISCARD damn::amr::RegridGhosts moved_ghosts_(int ln);
+    MKN_KUL_FN_SIG_RET damn::amr::RegridGhosts moved_ghosts_(int ln);
     void regrid_mhd_data_(int ln, auto const& map, std::vector<Box_t> const& old_cells, double t);
     // a new level ln's data, from the coarser level (regrid_, initialization)
     void initialize_refined_level_(int ln, double t);
@@ -946,7 +950,7 @@ private:
     void check_set_(std::size_t ln, std::string const& key, std::string const& where);
     // B over the level ghost cells of every local patch made divergence free
     void touch_up_level_ghosts_(std::size_t ln, std::string const& key);
-    NO_DISCARD double alpha_(std::size_t const ln, double const t) const
+    MKN_KUL_FN_SIG_RET double alpha_(std::size_t const ln, double const t) const
     {
         auto const& l = levels_[ln];
         // no coarser step in progress (initialization, regrid): the coarser level's data now
@@ -964,9 +968,9 @@ private:
 
         void sums(char const* stage, double const t) { self.sums_(ln, stage, t); } // SUPER_DEBUG
 
-        NO_DISCARD std::size_t number() const { return ln; }
-        NO_DISCARD std::uint64_t generation() const { return self.levels_[ln].generation; }
-        NO_DISCARD auto& data() { return self.data_(ln); }
+        MKN_KUL_FN_SIG_RET std::size_t number() const { return ln; }
+        MKN_KUL_FN_SIG_RET std::uint64_t generation() const { return self.levels_[ln].generation; }
+        MKN_KUL_FN_SIG_RET auto& data() { return self.data_(ln); }
         void per_patch(auto&& fn) { self.per_patch_(ln, fn); }
         // fn touching only its patch, never python: on damn's pools (per_patch_threaded_)
         void per_patch_threaded(auto&& fn) { self.per_patch_threaded_(ln, fn); }
@@ -983,22 +987,22 @@ private:
         {
             self.fill_electric_ghosts_(ln, key, t);
         }
-        NO_DISCARD double alpha(double const t) const { return self.alpha_(ln, t); }
+        MKN_KUL_FN_SIG_RET double alpha(double const t) const { return self.alpha_(ln, t); }
         void check_set(std::string const& key, std::string const& where)
         {
             self.check_set_(ln, key, where);
         }
-        NO_DISCARD auto mesh_size() const
+        MKN_KUL_FN_SIG_RET auto mesh_size() const
         {
             return damn::amr::mesh_size(self.hierarchy_, static_cast<int>(ln));
         }
 
         // with the coarser level (ln > 0)
-        NO_DISCARD LevelServices coarser() const { return {self, ln - 1}; }
-        NO_DISCARD double coarse_dt() const { return self.levels_[ln].coarse_dt; }
-        NO_DISCARD int time_ratio() const { return self.time_ratio(); }
+        MKN_KUL_FN_SIG_RET LevelServices coarser() const { return {self, ln - 1}; }
+        MKN_KUL_FN_SIG_RET double coarse_dt() const { return self.levels_[ln].coarse_dt; }
+        MKN_KUL_FN_SIG_RET int time_ratio() const { return self.time_ratio(); }
         // its last step's share of its coarser level's step (flux sums' weight)
-        NO_DISCARD double substep_weight() const { return self.substep_weight_(ln); }
+        MKN_KUL_FN_SIG_RET double substep_weight() const { return self.substep_weight_(ln); }
         void refine(auto const& op, damn::amr::LevelRegion const region,
                     std::vector<damn::amr::LevelPair> const& pairs, double const alpha = 0)
         {
@@ -1014,7 +1018,7 @@ private:
             self.coarsen_(ln, op, pairs);
         }
     };
-    NO_DISCARD LevelServices level_services_(std::size_t const ln) { return {*this, ln}; }
+    MKN_KUL_FN_SIG_RET LevelServices level_services_(std::size_t const ln) { return {*this, ln}; }
 
     // what the MHD model's advance uses of a level (solver/advance.hpp)
     struct MHDLevel
@@ -1036,17 +1040,17 @@ private:
         void fill_electric_ghosts(double const t) { self.fill_mhd_electric_ghosts_(ln, t); }
 
         // with the coarser level (solver/mhd/level_steps.hpp)
-        NO_DISCARD std::size_t number() const { return ln; }
-        NO_DISCARD MHDLevel coarser() const { return {self, ln - 1}; }
+        MKN_KUL_FN_SIG_RET std::size_t number() const { return ln; }
+        MKN_KUL_FN_SIG_RET MHDLevel coarser() const { return {self, ln - 1}; }
         void coarsen(auto const& op, std::vector<damn::amr::LevelPair> const& pairs)
         {
             self.coarsen_(ln, op, pairs);
         }
         void copy(auto const how, std::string const& key) { self.copy_(ln, how, key); }
-        NO_DISCARD double old_time() const { return self.levels_[ln].old_t; }
-        NO_DISCARD int time_ratio() const { return self.time_ratio(); }
+        MKN_KUL_FN_SIG_RET double old_time() const { return self.levels_[ln].old_t; }
+        MKN_KUL_FN_SIG_RET int time_ratio() const { return self.time_ratio(); }
         // its last step's share of its coarser level's step (flux sums' weight)
-        NO_DISCARD double substep_weight() const { return self.substep_weight_(ln); }
+        MKN_KUL_FN_SIG_RET double substep_weight() const { return self.substep_weight_(ln); }
     };
     // patch ghosts, then the physical boundaries' (simulator_ghosts.hpp)
     void fill_mhd_state_ghosts_(std::size_t ln, std::size_t s, double t);
@@ -1141,7 +1145,7 @@ private:
     //  time_ratio^ln); adaptive, level 0 its step's, a finer level min(its coarser step, stable)
     double next_dt_(int ln, damn::amr::Step const& step);
     // level ln's last step's share of its coarser level's step
-    NO_DISCARD double substep_weight_(std::size_t ln) const;
+    MKN_KUL_FN_SIG_RET double substep_weight_(std::size_t ln) const;
     // per level: its last step (damn's), its dt (constant: the table; adaptive: its last stable)
     std::vector<damn::amr::Step> level_step_;
     std::vector<std::vector<double>> substep_dts_; // per level, in the last advance

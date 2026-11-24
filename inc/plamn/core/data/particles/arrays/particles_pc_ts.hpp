@@ -333,7 +333,7 @@ public:
     auto& views() { return particles_views_; }
     auto& views() const { return particles_views_; }
 
-    NO_DISCARD bool is_consistent() const;
+    MKN_KUL_FN_SIG_RET bool is_consistent() const;
 
 protected:
     // visit the AMR cells of a tile that sit within ghost_cells_ of its wall — the only
@@ -649,7 +649,7 @@ void PCTileSetVector<Particles>::clear()
 }
 
 template<typename Particles>
-NO_DISCARD bool PCTileSetVector<Particles>::is_consistent() const
+MKN_KUL_FN_SIG_RET bool PCTileSetVector<Particles>::is_consistent() const
 {
     std::size_t n = 0;
     bool valid    = true;

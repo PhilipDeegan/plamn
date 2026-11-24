@@ -739,7 +739,7 @@ public:
 
     void sortMapping() const { cellMap_.sort(); }
 
-    NO_DISCARD bool is_consistent() const
+    MKN_KUL_FN_SIG_RET bool is_consistent() const
     {
         if (particles_.size() != cellMap_.size())
             return false;
@@ -768,20 +768,20 @@ public:
 
 
     // template<template<typename, std::size_t> typename Arr>
-    // NO_DISCARD auto& map(Arr<std::uint32_t, dimension> const& arr)
+    // MKN_KUL_FN_SIG_RET auto& map(Arr<std::uint32_t, dimension> const& arr)
     // {
     //     return cellMap_(arr);
     // }
 
     // template<template<typename, std::size_t> typename Arr>
-    // NO_DISCARD auto& map(Arr<std::uint32_t, dimension> const& arr) const
+    // MKN_KUL_FN_SIG_RET auto& map(Arr<std::uint32_t, dimension> const& arr) const
     // {
     //     return cellMap_(arr);
     // }
 
     // AMR INDEXES!
-    NO_DISCARD auto& map(auto const& arr) { return cellMap_(arr); }
-    NO_DISCARD auto& map(auto const& arr) const { return cellMap_(arr); }
+    MKN_KUL_FN_SIG_RET auto& map(auto const& arr) { return cellMap_(arr); }
+    MKN_KUL_FN_SIG_RET auto& map(auto const& arr) const { return cellMap_(arr); }
 
     auto& box() const { return box_; }
 };

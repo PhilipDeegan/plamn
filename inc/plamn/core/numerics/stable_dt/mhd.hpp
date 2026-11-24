@@ -43,8 +43,8 @@ struct MHDStableDt
 
 // a patch's bound: its state's rho, rhoV, B, Etot (patch grids, local indexes)
 template<typename Layout>
-NO_DISCARD double mhd_dt(Layout const& layout, auto const& rho, auto const& rhoV, auto const& B,
-                         auto const& Etot, MHDStableDt const& in)
+MKN_KUL_FN_SIG_RET double mhd_dt(Layout const& layout, auto const& rho, auto const& rhoV,
+                                 auto const& B, auto const& Etot, MHDStableDt const& in)
     requires(!TiledField<decltype(rho)>)
 {
     auto constexpr dim = Layout::dimension;
@@ -109,8 +109,8 @@ NO_DISCARD double mhd_dt(Layout const& layout, auto const& rho, auto const& rhoV
 
 // tiled: tile by tile, on each tile's layout and views
 template<typename Layout>
-NO_DISCARD double mhd_dt(Layout const&, TiledField auto const& rho, auto const& rhoV, auto const& B,
-                         auto const& Etot, MHDStableDt const& in)
+MKN_KUL_FN_SIG_RET double mhd_dt(Layout const&, TiledField auto const& rho, auto const& rhoV,
+                                 auto const& B, auto const& Etot, MHDStableDt const& in)
 {
     double dt = std::numeric_limits<double>::max();
     for (std::size_t ti = 0; ti < rho().size(); ++ti)

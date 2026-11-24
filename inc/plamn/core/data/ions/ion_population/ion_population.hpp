@@ -43,67 +43,79 @@ namespace core
         }
 
 
-        NO_DISCARD double mass() const { return mass_; }
+        MKN_KUL_FN_SIG_RET double mass() const { return mass_; }
 
         //! the charge of every particle of the population
-        NO_DISCARD double charge() const { return charge_; }
+        MKN_KUL_FN_SIG_RET double charge() const { return charge_; }
 
-        NO_DISCARD std::string const& name() const { return name_; }
-
-
+        MKN_KUL_FN_SIG_RET std::string const& name() const { return name_; }
 
 
-        NO_DISCARD auto const& particleInitializerInfo() const
+
+
+        MKN_KUL_FN_SIG_RET auto const& particleInitializerInfo() const
         {
             assert(particleInitializerInfo_.contains("density"));
             return particleInitializerInfo_;
         }
 
 
-        NO_DISCARD bool isUsable() const
+        MKN_KUL_FN_SIG_RET bool isUsable() const
         {
             // not the momentum tensor: bound only when computed (plamn's computed quantities)
             return damn::core::isUsable(particles_, particleDensity_, chargeDensity_, flux_);
         }
 
-        NO_DISCARD bool isSettable() const
+        MKN_KUL_FN_SIG_RET bool isSettable() const
         {
             return damn::core::isSettable(particles_, particleDensity_, chargeDensity_, flux_,
                                     momentumTensor_);
         }
 
-        NO_DISCARD auto& domainParticles() const { return particles_.domainParticles(); }
-        NO_DISCARD auto& domainParticles() { return particles_.domainParticles(); }
+        MKN_KUL_FN_SIG_RET auto& domainParticles() const { return particles_.domainParticles(); }
+        MKN_KUL_FN_SIG_RET auto& domainParticles() { return particles_.domainParticles(); }
 
-        NO_DISCARD auto& patchGhostParticles() const { return particles_.patchGhostParticles(); }
-        NO_DISCARD auto& patchGhostParticles() { return particles_.patchGhostParticles(); }
+        MKN_KUL_FN_SIG_RET auto& patchGhostParticles() const
+        {
+            return particles_.patchGhostParticles();
+        }
+        MKN_KUL_FN_SIG_RET auto& patchGhostParticles() { return particles_.patchGhostParticles(); }
 
-        NO_DISCARD auto& levelGhostParticles() const { return particles_.levelGhostParticles(); }
-        NO_DISCARD auto& levelGhostParticles() { return particles_.levelGhostParticles(); }
+        MKN_KUL_FN_SIG_RET auto& levelGhostParticles() const
+        {
+            return particles_.levelGhostParticles();
+        }
+        MKN_KUL_FN_SIG_RET auto& levelGhostParticles() { return particles_.levelGhostParticles(); }
 
-        NO_DISCARD auto& levelGhostParticlesOld() { return particles_.levelGhostParticlesOld(); }
-        NO_DISCARD auto& levelGhostParticlesOld() const
+        MKN_KUL_FN_SIG_RET auto& levelGhostParticlesOld()
+        {
+            return particles_.levelGhostParticlesOld();
+        }
+        MKN_KUL_FN_SIG_RET auto& levelGhostParticlesOld() const
         {
             return particles_.levelGhostParticlesOld();
         }
 
-        NO_DISCARD auto& levelGhostParticlesNew() { return particles_.levelGhostParticlesNew(); }
-        NO_DISCARD auto& levelGhostParticlesNew() const
+        MKN_KUL_FN_SIG_RET auto& levelGhostParticlesNew()
+        {
+            return particles_.levelGhostParticlesNew();
+        }
+        MKN_KUL_FN_SIG_RET auto& levelGhostParticlesNew() const
         {
             return particles_.levelGhostParticlesNew();
         }
 
-        NO_DISCARD field_type const& particleDensity() const { return particleDensity_; }
-        NO_DISCARD field_type& particleDensity() { return particleDensity_; }
+        MKN_KUL_FN_SIG_RET field_type const& particleDensity() const { return particleDensity_; }
+        MKN_KUL_FN_SIG_RET field_type& particleDensity() { return particleDensity_; }
 
-        NO_DISCARD field_type const& chargeDensity() const { return chargeDensity_; }
-        NO_DISCARD field_type& chargeDensity() { return chargeDensity_; }
+        MKN_KUL_FN_SIG_RET field_type const& chargeDensity() const { return chargeDensity_; }
+        MKN_KUL_FN_SIG_RET field_type& chargeDensity() { return chargeDensity_; }
 
-        NO_DISCARD VecField const& flux() const { return flux_; }
-        NO_DISCARD VecField& flux() { return flux_; }
+        MKN_KUL_FN_SIG_RET VecField const& flux() const { return flux_; }
+        MKN_KUL_FN_SIG_RET VecField& flux() { return flux_; }
 
-        NO_DISCARD TensorField const& momentumTensor() const { return momentumTensor_; }
-        NO_DISCARD TensorField& momentumTensor() { return momentumTensor_; }
+        MKN_KUL_FN_SIG_RET TensorField const& momentumTensor() const { return momentumTensor_; }
+        MKN_KUL_FN_SIG_RET TensorField& momentumTensor() { return momentumTensor_; }
 
 
 
@@ -115,7 +127,7 @@ namespace core
 
 
 
-        NO_DISCARD auto getCompileTimeResourcesViewList()
+        MKN_KUL_FN_SIG_RET auto getCompileTimeResourcesViewList()
         {
             return std::forward_as_tuple(flux_, momentumTensor_, particleDensity_, chargeDensity_,
                                          particles_);
@@ -128,7 +140,7 @@ namespace core
 
 
 
-        NO_DISCARD std::string to_str()
+        MKN_KUL_FN_SIG_RET std::string to_str()
         {
             std::stringstream ss;
             ss << "Ions Population\n";

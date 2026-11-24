@@ -176,7 +176,7 @@ private:
 };
 
 template<auto alloc_mode>
-NO_DISCARD auto level_of(auto&& level, auto&& quantities)
+MKN_KUL_FN_SIG_RET auto level_of(auto&& level, auto&& quantities)
 {
     LevelFields<alloc_mode> fields;
     level.per_patch([&](auto& patch) { quantities(patch, fields); });

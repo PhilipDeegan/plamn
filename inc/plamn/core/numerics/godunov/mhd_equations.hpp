@@ -16,8 +16,8 @@ namespace plamn::core
 {
 
 template<std::size_t dir>
-NO_DISCARD constexpr MHDConservative ideal_mhd_flux(double const gamma,
-                                                    MHDPrimitive const& u) DAMN_ALL
+MKN_KUL_FN_SIG_RET constexpr MHDConservative ideal_mhd_flux(double const gamma,
+                                                            MHDPrimitive const& u) DAMN_ALL
 {
     static_assert(dir < 3);
     auto const& V = u.V;
@@ -53,8 +53,8 @@ NO_DISCARD constexpr MHDConservative ideal_mhd_flux(double const gamma,
 // the ideal flux plus the Hall term (PHARE's compute(u, J): hall_contribution_, its operation
 //  order): the induction flux's (J x B) / rho, the energy flux's (B.J B_n - B.B J_n) / rho
 template<std::size_t dir>
-NO_DISCARD constexpr MHDConservative hall_mhd_flux(double const gamma, MHDPrimitive const& u,
-                                                   std::array<double, 3> const& J) DAMN_ALL
+MKN_KUL_FN_SIG_RET constexpr MHDConservative
+hall_mhd_flux(double const gamma, MHDPrimitive const& u, std::array<double, 3> const& J) DAMN_ALL
 {
     auto F            = ideal_mhd_flux<dir>(gamma, u);
     auto const& B     = u.B;

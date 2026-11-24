@@ -186,7 +186,7 @@ class MeshToParticle
 
 
 template<std::size_t dimdex, typename Layout, auto quantity>
-NO_DISCARD auto static resolve_start_index_and_weights(auto const& indexWeights) DAMN_ALL
+MKN_KUL_FN_SIG_RET auto static resolve_start_index_and_weights(auto const& indexWeights) DAMN_ALL
 {
     auto constexpr centerings                              = centering<Layout::dimension>(quantity);
     auto const& [d_starts, d_weights, p_starts, p_weights] = indexWeights;
@@ -210,8 +210,8 @@ public:
      * the field \param[in] weights are the nbrPointsSupport weights used for the interpolation
      */
     template<typename Layout, auto quantity>
-    NO_DISCARD DAMN_ALWAYS_INLINE auto op(auto const& field,
-                                          auto const& indexWeights) const DAMN_ALL
+    MKN_KUL_FN_SIG_RET DAMN_ALWAYS_INLINE auto op(auto const& field,
+                                                  auto const& indexWeights) const DAMN_ALL
     {
         auto const& [xStartIndex, xWeights]
             = resolve_start_index_and_weights<0, Layout, quantity>(indexWeights);
@@ -242,8 +242,8 @@ public:
      * weights used for the interpolation in both directions
      */
     template<typename Layout, auto quantity>
-    NO_DISCARD DAMN_ALWAYS_INLINE auto op(auto const& field,
-                                          auto const& indexWeights) const DAMN_ALL
+    MKN_KUL_FN_SIG_RET DAMN_ALWAYS_INLINE auto op(auto const& field,
+                                                  auto const& indexWeights) const DAMN_ALL
     {
         auto const& [xStartIndex, xWeights]
             = resolve_start_index_and_weights<0, Layout, quantity>(indexWeights);
@@ -289,8 +289,8 @@ public:
      * weights used for the interpolation in the 3 directions
      */
     template<typename Layout, auto quantity>
-    NO_DISCARD DAMN_ALWAYS_INLINE auto op(auto const& field,
-                                          auto const& indexWeights) const DAMN_ALL
+    MKN_KUL_FN_SIG_RET DAMN_ALWAYS_INLINE auto op(auto const& field,
+                                                  auto const& indexWeights) const DAMN_ALL
     {
         auto const& [xStartIndex, xWeights]
             = resolve_start_index_and_weights<0, Layout, quantity>(indexWeights);
@@ -881,7 +881,7 @@ public:
      * traversing from
      */
     template<auto centering>
-    NO_DISCARD static int computeStartLeftShift([[maybe_unused]] double delta) DAMN_ALL
+    MKN_KUL_FN_SIG_RET static int computeStartLeftShift([[maybe_unused]] double delta) DAMN_ALL
     {
         static_assert(interpOrder > 0 and interpOrder < 4);
 
@@ -937,8 +937,8 @@ private:
     // always inlined: six per m2p, out of line (gcc merges the identical instantiations) they
     //  cost a call each per particle
     template<auto quantity, typename Layout>
-    NO_DISCARD DAMN_ALWAYS_INLINE auto meshToParticle(auto const& field, Layout const&,
-                                                      auto const& indexWeights) DAMN_ALL
+    MKN_KUL_FN_SIG_RET DAMN_ALWAYS_INLINE auto meshToParticle(auto const& field, Layout const&,
+                                                              auto const& indexWeights) DAMN_ALL
     {
         return meshToParticle_.template op<Layout, quantity>(field, indexWeights);
     }

@@ -69,7 +69,10 @@ struct GridTile : public FieldTile<Layout_t, Field_t>
     Super& operator*() DAMN_ALL { return *this; }
     Super const& operator*() const DAMN_ALL { return *this; }
 
-    NO_DISCARD auto physicalQuantity() const DAMN_ALL { return (**this).physicalQuantity(); }
+    MKN_KUL_FN_SIG_RET auto physicalQuantity() const DAMN_ALL
+    {
+        return (**this).physicalQuantity();
+    }
 
 private:
     void reset() { (**this)() = Field_t{(**this).physicalQuantity(), arr.data(), arr.shape()}; }
@@ -149,19 +152,19 @@ public:
     auto& operator()() { return super()(); }
     auto& operator()() const { return super()(); }
 
-    NO_DISCARD auto at(auto const&... args) { return super().at(args...); }
-    NO_DISCARD auto at(auto const&... args) const { return super().at(args...); }
+    MKN_KUL_FN_SIG_RET auto at(auto const&... args) { return super().at(args...); }
+    MKN_KUL_FN_SIG_RET auto at(auto const&... args) const { return super().at(args...); }
 
     View& operator*() { return *this; }
     View const& operator*() const { return *this; }
 
     auto data() { return super().data(); }
     auto data() const { return super().data(); }
-    NO_DISCARD auto begin() { return super().begin(); }
-    NO_DISCARD auto begin() const { return super().begin(); }
-    NO_DISCARD auto end() { return super().end(); }
-    NO_DISCARD auto end() const { return super().end(); }
-    NO_DISCARD auto size() const DAMN_ALL { return View::size(); }
+    MKN_KUL_FN_SIG_RET auto begin() { return super().begin(); }
+    MKN_KUL_FN_SIG_RET auto begin() const { return super().begin(); }
+    MKN_KUL_FN_SIG_RET auto end() { return super().end(); }
+    MKN_KUL_FN_SIG_RET auto end() const { return super().end(); }
+    MKN_KUL_FN_SIG_RET auto size() const DAMN_ALL { return View::size(); }
     auto& layout() const { return layout_; }
 
     // patch layout and each tile's sub layout from a corrected patch layout (restarts)
@@ -175,7 +178,7 @@ public:
     Super& super() { return *this; }
     Super const& super() const { return *this; }
 
-    NO_DISCARD auto& name() const { return name_; }
+    MKN_KUL_FN_SIG_RET auto& name() const { return name_; }
     auto max_tile_size() const { return max_tile_size_; }
 
 private:

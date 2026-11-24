@@ -66,7 +66,7 @@ concept HasComponents
 
 template<typename Particles>
     requires HasComponents<Particles>
-NO_DISCARD auto components(Particles& particles)
+MKN_KUL_FN_SIG_RET auto components(Particles& particles)
 {
     using P                 = std::decay_t<Particles>;
     auto constexpr dim      = P::dimension;

@@ -66,8 +66,14 @@ struct Boundary
     std::vector<std::pair<Vector, FieldCondition>> vectors{};
 
     // the quantity's condition, nullptr if it has none
-    NO_DISCARD FieldCondition const* condition(Scalar const q) const { return find_(scalars, q); }
-    NO_DISCARD FieldCondition const* condition(Vector const q) const { return find_(vectors, q); }
+    MKN_KUL_FN_SIG_RET FieldCondition const* condition(Scalar const q) const
+    {
+        return find_(scalars, q);
+    }
+    MKN_KUL_FN_SIG_RET FieldCondition const* condition(Vector const q) const
+    {
+        return find_(vectors, q);
+    }
 
 private:
     static FieldCondition const* find_(auto const& conditions, auto const q)
@@ -82,7 +88,7 @@ private:
 // the boundary of `type` at `location` for the given quantities; inflow needs its state and the
 //  heat capacity ratio gamma (> 1)
 template<typename Quantity>
-NO_DISCARD Boundary<Quantity>
+MKN_KUL_FN_SIG_RET Boundary<Quantity>
 make_boundary(BoundaryLocation const location, BoundaryType const type,
               std::vector<typename Quantity::Scalar> const& scalars,
               std::vector<typename Quantity::Vector> const& vectors,
@@ -171,7 +177,7 @@ make_boundary(BoundaryLocation const location, BoundaryType const type,
 // the boundary at `location` from its input (simulation/grid/domain_boundaries/<location>: type,
 //  and for an inflow density, pressure, velocity/{x,y,z}, B/{x,y,z})
 template<typename Quantity>
-NO_DISCARD Boundary<Quantity>
+MKN_KUL_FN_SIG_RET Boundary<Quantity>
 make_boundary(BoundaryLocation const location, initializer::Dict const& dict,
               std::vector<typename Quantity::Scalar> const& scalars,
               std::vector<typename Quantity::Vector> const& vectors, double const gamma = 0.)
@@ -250,7 +256,7 @@ struct BoundaryManager
         }
     }
 
-    NO_DISCARD Boundary<Quantity> const* boundary(BoundaryLocation const location) const
+    MKN_KUL_FN_SIG_RET Boundary<Quantity> const* boundary(BoundaryLocation const location) const
     {
         auto const& b = boundaries[static_cast<std::size_t>(location)];
         return b ? &*b : nullptr;
@@ -259,7 +265,7 @@ struct BoundaryManager
     // the face whose conditions a location takes: itself for a face, else one of its adjacent
     //  faces by the priority
     template<typename Location>
-    NO_DISCARD BoundaryLocation master(Location const location) const
+    MKN_KUL_FN_SIG_RET BoundaryLocation master(Location const location) const
     {
         if constexpr (std::is_same_v<Location, BoundaryLocation>)
             return location;

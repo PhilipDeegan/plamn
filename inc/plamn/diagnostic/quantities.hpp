@@ -25,7 +25,7 @@ template<typename View>
 using Accessor = std::function<std::vector<typename View::field_type const*>(View const&)>;
 
 template<typename View>
-NO_DISCARD std::map<std::string, Accessor<View>>
+MKN_KUL_FN_SIG_RET std::map<std::string, Accessor<View>>
 hybrid_quantities(std::vector<std::string> const& population_names)
 {
     using Field    = View::field_type;
@@ -53,7 +53,7 @@ hybrid_quantities(std::vector<std::string> const& population_names)
 //  MHDDiagnosticWriter /mhd/..., B and E as the electromag's). V and P: as the patch has them, the
 //  writer converts the conservative state to them first (PHARE's compute)
 template<typename Patch>
-NO_DISCARD std::map<std::string, Accessor<Patch>> mhd_quantities()
+MKN_KUL_FN_SIG_RET std::map<std::string, Accessor<Patch>> mhd_quantities()
 {
     using Fields = std::vector<typename Patch::field_type const*>;
     // std::addressof: Grid overloads operator&
@@ -73,7 +73,7 @@ NO_DISCARD std::map<std::string, Accessor<Patch>> mhd_quantities()
 }
 
 template<typename View>
-NO_DISCARD Accessor<View> const&
+MKN_KUL_FN_SIG_RET Accessor<View> const&
 quantity_for(std::map<std::string, Accessor<View>> const& quantities, std::string const& quantity)
 {
     auto const it = quantities.find(quantity);

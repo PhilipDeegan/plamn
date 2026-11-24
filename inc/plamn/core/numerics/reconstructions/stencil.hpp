@@ -18,14 +18,14 @@
 namespace plamn::core::reconstruction
 {
 template<std::size_t dir>
-NO_DISCARD auto shifted(auto ijk, int const shift) DAMN_ALL
+MKN_KUL_FN_SIG_RET auto shifted(auto ijk, int const shift) DAMN_ALL
 {
     ijk[dir] += shift;
     return ijk;
 }
 
 template<std::size_t dir, int from, int to>
-NO_DISCARD std::array<double, to - from + 1> values(auto const& F, auto const& ijk) DAMN_ALL
+MKN_KUL_FN_SIG_RET std::array<double, to - from + 1> values(auto const& F, auto const& ijk) DAMN_ALL
 {
     return [&]<std::size_t... i>(std::index_sequence<i...>) {
         return std::array<double, to - from + 1>{
@@ -34,7 +34,8 @@ NO_DISCARD std::array<double, to - from + 1> values(auto const& F, auto const& i
 }
 
 template<std::size_t dir, int from, int to, auto src, auto dst>
-NO_DISCARD std::array<double, to - from + 1> centred_values(auto const& U, auto const& ijk) DAMN_ALL
+MKN_KUL_FN_SIG_RET std::array<double, to - from + 1> centred_values(auto const& U,
+                                                                    auto const& ijk) DAMN_ALL
 {
     return [&]<std::size_t... i>(std::index_sequence<i...>) {
         return std::array<double, to - from + 1>{

@@ -81,16 +81,19 @@ namespace core
         //                  start the ResourcesUser interface
         //-------------------------------------------------------------------------
 
-        NO_DISCARD bool isUsable() const { return E.isUsable() && B.isUsable(); }
+        MKN_KUL_FN_SIG_RET bool isUsable() const { return E.isUsable() && B.isUsable(); }
 
-        NO_DISCARD bool isSettable() const { return E.isSettable() && B.isSettable(); }
+        MKN_KUL_FN_SIG_RET bool isSettable() const { return E.isSettable() && B.isSettable(); }
 
-        NO_DISCARD auto getCompileTimeResourcesViewList() const
+        MKN_KUL_FN_SIG_RET auto getCompileTimeResourcesViewList() const
         {
             return std::forward_as_tuple(E, B);
         }
 
-        NO_DISCARD auto getCompileTimeResourcesViewList() { return std::forward_as_tuple(E, B); }
+        MKN_KUL_FN_SIG_RET auto getCompileTimeResourcesViewList()
+        {
+            return std::forward_as_tuple(E, B);
+        }
 
 
         //-------------------------------------------------------------------------

@@ -63,12 +63,12 @@ public:
     using TensorType = std::conditional_t<rank == 1, Vector, Tensor>;
 
 
-    NO_DISCARD static constexpr auto B() { return componentsQuantities(Vector::B); }
-    NO_DISCARD static constexpr auto E() { return componentsQuantities(Vector::E); }
-    NO_DISCARD static constexpr auto J() { return componentsQuantities(Vector::J); }
-    NO_DISCARD static constexpr auto V() { return componentsQuantities(Vector::V); }
+    MKN_KUL_FN_SIG_RET static constexpr auto B() { return componentsQuantities(Vector::B); }
+    MKN_KUL_FN_SIG_RET static constexpr auto E() { return componentsQuantities(Vector::E); }
+    MKN_KUL_FN_SIG_RET static constexpr auto J() { return componentsQuantities(Vector::J); }
+    MKN_KUL_FN_SIG_RET static constexpr auto V() { return componentsQuantities(Vector::V); }
 
-    NO_DISCARD static constexpr std::array<Scalar, 3> componentsQuantities(Vector const qty)
+    MKN_KUL_FN_SIG_RET static constexpr std::array<Scalar, 3> componentsQuantities(Vector const qty)
     {
         auto const idx = static_cast<std::size_t>(qty);
         if (idx >= vector_components.size())
@@ -76,7 +76,7 @@ public:
         return vector_components[idx];
     }
 
-    NO_DISCARD static constexpr std::array<Scalar, 6> componentsQuantities(Tensor /*qty*/)
+    MKN_KUL_FN_SIG_RET static constexpr std::array<Scalar, 6> componentsQuantities(Tensor /*qty*/)
     {
         // no condition, for now there's only then momentum tensor M
         return {{Scalar::Mxx, Scalar::Mxy, Scalar::Mxz, Scalar::Myy, Scalar::Myz, Scalar::Mzz}};
@@ -125,7 +125,7 @@ namespace hybrid
     });
 } // namespace hybrid
 
-NO_DISCARD constexpr Quantity quantity(HybridQuantity::Scalar const qty) DAMN_ALL
+MKN_KUL_FN_SIG_RET constexpr Quantity quantity(HybridQuantity::Scalar const qty) DAMN_ALL
 {
     auto const idx = static_cast<std::size_t>(qty);
     if (idx >= hybrid::quantities.size())

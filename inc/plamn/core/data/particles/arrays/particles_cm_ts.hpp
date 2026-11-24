@@ -288,7 +288,7 @@ public:
     auto& views() { return particles_views_; }
     auto& views() const { return particles_views_; }
 
-    NO_DISCARD bool is_consistent() const;
+    MKN_KUL_FN_SIG_RET bool is_consistent() const;
 
 protected:
     // tiles build from amrbox, but `.at()` function maps ghosts box
@@ -506,7 +506,7 @@ void MappedTileSetVector<Particles>::clear()
 }
 
 template<typename Particles>
-NO_DISCARD bool MappedTileSetVector<Particles>::is_consistent() const
+MKN_KUL_FN_SIG_RET bool MappedTileSetVector<Particles>::is_consistent() const
 {
     std::size_t n = 0;
     for (auto const& tile : particles_)

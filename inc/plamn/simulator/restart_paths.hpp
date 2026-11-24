@@ -11,12 +11,13 @@
 
 namespace plamn::simulator
 {
-NO_DISCARD inline std::string restart_dir_for_time(std::string const& dir, double const time)
+MKN_KUL_FN_SIG_RET inline std::string restart_dir_for_time(std::string const& dir,
+                                                           double const time)
 {
     return std::format("{}/{:021.10f}", dir, time);
 }
 
-NO_DISCARD inline std::string restart_file_in(std::string const& dir)
+MKN_KUL_FN_SIG_RET inline std::string restart_file_in(std::string const& dir)
 {
     return dir + "/restart.h5";
 }

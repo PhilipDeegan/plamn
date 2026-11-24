@@ -47,19 +47,20 @@ public:
     }
 
     template<typename... Indexes>
-    NO_DISCARD value_type operator()(Indexes... indexes) const
+    MKN_KUL_FN_SIG_RET value_type operator()(Indexes... indexes) const
         requires(sizeof...(Indexes) == dimension && (std::is_integral_v<Indexes> && ...))
     {
         return (*this)(
             std::array<std::uint32_t, dimension>{static_cast<std::uint32_t>(indexes)...});
     }
 
-    NO_DISCARD value_type operator()(std::array<std::uint32_t, dimension> const& index) const
+    MKN_KUL_FN_SIG_RET value_type
+    operator()(std::array<std::uint32_t, dimension> const& index) const
     {
         return averageFrom_<0>(index);
     }
 
-    NO_DISCARD auto const& centering() const { return destination_; }
+    MKN_KUL_FN_SIG_RET auto const& centering() const { return destination_; }
 
 private:
     /// recursive helper to compute the tensor product of the 1D recentering operation
@@ -113,14 +114,15 @@ public:
     }
 
     template<typename... Indexes>
-    NO_DISCARD value_type operator()(Indexes... indexes) const
+    MKN_KUL_FN_SIG_RET value_type operator()(Indexes... indexes) const
         requires(sizeof...(Indexes) == dimension && (std::is_integral_v<Indexes> && ...))
     {
         return (*this)(
             std::array<std::uint32_t, dimension>{static_cast<std::uint32_t>(indexes)...});
     }
 
-    NO_DISCARD value_type operator()(std::array<std::uint32_t, dimension> const& index) const
+    MKN_KUL_FN_SIG_RET value_type
+    operator()(std::array<std::uint32_t, dimension> const& index) const
     {
         for (std::size_t d = 0; d < dimension; ++d)
             if (source[d] == QtyCentering::dual and destination[d] == QtyCentering::primal)

@@ -21,27 +21,30 @@ struct WENO3Reconstruction
     static constexpr std::uint32_t nghosts = 2;
 
     template<std::size_t dir>
-    NO_DISCARD static std::array<double, 2> reconstruct(auto const& F, auto const& ijk) DAMN_ALL
+    MKN_KUL_FN_SIG_RET static std::array<double, 2> reconstruct(auto const& F,
+                                                                auto const& ijk) DAMN_ALL
     {
         return from_values(reconstruction::values<dir, -2, 1>(F, ijk));
     }
 
     template<std::size_t dir, auto src, auto dst>
-    NO_DISCARD static std::array<double, 2> center_reconstruct(auto const& U,
-                                                               auto const& ijk) DAMN_ALL
+    MKN_KUL_FN_SIG_RET static std::array<double, 2> center_reconstruct(auto const& U,
+                                                                       auto const& ijk) DAMN_ALL
     {
         return from_values(reconstruction::centred_values<dir, -2, 1, src, dst>(U, ijk));
     }
 
     // v: cells i-2 .. i+1
-    NO_DISCARD static std::array<double, 2> from_values(std::array<double, 4> const& v) DAMN_ALL
+    MKN_KUL_FN_SIG_RET static std::array<double, 2>
+    from_values(std::array<double, 4> const& v) DAMN_ALL
     {
         auto const [u_2, u_1, u, u1] = v;
         return {left_(u_2, u_1, u), right_(u_1, u, u1)};
     }
 
 private:
-    NO_DISCARD static double left_(double const ul, double const u, double const ur) DAMN_ALL
+    MKN_KUL_FN_SIG_RET static double left_(double const ul, double const u,
+                                           double const ur) DAMN_ALL
     {
         auto constexpr dL0    = 1. / 3.;
         auto constexpr dL1    = 2. / 3.;
@@ -49,7 +52,8 @@ private:
         return wL0 * (-0.5 * ul + 1.5 * u) + wL1 * (0.5 * u + 0.5 * ur);
     }
 
-    NO_DISCARD static double right_(double const ul, double const u, double const ur) DAMN_ALL
+    MKN_KUL_FN_SIG_RET static double right_(double const ul, double const u,
+                                            double const ur) DAMN_ALL
     {
         auto constexpr dR0    = 2. / 3.;
         auto constexpr dR1    = 1. / 3.;
@@ -57,9 +61,9 @@ private:
         return wR0 * (0.5 * u + 0.5 * ul) + wR1 * (-0.5 * ur + 1.5 * u);
     }
 
-    NO_DISCARD static std::array<double, 2> weights_(double const ul, double const u,
-                                                     double const ur, double const d0,
-                                                     double const d1) DAMN_ALL
+    MKN_KUL_FN_SIG_RET static std::array<double, 2> weights_(double const ul, double const u,
+                                                             double const ur, double const d0,
+                                                             double const d1) DAMN_ALL
     {
         auto constexpr eps   = 1.e-6;
         auto const beta0     = (u - ul) * (u - ul);
