@@ -1,13 +1,12 @@
 """spheromak_dipole.py outputs (pharevtkhdf: EM_B, ions_mass_density, ions_bulkVelocity), one run
-or two (e.g. --model hybrid against --model coupled: B, the mass density and the bulk velocity are
-on every level of either, MHD levels' from its rho and V)
+or two (e.g. two resistivities, layouts or resolutions with the same levels)
 
     python3 etc/experiments/spheromak_compare.py phare_outputs/sph_hybrid
-    python3 etc/experiments/spheromak_compare.py phare_outputs/sph_hybrid phare_outputs/sph_coupled \\
+    python3 etc/experiments/spheromak_compare.py phare_outputs/sph_a phare_outputs/sph_b \\
         --plots phare_outputs/sph_plots --times 0 0.5 1
 
 Per run, per dump: magnetic energy (|B|^2 / 2) and bulk kinetic energy (rho V^2 / 2) per level
-(level 1: over its box), and over level 0 outside level 1 (a coupled run's MHD only region): the
+(level 1: over its box), and over level 0 outside level 1 (the quiet far field): the
 mass density's range, max |V|, max |B|. Two runs: per level, the rms and max difference of B, the
 mass density and the bulk velocity where both have the same boxes. --plots: the z mid plane of
 |B|, the mass density and |V| per level, each run and their difference.

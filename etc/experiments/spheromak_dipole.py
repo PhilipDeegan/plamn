@@ -1,21 +1,18 @@
 """A Taylor spheromak (radius R, force free inside, no field outside) at the centre of a cube,
-relaxing into a dipole (plamn #68). Two levels by default: level 0 over the whole domain, a fixed
-level 1 box around the sphere. --model hybrid (default): hybrid on both; --model coupled: MHD on
-level 0 (max_mhd_level 1), hybrid in the box, its particles from MHD's state (plamn's coupled
-input; needs the 3D MHD modules, #67). The plasma: uniform density, cold ions (vth 1e-5), Te 0.
+relaxing into a dipole (plamn #68). Pure hybrid: the sphere is at ion scale (R ~ d_i), below what
+MHD models. Two levels by default: level 0 over the whole domain, a fixed level 1 box around the
+sphere. The plasma: uniform density, cold ions (vth 1e-5), Te 0.
 
     PYTHONPATH=.:$PHARE/pyphare python3 etc/experiments/spheromak_dipole.py
     ... spheromak_dipole.py --cells 60 --dl 0.1 --margin -1       # one level, 60^3 at dl 0.1
     ... spheromak_dipole.py --final-time 0.5 --diag-every 0.05 --out phare_outputs/sph
-    ... spheromak_dipole.py --model coupled --out phare_outputs/sph_coupled
 
 Options: --cells (level 0, per side), --dl (level 0), --margin (level 1: the box around the sphere,
 this far beyond R, in units of length; < 0: no level 1), --ppc, --final-time, --diag-every,
 --layout, --allocator, --cfl-wave, --cfl-particles, --out, --R, --B0, --density, --vth,
---resistivity, --hyper-resistivity; coupled: --pressure (MHD's, default n vth^2: the cold ions'),
---mhd (reconstruction,limiter,riemann,timestepper), --hall.
-Diagnostics (pharevtkhdf, --out): B, E, the ions' mass density and bulk velocity (MHD levels: rho,
-V), at 0 and every --diag-every; compare runs with spheromak_compare.py.
+--resistivity, --hyper-resistivity.
+Diagnostics (pharevtkhdf, --out): B, E, the ions' mass density and bulk velocity, at 0 and every
+--diag-every; compare runs with spheromak_compare.py.
 """
 
 import argparse
@@ -60,26 +57,6 @@ def config(a):
     centre = (cells * dl / 2,) * 3
     boxes = refinement_boxes(cells, dl, a.R, a.margin)
     times = np.arange(0, a.final_time + 0.5 * a.diag_every, a.diag_every)
-    coupled = a.model == "coupled"
-    if coupled and not boxes:
-        raise ValueError(
-            "--model coupled needs level 1 (--margin >= 0): the hybrid box"
-        )
-    kwargs = {}
-    if coupled:
-        reconstruction, limiter, riemann, timestepper = a.mhd.split(",")
-        kwargs = dict(
-            max_mhd_level=1,
-            reconstruction=reconstruction,
-            limiter=limiter,
-            riemann=riemann,
-            mhd_timestepper=timestepper,
-            model_options=["MHDModel", "HybridModel"],
-            gamma=5.0 / 3.0,
-            eta=a.resistivity,
-            nu=a.hyper_resistivity,
-            hall=a.hall,
-        )
     sim = ph.Simulation(
         time_step=dict(
             mode="adaptive", cfl_wave=a.cfl_wave, cfl_particles=a.cfl_particles
@@ -98,7 +75,6 @@ def config(a):
             "options": {"dir": a.out, "mode": "overwrite"},
         },
         strict=False,
-        **kwargs,
     )
 
     def b(i):
@@ -107,38 +83,20 @@ def config(a):
     def const(v):
         return lambda x, y, z: v + 0.0 * x
 
-    species = {
-        "charge": 1,
-        "mass": 1,
-        "nbr_part_per_cell": a.ppc,
-        "init": {"seed": 12334},
-    }
-    if coupled:
-        # the species' Maxwellian from MHD's state: vth^2 = (P - Te n) / (n m), Te 0 here
-        pressure = a.pressure if a.pressure is not None else a.density * a.vth**2
-        ph.MHDModel(
-            density=const(a.density),
-            vx=const(0.0),
-            vy=const(0.0),
-            vz=const(0.0),
-            bx=b(0),
-            by=b(1),
-            bz=b(2),
-            p=const(pressure),
-            protons=species,
-        )
-    else:
-        ph.MaxwellianFluidModel(
-            bx=b(0),
-            by=b(1),
-            bz=b(2),
-            protons={
-                **species,
-                "density": const(a.density),
-                **{f"vbulk{c}": const(0.0) for c in "xyz"},
-                **{f"vth{c}": const(a.vth) for c in "xyz"},
-            },
-        )
+    ph.MaxwellianFluidModel(
+        bx=b(0),
+        by=b(1),
+        bz=b(2),
+        protons={
+            "charge": 1,
+            "mass": 1,
+            "density": const(a.density),
+            "nbr_part_per_cell": a.ppc,
+            "init": {"seed": 12334},
+            **{f"vbulk{c}": const(0.0) for c in "xyz"},
+            **{f"vth{c}": const(a.vth) for c in "xyz"},
+        },
+    )
     ph.ElectronModel(closure="isothermal", Te=0.0)
     for q in ["E", "B"]:
         ph.ElectromagDiagnostics(quantity=q, write_timestamps=times)
@@ -151,7 +109,6 @@ def parse(argv):
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    p.add_argument("--model", choices=["hybrid", "coupled"], default="hybrid")
     p.add_argument("--cells", type=int, default=30)
     p.add_argument("--dl", type=float, default=0.2)
     p.add_argument("--margin", type=float, default=0.4)
@@ -168,9 +125,6 @@ def parse(argv):
     p.add_argument("--vth", type=float, default=1e-5)
     p.add_argument("--resistivity", type=float, default=1e-3)
     p.add_argument("--hyper-resistivity", type=float, default=1e-3)
-    p.add_argument("--pressure", type=float, default=None)
-    p.add_argument("--mhd", default="Linear,VanLeer,Rusanov,TVDRK2")
-    p.add_argument("--hall", action="store_true")
     p.add_argument("--out", default="phare_outputs/spheromak_dipole")
     return p.parse_args(argv)
 
@@ -180,8 +134,7 @@ def main(argv):
     ph, sim, boxes = config(a)
     sys.argv = [sys.argv[0]]
     print(
-        f"spheromak R {a.R} B0 {a.B0} ({a.model}): level 0 {a.cells}^3 dl {a.dl},"
-        f" level 1 {boxes or 'none'}"
+        f"spheromak R {a.R} B0 {a.B0}: level 0 {a.cells}^3 dl {a.dl}, level 1 {boxes or 'none'}"
     )
     t0 = time.time()
     s = ph.Simulator(sim, log_to_file=False).setup().initialize()
