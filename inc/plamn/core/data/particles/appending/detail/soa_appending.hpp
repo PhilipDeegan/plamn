@@ -77,7 +77,6 @@ void ParticlesAppender<LM::AoSMapped, AM::CPU, LM::SoAPC, AM::GPU_UNIFIED>::oper
     };
 
 
-    std::size_t tmp_start = 0;
     auto const tmp_tuple  = tmp.as_tuple();
     auto finish           = [&](auto const lix, auto const size) {
         auto& particles = dst(lix);

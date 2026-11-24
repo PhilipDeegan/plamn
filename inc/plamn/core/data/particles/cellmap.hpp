@@ -426,7 +426,7 @@ inline void CellMap<opts>::erase(Array const& items, std::size_t itemIndex, Cell
 
 template<auto opts>
 template<mkn::kul::Iterable Array>
-inline void CellMap<opts>::erase(Array const& items, cell_t const oldCell,
+inline void CellMap<opts>::erase(Array const& /*items*/, cell_t const oldCell,
                                  std::size_t const itemIndex)
 {
     auto& blist = cellIndexes_(local_(oldCell));

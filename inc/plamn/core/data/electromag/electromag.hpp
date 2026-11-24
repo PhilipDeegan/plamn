@@ -130,7 +130,7 @@ namespace core
 namespace plamn::core
 {
 
-void check_electromag(auto const& em) DAMN_ALL
+void check_electromag([[maybe_unused]] auto const& em) DAMN_ALL
 {
 #if DAMN_DEBUG && !DAMN_HAVE_GPU
     check_tensor_field(em.E);

@@ -106,7 +106,7 @@ public:
     }
 
     template<typename M, typename... Args>
-    inline void compute(Args&&... args) const DAMN_ALL
+    inline void compute(Args&&... /*args*/) const DAMN_ALL
     {
     }
 
