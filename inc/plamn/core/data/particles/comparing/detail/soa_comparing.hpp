@@ -72,9 +72,9 @@ mkn::kul::EqualityReport ParticlesComparator<AoS, CPU, SoA, CPU>::operator()(PS0
 
 template<>
 template<typename PS0, typename PS1>
-mkn::kul::EqualityReport ParticlesComparator<SoAVX, CPU, AoS, CPU>::operator()(PS0 const& ps0,
-                                                                               PS1 const& ps1,
-                                                                               double const atol)
+mkn::kul::EqualityReport
+ParticlesComparator<SoAVX, CPU, AoS, CPU>::operator()(PS0 const& /*ps0*/, PS1 const& /*ps1*/,
+                                                      double const /*atol*/)
 {
     return mkn::kul::EqualityReport{};
 }

@@ -143,7 +143,7 @@ public:
 
     void copyData(Field const& source) { Super::fill_from(source); }
 
-    void setBuffer(std::nullptr_t ptr) DAMN_ALL { setBuffer(static_cast<Field*>(nullptr)); }
+    void setBuffer(std::nullptr_t /*ptr*/) DAMN_ALL { setBuffer(static_cast<Field*>(nullptr)); }
 
     template<typename FieldLike>
     void setBuffer(FieldLike* const field) DAMN_ALL

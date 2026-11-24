@@ -225,7 +225,7 @@ public:
     FieldTileSet& operator=(FieldTileSet const&) DAMN_ALL = delete;
     FieldTileSet& operator=(FieldTileSet&&) DAMN_ALL      = delete;
 
-    void setBuffer(std::nullptr_t ptr) DAMN_ALL
+    void setBuffer(std::nullptr_t /*ptr*/) DAMN_ALL
     {
         super() = Super{{}, nullptr, 0, nullptr, {}};
     }
@@ -282,7 +282,7 @@ public:
         return super()();
     }
 
-    void setData(auto* const data) DAMN_ALL
+    void setData(auto* const /*data*/) DAMN_ALL
     {
         throw std::runtime_error("fix?");
         /*Super::setBuffer(data);*/
@@ -304,7 +304,7 @@ public:
     MKN_KUL_FN_SIG_RET auto at(auto const&... args) { return super().at(args...); }
     MKN_KUL_FN_SIG_RET auto at(auto const&... args) const { return super().at(args...); }
 
-    void check(bool const nan = false) const
+    void check(bool const /*nan*/ = false) const
     {
         // for (auto& tile : super())
         // {

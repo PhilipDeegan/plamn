@@ -259,9 +259,7 @@ struct ParticlesSynchronisedMoverTest : public ::testing::Test
             {
                 auto const cells  = domain_box(layout, dual_centering<dim>());
                 int firstPhysCell = cells.lower[0];
-                int lastPhysCell  = cells.upper[0];
                 auto firstAMRCell = to_amr(layout, damn::core::Point{firstPhysCell});
-                auto lastAMRCell  = to_amr(layout, damn::core::Point{lastPhysCell});
 
                 // we need to put levelGhost particles in the cell just to the
                 // left of the first cell. In reality these particles should
@@ -545,7 +543,8 @@ TYPED_TEST_SUITE(ParticlesSynchronisedMoverTest, Permutations, );
 
 TYPED_TEST(ParticlesSynchronisedMoverTest, ionUpdaterTakesPusherParamsFromDictAtConstruction)
 {
-    typename ParticlesSynchronisedMoverTest<TypeParam>::ParticlesSynchronisedMover_t ionUpdater{};
+    EXPECT_NO_THROW(
+        (typename ParticlesSynchronisedMoverTest<TypeParam>::ParticlesSynchronisedMover_t{}));
 }
 
 
@@ -611,8 +610,6 @@ TYPED_TEST(ParticlesSynchronisedMoverTest, loadsLevelGhostParticlesOnLeftGhostAr
 
 TYPED_TEST(ParticlesSynchronisedMoverTest, particlesUntouchedInMomentOnlyMode)
 {
-    typename ParticlesSynchronisedMoverTest<TypeParam>::ParticlesSynchronisedMover_t ionUpdater{};
-
     auto ionsBufferCpy = this->ions;
 
     this->update(UpdaterMode::domain_only);
@@ -682,8 +679,6 @@ TYPED_TEST(ParticlesSynchronisedMoverTest, particlesUntouchedInMomentOnlyMode)
 
 TYPED_TEST(ParticlesSynchronisedMoverTest, momentsAreChangedInParticlesAndMomentsMode)
 {
-    typename ParticlesSynchronisedMoverTest<TypeParam>::ParticlesSynchronisedMover_t ionUpdater{};
-
     auto ionsBufferCpy = this->ions;
 
     assert(ionsBufferCpy.massDensity().data() != this->ions.massDensity().data());
@@ -711,8 +706,6 @@ TYPED_TEST(ParticlesSynchronisedMoverTest, momentsAreChangedInParticlesAndMoment
 
 TYPED_TEST(ParticlesSynchronisedMoverTest, momentsAreChangedInMomentsOnlyMode)
 {
-    typename ParticlesSynchronisedMoverTest<TypeParam>::ParticlesSynchronisedMover_t ionUpdater{};
-
     auto ionsBufferCpy = this->ions;
 
     assert(ionsBufferCpy.massDensity().data() != this->ions.massDensity().data());
@@ -731,8 +724,6 @@ TYPED_TEST(ParticlesSynchronisedMoverTest, momentsAreChangedInMomentsOnlyMode)
 
 TYPED_TEST(ParticlesSynchronisedMoverTest, thatNoNaNsExistOnPhysicalNodesMoments)
 {
-    typename ParticlesSynchronisedMoverTest<TypeParam>::ParticlesSynchronisedMover_t ionUpdater{};
-
     this->update(UpdaterMode::domain_only);
 
     this->fillIonsMomentsGhosts();

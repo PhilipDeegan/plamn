@@ -131,7 +131,7 @@ struct TensorField
             component.zero();
     }
 
-    void setBuffer(std::nullptr_t ptr)
+    void setBuffer(std::nullptr_t /*ptr*/)
     {
         mkn::kul::for_N<N, mkn::kul::for_N_R_mode::forward_tuple>(
             [&](auto i) { components_[i].setBuffer(nullptr); });

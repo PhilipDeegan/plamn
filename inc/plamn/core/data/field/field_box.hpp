@@ -24,8 +24,8 @@
 #include <algorithm>
 #include <cstdint>
 #include <format>
-#include <iterator>
 #include <stdexcept>
+#include <utility>
 
 #ifndef PLAMN_FIELD_BOX_IMPL
 #define PLAMN_FIELD_BOX_IMPL 0
@@ -462,14 +462,16 @@ void operate_on_fields(FieldBox<Grid<T0s...>>& dst, FieldBox<GridTileSet<T1s...>
 }
 
 template<typename Operator, typename... T0s, typename... T1s>
-void operate_on_fields(FieldBox<Grid<T0s...>>& dst, FieldBox<GridTileSet<T1s...> const> const& src)
+void operate_on_fields(FieldBox<Grid<T0s...>>& /*dst*/,
+                       FieldBox<GridTileSet<T1s...> const> const& /*src*/)
 {
     throw std::runtime_error(
         "FieldBox<Grid<T0s...>>& dst, FieldBox<GridTileSet<T1s...> const> const& src");
 }
 
 template<typename Operator, typename... T0s, typename... T1s>
-void operate_on_fields(FieldBox<Grid<T0s...>>& dst, FieldBox<FieldTileSet<T1s...> const> const& src)
+void operate_on_fields(FieldBox<Grid<T0s...>>& /*dst*/,
+                       FieldBox<FieldTileSet<T1s...> const> const& /*src*/)
 {
     throw std::runtime_error("operate_on_fields(FieldBox<Grid<T0s...>>& dst, "
                              "FieldBox<FieldTileSet<T1s...> const> const& src)");
@@ -983,7 +985,7 @@ void fill_domain_box(Field_t& field, auto const& layout, auto const v)
 }
 
 template<typename Field_t>
-void fill_domain_box(Field_t& field, auto const& layout, auto const v)
+void fill_domain_box(Field_t& field, auto const& /*layout*/, auto const v)
     requires(is_field_tile_set_v<Field_t>)
 {
     auto const pq = field.physicalQuantity();

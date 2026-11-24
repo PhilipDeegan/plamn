@@ -56,7 +56,7 @@ void cmp_do(auto& patch)
 }
 
 template<auto alloc_mode>
-void compare(auto const& layout, auto& ref, auto& cmp)
+void compare(auto const& /*layout*/, auto& ref, auto& cmp)
 {
     using enum LayoutMode;
     using enum damn::AllocatorMode;

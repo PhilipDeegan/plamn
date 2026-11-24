@@ -715,7 +715,7 @@ public:
 
 
     template<typename Field>
-    static void on_cpu_tiles(auto& particles, auto& layout, double coef = 1.) DAMN_ALL
+    static void on_cpu_tiles(auto& particles, auto& /*layout*/, double coef = 1.) DAMN_ALL
     {
         using TensorField_t = basic::TensorField<typename Field::Super, 1>;
 
@@ -739,7 +739,7 @@ public:
 
     template<typename Layout>
     static void chunk_kernel(auto& particles, Layout& layout, auto& flux, auto& density,
-                             double coef = 1.) DAMN_DEV
+                             double /*coef*/ = 1.) DAMN_DEV
     {
 #if DAMN_HAVE_MKN_GPU_HW
         auto constexpr static nghosts = Layout::options.field_ghost_width;
@@ -898,7 +898,7 @@ public:
     // unlike Interpolating::particleToMesh, level ghosts are deposited after the tile reduction
     // (fillPopMomTensor), so each tile gathers every level ghost its halo reaches
     template<auto type = ParticleType::Domain, typename Particles_t>
-    void particleToMesh(Particles_t& particles, auto& momentumTensor, auto const& layout,
+    void particleToMesh(Particles_t& particles, auto& momentumTensor, auto const& /*layout*/,
                         double mass = 1.)
         requires(Particles_t::layout_mode == LayoutMode::AoSPCTS)
     {
@@ -923,7 +923,7 @@ public:
     }
 
     template<auto type = ParticleType::Domain, typename Particles_t>
-    void particleToMesh(Particles_t& particles, auto& momentumTensor, auto const& layout,
+    void particleToMesh(Particles_t& particles, auto& momentumTensor, auto const& /*layout*/,
                         double mass = 1.)
         requires(Particles_t::layout_mode == LayoutMode::AoSCMTS)
     {
@@ -944,7 +944,7 @@ public:
     }
 
     template<auto type = ParticleType::Domain, typename Particles_t>
-    void particleToMesh(Particles_t& particles, auto& momentumTensor, auto const& layout,
+    void particleToMesh(Particles_t& particles, auto& momentumTensor, auto const& /*layout*/,
                         double mass = 1.)
         requires(Particles_t::layout_mode == LayoutMode::AoSTS)
     {
