@@ -9,7 +9,7 @@ sphere. The plasma: uniform density, cold ions (vth 1e-5), Te 0.
 
 Options: --cells (level 0, per side), --dl (level 0), --margin (level 1: the box around the sphere,
 this far beyond R, in units of length; < 0: no level 1), --ppc, --final-time, --diag-every,
---layout, --allocator, --cfl-wave, --cfl-particles, --out, --R, --B0, --density, --vth,
+--layout, --allocator, --cfl-wave, --cfl-particles, --time-step (fixed, else adaptive), --out, --R, --B0, --density, --vth,
 --resistivity, --hyper-resistivity.
 Diagnostics (pharevtkhdf, --out): B, E, the ions' mass density and bulk velocity, at 0 and every
 --diag-every; compare runs with spheromak_compare.py.
@@ -58,8 +58,12 @@ def config(a):
     boxes = refinement_boxes(cells, dl, a.R, a.margin)
     times = np.arange(0, a.final_time + 0.5 * a.diag_every, a.diag_every)
     sim = ph.Simulation(
-        time_step=dict(
-            mode="adaptive", cfl_wave=a.cfl_wave, cfl_particles=a.cfl_particles
+        time_step=(
+            a.time_step
+            if a.time_step
+            else dict(
+                mode="adaptive", cfl_wave=a.cfl_wave, cfl_particles=a.cfl_particles
+            )
         ),
         final_time=a.final_time,
         cells=(cells,) * 3,
@@ -119,6 +123,7 @@ def parse(argv):
     p.add_argument("--allocator", default="CPU")
     p.add_argument("--cfl-wave", type=float, default=0.5)
     p.add_argument("--cfl-particles", type=float, default=0.5)
+    p.add_argument("--time-step", type=float, help="a fixed dt (default: adaptive)")
     p.add_argument("--R", type=float, default=1.0)
     p.add_argument("--B0", type=float, default=1.0)
     p.add_argument("--density", type=float, default=0.5)

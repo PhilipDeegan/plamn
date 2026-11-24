@@ -13,6 +13,8 @@ previous one, so the first case that differs says where (as tiling_gpu's tests/s
   harris_2d    + tagging, regrids, load balancing                     3 levels, 2 steps
   ion_ion_beam_1d  PHARE's tests/functional/ionIonBeam/ion_ion_beam1d.py to t=0.001 (1 step):
                two populations, its refinement boxes (3 levels), hyper resistivity
+  spheromak_3d     etc/experiments/spheromak_dipole.py's two levels (a fixed box around the
+               sphere), 10 steps: a cold plasma, a force free field cut at r = R
 
 The model is PHARE's tests/simulator/advance/test_advance_hybrid.py (getHierarchy), the sizes,
 seeds and boxes those of tiling_gpu's tests/simulator/layouts (10 particles per cell); harris_2d is
@@ -101,6 +103,12 @@ CASES = {
     ),
     # compare_physics.py's (not a ladder step): 3 levels, tagging, final B composites
     "harris_3d": dict(harris3d=True, cells=(20, 20, 20), steps=2),
+    # etc/experiments/spheromak_dipole.py (plamn #68) at its defaults, 10 fixed dt steps: 4.3M
+    #  particles over 2 levels
+    "spheromak_3d": dict(spheromak=True, cells=(30, 30, 30), ppc=100, steps=10, mem=2.0,
+                         # PHARE master does not coarsen the refined level onto level 0 at its
+                         #  initialization: 1e-9 at level 1's faces from the first step otherwise
+                         plamn_env={"PLAMN_INIT_SYNC": "0"}),
     # harris 3D sized by memory (tier()): 10^3 at 100 ppc vs PHARE on GitHub (slow.yml), 80^3 at
     #  100 ppc locally (51M level 0 particles; 8 ranks or 8 threads). harris_3d_10 is the 3D L2
     #  comparison: tagging makes levels 1 and 2 (0.9 GB, ~80 s per code on a runner)
@@ -450,6 +458,55 @@ def _harris_3d(ph, out, case, largest_patch_size, fmt, fine_dump):
     return sim
 
 
+def _spheromak_3d(ph, out, case, largest_patch_size, fmt, fine_dump):
+    """etc/experiments/spheromak_dipole.py's defaults (its field and level 1 box), a fixed dt"""
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "experiments" / "spheromak_dipole.py"
+    spec = importlib.util.spec_from_file_location("spheromak_dipole", path)
+    sd = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sd)
+
+    a = sd.parse([])
+    cells, dl, time_step = case["cells"][0], a.dl, 0.001
+    centre = (cells * dl / 2,) * 3
+    sim = ph.Simulation(
+        time_step=time_step,
+        final_time=time_step * case["steps"],
+        cells=case["cells"],
+        dl=(dl,) * 3,
+        refinement_boxes=sd.refinement_boxes(cells, dl, a.R, a.margin),
+        resistivity=a.resistivity,
+        hyper_resistivity=a.hyper_resistivity,
+        largest_patch_size=largest_patch_size,
+        diag_options=_diag_options(out, fmt, fine_dump),
+    )
+
+    def b(i):
+        return lambda x, y, z: sd.taylor_spheromak(x, y, z, centre, a.R, a.B0)[i]
+
+    def const(v):
+        return lambda x, y, z: v + 0.0 * x
+
+    ph.MaxwellianFluidModel(
+        bx=b(0),
+        by=b(1),
+        bz=b(2),
+        protons={
+            "charge": 1,
+            "density": const(a.density),
+            **{f"vbulk{c}": const(0.0) for c in "xyz"},
+            **{f"vth{c}": const(a.vth) for c in "xyz"},
+            "nbr_part_per_cell": case["ppc"],
+            "init": {"seed": int(os.environ.get("LADDER_SEED", "12334"))},
+        },
+    )
+    ph.ElectronModel(closure="isothermal", Te=0.0)
+    _diagnostics(ph, time_step * np.arange(case["steps"] + 1), POPULATIONS, fmt)
+    return sim
+
+
 def _advance_mhd_1d(ph, out, case, largest_patch_size, fmt, fine_dump):
     """PHARE's test_advance_mhd model in 1D: 60 cells of 0.1, dt 0.001, every step dumped"""
     cells, dl, dt = 60, 0.1, 0.001
@@ -588,6 +645,8 @@ def simulation(name, out, ndim=NDIM, largest_patch_size=None, fmt="pharevtkhdf",
         return _ion_ion_beam_1d(ph, out, case, largest_patch_size, fmt, fine_dump)
     if case.get("harris3d"):
         return _harris_3d(ph, out, case, largest_patch_size, fmt, fine_dump)
+    if case.get("spheromak"):
+        return _spheromak_3d(ph, out, case, largest_patch_size, fmt, fine_dump)
     if case.get("mhd_shock"):
         return _mhd_shock_1d(ph, out, case, largest_patch_size, fmt)
     if case.get("mhd_advance"):
