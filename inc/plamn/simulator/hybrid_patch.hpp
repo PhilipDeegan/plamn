@@ -11,6 +11,11 @@
 // not movable: the views, and the electrons' copies of the ions and J views, point at
 // members; LevelData keeps patches behind unique_ptr
 //
+// HybridPatch<opts, ctx>: ctx the level's context (level_context.hpp). The default context's
+//  patch is the core; another context's derives from it and adds that context's storage
+//  (HybridStorage), so code over the core (its members, member pointers, HybridPatch<opts>&)
+//  takes any hybrid patch, and code between two hybrid levels any two contexts
+//
 // for_each_resource names what damn's schedules may move:
 //   EM_B_x... EM_E_x..., EMPred_B_x..., EMAvg_E_x...,
 //   <pop>_density, <pop>_charge_density, <pop>_flux_x...,
@@ -34,6 +39,7 @@
 #include "plamn/initializer/data_provider.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
+#include "plamn/simulator/level_context.hpp"
 #include "damn/core/def/damn_config.hpp"
 #include "dict.hpp"
 
@@ -51,9 +57,11 @@
 
 namespace plamn::simulator
 {
-template<auto opts>
+template<auto opts, LevelContext ctx = LevelContext{}>
 struct HybridPatch
 {
+    auto static constexpr context = ctx;
+
     using Types       = core::PLAMN_Types<opts>::Hybrid;
     using Layout_t    = Types::Layout_t;
     using Grid_t      = Types::Grid_t;
@@ -350,6 +358,43 @@ private:
     std::optional<Electrons_t> electrons_;
 };
 
+// what a hybrid level holds for its neighbours (LevelContext): nothing by default
+template<auto opts, LevelContext ctx>
+struct HybridStorage
+{
+    explicit HybridStorage(auto const& /*layout*/) {}
+    void for_each_grid(auto&& /*fn*/) {}
+    void for_each_field_grid(auto&& /*fn*/) {}
+};
+
+// a hybrid patch of another context: the core and the context's storage
+template<auto opts, LevelContext ctx>
+    requires(ctx != LevelContext{})
+struct HybridPatch<opts, ctx> : HybridPatch<opts>
+{
+    using Base = HybridPatch<opts>;
+
+    auto static constexpr context = ctx;
+
+    template<typename... Args>
+    explicit HybridPatch(Args&&... args)
+        : Base(std::forward<Args>(args)...)
+        , storage{this->layout}
+    {
+        if constexpr (DAMN_DEBUG)
+            storage.for_each_grid(
+                [](auto& grid) { grid.fill(std::numeric_limits<double>::quiet_NaN()); });
+    }
+
+    void for_each_grid(auto&& fn)
+    {
+        Base::for_each_grid(fn);
+        storage.for_each_grid(fn);
+    }
+
+    HybridStorage<opts, ctx> storage;
+};
+
 
 namespace detail
 {
@@ -364,8 +409,20 @@ namespace detail
 
 // fn(name, grid) for each of the patch's own field grids (scratch grids apart), in a fixed
 //  order: the same on every patch of the model (grid_table)
+// a context's storage grids, after the core's: none for the core
 template<auto opts>
-void for_each_fixed_field_grid(HybridPatch<opts>& patch, auto&& fn)
+void for_each_storage_field_grid(HybridPatch<opts>&, auto&&)
+{
+}
+template<auto opts, LevelContext ctx>
+    requires(ctx != LevelContext{})
+void for_each_storage_field_grid(HybridPatch<opts, ctx>& patch, auto&& fn)
+{
+    patch.storage.for_each_field_grid(fn);
+}
+
+template<auto opts, LevelContext ctx>
+void for_each_fixed_field_grid(HybridPatch<opts, ctx>& patch, auto&& fn)
 {
     detail::vector_grids("EM_B", patch.emB, fn);
     detail::vector_grids("EM_E", patch.emE, fn);
@@ -390,21 +447,22 @@ void for_each_fixed_field_grid(HybridPatch<opts>& patch, auto&& fn)
         fn(name + "_charge_density", pop->charge_density);
         detail::vector_grids(name + "_flux", pop->flux, fn);
     }
+    for_each_storage_field_grid(patch, fn);
 }
 
 // fn(name, grid) for each field grid damn's schedules may move, by the name they know it as
-template<auto opts>
-void for_each_field_grid(HybridPatch<opts>& patch, auto&& fn)
+template<auto opts, LevelContext ctx>
+void for_each_field_grid(HybridPatch<opts, ctx>& patch, auto&& fn)
 {
     for_each_fixed_field_grid(patch, fn);
     for (auto& [name, grid] : patch.scratch)
         fn(name, grid);
 }
 
-template<auto opts>
-void for_each_resource(HybridPatch<opts>& patch, auto&& fn)
+template<auto opts, LevelContext ctx>
+void for_each_resource(HybridPatch<opts, ctx>& patch, auto&& fn)
 {
-    using Patch    = HybridPatch<opts>;
+    using Patch    = HybridPatch<opts, ctx>;
     auto const gw  = Patch::field_ghost_width;
     auto const pgw = Patch::particle_ghost_width;
 
@@ -429,8 +487,8 @@ void for_each_resource(HybridPatch<opts>& patch, auto&& fn)
 }
 
 // LevelData holds patches by unique_ptr
-template<auto opts>
-void for_each_resource(std::unique_ptr<HybridPatch<opts>>& patch, auto&& fn)
+template<auto opts, LevelContext ctx>
+void for_each_resource(std::unique_ptr<HybridPatch<opts, ctx>>& patch, auto&& fn)
 {
     for_each_resource(*patch, fn);
 }
