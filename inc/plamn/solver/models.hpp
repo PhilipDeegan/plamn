@@ -44,6 +44,15 @@ struct Models
     HybridModel<opts> hybrid{};
     MHDModel<opts> mhd{};
     int mhd_levels = 0; // levels below it are MHD
+    int max_levels = 1; // the input's AMR/max_nbr_levels
+
+    // whether some level is the model's: a build with both models runs either alone too (its
+    //  model's setup, input and resources only when it has levels)
+    MKN_KUL_FN_SIG_RET bool has_mhd_levels() const { return mhd_on and mhd_levels > 0; }
+    MKN_KUL_FN_SIG_RET bool has_hybrid_levels() const
+    {
+        return hybrid_on and mhd_levels < max_levels;
+    }
 
     MKN_KUL_FN_SIG_RET bool is_mhd(std::size_t const ln) const
     {
@@ -85,8 +94,9 @@ struct Models
     //  AMR/max_nbr_levels): PHARE's max_mhd_level, by default (as pyphare) every level if MHD is
     //  the only model, none otherwise. Its models (pyphare's model_options), if given: the
     //  models the levels have, each enabled by the build
-    void set_levels(initializer::Dict const& sim, int const max_levels)
+    void set_levels(initializer::Dict const& sim, int const max_levels_)
     {
+        max_levels = max_levels_;
         std::vector<std::string> names;
         if (sim.contains("models"))
             names = sim["models"].template to<std::vector<std::string>>();
