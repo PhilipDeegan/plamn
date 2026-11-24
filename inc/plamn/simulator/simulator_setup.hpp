@@ -260,6 +260,8 @@ template<auto opts>
 void Simulator<opts>::setup_hybrid_()
 {
     models_.hybrid.ohm.emplace(core::OhmInfo::FROM(dict_["simulation"]["algo"]["ohm"]));
+    models_.hybrid.closure.emplace(
+        core::make_closure(dict_["simulation"]["electrons"]["pressure_closure"]));
     register_resources_();
     solver::hybrid::setup_computed(models_.hybrid, [&](std::string const& key, auto const& names) {
         resources_[key] = damn::amr::same_names(names);

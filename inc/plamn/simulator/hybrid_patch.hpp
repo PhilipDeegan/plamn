@@ -201,9 +201,8 @@ struct HybridPatch
         // the electrons copy the ions and J views: made once those point at data
         electrons_.emplace(dict["electrons"], ions, J);
         auto&& [moments]          = electrons_->getCompileTimeResourcesViewList();
-        auto&& [flux, closure]    = moments.getCompileTimeResourcesViewList();
+        auto&& [flux, pressure]   = moments.getCompileTimeResourcesViewList();
         auto&& [ve, ions_, J_]    = flux.getCompileTimeResourcesViewList();
-        auto&& [ions__, pressure] = closure.getCompileTimeResourcesViewList();
         electronVelocity.emplace(grids(ve, layout));
         electronPressure.emplace(grid(pressure, layout));
         bind(ve, *electronVelocity);
