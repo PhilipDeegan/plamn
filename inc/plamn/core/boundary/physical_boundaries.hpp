@@ -42,8 +42,8 @@ struct BoundaryManager;
 
 // the face whose conditions a region takes (its sides: -1 lower, +1 upper, 0 within)
 template<typename Quantity, std::size_t dim>
-NO_DISCARD BoundaryLocation region_location(BoundaryManager<Quantity> const& manager,
-                                            std::array<std::int8_t, dim> const& sides)
+MKN_KUL_FN_SIG_RET BoundaryLocation region_location(BoundaryManager<Quantity> const& manager,
+                                                    std::array<std::int8_t, dim> const& sides)
 {
     std::array<std::size_t, 3> dirs{};
     std::array<bool, 3> upper{};

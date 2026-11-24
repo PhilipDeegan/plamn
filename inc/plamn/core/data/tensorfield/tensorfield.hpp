@@ -131,7 +131,7 @@ struct TensorField
             component.zero();
     }
 
-    void setBuffer(std::nullptr_t ptr)
+    void setBuffer(std::nullptr_t /*ptr*/)
     {
         mkn::kul::for_N<N, mkn::kul::for_N_R_mode::forward_tuple>(
             [&](auto i) { components_[i].setBuffer(nullptr); });
@@ -147,13 +147,13 @@ struct TensorField
 
 
     //! return true if the TensorField can be used to access component data
-    NO_DISCARD bool isUsable() const DAMN_ALL
+    MKN_KUL_FN_SIG_RET bool isUsable() const DAMN_ALL
     {
         return std::all_of(std::begin(components_), std::end(components_),
                            [](auto const& c) { return c.isUsable(); });
     }
 
-    NO_DISCARD bool isSettable() const DAMN_ALL
+    MKN_KUL_FN_SIG_RET bool isSettable() const DAMN_ALL
     {
         return std::all_of(std::begin(components_), std::end(components_),
                            [](auto const& c) { return c.isSettable(); });
@@ -256,34 +256,34 @@ public:
     //                  ends the ResourcesUser interface
     //-------------------------------------------------------------------------
 
-    NO_DISCARD std::string const& name() const { return name_; }
+    MKN_KUL_FN_SIG_RET std::string const& name() const { return name_; }
 
 
 
 
-    NO_DISCARD field_type& getComponent(Component component) DAMN_ALL
+    MKN_KUL_FN_SIG_RET field_type& getComponent(Component component) DAMN_ALL
     {
         return components_[detail::tensor_field_index_for<rank>(component)];
     }
 
-    NO_DISCARD field_type const& getComponent(Component component) const DAMN_ALL
+    MKN_KUL_FN_SIG_RET field_type const& getComponent(Component component) const DAMN_ALL
     {
         return components_[detail::tensor_field_index_for<rank>(component)];
     }
 
 
-    NO_DISCARD std::string getComponentName(Component component) const
+    MKN_KUL_FN_SIG_RET std::string getComponentName(Component component) const
     {
         return componentNames_[detail::tensor_field_index_for<rank>(component)];
     }
 
 
 
-    NO_DISCARD auto& components() const DAMN_ALL
+    MKN_KUL_FN_SIG_RET auto& components() const DAMN_ALL
     {                       // std::array can't work on gpu?
         return components_; // reinterpret_cast<raw_array_ct>(components_);
     }
-    NO_DISCARD auto& components() DAMN_ALL
+    MKN_KUL_FN_SIG_RET auto& components() DAMN_ALL
     {
         return components_; // reinterpret_cast<raw_array_t>(components_);
     }
@@ -301,15 +301,15 @@ public:
 
 
 
-    NO_DISCARD auto begin() { return std::begin(components_); }
-    NO_DISCARD auto begin() const { return std::cbegin(components_); }
-    NO_DISCARD auto end() { return std::end(components_); }
-    NO_DISCARD auto end() const { return std::cend(components_); }
+    MKN_KUL_FN_SIG_RET auto begin() { return std::begin(components_); }
+    MKN_KUL_FN_SIG_RET auto begin() const { return std::cbegin(components_); }
+    MKN_KUL_FN_SIG_RET auto end() { return std::end(components_); }
+    MKN_KUL_FN_SIG_RET auto end() const { return std::cend(components_); }
 
 
-    NO_DISCARD auto& componentNames() const { return componentNames_; }
-    NO_DISCARD auto& physicalQuantity() const { return qty_; }
-    NO_DISCARD auto static constexpr size() { return N; }
+    MKN_KUL_FN_SIG_RET auto& componentNames() const { return componentNames_; }
+    MKN_KUL_FN_SIG_RET auto& physicalQuantity() const { return qty_; }
+    MKN_KUL_FN_SIG_RET auto static constexpr size() { return N; }
 
     Super& operator*() { return *this; }
     Super const& operator*() const { return *this; }

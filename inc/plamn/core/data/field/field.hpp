@@ -77,7 +77,7 @@ public:
     {
     }
 
-    NO_DISCARD auto& physicalQuantity() const DAMN_ALL { return qty_; }
+    MKN_KUL_FN_SIG_RET auto& physicalQuantity() const DAMN_ALL { return qty_; }
 
     bool isUsable() const DAMN_ALL { return Super::data() != nullptr; }
     bool isSettable() const DAMN_ALL { return !isUsable(); }
@@ -139,11 +139,11 @@ public:
     }
 
 
-    NO_DISCARD auto& name() const { return name_; }
+    MKN_KUL_FN_SIG_RET auto& name() const { return name_; }
 
     void copyData(Field const& source) { Super::fill_from(source); }
 
-    void setBuffer(std::nullptr_t ptr) DAMN_ALL { setBuffer(static_cast<Field*>(nullptr)); }
+    void setBuffer(std::nullptr_t /*ptr*/) DAMN_ALL { setBuffer(static_cast<Field*>(nullptr)); }
 
     template<typename FieldLike>
     void setBuffer(FieldLike* const field) DAMN_ALL
@@ -164,7 +164,7 @@ public:
 
 
     template<typename... Args>
-    NO_DISCARD auto& operator()(Args&&... args) DAMN_ALL
+    MKN_KUL_FN_SIG_RET auto& operator()(Args&&... args) DAMN_ALL
     {
         if constexpr (alloc_mode == damn::AllocatorMode::CPU)
         {
@@ -176,7 +176,7 @@ public:
         return super()(args...);
     }
     template<typename... Args>
-    NO_DISCARD auto const& operator()(Args&&... args) const DAMN_ALL
+    MKN_KUL_FN_SIG_RET auto const& operator()(Args&&... args) const DAMN_ALL
     {
         return super()(args...);
     }

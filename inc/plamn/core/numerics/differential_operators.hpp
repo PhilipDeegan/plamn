@@ -76,10 +76,13 @@ public:
     {
     }
 
-    NO_DISCARD std::array<QtyCentering, dim> centering() const DAMN_ALL { return centering_; }
+    MKN_KUL_FN_SIG_RET std::array<QtyCentering, dim> centering() const DAMN_ALL
+    {
+        return centering_;
+    }
 
     template<typename T>
-    NO_DISCARD double operator()(damn::core::Point<T, dim> const& idx) const DAMN_ALL
+    MKN_KUL_FN_SIG_RET double operator()(damn::core::Point<T, dim> const& idx) const DAMN_ALL
     {
         return scale_
                * (detail::shifted<d>(view_, idx, shift_ + 1)
@@ -112,10 +115,16 @@ public:
     {
     }
 
-    NO_DISCARD std::array<QtyCentering, dim> centering() const DAMN_ALL { return centering_; }
+    MKN_KUL_FN_SIG_RET std::array<QtyCentering, dim> centering() const DAMN_ALL
+    {
+        return centering_;
+    }
 
     template<typename T>
-    NO_DISCARD double operator()(damn::core::Point<T, dim> const&) const DAMN_ALL { return 0.; }
+    MKN_KUL_FN_SIG_RET double operator()(damn::core::Point<T, dim> const&) const DAMN_ALL
+    {
+        return 0.;
+    }
 
 private:
     std::array<QtyCentering, dim> centering_;
@@ -149,13 +158,13 @@ namespace detail
             check_();
         }
 
-        NO_DISCARD std::array<QtyCentering, dim> centering() const DAMN_ALL
+        MKN_KUL_FN_SIG_RET std::array<QtyCentering, dim> centering() const DAMN_ALL
         {
             return dj_vk_.centering();
         }
 
         template<typename T>
-    NO_DISCARD double operator()(damn::core::Point<T, dim> const& idx) const DAMN_ALL
+        MKN_KUL_FN_SIG_RET double operator()(damn::core::Point<T, dim> const& idx) const DAMN_ALL
         {
             if constexpr (j >= dim && k < dim)
                 return -dk_vj_(idx);
@@ -220,13 +229,13 @@ public:
             throw std::runtime_error("div: the three derivatives land on different centerings");
     }
 
-    NO_DISCARD std::array<QtyCentering, dim> centering() const DAMN_ALL
+    MKN_KUL_FN_SIG_RET std::array<QtyCentering, dim> centering() const DAMN_ALL
     {
         return dx_vx_.centering();
     }
 
     template<typename T>
-    NO_DISCARD double operator()(damn::core::Point<T, dim> const& idx) const DAMN_ALL
+    MKN_KUL_FN_SIG_RET double operator()(damn::core::Point<T, dim> const& idx) const DAMN_ALL
     {
         return dx_vx_(idx) + dy_vy_(idx) + dz_vz_(idx);
     }
@@ -279,8 +288,9 @@ auto div(Layout const& layout, auto const& v)
 }
 
 template<typename Layout, typename Src>
-NO_DISCARD double laplacian(Layout const& layout, Src const& f,
-                            damn::core::Point<std::size_t, Layout::dimension> const idx) DAMN_ALL
+MKN_KUL_FN_SIG_RET double
+laplacian(Layout const& layout, Src const& f,
+          damn::core::Point<std::size_t, Layout::dimension> const idx) DAMN_ALL
 {
     static_assert(Src::dimension == Layout::dimension, "field and layout dimensions must match");
 

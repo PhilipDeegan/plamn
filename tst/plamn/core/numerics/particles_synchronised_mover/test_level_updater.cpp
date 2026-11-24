@@ -124,7 +124,8 @@ struct LevelRun
                                     : Box_t{mkn::kul::ConstArray<int, dim>(0),
                                             mkn::kul::ConstArray<int, dim>(cells - 1)};
 
-    NO_DISCARD damn::amr::Hierarchy<dim> hierarchy(std::vector<Box_t> const& patch_boxes) const
+    MKN_KUL_FN_SIG_RET damn::amr::Hierarchy<dim>
+    hierarchy(std::vector<Box_t> const& patch_boxes) const
     {
         damn::amr::Hierarchy<dim> h;
         h.domain
@@ -140,7 +141,7 @@ struct LevelRun
     }
 
     // the level box cut into patches of size (at most) n per direction
-    NO_DISCARD std::vector<Box_t> split(int const n) const
+    MKN_KUL_FN_SIG_RET std::vector<Box_t> split(int const n) const
     {
         std::vector<Box_t> boxes{level_box};
         for (std::size_t d = 0; d < dim; ++d)
@@ -175,7 +176,7 @@ struct LevelRun
     bool const crossing = false;
 
     // the level ghost cells: the ring of width pgw around the level box
-    NO_DISCARD std::vector<Box_t> ring() const
+    MKN_KUL_FN_SIG_RET std::vector<Box_t> ring() const
     {
         return grow(level_box, mkn::kul::ConstArray<int, dim>(pgw)).remove(level_box);
     }
@@ -189,7 +190,7 @@ struct LevelRun
         return d;
     }
 
-    NO_DISCARD AoS_t crossing_particles(std::vector<Box_t> const& boxes) const
+    MKN_KUL_FN_SIG_RET AoS_t crossing_particles(std::vector<Box_t> const& boxes) const
     {
         auto ps          = make_particles<AoS_t>(*TestLayout<Layout_t>{level_box});
         double const vel = .1 / dt; // a cell (dx .1) per push
@@ -261,7 +262,8 @@ struct LevelRun
 
     // the level ghosts a patch holds: those of its ghost box whose cell it owns, each held by one
     //  patch (Simulator's own_level_ghosts_)
-    NO_DISCARD AoS_t owned_level_ghosts(damn::amr::Hierarchy<dim> const& h, Box_t const& box) const
+    MKN_KUL_FN_SIG_RET AoS_t owned_level_ghosts(damn::amr::Hierarchy<dim> const& h,
+                                                Box_t const& box) const
     {
         auto mine            = in_box(level_ghosts, grow(box, pgw));
         auto const elsewhere = damn::amr::owned_elsewhere(h, ln, box, static_cast<int>(pgw));
@@ -278,7 +280,7 @@ struct LevelRun
         std::unordered_map<std::string, Boxing_t> boxings;
     };
 
-    NO_DISCARD Level make_level(int const n) const
+    MKN_KUL_FN_SIG_RET Level make_level(int const n) const
     {
         auto const boxes = split(n);
         Level l{hierarchy(boxes), {}, {}};
@@ -433,7 +435,7 @@ struct LevelRun
         return sums;
     }
 
-    NO_DISCARD AoS_t level_domain(Level const& l) const
+    MKN_KUL_FN_SIG_RET AoS_t level_domain(Level const& l) const
     {
         auto all = make_particles<AoS_t>(*TestLayout<Layout_t>{level_box});
         for (auto const& patch : l.patches)

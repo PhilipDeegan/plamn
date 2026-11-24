@@ -20,14 +20,15 @@ struct ConstantReconstruction
     static constexpr std::uint32_t nghosts = 1;
 
     template<std::size_t dir>
-    NO_DISCARD static std::array<double, 2> reconstruct(auto const& F, auto const& ijk) DAMN_ALL
+    MKN_KUL_FN_SIG_RET static std::array<double, 2> reconstruct(auto const& F,
+                                                                auto const& ijk) DAMN_ALL
     {
         return reconstruction::values<dir, -1, 0>(F, ijk);
     }
 
     template<std::size_t dir, auto src, auto dst>
-    NO_DISCARD static std::array<double, 2> center_reconstruct(auto const& U,
-                                                               auto const& ijk) DAMN_ALL
+    MKN_KUL_FN_SIG_RET static std::array<double, 2> center_reconstruct(auto const& U,
+                                                                       auto const& ijk) DAMN_ALL
     {
         return reconstruction::centred_values<dir, -1, 0, src, dst>(U, ijk);
     }

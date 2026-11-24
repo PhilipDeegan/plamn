@@ -27,7 +27,8 @@
 
 namespace plamn::core
 {
-NO_DISCARD inline double whistler_speed(double const inv_dx, double const rho, double const BdotB)
+MKN_KUL_FN_SIG_RET inline double whistler_speed(double const inv_dx, double const rho,
+                                                double const BdotB)
 {
     auto const sqrt_rho = std::sqrt(rho);
     auto const vA       = std::sqrt(BdotB) / sqrt_rho;
@@ -38,8 +39,8 @@ NO_DISCARD inline double whistler_speed(double const inv_dx, double const rho, d
 // a patch's bound: rho its mass density, B its magnetic field components (patch grids, local
 //  indexes)
 template<typename Layout>
-NO_DISCARD double whistler_dt(Layout const& layout, auto const& rho, auto const& B,
-                              double const cfl_wave)
+MKN_KUL_FN_SIG_RET double whistler_dt(Layout const& layout, auto const& rho, auto const& B,
+                                      double const cfl_wave)
     requires(!TiledField<decltype(rho)>)
 {
     auto constexpr dim = Layout::dimension;
@@ -68,8 +69,8 @@ NO_DISCARD double whistler_dt(Layout const& layout, auto const& rho, auto const&
 // tiled: tile by tile, on each tile's layout and views (B's tile ghosts current after its ghost
 //  fill)
 template<typename Layout>
-NO_DISCARD double whistler_dt(Layout const&, TiledField auto const& rho, auto const& B,
-                              double const cfl_wave)
+MKN_KUL_FN_SIG_RET double whistler_dt(Layout const&, TiledField auto const& rho, auto const& B,
+                                      double const cfl_wave)
 {
     double dt = std::numeric_limits<double>::max();
     for (std::size_t ti = 0; ti < rho().size(); ++ti)

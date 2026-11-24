@@ -563,7 +563,7 @@ public:
     }
 
 
-    template<typename Field_t, auto deposit_v = TileDeposit::shared_all>
+    template<typename Field_t, auto deposit_v = TileDeposit::shared_all, std::size_t warps = 1>
     static void on_tiles(auto& particles, auto& Flux, auto& Rhop, double coef = 1.) DAMN_DEV
     {
 #if DAMN_HAVE_MKN_GPU_HW
@@ -573,17 +573,19 @@ public:
         auto const ft   = Flux.template as<TensorField_t>([&](auto& c) { return c[blockIdx.x](); });
         auto& parts     = particles()[blockIdx.x]();
 
-        // a contiguous share of the tile's particles per warp (blockDim.x / warpSize warps, see
-        //  DepositSpec): sorted particles keep each warp on its own cells, so warps don't
-        //  contend for the same staged nodes
-        auto const warps = blockDim.x / warpSize;
-        auto const warp  = threadIdx.x / warpSize;
-        auto const lane  = threadIdx.x % warpSize;
+        // a contiguous share of the tile's particles per group of blockDim.x / warps threads (a
+        //  warp each, launched as warp_size() * warps, see DepositSpec): sorted particles keep each
+        //  group on its own cells, so groups don't contend for the same staged nodes. From the
+        //  launch, not warpSize: correct whatever width the host launched for
+        static_assert(warps > 0);
+        auto const width = blockDim.x / warps;
+        auto const group = threadIdx.x / width;
+        auto const lane  = threadIdx.x % width;
         auto const n     = parts.size();
-        auto const begin = n * warp / warps;
-        auto const end   = n * (warp + 1) / warps;
+        auto const begin = n * group / warps;
+        auto const end   = n * (group + 1) / warps;
         tile_deposit<deposit_v>(rhop_tile(), ft, rhop_tile.ghost_box(), coef, [&](auto&& dep) {
-            for (std::size_t i = begin + lane; i < end; i += warpSize)
+            for (std::size_t i = begin + lane; i < end; i += width)
                 dep(parts[i]);
         });
 #endif
@@ -715,7 +717,7 @@ public:
 
 
     template<typename Field>
-    static void on_cpu_tiles(auto& particles, auto& layout, double coef = 1.) DAMN_ALL
+    static void on_cpu_tiles(auto& particles, auto& /*layout*/, double coef = 1.) DAMN_ALL
     {
         using TensorField_t = basic::TensorField<typename Field::Super, 1>;
 
@@ -739,7 +741,7 @@ public:
 
     template<typename Layout>
     static void chunk_kernel(auto& particles, Layout& layout, auto& flux, auto& density,
-                             double coef = 1.) DAMN_DEV
+                             double /*coef*/ = 1.) DAMN_DEV
     {
 #if DAMN_HAVE_MKN_GPU_HW
         auto constexpr static nghosts = Layout::options.field_ghost_width;
@@ -898,7 +900,7 @@ public:
     // unlike Interpolating::particleToMesh, level ghosts are deposited after the tile reduction
     // (fillPopMomTensor), so each tile gathers every level ghost its halo reaches
     template<auto type = ParticleType::Domain, typename Particles_t>
-    void particleToMesh(Particles_t& particles, auto& momentumTensor, auto const& layout,
+    void particleToMesh(Particles_t& particles, auto& momentumTensor, auto const& /*layout*/,
                         double mass = 1.)
         requires(Particles_t::layout_mode == LayoutMode::AoSPCTS)
     {
@@ -923,7 +925,7 @@ public:
     }
 
     template<auto type = ParticleType::Domain, typename Particles_t>
-    void particleToMesh(Particles_t& particles, auto& momentumTensor, auto const& layout,
+    void particleToMesh(Particles_t& particles, auto& momentumTensor, auto const& /*layout*/,
                         double mass = 1.)
         requires(Particles_t::layout_mode == LayoutMode::AoSCMTS)
     {
@@ -944,7 +946,7 @@ public:
     }
 
     template<auto type = ParticleType::Domain, typename Particles_t>
-    void particleToMesh(Particles_t& particles, auto& momentumTensor, auto const& layout,
+    void particleToMesh(Particles_t& particles, auto& momentumTensor, auto const& /*layout*/,
                         double mass = 1.)
         requires(Particles_t::layout_mode == LayoutMode::AoSTS)
     {

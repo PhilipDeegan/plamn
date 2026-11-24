@@ -28,8 +28,8 @@ struct MHDConservative
     double Etot;
 };
 
-NO_DISCARD constexpr MHDConservative to_conservative(double const gamma,
-                                                     MHDPrimitive const& u) DAMN_ALL
+MKN_KUL_FN_SIG_RET constexpr MHDConservative to_conservative(double const gamma,
+                                                             MHDPrimitive const& u) DAMN_ALL
 {
     auto const& [vx, vy, vz] = u.V;
     auto const& [bx, by, bz] = u.B;

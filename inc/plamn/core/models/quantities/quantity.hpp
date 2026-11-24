@@ -42,13 +42,13 @@ struct Quantity
     std::array<QtyCentering, 3> centering{};
 };
 
-NO_DISCARD constexpr bool same_physics(Quantity const& a, Quantity const& b) DAMN_ALL
+MKN_KUL_FN_SIG_RET constexpr bool same_physics(Quantity const& a, Quantity const& b) DAMN_ALL
 {
     return a.phys == b.phys and a.comp == b.comp;
 }
 
 template<std::size_t dim>
-NO_DISCARD constexpr auto centering(Quantity const& q) DAMN_ALL
+MKN_KUL_FN_SIG_RET constexpr auto centering(Quantity const& q) DAMN_ALL
 {
     std::array<QtyCentering, dim> c;
     for (std::size_t i = 0; i < dim; ++i)

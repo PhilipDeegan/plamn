@@ -97,23 +97,32 @@ public:
         requires(rank == 1 or rank == 2)
     using TensorType = std::conditional_t<rank == 1, Vector, Tensor>;
 
-    NO_DISCARD static constexpr auto V() { return componentsQuantities(Vector::V); }
-    NO_DISCARD static constexpr auto B() { return componentsQuantities(Vector::B); }
-    NO_DISCARD static constexpr auto rhoV() { return componentsQuantities(Vector::rhoV); }
+    MKN_KUL_FN_SIG_RET static constexpr auto V() { return componentsQuantities(Vector::V); }
+    MKN_KUL_FN_SIG_RET static constexpr auto B() { return componentsQuantities(Vector::B); }
+    MKN_KUL_FN_SIG_RET static constexpr auto rhoV() { return componentsQuantities(Vector::rhoV); }
 
-    NO_DISCARD static constexpr auto E() { return componentsQuantities(Vector::E); }
-    NO_DISCARD static constexpr auto J() { return componentsQuantities(Vector::J); }
+    MKN_KUL_FN_SIG_RET static constexpr auto E() { return componentsQuantities(Vector::E); }
+    MKN_KUL_FN_SIG_RET static constexpr auto J() { return componentsQuantities(Vector::J); }
 
-    NO_DISCARD static constexpr auto VecFlux_x() { return componentsQuantities(Vector::VecFlux_x); }
-    NO_DISCARD static constexpr auto VecFlux_y() { return componentsQuantities(Vector::VecFlux_y); }
-    NO_DISCARD static constexpr auto VecFlux_z() { return componentsQuantities(Vector::VecFlux_z); }
+    MKN_KUL_FN_SIG_RET static constexpr auto VecFlux_x()
+    {
+        return componentsQuantities(Vector::VecFlux_x);
+    }
+    MKN_KUL_FN_SIG_RET static constexpr auto VecFlux_y()
+    {
+        return componentsQuantities(Vector::VecFlux_y);
+    }
+    MKN_KUL_FN_SIG_RET static constexpr auto VecFlux_z()
+    {
+        return componentsQuantities(Vector::VecFlux_z);
+    }
 
-    NO_DISCARD static constexpr auto VecAllPrimal()
+    MKN_KUL_FN_SIG_RET static constexpr auto VecAllPrimal()
     {
         return componentsQuantities(Vector::VecAllPrimal);
     }
 
-    NO_DISCARD static constexpr std::array<Scalar, 3> componentsQuantities(Vector const qty)
+    MKN_KUL_FN_SIG_RET static constexpr std::array<Scalar, 3> componentsQuantities(Vector const qty)
     {
         auto const idx = static_cast<std::size_t>(qty);
         if (idx >= vector_components.size())
@@ -121,13 +130,13 @@ public:
         return vector_components[idx];
     }
 
-    NO_DISCARD static constexpr auto B_items()
+    MKN_KUL_FN_SIG_RET static constexpr auto B_items()
     {
         auto const& [Bx, By, Bz] = B();
         return std::make_tuple(std::make_pair("Bx", Bx), std::make_pair("By", By),
                                std::make_pair("Bz", Bz));
     }
-    NO_DISCARD static constexpr auto E_items()
+    MKN_KUL_FN_SIG_RET static constexpr auto E_items()
     {
         auto const& [Ex, Ey, Ez] = E();
         return std::make_tuple(std::make_pair("Ex", Ex), std::make_pair("Ey", Ey),
@@ -181,7 +190,7 @@ namespace mhd
     });
 } // namespace mhd
 
-NO_DISCARD constexpr Quantity quantity(MHDQuantity::Scalar const qty) DAMN_ALL
+MKN_KUL_FN_SIG_RET constexpr Quantity quantity(MHDQuantity::Scalar const qty) DAMN_ALL
 {
     auto const idx = static_cast<std::size_t>(qty);
     if (idx >= mhd::quantities.size())

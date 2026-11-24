@@ -529,7 +529,7 @@ TEST_P(Gaps3DMotion, bulkMotion)
 {
     auto const [weight, dir] = GetParam();
     auto ps                  = make(.1, weight);
-    std::size_t sorts = 0, moved = 0;
+    std::size_t sorts        = 0;
     std::uniform_int_distribution<int> across(box.lower[0], box.upper[0]);
     double id = 1e7;
     for (std::size_t round = 0; round < 20; ++round)
@@ -548,7 +548,6 @@ TEST_P(Gaps3DMotion, bulkMotion)
         sorts += ps.resettle(box, [&](auto const& p) { out.push_back(p); });
         for (auto const& p : out)
             where.erase(p.weight());
-        moved += chosen.size();
         for (std::size_t k = 0; k < out.size(); ++k) // as many in, upstream
         {
             Particle<3> p;

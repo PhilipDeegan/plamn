@@ -37,7 +37,7 @@ namespace expr
         damn::core::NdArrayView<dim, T const> view;
 
         template<typename I>
-        NO_DISCARD auto operator()(damn::core::Point<I, dim> const& i) const DAMN_ALL
+        MKN_KUL_FN_SIG_RET auto operator()(damn::core::Point<I, dim> const& i) const DAMN_ALL
         {
             return mkn::kul::for_N_fold<dim>([&](auto... d) { return view(i[d]...); });
         }
@@ -49,24 +49,36 @@ namespace expr
 
         double value;
 
-        NO_DISCARD double operator()(auto const&) const DAMN_ALL { return value; }
+        MKN_KUL_FN_SIG_RET double operator()(auto const&) const DAMN_ALL { return value; }
     };
 
     struct Plus
     {
-        NO_DISCARD auto operator()(auto const a, auto const b) const DAMN_ALL { return a + b; }
+        MKN_KUL_FN_SIG_RET auto operator()(auto const a, auto const b) const DAMN_ALL
+        {
+            return a + b;
+        }
     };
     struct Minus
     {
-        NO_DISCARD auto operator()(auto const a, auto const b) const DAMN_ALL { return a - b; }
+        MKN_KUL_FN_SIG_RET auto operator()(auto const a, auto const b) const DAMN_ALL
+        {
+            return a - b;
+        }
     };
     struct Times
     {
-        NO_DISCARD auto operator()(auto const a, auto const b) const DAMN_ALL { return a * b; }
+        MKN_KUL_FN_SIG_RET auto operator()(auto const a, auto const b) const DAMN_ALL
+        {
+            return a * b;
+        }
     };
     struct Divides
     {
-        NO_DISCARD auto operator()(auto const a, auto const b) const DAMN_ALL { return a / b; }
+        MKN_KUL_FN_SIG_RET auto operator()(auto const a, auto const b) const DAMN_ALL
+        {
+            return a / b;
+        }
     };
 
     template<typename Op, typename L, typename R>
@@ -77,7 +89,10 @@ namespace expr
         L l;
         R r;
 
-        NO_DISCARD auto operator()(auto const& i) const DAMN_ALL { return Op{}(l(i), r(i)); }
+        MKN_KUL_FN_SIG_RET auto operator()(auto const& i) const DAMN_ALL
+        {
+            return Op{}(l(i), r(i));
+        }
     };
 
     template<typename E>
@@ -87,11 +102,11 @@ namespace expr
 
         E e;
 
-        NO_DISCARD auto operator()(auto const& i) const DAMN_ALL { return -e(i); }
+        MKN_KUL_FN_SIG_RET auto operator()(auto const& i) const DAMN_ALL { return -e(i); }
     };
 
     template<typename T>
-    NO_DISCARD auto lift(T const& t)
+    MKN_KUL_FN_SIG_RET auto lift(T const& t)
     {
         if constexpr (Expr<T>)
             return t;
@@ -100,7 +115,7 @@ namespace expr
     }
 
     template<typename Op>
-    NO_DISCARD auto binary(auto const& a, auto const& b)
+    MKN_KUL_FN_SIG_RET auto binary(auto const& a, auto const& b)
     {
         using L = decltype(lift(a));
         using R = decltype(lift(b));
@@ -111,7 +126,7 @@ namespace expr
 
 // a field as an expression leaf (a view, no ownership)
 template<typename Field>
-NO_DISCARD auto of(Field const& f)
+MKN_KUL_FN_SIG_RET auto of(Field const& f)
 {
     using T = std::remove_cv_t<std::remove_reference_t<decltype(*f.data())>>;
     return expr::Leaf<Field::dimension, T>{{f.data(), f.shape()}};
@@ -120,34 +135,34 @@ NO_DISCARD auto of(Field const& f)
 
 template<ExprOperand A, ExprOperand B>
     requires(Expr<A> or Expr<B>)
-NO_DISCARD auto operator+(A const& a, B const& b)
+MKN_KUL_FN_SIG_RET auto operator+(A const& a, B const& b)
 {
     return expr::binary<expr::Plus>(a, b);
 }
 
 template<ExprOperand A, ExprOperand B>
     requires(Expr<A> or Expr<B>)
-NO_DISCARD auto operator-(A const& a, B const& b)
+MKN_KUL_FN_SIG_RET auto operator-(A const& a, B const& b)
 {
     return expr::binary<expr::Minus>(a, b);
 }
 
 template<ExprOperand A, ExprOperand B>
     requires(Expr<A> or Expr<B>)
-NO_DISCARD auto operator*(A const& a, B const& b)
+MKN_KUL_FN_SIG_RET auto operator*(A const& a, B const& b)
 {
     return expr::binary<expr::Times>(a, b);
 }
 
 template<ExprOperand A, ExprOperand B>
     requires(Expr<A> or Expr<B>)
-NO_DISCARD auto operator/(A const& a, B const& b)
+MKN_KUL_FN_SIG_RET auto operator/(A const& a, B const& b)
 {
     return expr::binary<expr::Divides>(a, b);
 }
 
 template<Expr E>
-NO_DISCARD auto operator-(E const& e)
+MKN_KUL_FN_SIG_RET auto operator-(E const& e)
 {
     return expr::Negate<E>{e};
 }

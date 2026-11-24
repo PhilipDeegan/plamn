@@ -55,9 +55,9 @@ namespace plamn::amr
 // a field resource's value at the centre of cell c: the mean over the cell's nodes in its
 // primal directions
 template<typename Field, std::uint32_t gw>
-NO_DISCARD double cell_centred(FieldResource<Field, gw> const& r,
-                               damn::core::Box<int, Field::dimension> const& cells,
-                               damn::core::Point<int, Field::dimension> const& c)
+MKN_KUL_FN_SIG_RET double cell_centred(FieldResource<Field, gw> const& r,
+                                       damn::core::Box<int, Field::dimension> const& cells,
+                                       damn::core::Point<int, Field::dimension> const& c)
 {
     auto constexpr dim   = Field::dimension;
     auto const centering = core::centering<dim>(*r.field);
@@ -94,7 +94,7 @@ struct DefaultCriterion
     static constexpr int reach = dim == 1 ? 3 : 2;
 
     template<typename Resource, std::size_t dim>
-    NO_DISCARD double
+    MKN_KUL_FN_SIG_RET double
     indicator(std::vector<Resource> const& components, damn::core::Box<int, dim> const& cells,
               damn::core::Point<int, dim> const& c, std::array<double, dim> const&) const
     {
@@ -144,7 +144,7 @@ struct LohnerCriterion
     double abstol = 1e-8;
 
     template<typename Resource, std::size_t dim>
-    NO_DISCARD double
+    MKN_KUL_FN_SIG_RET double
     indicator(std::vector<Resource> const& components, damn::core::Box<int, dim> const& cells,
               damn::core::Point<int, dim> const& c, std::array<double, dim> const&) const
     {
@@ -200,7 +200,7 @@ struct Tagging
 
 // B, Bx, By, Bz: the components' names, model free (B_x...: an MHD level's resources; a hybrid
 //  level's are EM_B_x...)
-NO_DISCARD inline std::vector<std::string> tagged_components(std::string const& name)
+MKN_KUL_FN_SIG_RET inline std::vector<std::string> tagged_components(std::string const& name)
 {
     if (name == "B")
         return {"B_x", "B_y", "B_z"};
@@ -212,8 +212,8 @@ NO_DISCARD inline std::vector<std::string> tagged_components(std::string const& 
 
 // the input's simulation/AMR/refinement/tagging node, the method of a model's levels by
 //  method_key (PHARE's TaggerFactory: hybrid_method, mhd_method)
-NO_DISCARD inline Tagging tagging_from(auto const& tagging,
-                                       std::string const& method_key = "hybrid_method")
+MKN_KUL_FN_SIG_RET inline Tagging tagging_from(auto const& tagging,
+                                               std::string const& method_key = "hybrid_method")
 {
     Tagging t;
     auto const method = tagging.contains(method_key)
@@ -255,7 +255,7 @@ NO_DISCARD inline Tagging tagging_from(auto const& tagging,
 // the cells of a patch to refine (level index space): resource(name) gives the patch's field
 // resource called name
 template<std::size_t dim>
-NO_DISCARD std::vector<damn::core::Point<int, dim>>
+MKN_KUL_FN_SIG_RET std::vector<damn::core::Point<int, dim>>
 tagged_cells(Tagging const& tagging, damn::core::Box<int, dim> const& cells,
              std::array<double, dim> const& dx, auto&& resource)
 {

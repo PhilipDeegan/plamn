@@ -384,8 +384,8 @@ void ParticlesExporter<AoSMapped, CPU>::delete_particles_in(Src& src, Boxes cons
 
 template<>
 template<typename Src, typename Boxes>
-void ParticlesExporter<AoSMapped, GPU_UNIFIED>::delete_particles_not_in(Src& src,
-                                                                        Boxes const& boxes)
+void ParticlesExporter<AoSMapped, GPU_UNIFIED>::delete_particles_not_in(Src& /*src*/,
+                                                                        Boxes const& /*boxes*/)
 {
     throw std::runtime_error("todo");
 }

@@ -562,7 +562,7 @@ namespace boris::avx
         double* v[3];
     };
 
-    NO_DISCARD auto columns(auto& particles)
+    MKN_KUL_FN_SIG_RET auto columns(auto& particles)
     {
         static constexpr auto dim = std::decay_t<decltype(particles)>::dimension;
         Columns<dim> cols;
@@ -579,7 +579,7 @@ namespace boris::avx
 
     // a staging buffer's (SoAVXArray: AoS particles staged, pushed, written back)
     template<std::size_t dim, std::size_t N>
-    NO_DISCARD auto columns(SoAVXArray<dim, N>& staged)
+    MKN_KUL_FN_SIG_RET auto columns(SoAVXArray<dim, N>& staged)
     {
         Columns<dim> cols;
         cols.w = staged.weight_.data();
@@ -595,7 +595,7 @@ namespace boris::avx
 
     // staged slot i as a particle (the deposit of a staged copy)
     template<std::size_t dim, std::size_t N>
-    NO_DISCARD auto particle_at(SoAVXArray<dim, N> const& staged, std::size_t const i)
+    MKN_KUL_FN_SIG_RET auto particle_at(SoAVXArray<dim, N> const& staged, std::size_t const i)
     {
         Particle<dim> p;
         p.weight() = staged.weight_[i];
@@ -922,8 +922,8 @@ namespace boris::avx
     };
 
     template<auto type, MultiBorisMode mode, typename Interpolator_t, std::size_t L, bool record>
-    NO_DISCARD auto push(auto const& em, auto const& layout, auto const& boxing, auto const& halfdt,
-                         double const coef1, auto& rhoP, auto& flux)
+    MKN_KUL_FN_SIG_RET auto push(auto const& em, auto const& layout, auto const& boxing,
+                                 auto const& halfdt, double const coef1, auto& rhoP, auto& flux)
     {
         return Push<type, mode, Interpolator_t, L, record, std::decay_t<decltype(em)>,
                     std::decay_t<decltype(layout)>, std::decay_t<decltype(boxing)>,

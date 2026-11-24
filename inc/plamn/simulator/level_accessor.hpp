@@ -32,7 +32,7 @@ struct LevelAccessor
         auto& patchID() const { return id; }
     };
 
-    NO_DISCARD std::size_t size() const { return data.data.size(); }
+    MKN_KUL_FN_SIG_RET std::size_t size() const { return data.data.size(); }
 
     View operator[](std::size_t const i)
     {
@@ -40,7 +40,7 @@ struct LevelAccessor
         return View{id(i), patch.layout, {patch.ions, patch.*electromag}};
     }
 
-    NO_DISCARD std::string id(std::size_t const i) const
+    MKN_KUL_FN_SIG_RET std::string id(std::size_t const i) const
     {
         return std::to_string(data.patches[i].id);
     }

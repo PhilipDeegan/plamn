@@ -21,8 +21,8 @@ struct FiniteVolumeEuler
     double dt;
     std::array<double, dim> inv_dx; // 1 / dx, as PHARE's inverseMeshSize
 
-    NO_DISCARD double operator()(auto const& ijk, auto const& U, auto const& Fx, auto const& Fy,
-                                 auto const& Fz) const DAMN_ALL
+    MKN_KUL_FN_SIG_RET double operator()(auto const& ijk, auto const& U, auto const& Fx,
+                                         auto const& Fy, auto const& Fz) const DAMN_ALL
     {
         auto const diff = [&](auto const& F, auto const d) {
             auto next = ijk;
@@ -39,7 +39,7 @@ struct FiniteVolumeEuler
     }
 
     template<typename Layout>
-    NO_DISCARD static FiniteVolumeEuler from(Layout const& layout, double const dt)
+    MKN_KUL_FN_SIG_RET static FiniteVolumeEuler from(Layout const& layout, double const dt)
     {
         FiniteVolumeEuler fve{dt, {}};
         for (std::size_t d = 0; d < dim; ++d)

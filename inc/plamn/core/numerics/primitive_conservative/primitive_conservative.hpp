@@ -15,22 +15,22 @@
 namespace plamn::core
 {
 
-NO_DISCARD constexpr auto v_to_rhov(auto const rho, auto const vx, auto const vy,
-                                    auto const vz) DAMN_ALL
+MKN_KUL_FN_SIG_RET constexpr auto v_to_rhov(auto const rho, auto const vx, auto const vy,
+                                            auto const vz) DAMN_ALL
 {
     return std::array{rho * vx, rho * vy, rho * vz};
 }
 
-NO_DISCARD constexpr auto rhov_to_v(auto const rho, auto const rhovx, auto const rhovy,
-                                    auto const rhovz) DAMN_ALL
+MKN_KUL_FN_SIG_RET constexpr auto rhov_to_v(auto const rho, auto const rhovx, auto const rhovy,
+                                            auto const rhovz) DAMN_ALL
 {
     return std::array{rhovx / rho, rhovy / rho, rhovz / rho};
 }
 
 // total energy from the pressure, ideal gas of heat capacity ratio gamma
-NO_DISCARD constexpr auto eos_p_to_etot(double const gamma, auto const rho, auto const vx,
-                                        auto const vy, auto const vz, auto const bx, auto const by,
-                                        auto const bz, auto const p) DAMN_ALL
+MKN_KUL_FN_SIG_RET constexpr auto eos_p_to_etot(double const gamma, auto const rho, auto const vx,
+                                                auto const vy, auto const vz, auto const bx,
+                                                auto const by, auto const bz, auto const p) DAMN_ALL
 {
     auto const v2 = vx * vx + vy * vy + vz * vz;
     auto const b2 = bx * bx + by * by + bz * bz;
@@ -38,9 +38,10 @@ NO_DISCARD constexpr auto eos_p_to_etot(double const gamma, auto const rho, auto
 }
 
 // pressure from the total energy, the inverse of eos_p_to_etot
-NO_DISCARD constexpr auto eos_etot_to_p(double const gamma, auto const rho, auto const vx,
-                                        auto const vy, auto const vz, auto const bx, auto const by,
-                                        auto const bz, auto const etot) DAMN_ALL
+MKN_KUL_FN_SIG_RET constexpr auto eos_etot_to_p(double const gamma, auto const rho, auto const vx,
+                                                auto const vy, auto const vz, auto const bx,
+                                                auto const by, auto const bz,
+                                                auto const etot) DAMN_ALL
 {
     auto const v2 = vx * vx + vy * vy + vz * vz;
     auto const b2 = bx * bx + by * by + bz * bz;
@@ -48,7 +49,7 @@ NO_DISCARD constexpr auto eos_etot_to_p(double const gamma, auto const rho, auto
 }
 
 // B on the cell centred grid at ijk
-NO_DISCARD auto b_at_cell(auto const& B, auto const& ijk) DAMN_ALL
+MKN_KUL_FN_SIG_RET auto b_at_cell(auto const& B, auto const& ijk) DAMN_ALL
 {
     using enum MHDQuantity::Scalar;
     return std::array{project<Bx, rho>(B[0], ijk), project<By, rho>(B[1], ijk),

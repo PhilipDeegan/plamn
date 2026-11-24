@@ -45,7 +45,7 @@ struct Models
     MHDModel<opts> mhd{};
     int mhd_levels = 0; // levels below it are MHD
 
-    NO_DISCARD bool is_mhd(std::size_t const ln) const
+    MKN_KUL_FN_SIG_RET bool is_mhd(std::size_t const ln) const
     {
         if constexpr (!mhd_on)
             return false;

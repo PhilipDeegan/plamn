@@ -46,8 +46,8 @@ struct UpwindCT
     static constexpr bool has_equation = dim > 1 or c != 0;
 
     template<std::size_t c, std::size_t dim>
-    NO_DISCARD static double E(auto const& ijk, auto const& B, auto const& x, auto const& y,
-                               auto const& z) DAMN_ALL
+    MKN_KUL_FN_SIG_RET static double E(auto const& ijk, auto const& B, auto const& x, auto const& y,
+                                       auto const& z) DAMN_ALL
     {
         static_assert(has_equation<c, dim>);
         if constexpr (c == 0)
@@ -60,8 +60,8 @@ struct UpwindCT
 
     // Hall: E, then its Hall term added (PHARE's "E(idx) += ..."), the faces' jt and rhot read
     template<std::size_t c, std::size_t dim>
-    NO_DISCARD static double E_hall(auto const& ijk, auto const& B, auto const& x, auto const& y,
-                                    auto const& z) DAMN_ALL
+    MKN_KUL_FN_SIG_RET static double E_hall(auto const& ijk, auto const& B, auto const& x,
+                                            auto const& y, auto const& z) DAMN_ALL
     {
         auto e = E<c, dim>(ijk, B, x, y, z);
         e += hall_<c, dim>(ijk, B, x, y, z);
@@ -70,8 +70,8 @@ struct UpwindCT
 
 private:
     template<std::size_t c, std::size_t dim>
-    NO_DISCARD static double hall_(auto const& idx, auto const& B, auto const& x, auto const& y,
-                                   auto const& z) DAMN_ALL
+    MKN_KUL_FN_SIG_RET static double hall_(auto const& idx, auto const& B, auto const& x,
+                                           auto const& y, auto const& z) DAMN_ALL
     {
         if constexpr (c == 0) // dim 2, 3
         {
@@ -165,7 +165,7 @@ private:
     }
 
     template<std::size_t dir>
-    NO_DISCARD static auto prev(auto ijk) DAMN_ALL
+    MKN_KUL_FN_SIG_RET static auto prev(auto ijk) DAMN_ALL
     {
         ijk[dir] -= 1;
         return ijk;
@@ -173,14 +173,14 @@ private:
 
     // 0.5 * (f(ijk) + f(ijk - e_dir))
     template<std::size_t dir>
-    NO_DISCARD static double avg(auto const& f, auto const& ijk) DAMN_ALL
+    MKN_KUL_FN_SIG_RET static double avg(auto const& f, auto const& ijk) DAMN_ALL
     {
         return 0.5 * (f(ijk) + f(prev<dir>(ijk)));
     }
 
     template<std::size_t dim>
-    NO_DISCARD static double Ex_(auto const& idx, auto const& B, auto const& y,
-                                 auto const& z) DAMN_ALL
+    MKN_KUL_FN_SIG_RET static double Ex_(auto const& idx, auto const& B, auto const& y,
+                                         auto const& z) DAMN_ALL
     {
         if constexpr (dim == 2)
         {
@@ -209,8 +209,8 @@ private:
     }
 
     template<std::size_t dim>
-    NO_DISCARD static double Ey_(auto const& idx, auto const& B, auto const& x,
-                                 auto const& z) DAMN_ALL
+    MKN_KUL_FN_SIG_RET static double Ey_(auto const& idx, auto const& B, auto const& x,
+                                         auto const& z) DAMN_ALL
     {
         if constexpr (dim <= 2)
         {
@@ -239,8 +239,8 @@ private:
     }
 
     template<std::size_t dim>
-    NO_DISCARD static double Ez_(auto const& idx, auto const& B, auto const& x,
-                                 auto const& y) DAMN_ALL
+    MKN_KUL_FN_SIG_RET static double Ez_(auto const& idx, auto const& B, auto const& x,
+                                         auto const& y) DAMN_ALL
     {
         if constexpr (dim == 1)
         {

@@ -60,8 +60,8 @@ ParticlesComparator<AoSMapped, CPU, AoS, CPU>::operator()(PS0 const& ps0, PS1 co
 template<>
 template<typename PS0, typename PS1>
 mkn::kul::EqualityReport
-ParticlesComparator<AoSMapped, CPU, SoA, CPU>::operator()(PS0 const& ps0, PS1 const& ps1,
-                                                          double const atol)
+ParticlesComparator<AoSMapped, CPU, SoA, CPU>::operator()(PS0 const& /*ps0*/, PS1 const& /*ps1*/,
+                                                          double const /*atol*/)
 {
     throw std::runtime_error("finish");
 }

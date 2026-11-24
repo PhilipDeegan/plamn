@@ -18,7 +18,7 @@ namespace plamn::core
 // PHARE's MinModLimiter::limit over any number of values: 0 unless all have one sign, else the
 //  one of least magnitude (the first of them)
 template<typename... Rest>
-NO_DISCARD double min_mod(double const first, Rest const... rest)
+MKN_KUL_FN_SIG_RET double min_mod(double const first, Rest const... rest)
 {
     bool const all_positive = (first > 0) && ((rest > 0) && ...);
     bool const all_negative = (first < 0) && ((rest < 0) && ...);
@@ -34,27 +34,28 @@ struct MP5Reconstruction
     static constexpr std::uint32_t nghosts = 3;
 
     template<std::size_t dir>
-    NO_DISCARD static std::array<double, 2> reconstruct(auto const& F, auto const& ijk)
+    MKN_KUL_FN_SIG_RET static std::array<double, 2> reconstruct(auto const& F, auto const& ijk)
     {
         return from_values(reconstruction::values<dir, -3, 2>(F, ijk));
     }
 
     template<std::size_t dir, auto src, auto dst>
-    NO_DISCARD static std::array<double, 2> center_reconstruct(auto const& U, auto const& ijk)
+    MKN_KUL_FN_SIG_RET static std::array<double, 2> center_reconstruct(auto const& U,
+                                                                       auto const& ijk)
     {
         return from_values(reconstruction::centred_values<dir, -3, 2, src, dst>(U, ijk));
     }
 
     // v: cells i-3 .. i+2
-    NO_DISCARD static std::array<double, 2> from_values(std::array<double, 6> const& v)
+    MKN_KUL_FN_SIG_RET static std::array<double, 2> from_values(std::array<double, 6> const& v)
     {
         auto const [u_3, u_2, u_1, u, u1, u2] = v;
         return {impl_(u_3, u_2, u_1, u, u1), impl_(u2, u1, u, u_1, u_2)};
     }
 
 private:
-    NO_DISCARD static double impl_(double const v_m2, double const v_m1, double const u,
-                                   double const v_p1, double const v_p2)
+    MKN_KUL_FN_SIG_RET static double impl_(double const v_m2, double const v_m1, double const u,
+                                           double const v_p1, double const v_p2)
     {
         auto constexpr alpha = 4.;
         auto const fi1_2     = (2. * v_m2 - 13. * v_m1 + 47. * u + 27. * v_p1 - 3. * v_p2) / 60.;

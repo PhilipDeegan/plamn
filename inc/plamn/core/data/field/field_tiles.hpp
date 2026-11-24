@@ -169,7 +169,7 @@ public:
         return field_(damn::core::to_point<std::uint32_t>(ijk...));
     }
 
-    NO_DISCARD auto physicalQuantity() const DAMN_ALL { return field_.physicalQuantity(); }
+    MKN_KUL_FN_SIG_RET auto physicalQuantity() const DAMN_ALL { return field_.physicalQuantity(); }
 
     bool isUsable() const { return field_.isUsable(); }
     bool isSettable() const { return !isUsable(); }
@@ -225,7 +225,7 @@ public:
     FieldTileSet& operator=(FieldTileSet const&) DAMN_ALL = delete;
     FieldTileSet& operator=(FieldTileSet&&) DAMN_ALL      = delete;
 
-    void setBuffer(std::nullptr_t ptr) DAMN_ALL
+    void setBuffer(std::nullptr_t /*ptr*/) DAMN_ALL
     {
         super() = Super{{}, nullptr, 0, nullptr, {}};
     }
@@ -282,7 +282,7 @@ public:
         return super()();
     }
 
-    void setData(auto* const data) DAMN_ALL
+    void setData(auto* const /*data*/) DAMN_ALL
     {
         throw std::runtime_error("fix?");
         /*Super::setBuffer(data);*/
@@ -297,14 +297,14 @@ public:
             std::copy(that[tidx]().data(), that[tidx]().data() + that[tidx]().size(),
                       super()[tidx]().data());
     }
-    NO_DISCARD auto size() const DAMN_ALL { return ghost_box_.size(); } // NOT ntiles!
-    NO_DISCARD auto shape() const DAMN_ALL { return *ghost_box_.shape().as_unsigned(); }
-    NO_DISCARD auto ghost_box() const DAMN_ALL { return ghost_box_; }
+    MKN_KUL_FN_SIG_RET auto size() const DAMN_ALL { return ghost_box_.size(); } // NOT ntiles!
+    MKN_KUL_FN_SIG_RET auto shape() const DAMN_ALL { return *ghost_box_.shape().as_unsigned(); }
+    MKN_KUL_FN_SIG_RET auto ghost_box() const DAMN_ALL { return ghost_box_; }
 
-    NO_DISCARD auto at(auto const&... args) { return super().at(args...); }
-    NO_DISCARD auto at(auto const&... args) const { return super().at(args...); }
+    MKN_KUL_FN_SIG_RET auto at(auto const&... args) { return super().at(args...); }
+    MKN_KUL_FN_SIG_RET auto at(auto const&... args) const { return super().at(args...); }
 
-    void check(bool const nan = false) const
+    void check(bool const /*nan*/ = false) const
     {
         // for (auto& tile : super())
         // {
@@ -357,7 +357,7 @@ public:
     template<typename, typename, typename>
     friend std::ostream& operator<<(std::ostream&, FieldTileSet const&);
 
-    NO_DISCARD auto physicalQuantity() const DAMN_ALL { return qty_; }
+    MKN_KUL_FN_SIG_RET auto physicalQuantity() const DAMN_ALL { return qty_; }
 
 private:
     Super& super() { return *this; }
@@ -424,7 +424,7 @@ public:
     {
     }
 
-    NO_DISCARD auto& name() const { return name_; }
+    MKN_KUL_FN_SIG_RET auto& name() const { return name_; }
 
 private:
     Super& super() { return *this; }

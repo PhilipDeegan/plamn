@@ -30,8 +30,8 @@ namespace plamn::core
 
 // a particle is in a box if its cell is
 template<typename Particle>
-NO_DISCARD auto DAMN_ALL isIn(Particle const& particle,
-                                    damn::core::Box<int, Particle::dimension> const& box)
+MKN_KUL_FN_SIG_RET auto DAMN_ALL isIn(Particle const& particle,
+                                      damn::core::Box<int, Particle::dimension> const& box)
     -> decltype(isIn(particle.iCell(), box), bool())
 {
     return isIn(particle.iCell(), box);
@@ -221,7 +221,7 @@ auto it_dist(I0&& i0, I1&& i1)
 // the cell jump limit makes this irrelevant: domain particles throw before leaving the ghost box,
 // level ghosts out of it are dropped by a predicate before interpolation, not through the cell map.
 // Then remove this and the margin in make_particles below (grep "cell-jump-limit").
-NO_DISCARD int constexpr particleMapMargin(int const particleGhostWidth)
+MKN_KUL_FN_SIG_RET int constexpr particleMapMargin(int const particleGhostWidth)
 {
     return std::max(2, 4 - particleGhostWidth);
 }

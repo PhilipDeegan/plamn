@@ -123,13 +123,13 @@ public:
 
     // nbrParticlePerCell for each cell whose density is at least the cutoff, as loadParticles;
     //  a background at least the cutoff populates every cell, nothing to sample
-    NO_DISCARD std::size_t nbrParticles(Layout const& layout) const override;
+    MKN_KUL_FN_SIG_RET std::size_t nbrParticles(Layout const& layout) const override;
 
 
     virtual ~MaxwellianParticleInitializer() = default;
 
 
-    NO_DISCARD static std::uint64_t baseSeed(std::optional<std::size_t> const& seed)
+    MKN_KUL_FN_SIG_RET static std::uint64_t baseSeed(std::optional<std::size_t> const& seed)
     {
         if (seed.has_value())
             return *seed;
@@ -140,7 +140,7 @@ public:
 private:
     //! number of cells on the outer layer of the box, where incoming particles first land
     //! a box 2 cells or less wide in some direction has no interior, all its cells count
-    NO_DISCARD static std::size_t surface_cell_count_(auto const& box)
+    MKN_KUL_FN_SIG_RET static std::size_t surface_cell_count_(auto const& box)
     {
         std::size_t all = 1, interior = 1;
         for (auto const n : box.shape())
@@ -191,12 +191,15 @@ public:
                 _B[i] = magneticField[i](coords...);
     }
 
-    NO_DISCARD std::array<double const*, 3> B() const { return ptrs(_B); }
+    MKN_KUL_FN_SIG_RET std::array<double const*, 3> B() const { return ptrs(_B); }
 
-    NO_DISCARD auto operator()() const { return std::make_tuple(_n->data(), ptrs(_V), ptrs(_Vth)); }
+    MKN_KUL_FN_SIG_RET auto operator()() const
+    {
+        return std::make_tuple(_n->data(), ptrs(_V), ptrs(_Vth));
+    }
 
 private:
-    NO_DISCARD std::array<double const*, 3>
+    MKN_KUL_FN_SIG_RET std::array<double const*, 3>
     ptrs(std::array<std::shared_ptr<damn::core::Span<double>>, 3> const& v) const
     {
         return {v[0]->data(), v[1]->data(), v[2]->data()};

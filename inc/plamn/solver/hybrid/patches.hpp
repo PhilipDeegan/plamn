@@ -33,7 +33,7 @@ struct CellCounts
     damn::core::Box<int, dim> cells;
     std::vector<double> n = std::vector<double>(cells.size(), 0.);
 
-    NO_DISCARD std::size_t index(damn::core::Point<int, dim> const& c) const
+    MKN_KUL_FN_SIG_RET std::size_t index(damn::core::Point<int, dim> const& c) const
     {
         std::size_t k = 0, stride = 1;
         for (std::size_t d = 0; d < dim; ++d)
@@ -45,7 +45,7 @@ struct CellCounts
     }
 
     // the particles in box's cells (those keep(cell) keeps)
-    NO_DISCARD double in(damn::core::Box<int, dim> const& box, auto&& keep) const
+    MKN_KUL_FN_SIG_RET double in(damn::core::Box<int, dim> const& box, auto&& keep) const
     {
         double sum = 0;
         if (auto const overlap = box * cells)
@@ -55,14 +55,14 @@ struct CellCounts
             });
         return sum;
     }
-    NO_DISCARD double in(damn::core::Box<int, dim> const& box) const
+    MKN_KUL_FN_SIG_RET double in(damn::core::Box<int, dim> const& box) const
     {
         return in(box, [](auto const&) { return true; });
     }
 };
 
 template<typename Patch>
-NO_DISCARD auto cell_counts(Patch const& patch)
+MKN_KUL_FN_SIG_RET auto cell_counts(Patch const& patch)
 {
     auto constexpr dim = Patch::dimension;
     CellCounts<dim> counts{patch.layout.cells};
@@ -79,8 +79,8 @@ NO_DISCARD auto cell_counts(Patch const& patch)
 
 // true if coarse cell c is refined into one of the patches (whole coarse cells)
 template<std::size_t dim>
-NO_DISCARD bool refined_into(damn::core::Point<int, dim> const& c, int const ratio,
-                             std::vector<damn::amr::Patch<dim>> const& patches)
+MKN_KUL_FN_SIG_RET bool refined_into(damn::core::Point<int, dim> const& c, int const ratio,
+                                     std::vector<damn::amr::Patch<dim>> const& patches)
 {
     auto const fine = c * ratio;
     for (auto const& p : patches)
@@ -94,8 +94,8 @@ namespace plamn::solver::hybrid
 {
 // a patch of level ln (its cells): its particle ghost box among the level's other patches
 template<auto opts, std::size_t dim>
-NO_DISCARD auto surroundings(HybridModel<opts> const&, damn::amr::Hierarchy<dim> const& h,
-                             int const ln, damn::core::Box<int, dim> const& box)
+MKN_KUL_FN_SIG_RET auto surroundings(HybridModel<opts> const&, damn::amr::Hierarchy<dim> const& h,
+                                     int const ln, damn::core::Box<int, dim> const& box)
 {
     using Patch_t      = HybridModel<opts>::Patch_t;
     auto constexpr pgw = static_cast<int>(Patch_t::particle_ghost_width);
@@ -107,8 +107,8 @@ NO_DISCARD auto surroundings(HybridModel<opts> const&, damn::amr::Hierarchy<dim>
 
 // sim: the input's "simulation"
 template<auto opts>
-NO_DISCARD auto make_patch(HybridModel<opts> const& model, auto const& layout, auto const& sim,
-                           auto const& surroundings)
+MKN_KUL_FN_SIG_RET auto make_patch(HybridModel<opts> const& model, auto const& layout,
+                                   auto const& sim, auto const& surroundings)
 {
     using Patch_t = HybridModel<opts>::Patch_t;
     auto patch    = std::make_unique<Patch_t>(layout, sim, surroundings);
@@ -124,7 +124,7 @@ NO_DISCARD auto make_patch(HybridModel<opts> const& model, auto const& layout, a
 // layout -> the particles the populations' initial functions put in its cells (populated
 //  cells: density above each population's cut off), before any exists
 template<auto opts>
-NO_DISCARD auto initial_particle_counter(HybridModel<opts> const&, auto const& sim)
+MKN_KUL_FN_SIG_RET auto initial_particle_counter(HybridModel<opts> const&, auto const& sim)
 {
     using Patch_t       = HybridModel<opts>::Patch_t;
     using Initializers  = Patch_t::Types::ParticleInitializerFactory_t;

@@ -38,7 +38,7 @@ namespace core
 
 
     template<typename T, std::size_t dim>
-    NO_DISCARD damn::core::Box<T, dim>
+    MKN_KUL_FN_SIG_RET damn::core::Box<T, dim>
     toCenteredBox(damn::core::Box<T, dim> box, std::array<QtyCentering, dim> const& centerings)
     {
         for (std::size_t i = 0; i < dim; ++i)
@@ -50,13 +50,13 @@ namespace core
 
 
     template<auto src, auto dst, std::size_t order = 2>
-    NO_DISCARD consteval auto recenteringStencil();
+    MKN_KUL_FN_SIG_RET consteval auto recenteringStencil();
 
 
     // src, dst: centerings; for quantities see patch_layout.hpp
     template<auto src, auto dst, std::size_t order = 2, typename Field>
         requires(not std::is_enum_v<decltype(src)>)
-    NO_DISCARD inline auto
+    MKN_KUL_FN_SIG_RET inline auto
     project(Field const& field,
             damn::core::Point<std::size_t, Field::dimension> const& index) DAMN_ALL
     {
@@ -72,7 +72,7 @@ namespace core
     enum class InterpDir { DualToPrimal = 0, PrimalToDual = 1 };
 
 
-    NO_DISCARD constexpr std::array<int, 2> linearRecenteringOffsets(QtyCentering source)
+    MKN_KUL_FN_SIG_RET constexpr std::array<int, 2> linearRecenteringOffsets(QtyCentering source)
     {
         if (source == QtyCentering::primal)
             return {0, 1};
@@ -81,7 +81,7 @@ namespace core
 
 
     template<std::size_t dim, auto dir, InterpDir interpDir, std::size_t order = 2>
-    NO_DISCARD consteval auto directionalInterp()
+    MKN_KUL_FN_SIG_RET consteval auto directionalInterp()
     {
         if constexpr (dir >= dim)
         {
@@ -153,7 +153,7 @@ namespace core
      * midpoint weights). This is the dual counterpart, kept beside it for cohesion.
      */
     template<std::size_t dim, auto dir, int sign, std::size_t order = 2>
-    NO_DISCARD consteval auto directionalProlongation()
+    MKN_KUL_FN_SIG_RET consteval auto directionalProlongation()
     {
         static_assert(sign == 1 || sign == -1, "child sign σ must be ±1");
         static_assert(order == 2, "dual prolongation ladder is order 2 (degree-2 skipped)");
@@ -182,7 +182,7 @@ namespace core
 
 
     template<auto... dirs>
-    NO_DISCARD consteval auto tensorProduct(auto const&... rows)
+    MKN_KUL_FN_SIG_RET consteval auto tensorProduct(auto const&... rows)
     {
         static_assert(sizeof...(dirs) == sizeof...(rows) && sizeof...(rows) > 0);
         static_assert(
@@ -226,7 +226,7 @@ namespace core
     namespace detail
     {
         template<auto src, auto dst, std::size_t order, auto diff, std::size_t... k>
-        NO_DISCARD consteval auto recenteringStencilImpl(std::index_sequence<k...>)
+        MKN_KUL_FN_SIG_RET consteval auto recenteringStencilImpl(std::index_sequence<k...>)
         {
             constexpr std::size_t dim = src.size();
             return tensorProduct<diff[k]...>(
@@ -237,7 +237,7 @@ namespace core
         }
 
         template<auto src, auto dst>
-        NO_DISCARD consteval std::size_t differingDirections()
+        MKN_KUL_FN_SIG_RET consteval std::size_t differingDirections()
         {
             std::size_t count = 0;
             for (std::size_t d = 0; d < src.size(); ++d)
@@ -246,7 +246,7 @@ namespace core
         }
 
         template<auto src, auto dst, std::size_t p>
-        NO_DISCARD consteval auto differingDirectionsArray()
+        MKN_KUL_FN_SIG_RET consteval auto differingDirectionsArray()
         {
             std::array<std::size_t, p> diff{};
             std::size_t k = 0;
@@ -259,7 +259,7 @@ namespace core
 
 
     template<auto src, auto dst, std::size_t order>
-    NO_DISCARD consteval auto recenteringStencil()
+    MKN_KUL_FN_SIG_RET consteval auto recenteringStencil()
     {
         static_assert(src.size() == dst.size());
         constexpr std::size_t dim = src.size();

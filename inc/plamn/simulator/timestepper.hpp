@@ -41,7 +41,7 @@ public:
     };
 
     // dict: the whole dict (its "simulation" node)
-    NO_DISCARD static Timestepper FROM(initializer::Dict const& dict)
+    MKN_KUL_FN_SIG_RET static Timestepper FROM(initializer::Dict const& dict)
     {
         Timestepper ts;
         ts.mode_ = cppdict::get_value(dict, "simulation/time_step/mode", TimeStepType::constant);
@@ -68,7 +68,7 @@ public:
         std::uint64_t steps = 0;
         double compensation = 0;
     };
-    NO_DISCARD State state() const
+    MKN_KUL_FN_SIG_RET State state() const
     {
         return {.mode         = static_cast<int>(mode_),
                 .dt           = dt_,
@@ -96,15 +96,15 @@ public:
         compensation_ = 0;
     }
 
-    NO_DISCARD bool adaptive() const { return mode_ == TimeStepType::adaptive; }
-    NO_DISCARD double dt() const { return dt_; }
-    NO_DISCARD double time() const { return time_; }
-    NO_DISCARD double final_time() const { return final_time_; }
-    NO_DISCARD CFL const& cfl() const { return cfl_; }
+    MKN_KUL_FN_SIG_RET bool adaptive() const { return mode_ == TimeStepType::adaptive; }
+    MKN_KUL_FN_SIG_RET double dt() const { return dt_; }
+    MKN_KUL_FN_SIG_RET double time() const { return time_; }
+    MKN_KUL_FN_SIG_RET double final_time() const { return final_time_; }
+    MKN_KUL_FN_SIG_RET CFL const& cfl() const { return cfl_; }
     // adaptive run stops: a finer level's stable dt more than this many times smaller than its
     //  coarser level's; level 0's more than that many times smaller than the run's first
-    NO_DISCARD int fine_level_substeps_max() const { return fine_level_substeps_max_; }
-    NO_DISCARD int level0_dt_shrink_max() const { return level0_dt_shrink_max_; }
+    MKN_KUL_FN_SIG_RET int fine_level_substeps_max() const { return fine_level_substeps_max_; }
+    MKN_KUL_FN_SIG_RET int level0_dt_shrink_max() const { return level0_dt_shrink_max_; }
 
     // the next step's dt: constant, the dict's; adaptive, stable(cfl) up to final_time
     double next(auto&& stable)

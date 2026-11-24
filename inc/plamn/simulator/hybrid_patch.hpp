@@ -239,7 +239,7 @@ struct HybridPatch
     HybridPatch& operator=(HybridPatch const&) = delete;
     HybridPatch& operator=(HybridPatch&&)      = delete;
 
-    NO_DISCARD auto& electrons() { return *electrons_; }
+    MKN_KUL_FN_SIG_RET auto& electrons() { return *electrons_; }
 
     Layout_t layout;
 

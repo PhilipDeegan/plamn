@@ -22,7 +22,7 @@ using enum damn::AllocatorMode;
 
 template<>
 template<typename Dst, typename Src, typename Layout>
-Dst ParticlesConverter<AoS, CPU, AoS, CPU>::operator()(Src const& src, Layout const& layout)
+Dst ParticlesConverter<AoS, CPU, AoS, CPU>::operator()(Src const& src, Layout const& /*layout*/)
 {
     return src;
 }

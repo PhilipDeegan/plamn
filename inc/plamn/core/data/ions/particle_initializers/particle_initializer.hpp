@@ -17,7 +17,7 @@ namespace core
 
         // how many particles loadParticles would load on layout's cells, e.g. a patch's load
         //  balancing weight before it is allocated
-        NO_DISCARD virtual std::size_t nbrParticles(Layout const& layout) const = 0;
+        MKN_KUL_FN_SIG_RET virtual std::size_t nbrParticles(Layout const& layout) const = 0;
         virtual ~ParticleInitializer()                                          = default;
     };
 

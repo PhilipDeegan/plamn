@@ -56,7 +56,7 @@ template<std::size_t interp>
 std::uint32_t constexpr particle_ghosts = std::array{1u, 2u, 2u}[interp - 1];
 
 // /ions/pop/protons/flux -> ions_pop_protons_flux.h5
-NO_DISCARD inline std::string file_name(std::string const& quantity)
+MKN_KUL_FN_SIG_RET inline std::string file_name(std::string const& quantity)
 {
     auto name = quantity.substr(quantity.find_first_not_of('/'));
     std::replace(name.begin(), name.end(), '/', '_');
@@ -65,7 +65,7 @@ NO_DISCARD inline std::string file_name(std::string const& quantity)
 
 // what PHARE's core::to_string_with_precision(t, 10) returns: fixed, 10 decimals (it zeroes the
 //  last digit of a copy, then returns the stream's string: every digit kept)
-NO_DISCARD inline std::string time_key(double const t)
+MKN_KUL_FN_SIG_RET inline std::string time_key(double const t)
 {
     std::ostringstream out;
     out.precision(10);
@@ -73,8 +73,8 @@ NO_DISCARD inline std::string time_key(double const t)
     return out.str();
 }
 
-NO_DISCARD inline std::string patch_path(std::string const& time, int const level, int const rank,
-                                         std::uint32_t const id)
+MKN_KUL_FN_SIG_RET inline std::string patch_path(std::string const& time, int const level,
+                                                 int const rank, std::uint32_t const id)
 {
     return "/t/" + time + "/pl" + std::to_string(level) + "/p" + std::to_string(rank) + "#"
            + std::to_string(id);
@@ -135,7 +135,7 @@ struct ParticleColumns
 };
 
 // tiled: tile by tile
-NO_DISCARD auto particle_columns(core::TiledParticles auto const& particles)
+MKN_KUL_FN_SIG_RET auto particle_columns(core::TiledParticles auto const& particles)
 {
     auto constexpr dim = std::decay_t<decltype(particles)>::dimension;
     ParticleColumns<dim> out;
@@ -153,7 +153,7 @@ NO_DISCARD auto particle_columns(core::TiledParticles auto const& particles)
     return out;
 }
 
-NO_DISCARD auto particle_columns(auto const& particles)
+MKN_KUL_FN_SIG_RET auto particle_columns(auto const& particles)
     requires(!core::TiledParticles<decltype(particles)>)
 {
     auto constexpr dim = std::decay_t<decltype(particles)>::dimension;

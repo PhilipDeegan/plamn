@@ -51,7 +51,7 @@ namespace plamn::simulator::detail
 // the first point of a field resource's ghost box that is NaN (nothing filled it), points past
 // a non periodic domain boundary skipped; std::nullopt for other resources
 template<typename Resource, std::size_t dim>
-NO_DISCARD std::optional<damn::core::Point<int, dim>>
+MKN_KUL_FN_SIG_RET std::optional<damn::core::Point<int, dim>>
 first_unset(Resource const& r, damn::core::Box<int, dim> const& cells,
             damn::core::Box<int, dim> const& domain, std::array<bool, dim> const& periodic)
 {

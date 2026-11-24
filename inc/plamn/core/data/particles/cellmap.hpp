@@ -165,10 +165,10 @@ public:
 
 
 
-    NO_DISCARD auto nbr_cells() const { return cellIndexes_.size(); }
+    MKN_KUL_FN_SIG_RET auto nbr_cells() const { return cellIndexes_.size(); }
 
 
-    NO_DISCARD bool check_unique() const
+    MKN_KUL_FN_SIG_RET bool check_unique() const
     {
         std::unordered_map<std::size_t, std::size_t> counts;
         damn::core::for_each_point(box_, [&](auto const& cell) {
@@ -226,17 +226,20 @@ public:
 
 
     // number of indexes stored in that cell of the cellmap
-    NO_DISCARD std::size_t size(cell_t cell) const { return cellIndexes_(local_(cell)).size(); }
-    NO_DISCARD std::size_t size(cell_t cell) { return cellIndexes_(local_(cell)).size(); }
+    MKN_KUL_FN_SIG_RET std::size_t size(cell_t cell) const
+    {
+        return cellIndexes_(local_(cell)).size();
+    }
+    MKN_KUL_FN_SIG_RET std::size_t size(cell_t cell) { return cellIndexes_(local_(cell)).size(); }
 
     // total number of mapped indexes
-    NO_DISCARD auto size() const;
+    MKN_KUL_FN_SIG_RET auto size() const;
 
     // number of indexes mapped in the given box
-    NO_DISCARD auto size(box_t const& box) const;
+    MKN_KUL_FN_SIG_RET auto size(box_t const& box) const;
 
     // total capacity over all cells
-    NO_DISCARD auto capacity() const;
+    MKN_KUL_FN_SIG_RET auto capacity() const;
 
     // remove all indexes
     void clear()
@@ -247,10 +250,13 @@ public:
 
     void empty();
 
-    NO_DISCARD bool is_empty() const { return size() == 0; }
+    MKN_KUL_FN_SIG_RET bool is_empty() const { return size() == 0; }
 
 
-    NO_DISCARD float used_mem_ratio() const { return static_cast<float>(size()) / capacity(); }
+    MKN_KUL_FN_SIG_RET float used_mem_ratio() const
+    {
+        return static_cast<float>(size()) / capacity();
+    }
 
 
     // export from 'from' into 'dest' items indexed in the map found withing 'box'
@@ -311,33 +317,33 @@ public:
     template<typename CellIndex>
     void print(CellIndex const& cell) const;
 
-    NO_DISCARD auto& box() { return box_; }
-    NO_DISCARD auto const& box() const { return box_; }
+    MKN_KUL_FN_SIG_RET auto& box() { return box_; }
+    MKN_KUL_FN_SIG_RET auto const& box() const { return box_; }
 
-    NO_DISCARD auto begin() { return cellIndexes_.begin(); }
-    NO_DISCARD auto end() { return cellIndexes_.end(); }
+    MKN_KUL_FN_SIG_RET auto begin() { return cellIndexes_.begin(); }
+    MKN_KUL_FN_SIG_RET auto end() { return cellIndexes_.end(); }
 
 
     template<template<typename, std::size_t> typename Arr>
-    NO_DISCARD auto& operator()(Arr<std::uint32_t, opts.dimension> const& arr)
+    MKN_KUL_FN_SIG_RET auto& operator()(Arr<std::uint32_t, opts.dimension> const& arr)
     {
         return cellIndexes_(arr);
     }
 
     template<template<typename, std::size_t> typename Arr>
-    NO_DISCARD auto& operator()(Arr<std::uint32_t, opts.dimension> const& arr) const
+    MKN_KUL_FN_SIG_RET auto& operator()(Arr<std::uint32_t, opts.dimension> const& arr) const
     {
         return cellIndexes_(arr);
     }
 
     template<typename Cell>
-    NO_DISCARD auto& operator()(Cell const& cell)
+    MKN_KUL_FN_SIG_RET auto& operator()(Cell const& cell)
     {
         return cellIndexes_(local_(cell));
     }
 
     template<typename Cell>
-    NO_DISCARD auto const& operator()(Cell const& cell) const
+    MKN_KUL_FN_SIG_RET auto const& operator()(Cell const& cell) const
     {
         return cellIndexes_(local_(cell));
     }
@@ -420,7 +426,7 @@ inline void CellMap<opts>::erase(Array const& items, std::size_t itemIndex, Cell
 
 template<auto opts>
 template<mkn::kul::Iterable Array>
-inline void CellMap<opts>::erase(Array const& items, cell_t const oldCell,
+inline void CellMap<opts>::erase(Array const& /*items*/, cell_t const oldCell,
                                  std::size_t const itemIndex)
 {
     auto& blist = cellIndexes_(local_(oldCell));

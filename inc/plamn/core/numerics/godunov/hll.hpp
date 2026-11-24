@@ -21,8 +21,9 @@
 namespace plamn::core
 {
 template<std::size_t dir>
-NO_DISCARD GodunovFaceResult hll(double const gamma, MHDPrimitive const& uL, MHDPrimitive const& uR,
-                                 FaceCurrents const* const j = nullptr) DAMN_ALL
+MKN_KUL_FN_SIG_RET GodunovFaceResult hll(double const gamma, MHDPrimitive const& uL,
+                                         MHDPrimitive const& uR,
+                                         FaceCurrents const* const j = nullptr) DAMN_ALL
 {
     auto const b2   = [](auto const& B) { return B[0] * B[0] + B[1] * B[1] + B[2] * B[2]; };
     auto const cfL  = fast_magnetosonic(gamma, uL.rho, uL.B[dir], b2(uL.B), uL.P);
@@ -72,9 +73,9 @@ NO_DISCARD GodunovFaceResult hll(double const gamma, MHDPrimitive const& uL, MHD
 struct RusanovRiemann
 {
     template<std::size_t dir>
-    NO_DISCARD static GodunovFaceResult solve(double const gamma, MHDPrimitive const& uL,
-                                              MHDPrimitive const& uR,
-                                              FaceCurrents const* const j = nullptr) DAMN_ALL
+    MKN_KUL_FN_SIG_RET static GodunovFaceResult
+    solve(double const gamma, MHDPrimitive const& uL, MHDPrimitive const& uR,
+          FaceCurrents const* const j = nullptr) DAMN_ALL
     {
         return rusanov<dir>(gamma, uL, uR, j);
     }
@@ -83,9 +84,9 @@ struct RusanovRiemann
 struct HLLRiemann
 {
     template<std::size_t dir>
-    NO_DISCARD static GodunovFaceResult solve(double const gamma, MHDPrimitive const& uL,
-                                              MHDPrimitive const& uR,
-                                              FaceCurrents const* const j = nullptr) DAMN_ALL
+    MKN_KUL_FN_SIG_RET static GodunovFaceResult
+    solve(double const gamma, MHDPrimitive const& uL, MHDPrimitive const& uR,
+          FaceCurrents const* const j = nullptr) DAMN_ALL
     {
         return hll<dir>(gamma, uL, uR, j);
     }

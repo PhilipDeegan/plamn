@@ -57,7 +57,7 @@ struct Particle
     std::array<double, dim> delta_ = mkn::kul::ConstArray<double, dim>(); // 20  32  44
     std::array<double, 3> v_       = mkn::kul::ConstArray<double, 3>();   // 44  56  68
 
-    NO_DISCARD bool operator==(Particle<dim> const& that) const
+    MKN_KUL_FN_SIG_RET bool operator==(Particle<dim> const& that) const
     {
         return (this->weight_ == that.weight_) && //
                (this->iCell_ == that.iCell_) &&   //
@@ -96,7 +96,7 @@ template<typename T = float>
 struct ParticleDeltaDistribution
 {
     template<typename Generator>
-    NO_DISCARD T operator()(Generator& generator)
+    MKN_KUL_FN_SIG_RET T operator()(Generator& generator)
     {
         return dist(generator);
     }
@@ -105,14 +105,14 @@ struct ParticleDeltaDistribution
 
 
 template<typename T, std::size_t dim>
-NO_DISCARD auto cellAsPoint(std::array<T, dim> const& iCell) DAMN_ALL
+MKN_KUL_FN_SIG_RET auto cellAsPoint(std::array<T, dim> const& iCell) DAMN_ALL
 {
     return damn::core::Point<int, dim>{iCell};
 }
 
 
 template<typename Particle>
-NO_DISCARD auto cellAsPoint(Particle const& particle) DAMN_ALL
+MKN_KUL_FN_SIG_RET auto cellAsPoint(Particle const& particle) DAMN_ALL
 {
     return cellAsPoint(particle.iCell());
 }
@@ -183,7 +183,7 @@ template<typename Box_t, typename RValue = std::size_t>
 struct CellFlattener
 {
     template<typename Icell>
-    NO_DISCARD RValue operator()(Icell const& icell) const DAMN_ALL
+    MKN_KUL_FN_SIG_RET RValue operator()(Icell const& icell) const DAMN_ALL
     {
         if constexpr (Box_t::dimension == 2)
             return icell[1] + icell[0] * shape[1];
@@ -206,7 +206,7 @@ template<std::size_t dim, template<std::size_t> typename ParticleA,
          template<std::size_t> typename ParticleB>
     requires(is_damn_particle_type<dim, ParticleA<dim>>
              and is_damn_particle_type<dim, ParticleB<dim>>)
-NO_DISCARD bool operator==(ParticleA<dim> const& particleA, ParticleB<dim> const& particleB)
+MKN_KUL_FN_SIG_RET bool operator==(ParticleA<dim> const& particleA, ParticleB<dim> const& particleB)
 {
     return particleA.weight == particleB.weight and //
            particleA.iCell == particleB.iCell and   //

@@ -46,6 +46,7 @@ jobs:
         curl -fsSLo llvm.sh https://apt.llvm.org/llvm.sh && bash llvm.sh 22
         ln -sf /usr/bin/clang-22 /usr/local/bin/clang
         ln -sf /usr/bin/clang++-22 /usr/local/bin/clang++
+        ln -sf /usr/bin/llvm-ar-22 /usr/local/bin/llvm-ar # the profiles' archiver
         clang++ --version
     - uses: actions/checkout@v6
       with:

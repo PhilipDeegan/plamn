@@ -59,7 +59,7 @@ struct Diagnostic
 };
 
 // pyphare's diagnostics plamn writes: electromag and fluid, particle (phareh5 only)
-NO_DISCARD inline std::vector<Diagnostic> diagnostics_from(initializer::Dict const& dict)
+MKN_KUL_FN_SIG_RET inline std::vector<Diagnostic> diagnostics_from(initializer::Dict const& dict)
 {
     std::vector<Diagnostic> out;
     if (!dict["simulation"].contains("diagnostics"))
@@ -99,7 +99,7 @@ NO_DISCARD inline std::vector<Diagnostic> diagnostics_from(initializer::Dict con
 
 // PHARE's DiagnosticsManager: due when a timestamp is within dt of t, compared as floats; the
 // timestamps passed are caught up
-NO_DISCARD inline bool due(Diagnostic& diag, double const t, double const dt)
+MKN_KUL_FN_SIG_RET inline bool due(Diagnostic& diag, double const t, double const dt)
 {
     bool is_due = false;
     while (diag.next < diag.timestamps.size()
@@ -111,7 +111,7 @@ NO_DISCARD inline bool due(Diagnostic& diag, double const t, double const dt)
     return is_due;
 }
 
-NO_DISCARD inline std::string file_name(std::string const& quantity)
+MKN_KUL_FN_SIG_RET inline std::string file_name(std::string const& quantity)
 {
     auto name = quantity.substr(quantity.find_first_not_of('/'));
     std::replace(name.begin(), name.end(), '/', '_');

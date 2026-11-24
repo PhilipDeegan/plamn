@@ -25,8 +25,8 @@ struct GodunovFace
     double gamma;
 
     template<std::size_t dir>
-    NO_DISCARD GodunovFaceResult operator()(auto const& ijk, auto const& rho, auto const& V,
-                                            auto const& B, auto const& P) const DAMN_ALL
+    MKN_KUL_FN_SIG_RET GodunovFaceResult operator()(auto const& ijk, auto const& rho, auto const& V,
+                                                    auto const& B, auto const& P) const DAMN_ALL
     {
         auto const [uL, uR] = states_<dir>(ijk, rho, V, B, P);
         return Riemann::template solve<dir>(gamma, uL, uR);
@@ -36,8 +36,9 @@ struct GodunovFace
     //  transverse components are (each from its centring to the cell centres, then to the face),
     //  the Riemann solver given them (the Hall flux; jt, rhot)
     template<std::size_t dir>
-    NO_DISCARD GodunovFaceResult hall(auto const& ijk, auto const& rho, auto const& V,
-                                      auto const& B, auto const& P, auto const& J) const DAMN_ALL
+    MKN_KUL_FN_SIG_RET GodunovFaceResult hall(auto const& ijk, auto const& rho, auto const& V,
+                                              auto const& B, auto const& P,
+                                              auto const& J) const DAMN_ALL
     {
         // not "using enum MHDQuantity::Scalar": its rho would hide the rho field
         using Q             = MHDQuantity::Scalar;
@@ -63,8 +64,8 @@ struct GodunovFace
 
 private:
     template<std::size_t dir>
-    NO_DISCARD static auto states_(auto const& ijk, auto const& rho, auto const& V, auto const& B,
-                                   auto const& P) DAMN_ALL
+    MKN_KUL_FN_SIG_RET static auto states_(auto const& ijk, auto const& rho, auto const& V,
+                                           auto const& B, auto const& P) DAMN_ALL
     {
         using R                 = Reconstruction;
         auto const [rhoL, rhoR] = R::template reconstruct<dir>(rho, ijk);

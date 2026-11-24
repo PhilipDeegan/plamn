@@ -51,30 +51,30 @@ struct FieldResource
 };
 
 template<std::uint32_t gw, typename Field>
-NO_DISCARD auto field_resource(Field& field)
+MKN_KUL_FN_SIG_RET auto field_resource(Field& field)
 {
     return FieldResource<Field, gw>{std::addressof(field)}; // Grid overloads operator&
 }
 
 template<typename Field, std::uint32_t gw>
-NO_DISCARD auto domain_box(FieldResource<Field, gw> const& r,
-                           damn::core::Box<int, Field::dimension> const& cells)
+MKN_KUL_FN_SIG_RET auto domain_box(FieldResource<Field, gw> const& r,
+                                   damn::core::Box<int, Field::dimension> const& cells)
 {
     return core::qty_box(cells, core::centering<Field::dimension>(*r.field));
 }
 
 template<typename Field, std::uint32_t gw>
-NO_DISCARD auto ghost_box(FieldResource<Field, gw> const& r,
-                          damn::core::Box<int, Field::dimension> const& cells)
+MKN_KUL_FN_SIG_RET auto ghost_box(FieldResource<Field, gw> const& r,
+                                  damn::core::Box<int, Field::dimension> const& cells)
 {
     return damn::core::Box<int, Field::dimension>{
         core::qty_ghost_box(cells, core::centering<Field::dimension>(*r.field), gw)};
 }
 
 template<typename Field, std::uint32_t gw>
-NO_DISCARD auto& value(FieldResource<Field, gw> const& r,
-                       damn::core::Box<int, Field::dimension> const& cells,
-                       damn::core::Point<int, Field::dimension> const& amr)
+MKN_KUL_FN_SIG_RET auto& value(FieldResource<Field, gw> const& r,
+                               damn::core::Box<int, Field::dimension> const& cells,
+                               damn::core::Point<int, Field::dimension> const& amr)
 {
     return (*r.field)(core::amr_to_local(cells, amr, gw).toArray());
 }
@@ -83,8 +83,8 @@ NO_DISCARD auto& value(FieldResource<Field, gw> const& r,
 // what checkpoints hold of a field: its ghosts too (a refined level's level ghosts were filled
 //  from the coarser level before its synchronization: they cannot be rebuilt bit for bit)
 template<typename Field, std::uint32_t gw>
-NO_DISCARD auto checkpoint_box(FieldResource<Field, gw> const& r,
-                               damn::core::Box<int, Field::dimension> const& cells)
+MKN_KUL_FN_SIG_RET auto checkpoint_box(FieldResource<Field, gw> const& r,
+                                       damn::core::Box<int, Field::dimension> const& cells)
 {
     return ghost_box(r, cells);
 }
@@ -92,8 +92,8 @@ NO_DISCARD auto checkpoint_box(FieldResource<Field, gw> const& r,
 // a C ordered field's values over its ghost box, written and read in place by checkpoints
 template<typename Field, std::uint32_t gw>
     requires(Field::is_c_ordered)
-NO_DISCARD auto box_span(FieldResource<Field, gw> const& r,
-                         damn::core::Box<int, Field::dimension> const& cells)
+MKN_KUL_FN_SIG_RET auto box_span(FieldResource<Field, gw> const& r,
+                                 damn::core::Box<int, Field::dimension> const& cells)
 {
     auto const ghost = ghost_box(r, cells);
     if (r.field->size() != ghost.size())
@@ -112,21 +112,21 @@ struct ParticleResource
 };
 
 template<std::uint32_t gw, typename Particles>
-NO_DISCARD auto particle_resource(Particles& particles)
+MKN_KUL_FN_SIG_RET auto particle_resource(Particles& particles)
 {
     return ParticleResource<Particles, gw>{std::addressof(particles)};
 }
 
 template<typename Particles, std::uint32_t gw>
-NO_DISCARD auto domain_box(ParticleResource<Particles, gw> const&,
-                           damn::core::Box<int, Particles::dimension> const& cells)
+MKN_KUL_FN_SIG_RET auto domain_box(ParticleResource<Particles, gw> const&,
+                                   damn::core::Box<int, Particles::dimension> const& cells)
 {
     return cells;
 }
 
 template<typename Particles, std::uint32_t gw>
-NO_DISCARD auto ghost_box(ParticleResource<Particles, gw> const&,
-                          damn::core::Box<int, Particles::dimension> const& cells)
+MKN_KUL_FN_SIG_RET auto ghost_box(ParticleResource<Particles, gw> const&,
+                                  damn::core::Box<int, Particles::dimension> const& cells)
 {
     return damn::core::grow(cells, mkn::kul::ConstArray<int, Particles::dimension>(gw));
 }
@@ -491,7 +491,7 @@ namespace plamn::core
 {
 // a particle's cell, for damn::amr::ParticleData (found by ADL on the particle)
 template<std::size_t dim>
-NO_DISCARD auto cell(Particle<dim> const& particle)
+MKN_KUL_FN_SIG_RET auto cell(Particle<dim> const& particle)
 {
     return damn::core::Point<int, dim>{particle.iCell()};
 }

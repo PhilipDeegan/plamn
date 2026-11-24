@@ -73,8 +73,8 @@ public:
     {
     }
 
-    NO_DISCARD std::string name() const { return name_; }
-    NO_DISCARD constexpr PhysicalQuantity physicalQuantity() const { return qty_; }
+    MKN_KUL_FN_SIG_RET std::string name() const { return name_; }
+    MKN_KUL_FN_SIG_RET constexpr PhysicalQuantity physicalQuantity() const { return qty_; }
 
     void copyData(auto const& that)
     {
@@ -88,12 +88,12 @@ public:
     void fill(auto const v) { field_.fill(v); } // is always usable
 
     // returns view when getting address of this object, could be misleading, but convenient
-    NO_DISCARD auto operator&() { return &field_; }
-    NO_DISCARD auto operator&() const { return &field_; }
+    MKN_KUL_FN_SIG_RET auto operator&() { return &field_; }
+    MKN_KUL_FN_SIG_RET auto operator&() const { return &field_; }
 
-    NO_DISCARD operator field_type&() { return field_; }
-    NO_DISCARD auto& operator*() { return field_; }
-    NO_DISCARD auto& operator*() const { return field_; }
+    MKN_KUL_FN_SIG_RET operator field_type&() { return field_; }
+    MKN_KUL_FN_SIG_RET auto& operator*() { return field_; }
+    MKN_KUL_FN_SIG_RET auto& operator*() const { return field_; }
 
     template<typename, typename>
     friend std::ostream& operator<<(std::ostream& out, Grid const&);

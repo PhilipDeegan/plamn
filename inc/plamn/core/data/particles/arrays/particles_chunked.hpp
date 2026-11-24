@@ -183,7 +183,7 @@ struct ChunkState
     void unsort() { sorted_ = false; }
 
     // gaps between the chunks (set_slack): 0, none, a sort on every change of cell
-    NO_DISCARD bool has_slack() const { return slack_ > 0; }
+    MKN_KUL_FN_SIG_RET bool has_slack() const { return slack_ > 0; }
 
     // sort()'s gaps: slack (a fraction of the particles) over domain's cells (the patch's: box()
     //  is the cell map's, larger), its border cells weighted border to 1 inside
@@ -239,7 +239,7 @@ public:
     }
 
     // the particles, not the gaps (sorted)
-    NO_DISCARD std::size_t nbr_particles() const
+    MKN_KUL_FN_SIG_RET std::size_t nbr_particles() const
     {
         std::size_t n = 0;
         for_each_range(shell(), [&](auto, auto const size) { n += size; });
@@ -329,14 +329,14 @@ protected:
     }
 
     // the end of the last non empty chunk before c, the start of the first after c
-    NO_DISCARD std::size_t prev_end_(std::size_t const c) const
+    MKN_KUL_FN_SIG_RET std::size_t prev_end_(std::size_t const c) const
     {
         for (std::size_t k = c; k-- > 0;)
             if (self().sizes_[k])
                 return self().starts_[k] + self().sizes_[k];
         return 0;
     }
-    NO_DISCARD std::size_t next_start_(std::size_t const c) const
+    MKN_KUL_FN_SIG_RET std::size_t next_start_(std::size_t const c) const
     {
         for (std::size_t k = c + 1; k < self().sizes_.size(); ++k)
             if (self().sizes_[k])
