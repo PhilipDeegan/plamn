@@ -16,8 +16,13 @@ profile:
   sub: cppdict&tpp/cppdict(https://github.com/LaboratoryOfPlasmaPhysics/cppdict)
        menum&tpp/menum(https://github.com/Neargye/magic_enum)
   self: damn
-  # nothing reads errno: sqrt, pow ... stay inline, their loops vectorise (results unchanged)
-  arg: -std=c++20 -fno-math-errno
+  # nothing reads errno: sqrt, pow ... stay inline, their loops vectorise (results unchanged);
+  #  per compiler: nvcc passes it to its host compiler
+  arg: -std=c++20
+  if_arg:
+    g++: -fno-math-errno
+    clang++: -fno-math-errno
+    nvcc: -Xcompiler -fno-math-errno
 
 # python module: pyphare's dict and enums, installed into plamn
 - name: py_etc
