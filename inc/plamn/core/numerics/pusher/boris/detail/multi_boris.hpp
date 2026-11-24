@@ -1793,9 +1793,8 @@ struct MultiBorisFunctors
         Launcher launcher{1, 0};
         launcher.b.x           = damn::kernel::warp_size();
         launcher.g.x           = pps().size();
-        auto const tile_picker = [pps = pps] __device__() {
-            return std::make_tuple(blockIdx.x, &pps()[blockIdx.x], threadIdx.x,
-                                   damn::kernel::warp_size());
+        auto const tile_picker = [pps = pps] __device__() { // threads stride by the launch width
+            return std::make_tuple(blockIdx.x, &pps()[blockIdx.x], threadIdx.x, blockDim.x);
         };
         launcher.stream(in.streamer.streams[i],
                         [=, self = *this] __device__() mutable { self.per_tile(tile_picker); });

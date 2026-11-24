@@ -136,10 +136,11 @@ void Simulator<opts>::setup_()
     hierarchy_.max_levels = cppdict::get_value(dict_, "simulation/AMR/max_nbr_levels", 1);
     models_.set_levels(sim, hierarchy_.max_levels);
     if constexpr (Models_t::mhd_on)
-    {
-        models_.mhd = solver::MHDModel<opts>::from(sim);
-        register_mhd_resources_();
-    }
+        if (models_.has_mhd_levels()) // a coupled build's hybrid only input has no MHD options
+        {
+            models_.mhd = solver::MHDModel<opts>::from(sim);
+            register_mhd_resources_();
+        }
     if (hierarchy_.max_levels > 1 and amr.contains("refinement")
         and amr["refinement"].contains("tagging")
         and amr["refinement"]["tagging"].contains("threshold"))
@@ -248,7 +249,8 @@ void Simulator<opts>::setup_()
     }
 
     if constexpr (Models_t::hybrid_on)
-        setup_hybrid_();
+        if (models_.has_hybrid_levels()) // a coupled build's MHD only input has no ions, no Ohm
+            setup_hybrid_();
     setup_restarts_();
     setup_diagnostics_();
     setup_decomposition_log_();
