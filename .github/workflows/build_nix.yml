@@ -67,3 +67,11 @@ jobs:
     - run: |
         PYTHONPATH=.:phare/pyphare:tst/plamn/python \
           python3 -m phlop.run.test_cases -i tst -c 4 --tags mpi
+    # a failing test's output, kept by phlop under .phlop/ (a hidden directory: include-hidden-files)
+    - if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: phlop-logs-${{ matrix.pyphare }}
+        path: .phlop/
+        include-hidden-files: true
+        if-no-files-found: ignore

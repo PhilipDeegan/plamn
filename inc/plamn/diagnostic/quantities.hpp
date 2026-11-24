@@ -51,7 +51,9 @@ hybrid_quantities(std::vector<std::string> const& population_names)
 
 // quantity -> its grids on an MHD patch (simulator::MHDPatch), its advanced state's (PHARE's
 //  MHDDiagnosticWriter /mhd/..., B and E as the electromag's). V and P: as the patch has them, the
-//  writer converts the conservative state to them first (PHARE's compute)
+//  writer converts the conservative state to them first (PHARE's compute). The quantities a
+//  hybrid level has too, under its names, so one diagnostic spans a coupled hierarchy: B, E, the
+//  ions' mass density (rho) and bulk velocity (V)
 template<typename Patch>
 MKN_KUL_FN_SIG_RET std::map<std::string, Accessor<Patch>> mhd_quantities()
 {
@@ -69,6 +71,8 @@ MKN_KUL_FN_SIG_RET std::map<std::string, Accessor<Patch>> mhd_quantities()
     q["/mhd/P"]    = [](Patch const& p) { return Fields{std::addressof(p.states[0].P)}; };
     q["/EM_B"]     = [=](Patch const& p) { return vec(p.states[0].B); };
     q["/EM_E"]     = [=](Patch const& p) { return vec(p.E); };
+    q["/ions/mass_density"] = q["/mhd/rho"];
+    q["/ions/bulkVelocity"] = q["/mhd/V"];
     return q;
 }
 

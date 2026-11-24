@@ -32,7 +32,7 @@ runs:
   - shell: bash
     run: |
       python3 -c "import dill, numpy, matplotlib; print('pyphare requirements from', __import__('sys').prefix)"
-      python3 -m pip install phlop
+      python3 -m pip install "phlop[psutil]>=0.1.1"  # psutil: a stalled job's ranks killed
 
   # damn is private: check it out where mkn looks for it (tpp/damn) instead of cloning
   - if: inputs.damn-key != ''

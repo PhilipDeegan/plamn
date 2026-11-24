@@ -10,6 +10,12 @@
 // (create_data_set_per_mpi: a rank with fewer patches passes empty ones), writes its own, then
 // the patch attributes (write_attributes_per_mpi), then the file's
 //
+// a coupled hierarchy (MHD and hybrid levels): a field quantity is written on the levels whose
+// model provides it (provides: its quantity table, or a hybrid computed quantity), the others
+// get nothing (phareh5) or an empty entry (pharevtkhdf), as a level not there. B, E, the ions'
+// mass density and bulk velocity are on both (MHD: B, E, rho, V); a quantity no model owning
+// levels has: an error at setup
+//
 // pharevtkhdf
 // a dump of a quantity, level by level: this rank's patches' rows (damn::hdf5::vtkhdf::rows_of)
 // in one buffer (diagnostics_.buffer, reused), each patch converted straight into its slice
@@ -49,6 +55,50 @@
 
 namespace plamn
 {
+namespace detail
+{
+    // whether the model's levels have the field quantity
+    template<typename Model>
+        requires solver::is_mhd_model_v<Model>
+    bool provides(Model const& model, std::string const& quantity)
+    {
+        return model.quantities.contains(quantity);
+    }
+    template<typename Model>
+        requires solver::is_hybrid_model_v<Model>
+    bool provides(Model const& model, std::string const& quantity)
+    {
+        return model.computed.contains(quantity) or model.quantities.contains(quantity);
+    }
+
+    // fn(the quantity's fields on a patch of the model's): MHD's V and P (and the bulk velocity,
+    //  its V) from the conservative state first (PHARE's compute); a hybrid computed quantity's
+    //  scratch grids (computed(patch, quantity): computed per level first), else the view's
+    template<typename Model>
+        requires solver::is_mhd_model_v<Model>
+    void quantity_fields(Model const& model, auto& patch, std::string const& quantity, auto&&,
+                         auto&& fn)
+    {
+        if (quantity == "/mhd/V" or quantity == "/mhd/P" or quantity == "/ions/bulkVelocity")
+        {
+            auto& u = patch.states[0];
+            core::PrimitiveConservativeTransformer{model.gamma}.to_primitive(
+                patch.layout, u.rho, u.rhoV, u.B, u.Etot, u.V, u.P);
+        }
+        fn(diagnostic::quantity_for(model.quantities, quantity)(patch));
+    }
+    template<typename Model>
+        requires solver::is_hybrid_model_v<Model>
+    void quantity_fields(Model const& model, auto& patch, std::string const& quantity,
+                         auto&& computed, auto&& fn)
+    {
+        if (model.computed.contains(quantity))
+            fn(computed(patch, quantity));
+        else
+            fn(diagnostic::quantity_for(model.quantities, quantity)(simulator::view(patch)));
+    }
+} // namespace detail
+
 template<auto opts>
 void Simulator<opts>::setup_diagnostics_()
 {
@@ -74,29 +124,41 @@ void Simulator<opts>::setup_diagnostics_()
             = diagnostic::mhd_quantities<typename solver::MHDModel<opts>::Patch_t>();
     if constexpr (Models_t::hybrid_on)
         models_.hybrid.quantities = solver::hybrid::diagnostic_quantities(models_.hybrid);
-    // unknown quantities: at setup, not at a dump, for each model owning levels
+    // unknown quantities: at setup, not at a dump. A field on the levels of any model owning
+    //  levels that provides it (none: quantity_for's error), particles on the hybrid levels
+    bool constexpr mhd_on = Models_t::mhd_on, hybrid_on = Models_t::hybrid_on;
+    bool const mhd_levels    = mhd_on and models_.mhd_levels > 0;
+    bool const hybrid_levels = hybrid_on and models_.mhd_levels < hierarchy_.max_levels;
     for (auto const& d : diagnostics_.list)
     {
-        if constexpr (Models_t::mhd_on)
-            if (models_.mhd_levels > 0)
-            {
-                if (d.type == "particle")
-                    throw std::runtime_error("plamn diagnostics: no particles on MHD levels");
-                if (!diagnostics_.phareh5)
-                    throw std::runtime_error(
-                        "plamn diagnostics: MHD levels in pharevtkhdf not yet");
-                std::ignore = diagnostic::quantity_for(models_.mhd.quantities, d.quantity);
-            }
-        if constexpr (Models_t::hybrid_on)
-            if (models_.mhd_levels < hierarchy_.max_levels)
-            {
-                if (d.type == "particle")
+        if (d.type == "particle")
+        {
+            if constexpr (hybrid_on)
+                if (hybrid_levels)
+                {
                     std::ignore = solver::hybrid::particle_population(models_.hybrid, d.quantity);
-                else if (is_computed(d.quantity)) // its scratch grids on every patch
+                    continue;
+                }
+            throw std::runtime_error("plamn diagnostics: particles without hybrid levels: "
+                                     + d.quantity);
+        }
+        bool provided = false;
+        if constexpr (mhd_on)
+            provided = provided or (mhd_levels and detail::provides(models_.mhd, d.quantity));
+        if constexpr (hybrid_on)
+            if (hybrid_levels and detail::provides(models_.hybrid, d.quantity))
+            {
+                provided = true;
+                if (is_computed(d.quantity)) // its scratch grids on every patch
                     models_.hybrid.requested.insert(d.quantity);
-                else
-                    std::ignore = diagnostic::quantity_for(models_.hybrid.quantities, d.quantity);
             }
+        if (provided)
+            continue;
+        if constexpr (hybrid_on)
+            if (hybrid_levels)
+                std::ignore = diagnostic::quantity_for(models_.hybrid.quantities, d.quantity);
+        if constexpr (mhd_on)
+            std::ignore = diagnostic::quantity_for(models_.mhd.quantities, d.quantity);
     }
 }
 
@@ -129,42 +191,35 @@ void Simulator<opts>::dump_(diagnostic::Diagnostic& diag, double const time, int
 {
     if (diagnostics_.phareh5)
         dump_phareh5_(diag, time, only);
-    else if constexpr (Models_t::hybrid_on) // MHD levels: phareh5 only (setup_diagnostics_)
+    else
         dump_vtkhdf_(diag, time, only);
 }
 
 template<auto opts>
 void Simulator<opts>::dump_vtkhdf_(diagnostic::Diagnostic& diag, double const time, int const only)
 {
-    using Patch_t = solver::HybridModel<opts>::Patch_t;
     DAMN_LOG_SCOPE(1, "Simulator::dump_vtkhdf_");
 #if DAMN_HAS_HIGHFIVE
     using namespace damn::hdf5;
-    using Float       = Diagnostics::Float;
-    auto constexpr gw = Patch_t::field_ghost_width;
+    using Float = Diagnostics::Float;
 
-    // the quantity's fields on a patch, fn(fields): computed ones' scratch grids (computed per
-    //  level first), the others the view's
-    bool const is_computed_ = is_computed(diag.quantity);
-    auto const with_fields  = [&](Patch_t& patch, auto&& fn) {
-        if (is_computed_)
-            fn(computed(patch, diag.quantity));
-        else
-            fn(diagnostic::quantity_for(models_.hybrid.quantities,
-                                        diag.quantity)(simulator::view(patch)));
+    // fn(the quantity's fields on a patch of the model's)
+    auto const computed_   = [&](auto& patch, std::string const& q) { return computed(patch, q); };
+    auto const with_fields = [&](auto& model, auto& patch, auto&& fn) {
+        detail::quantity_fields(model, patch, diag.quantity, computed_, fn);
     };
     auto const path        = diagnostics_.dir + "/" + diagnostic::file_name(diag.quantity);
     auto const max_levels  = hierarchy_.max_levels;
     std::size_t components = 0;
     {
-        // the number of components, from any patch's accessor (a rank may have none)
+        // the number of components, from any patch of a level providing it (a rank may have none)
         std::size_t local = 0;
-        for (auto const& [ln, ld] : models_.hybrid.levels)
-            if (!ld.data.empty())
-            {
-                with_fields(*ld.data[0], [&](auto const& f) { local = f.size(); });
-                break;
-            }
+        for (std::size_t ln = 0; ln < levels_.size() and local == 0; ++ln)
+            models_.visit(ln, [&](auto& model) {
+                auto const& ld = model.levels[static_cast<int>(ln)];
+                if (!ld.data.empty() and detail::provides(model, diag.quantity))
+                    with_fields(model, *ld.data[0], [&](auto const& f) { local = f.size(); });
+            });
         components = damn::mpi::max(local);
     }
 
@@ -190,15 +245,20 @@ void Simulator<opts>::dump_vtkhdf_(diagnostic::Diagnostic& diag, double const ti
         }
         file->write_attribute("/", "domain_box", upper);
         file->write_attribute("/", "periodicities", periodic);
-        auto const& ions = dict_["simulation"]["ions"];
-        for (std::size_t i = 0; i < models_.hybrid.population_names.size(); ++i)
-            if (diag.quantity.starts_with("/ions/pop/" + models_.hybrid.population_names[i] + "/"))
-            {
-                auto const& pop = ions["pop" + std::to_string(i)];
-                file->write_attribute("/", "pop_mass", pop["mass"].template to<double>());
-                file->write_attribute("/", "pop_charge",
-                                      pop["particle_initializer"]["charge"].template to<double>());
-            }
+        if constexpr (Models_t::hybrid_on)
+        {
+            auto const& ions = dict_["simulation"]["ions"];
+            for (std::size_t i = 0; i < models_.hybrid.population_names.size(); ++i)
+                if (diag.quantity.starts_with("/ions/pop/" + models_.hybrid.population_names[i]
+                                              + "/"))
+                {
+                    auto const& pop = ions["pop" + std::to_string(i)];
+                    file->write_attribute("/", "pop_mass", pop["mass"].template to<double>());
+                    file->write_attribute(
+                        "/", "pop_charge",
+                        pop["particle_initializer"]["charge"].template to<double>());
+                }
+        }
 
         std::array<double, dimension> spacing{};
         for (std::size_t i = 0; i < dimension; ++i)
@@ -207,40 +267,49 @@ void Simulator<opts>::dump_vtkhdf_(diagnostic::Diagnostic& diag, double const ti
     }
 
     vtkhdf::append_step<Float>(*file, time);
+    auto const empty_level = [&](int const ln) {
+        damn::amr::Level<dimension> const none{ln, {}};
+        vtkhdf::append_level<Float>(*file, ln, none, rank_, components, std::span<Float const>());
+    };
     for (int ln = 0; ln < max_levels; ++ln)
     {
         if (static_cast<std::size_t>(ln) >= levels_.size() or (only >= 0 and ln != only))
         {
-            damn::amr::Level<dimension> const none{ln, {}};
-            vtkhdf::append_level<Float>(*file, ln, none, rank_, components,
-                                        std::span<Float const>());
+            empty_level(ln);
             continue;
         }
-        if (is_computed_)
-            compute(static_cast<std::size_t>(ln), diag.quantity);
-        auto& ld = data_(ln);
+        models_.visit(static_cast<std::size_t>(ln), [&](auto& model) {
+            using Model_t = std::remove_cvref_t<decltype(model)>;
+            if (!detail::provides(model, diag.quantity))
+                return empty_level(ln); // not on this model's levels: as a level not there
+            if constexpr (solver::is_hybrid_model_v<Model_t>)
+                if (is_computed(diag.quantity))
+                    compute(static_cast<std::size_t>(ln), diag.quantity);
+            auto constexpr gw = Model_t::Patch_t::field_ghost_width;
+            auto& ld          = model.levels[ln];
 
-        // this rank's patches' rows, one after another
-        std::vector<std::size_t> first{0};
-        for (auto const& p : ld.patches)
-            first.push_back(first.back() + vtkhdf::rows_of(p.box) * components);
-        auto& buffer = diagnostics_.buffer.get(first.back());
-        {
-            DAMN_LOG_SCOPE(1, "Simulator::dump_vtkhdf_::convert");
-            damn::core::ThreadPool::INSTANCE().patch_exec(
-                ld.data.size(), [&](auto const i) { return i; },
-                [&](auto const i) {
-                    std::span<Float> rows{buffer.data() + first[i], first[i + 1] - first[i]};
-                    with_fields(*ld.data[i], [&](auto const& grids) {
-                        for (std::size_t c = 0; c < grids.size(); ++c)
-                            diagnostic::primal_into<gw>(*grids[c], ld.patches[i].box, rows,
-                                                        components, c);
+            // this rank's patches' rows, one after another
+            std::vector<std::size_t> first{0};
+            for (auto const& p : ld.patches)
+                first.push_back(first.back() + vtkhdf::rows_of(p.box) * components);
+            auto& buffer = diagnostics_.buffer.get(first.back());
+            {
+                DAMN_LOG_SCOPE(1, "Simulator::dump_vtkhdf_::convert");
+                damn::core::ThreadPool::INSTANCE().patch_exec(
+                    ld.data.size(), [&](auto const i) { return i; },
+                    [&](auto const i) {
+                        std::span<Float> rows{buffer.data() + first[i], first[i + 1] - first[i]};
+                        with_fields(model, *ld.data[i], [&](auto const& grids) {
+                            for (std::size_t c = 0; c < grids.size(); ++c)
+                                diagnostic::primal_into<gw>(*grids[c], ld.patches[i].box, rows,
+                                                            components, c);
+                        });
                     });
-                });
-        }
-        DAMN_LOG_SCOPE(1, "Simulator::dump_vtkhdf_::write");
-        vtkhdf::append_level<Float>(*file, ln, hierarchy_.levels[ln], rank_, components,
-                                    std::span<Float const>{buffer.data(), first.back()});
+            }
+            DAMN_LOG_SCOPE(1, "Simulator::dump_vtkhdf_::write");
+            vtkhdf::append_level<Float>(*file, ln, hierarchy_.levels[ln], rank_, components,
+                                        std::span<Float const>{buffer.data(), first.back()});
+        });
     }
 
     // PHARE's flush_every: closed every flush_every dumps (0: never), reopened at the next
@@ -262,23 +331,10 @@ void Simulator<opts>::dump_phareh5_(diagnostic::Diagnostic& diag, double const t
     using Float       = Diagnostics::Float;
 
     bool const particles = diag.type == "particle";
-    // fn(the quantity's fields on a patch of the model's); the model's members through it (a
-    //  disabled model's are not there)
+    // fn(the quantity's fields on a patch of the model's)
+    auto const computed_   = [&](auto& patch, std::string const& q) { return computed(patch, q); };
     auto const with_fields = [&](auto& model, auto& patch, auto&& fn) {
-        if constexpr (solver::is_mhd_model_v<std::remove_cvref_t<decltype(model)>>)
-        {
-            if (diag.quantity == "/mhd/V" or diag.quantity == "/mhd/P") // from the conservative
-            {
-                auto& u = patch.states[0];
-                core::PrimitiveConservativeTransformer{model.gamma}.to_primitive(
-                    patch.layout, u.rho, u.rhoV, u.B, u.Etot, u.V, u.P);
-            }
-            fn(diagnostic::quantity_for(model.quantities, diag.quantity)(patch));
-        }
-        else if (model.computed.contains(diag.quantity))
-            fn(computed(patch, diag.quantity));
-        else
-            fn(diagnostic::quantity_for(model.quantities, diag.quantity)(simulator::view(patch)));
+        detail::quantity_fields(model, patch, diag.quantity, computed_, fn);
     };
     // datasets: the quantity's last path element, then _x.. (vectors), _xx.. (tensors)
     auto const name           = diag.quantity.substr(diag.quantity.rfind('/') + 1);
@@ -309,6 +365,8 @@ void Simulator<opts>::dump_phareh5_(diagnostic::Diagnostic& diag, double const t
         models_.visit(static_cast<std::size_t>(ln), [&](auto& model) {
             using Model_t = std::remove_cvref_t<decltype(model)>;
             using Patch_t = Model_t::Patch_t;
+            if (!particles and !detail::provides(model, diag.quantity))
+                return; // not on this model's levels: nothing, as a level not there
             // the fields' points written: PHARE's ghost box (hybrid: per interp order; MHD: the
             //  patch's)
             auto constexpr gw = Patch_t::field_ghost_width;
