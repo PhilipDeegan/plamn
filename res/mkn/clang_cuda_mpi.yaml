@@ -21,7 +21,7 @@ find:
       /usr/lib64/openmpi/lib
       /usr/lib/x86_64-linux-gnu/hdf5/openmpi
 
-env: |
+env: | # a versioned clang, e.g. OMPI_CXX=clang++-22
   OMPI_CXX=clang++
   PATH=/opt/mpi/cuda/bin:${PATH}
 
@@ -35,6 +35,6 @@ compiler:
 
 file:
   - type: cpp:cxx:cc
-    archiver: llvm-ar-22 -cr
+    archiver: llvm-ar -cr # clang's (GNU ar cannot index its LTO bitcode), e.g. llvm-ar-22 with clang++-22
     compiler:  mpicxx ${cxx.flags}
     linker:  mpicxx ${lnk.flags}

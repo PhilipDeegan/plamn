@@ -15,12 +15,13 @@ env: | # replace with $(clang++ -print-file-name=libclang_rt.asan-x86_64.so)
   ASAN_OPTIONS=detect_leaks=0
   OMPI_MCA_memory=^patcher
 
+# a versioned clang, e.g. clang++-22: name it in compiler/linker below and mask it as clang++
 # compiler:
 #   mask:
 #     clang++:
-#       clang++-
+#       clang++-22
 file:
   - type: cpp:cxx:cc:c:S
-    archiver: ar -cr
+    archiver: llvm-ar -cr # clang's (GNU ar cannot index its LTO bitcode), e.g. llvm-ar-22 with clang++-22
     compiler: ccache clang++ ${cxx_flags}
     linker: clang++ -Bmold -lclang_rt.asan

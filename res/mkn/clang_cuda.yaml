@@ -21,17 +21,16 @@ property:
 #   repo: git@github.com:mkn/
 #   mod-repo: git@github.com:mkn-mod/
 
-# env: |
-#   OMPI_CXX=clang++-18
-#   PATH=/opt/mpi/cuda/bin:${PATH}
-
 inc: /usr/local/cuda/targets/x86_64-linux/include/cccl
 path: /usr/local/cuda/targets/x86_64-linux/lib
 
-
-
+# a versioned clang, e.g. clang++-22: name it in compiler/linker below and mask it as clang++
+# compiler:
+#   mask:
+#     clang++:
+#       clang++-22
 file:
   - type: cpp:cxx:cc
-    archiver: llvm-ar-22 -cr
+    archiver: llvm-ar -cr # clang's (GNU ar cannot index its LTO bitcode), e.g. llvm-ar-22 with clang++-22
     compiler:  clang++ ${cxx.flags}
     linker:  clang++ ${lnk.flags}
