@@ -41,6 +41,8 @@ MKN_KUL_FN_SIG_RET std::vector<std::string> restart_names(HybridModel<opts> cons
         for (auto const* m : {"_density", "_charge_density", "_flux_x", "_flux_y", "_flux_z"})
             names.push_back(pop + m);
     }
+    for (auto const& name : core::closure_restart_names(*model.closure))
+        names.push_back(name);
     return names;
 }
 
@@ -112,6 +114,7 @@ void restart_loaded(HybridModel<opts> const& model, auto&& level)
     });
     level.per_patch(
         [&](auto& patch) { core::AmpereTransformer{}(patch.layout, patch.em.B, patch.J); });
+    restart_loaded_level(model, level); // the closure's state from what was stored
 }
 
 } // namespace plamn::solver::hybrid

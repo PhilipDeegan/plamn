@@ -26,6 +26,7 @@
 #include "plamn/amr/refine.hpp"
 #include "plamn/core/data/particles/exporting/particles_exporting.hpp"
 #include "plamn/core/numerics/faraday/faraday_transformer.hpp"
+#include "plamn/solver/hybrid/closures.hpp"
 #include "plamn/solver/hybrid/model.hpp"
 
 #include "phlop/timing/scope.hpp"
@@ -127,13 +128,14 @@ void coarsen_moments(auto&& level)
 }
 
 template<auto opts>
-void synchronize(HybridModel<opts> const&, auto&& level, double const t)
+void synchronize(HybridModel<opts> const& model, auto&& level, double const t)
 {
     DAMN_LOG_SCOPE(1, "Simulator::synchronize_");
     auto coarse = level.coarser();
 
     level.coarsen(amr::ElectricFieldCoarsener{}, amr::vector_pairs("EM_E", "EM_E"));
     coarsen_moments(level);
+    synchronize_level(model, level); // the closure's (polytropic: Pe)
 
     // reflux: the coarser Eavg under the fine level is the fine one's time average
     level.coarsen(amr::ElectricFieldCoarsener{}, amr::vector_pairs("EMAvg_E", "EM_fluxSum_E"));

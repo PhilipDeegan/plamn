@@ -64,7 +64,8 @@ void initialize_root(HybridModel<opts>& model, auto&& level, auto const& sim)
     fill_ion_borders(level);
     compute_moments<opts>(level);
 
-    // J from B, then E from Ohm's law
+    // the closure's state from the input, then J from B, the electrons, E from Ohm's law
+    seed_level(model, level, sim);
     ampere_ohm<&Patch_t::em>(model, level);
     level.copy(damn::amr::fill_ghosts, "EM_E");
     level.check_set("EM_E", "root initialization");

@@ -114,6 +114,80 @@ def _patch_density_background():
     hybrid._populate_populations = populate_with_background
 
 
+def _patch_electron_closures():
+    """ElectronModel(closure="polytropic", Pe=f): Pe = s n^gamma, the entropy s carried by the
+    electron flow (#91); gamma is the Simulation's (also the MHD adiabatic index), not an option
+    of the closure. The dictionary takes the initial entropy s = Pe / n^gamma of the analytic ion
+    charge density (sum of the populations' charge * density), free of the deposit's noise"""
+    import numpy as np
+    from pyphare.pharein import electron_model, global_vars
+    from pyphare.pharein.initialize import hybrid
+
+    class PolytropicClosure:
+        closure_name = "polytropic"
+
+        def __init__(self, **kwargs):
+            if "Pe" not in kwargs:
+                raise ValueError(
+                    "ElectronModel: the polytropic closure needs the initial electron pressure 'Pe'"
+                )
+            for name in ("gamma", "Gamma"):
+                if name in kwargs:
+                    raise ValueError(
+                        f"ElectronModel: '{name}' is not an option of the closure, the polytropic"
+                        " index is the 'gamma' given to Simulation"
+                    )
+            self.Pe = kwargs["Pe"]
+
+        @staticmethod
+        def name():
+            return PolytropicClosure.closure_name
+
+        def dict_path(self):
+            return {"name/": PolytropicClosure.closure_name}
+
+    electron_model.PolytropicClosure = PolytropicClosure
+    init = electron_model.ElectronModel.__init__
+
+    def init_with_closures(self, **kwargs):
+        if kwargs.get("closure") == "polytropic":
+            self.closure = PolytropicClosure(**kwargs)
+            global_vars.sim.set_electrons(self)
+        elif kwargs.get("closure") == "isothermal":
+            init(self, **kwargs)
+        else:
+            raise ValueError(
+                f"ElectronModel: unknown closure {kwargs.get('closure')!r},"
+                " expected 'isothermal' or 'polytropic'"
+            )
+
+    electron_model.ElectronModel.__init__ = init_with_closures
+
+    populate = hybrid._populate_electrons
+
+    def populate_with_closures(dp, sim):
+        closure = sim.electrons.closure
+        if closure.name() != "polytropic":
+            return populate(dp, sim)
+        path = "simulation/electrons/pressure_closure/"
+        gamma = float(getattr(sim, "gamma", 5.0 / 3.0))
+        model, pops = sim.model.model_dict, sim.model.populations
+
+        def entropy(*x):
+            n = sum(model[pop]["charge"] * model[pop]["density"](*x) for pop in pops)
+            if np.any(np.asarray(n) <= 0):
+                raise ValueError("polytropic electrons: the ion charge density must be > 0")
+            pe = closure.Pe(*x)
+            return np.broadcast_to(pe / n**gamma, np.shape(x[0])).astype(np.float64)
+
+        dp.add_string(path + "name", "polytropic")
+        dp.add_double(path + "gamma", gamma)
+        dp.add_init_function(sim.ndim, path + "Pe", closure.Pe)
+        dp.add_init_function(sim.ndim, path + "s", entropy)
+
+    hybrid._populate_electrons = populate_with_closures
+
+
 def set_tag_boxes(sim, tag_boxes):
     """levels made at initialization from tag_boxes ({level: boxes}, levels from 1, each in its
     own level's cells: pyphare Boxes or (lower, upper) pairs, e.g. Tagger(sim).tag()) instead of
@@ -379,6 +453,7 @@ def patch():
     _patch_enum_int()
     _patch_live_simulators()
     _patch_density_background()
+    _patch_electron_closures()
     _patch_tag_boxes()
     _patch_time_step_keys()
     _patch_coupled_input()

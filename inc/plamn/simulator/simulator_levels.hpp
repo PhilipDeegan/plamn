@@ -306,7 +306,10 @@ void Simulator<opts>::initialize_refined_(std::size_t const ln, double const t)
     {
         if (models_.is_mhd(ln - 1))
             return initialize_hybrid_over_mhd_(ln, t);
-        solver::hybrid::initialize_refined(models_.hybrid, level_services_(ln), t);
+        auto level = level_services_(ln);
+        solver::hybrid::initialize_refined(models_.hybrid, level, t);
+        // the initial hierarchy: the closure's state from the input, as the root's
+        solver::hybrid::seed_level(models_.hybrid, level, dict_["simulation"]);
     }
 }
 
@@ -454,7 +457,9 @@ void Simulator<opts>::initialize_hybrid_()
     for (std::size_t ln = 1; ln <= refinement_boxes_.size(); ++ln)
     {
         make_level_(static_cast<int>(ln), refinement_boxes_[ln - 1]);
-        solver::hybrid::initialize_refined(models_.hybrid, level_services_(ln), startTime_);
+        auto level = level_services_(ln);
+        solver::hybrid::initialize_refined(models_.hybrid, level, startTime_);
+        solver::hybrid::seed_level(models_.hybrid, level, dict_["simulation"]); // the closure's
     }
     // tagging: each new level from the tags of the one under it, as long as some are (pretag:
     //  those boxes are known already)
@@ -469,8 +474,9 @@ void Simulator<opts>::initialize_hybrid_()
             clustered_.resize(static_cast<std::size_t>(ln) + 2);
             clustered_[ln + 1] = boxes;
             make_level_(ln + 1, boxes);
-            solver::hybrid::initialize_refined(
-                models_.hybrid, level_services_(static_cast<std::size_t>(ln) + 1), startTime_);
+            auto level = level_services_(static_cast<std::size_t>(ln) + 1);
+            solver::hybrid::initialize_refined(models_.hybrid, level, startTime_);
+            solver::hybrid::seed_level(models_.hybrid, level, dict_["simulation"]);
         }
     planned_.clear(); // made: later levels (regrids) level by level
     // the totals under a finer level the finer one's from the start, as after a synchronization

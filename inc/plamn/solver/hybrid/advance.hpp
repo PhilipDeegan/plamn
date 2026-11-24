@@ -240,7 +240,7 @@ namespace detail
 // electrons from the ions and J, then E from Ohm's law; electromag: the HybridPatch member
 // holding the B used and the E computed, the model's (em) or the predicted one (emPred)
 template<auto electromag, auto opts>
-void ampere_ohm(HybridModel<opts> const& model, auto&& level)
+void ampere_ohm(HybridModel<opts> const& model, auto&& level, ClosureStage const& stage = {})
 {
     // one loop each, so each has its own scope (time, counters)
     {
@@ -250,7 +250,7 @@ void ampere_ohm(HybridModel<opts> const& model, auto&& level)
     {
         DAMN_LOG_SCOPE(1, "Simulator::electrons");
         detail::electrons_level<opts>(level);
-        pressure_level(model, level);
+        pressure_level(model, level, stage);
     }
     DAMN_LOG_SCOPE(1, "Simulator::ohm");
     detail::ohm_level<electromag, opts>(model, level);
@@ -414,14 +414,15 @@ void move_ions(HybridModel<opts>& model, auto& level, double const t, double con
 //  J, the electrons and E
 template<auto B_to, auto opts>
 void faraday_ampere_ohm(HybridModel<opts> const& model, auto& level, auto&& E_of,
-                        std::string const& key, double const t, double const dt)
+                        std::string const& key, double const t, double const dt,
+                        ClosureStage::Kind const stage)
 {
     {
         DAMN_LOG_SCOPE(1, "Simulator::faraday");
         faraday_level<B_to, opts>(level, E_of, dt);
     }
     level.fill_magnetic_ghosts(key, t + dt);
-    ampere_ohm<B_to>(model, level);
+    ampere_ohm<B_to>(model, level, {stage, t, dt});
 }
 
 } // namespace plamn::solver::hybrid::detail
@@ -437,7 +438,8 @@ void advance(HybridModel<opts>& model, auto&& level, double const t, double cons
     auto const Eavg = [](auto& patch) -> auto& { return patch.emAvg.E; };
     {
         DAMN_LOG_SCOPE(1, "Simulator::predictor1_");
-        d::faraday_ampere_ohm<&Patch_t::emPred>(model, level, E, "EMPred_B", t, dt);
+        d::faraday_ampere_ohm<&Patch_t::emPred>(model, level, E, "EMPred_B", t, dt,
+                                                hybrid::ClosureStage::first);
     }
     DAMN_SUPER_DEBUG_DO(level.sums("predictor1", t);)
     d::average<opts>(level, t, dt);
@@ -446,7 +448,8 @@ void advance(HybridModel<opts>& model, auto&& level, double const t, double cons
     DAMN_SUPER_DEBUG_DO(level.sums("moments1", t);)
     {
         DAMN_LOG_SCOPE(1, "Simulator::predictor2_");
-        d::faraday_ampere_ohm<&Patch_t::emPred>(model, level, Eavg, "EMPred_B", t, dt);
+        d::faraday_ampere_ohm<&Patch_t::emPred>(model, level, Eavg, "EMPred_B", t, dt,
+                                                hybrid::ClosureStage::middle);
     }
     DAMN_SUPER_DEBUG_DO(level.sums("predictor2", t);)
     d::average<opts>(level, t, dt);
@@ -455,7 +458,8 @@ void advance(HybridModel<opts>& model, auto&& level, double const t, double cons
     DAMN_SUPER_DEBUG_DO(level.sums("moments2", t);)
     {
         DAMN_LOG_SCOPE(1, "Simulator::corrector_");
-        d::faraday_ampere_ohm<&Patch_t::em>(model, level, Eavg, "EM_B", t, dt);
+        d::faraday_ampere_ohm<&Patch_t::em>(model, level, Eavg, "EM_B", t, dt,
+                                            hybrid::ClosureStage::last);
         level.fill_electric_ghosts("EM_E", t + dt);
     }
     DAMN_SUPER_DEBUG_DO(level.sums("corrector", t);)
