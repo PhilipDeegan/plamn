@@ -92,12 +92,12 @@ struct FieldTileOverlaps
                 static_assert(not std::is_const_v<decltype(field)>);
             }
 
-            NO_DISCARD auto& operator[](std::size_t const i) { return tiles[i]; }
-            NO_DISCARD auto& operator[](std::size_t const i) const { return tiles[i]; }
-            NO_DISCARD auto begin() { return tiles.begin(); }
-            NO_DISCARD auto begin() const { return tiles.begin(); }
-            NO_DISCARD auto end() { return tiles.end(); }
-            NO_DISCARD auto end() const { return tiles.end(); }
+            MKN_KUL_FN_SIG_RET auto& operator[](std::size_t const i) { return tiles[i]; }
+            MKN_KUL_FN_SIG_RET auto& operator[](std::size_t const i) const { return tiles[i]; }
+            MKN_KUL_FN_SIG_RET auto begin() { return tiles.begin(); }
+            MKN_KUL_FN_SIG_RET auto begin() const { return tiles.begin(); }
+            MKN_KUL_FN_SIG_RET auto end() { return tiles.end(); }
+            MKN_KUL_FN_SIG_RET auto end() const { return tiles.end(); }
 
             TileSpan_t tile_span;
             std::vector<Tile> tiles{};

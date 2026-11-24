@@ -55,7 +55,7 @@ namespace detail
         std::size_t size = 0;
     };
 
-    NO_DISCARD inline Row refine_row(core::QtyCentering const centering, int const fine)
+    MKN_KUL_FN_SIG_RET inline Row refine_row(core::QtyCentering const centering, int const fine)
     {
         bool const odd = (fine % 2) != 0;
         if (centering == core::QtyCentering::primal)
@@ -209,7 +209,7 @@ void divergence_free_touch_up(std::array<Resource*, 3> const& B,
 
 // a coarse particle's position on the fine grid
 template<std::size_t dim>
-NO_DISCARD core::ParticlePosition<dim> to_fine_grid(core::Particle<dim> const& p)
+MKN_KUL_FN_SIG_RET core::ParticlePosition<dim> to_fine_grid(core::Particle<dim> const& p)
 {
     core::ParticlePosition<dim> fine{p.iCell(), p.delta()};
     for (std::size_t d = 0; d < dim; ++d)

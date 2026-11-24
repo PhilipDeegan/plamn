@@ -68,8 +68,9 @@ namespace boundary::detail
 {
     // the index mirroring `index` across the boundary, along d (local index space)
     template<typename Layout, std::size_t dim>
-    NO_DISCARD auto mirrored(Layout const& layout, Direction const d, Side const side,
-                             QtyCentering const c, damn::core::Point<std::uint32_t, dim> index)
+    MKN_KUL_FN_SIG_RET auto mirrored(Layout const& layout, Direction const d, Side const side,
+                                     QtyCentering const c,
+                                     damn::core::Point<std::uint32_t, dim> index)
     {
         auto const i = static_cast<std::size_t>(d);
         auto const n
@@ -80,8 +81,8 @@ namespace boundary::detail
 
     // the field's nodes over the ghost cells, at its centering
     template<std::size_t dim>
-    NO_DISCARD auto field_box(damn::core::Box<std::uint32_t, dim> const& ghost_cells,
-                              auto const& field)
+    MKN_KUL_FN_SIG_RET auto field_box(damn::core::Box<std::uint32_t, dim> const& ghost_cells,
+                                      auto const& field)
     {
         return toCenteredBox(ghost_cells, centering<dim>(field.physicalQuantity()));
     }

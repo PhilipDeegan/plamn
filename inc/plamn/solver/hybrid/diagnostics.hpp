@@ -19,7 +19,7 @@ namespace plamn::solver::hybrid
 {
 // quantity -> its fields on a patch's view
 template<auto opts>
-NO_DISCARD auto diagnostic_quantities(HybridModel<opts> const& model)
+MKN_KUL_FN_SIG_RET auto diagnostic_quantities(HybridModel<opts> const& model)
 {
     using View_t = HybridModel<opts>::View_t;
     return diagnostic::hybrid_quantities<View_t>(model.population_names);
@@ -27,8 +27,8 @@ NO_DISCARD auto diagnostic_quantities(HybridModel<opts> const& model)
 
 // a particle diagnostic's population index (/ions/pop/<name>/domain or levelGhost)
 template<auto opts>
-NO_DISCARD std::size_t particle_population(HybridModel<opts> const& model,
-                                           std::string const& quantity)
+MKN_KUL_FN_SIG_RET std::size_t particle_population(HybridModel<opts> const& model,
+                                                   std::string const& quantity)
 {
     for (std::size_t i = 0; i < model.population_names.size(); ++i)
         for (auto const* kind : {"/domain", "/levelGhost"})

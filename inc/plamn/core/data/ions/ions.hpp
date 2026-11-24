@@ -61,23 +61,23 @@ namespace core
         }
 
 
-        NO_DISCARD auto nbrPopulations() const { return populations_.size(); }
-        NO_DISCARD auto size() const { return nbrPopulations(); }
+        MKN_KUL_FN_SIG_RET auto nbrPopulations() const { return populations_.size(); }
+        MKN_KUL_FN_SIG_RET auto size() const { return nbrPopulations(); }
 
-        NO_DISCARD field_type const& massDensity() const { return massDensity_; }
-        NO_DISCARD field_type& massDensity() { return massDensity_; }
+        MKN_KUL_FN_SIG_RET field_type const& massDensity() const { return massDensity_; }
+        MKN_KUL_FN_SIG_RET field_type& massDensity() { return massDensity_; }
 
-        NO_DISCARD field_type const& chargeDensity() const { return chargeDensity_; }
-        NO_DISCARD field_type& chargeDensity() { return chargeDensity_; }
+        MKN_KUL_FN_SIG_RET field_type const& chargeDensity() const { return chargeDensity_; }
+        MKN_KUL_FN_SIG_RET field_type& chargeDensity() { return chargeDensity_; }
 
-        NO_DISCARD vecfield_type const& velocity() const { return bulkVelocity_; }
-        NO_DISCARD vecfield_type& velocity() { return bulkVelocity_; }
+        MKN_KUL_FN_SIG_RET vecfield_type const& velocity() const { return bulkVelocity_; }
+        MKN_KUL_FN_SIG_RET vecfield_type& velocity() { return bulkVelocity_; }
 
-        NO_DISCARD vecfield_type const& chargeFlux() const { return chargeFlux_; }
-        NO_DISCARD vecfield_type& chargeFlux() { return chargeFlux_; }
+        MKN_KUL_FN_SIG_RET vecfield_type const& chargeFlux() const { return chargeFlux_; }
+        MKN_KUL_FN_SIG_RET vecfield_type& chargeFlux() { return chargeFlux_; }
 
-        NO_DISCARD std::string static chargeDensityName() { return "chargeDensity"; }
-        NO_DISCARD std::string static massDensityName() { return "massDensity"; }
+        MKN_KUL_FN_SIG_RET std::string static chargeDensityName() { return "chargeDensity"; }
+        MKN_KUL_FN_SIG_RET std::string static massDensityName() { return "massDensity"; }
 
         tensorfield_type const& momentumTensor() const { return momentumTensor_; }
         tensorfield_type& momentumTensor() { return momentumTensor_; }
@@ -219,26 +219,26 @@ namespace core
         }
 
 
-        NO_DISCARD auto begin() { return std::begin(populations_); }
-        NO_DISCARD auto end() { return std::end(populations_); }
-        NO_DISCARD auto begin() const { return std::begin(populations_); }
-        NO_DISCARD auto end() const { return std::end(populations_); }
+        MKN_KUL_FN_SIG_RET auto begin() { return std::begin(populations_); }
+        MKN_KUL_FN_SIG_RET auto end() { return std::end(populations_); }
+        MKN_KUL_FN_SIG_RET auto begin() const { return std::begin(populations_); }
+        MKN_KUL_FN_SIG_RET auto end() const { return std::end(populations_); }
 
-        NO_DISCARD auto& population(std::size_t const i)
+        MKN_KUL_FN_SIG_RET auto& population(std::size_t const i)
         {
             if (i >= populations_.size())
                 throw std::out_of_range("Ions population index out of range");
             return populations_[i];
         }
 
-        NO_DISCARD auto const& population(std::size_t const i) const
+        MKN_KUL_FN_SIG_RET auto const& population(std::size_t const i) const
         {
             if (i >= populations_.size())
                 throw std::out_of_range("Ions population index out of range");
             return populations_[i];
         }
 
-        NO_DISCARD bool isUsable() const
+        MKN_KUL_FN_SIG_RET bool isUsable() const
         {
             // not the momentum tensor: bound only when computed (plamn's computed quantities)
             auto usable
@@ -250,7 +250,7 @@ namespace core
 
 
 
-        NO_DISCARD bool isSettable() const
+        MKN_KUL_FN_SIG_RET bool isSettable() const
         {
             auto settable = damn::core::isSettable(chargeDensity_, bulkVelocity_, momentumTensor_,
                                              massDensity_, chargeFlux_);
@@ -267,12 +267,12 @@ namespace core
 
 
 
-        NO_DISCARD std::vector<IonPopulation>& getRunTimeResourcesViewList()
+        MKN_KUL_FN_SIG_RET std::vector<IonPopulation>& getRunTimeResourcesViewList()
         {
             return populations_;
         }
 
-        NO_DISCARD auto getCompileTimeResourcesViewList()
+        MKN_KUL_FN_SIG_RET auto getCompileTimeResourcesViewList()
         {
             return std::forward_as_tuple(bulkVelocity_, momentumTensor_, chargeDensity_,
                                          massDensity_, chargeFlux_);
@@ -285,7 +285,7 @@ namespace core
         //-------------------------------------------------------------------------
 
 
-        NO_DISCARD std::string to_str()
+        MKN_KUL_FN_SIG_RET std::string to_str()
         {
             std::stringstream ss;
             ss << "Ions\n";

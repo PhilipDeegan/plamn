@@ -112,13 +112,13 @@ struct MHDPatch
     {
         std::vector<std::unique_ptr<State_t>> data;
 
-        NO_DISCARD State_t& operator[](std::size_t const s) { return *data[s]; }
-        NO_DISCARD State_t const& operator[](std::size_t const s) const { return *data[s]; }
-        NO_DISCARD std::size_t size() const { return data.size(); }
+        MKN_KUL_FN_SIG_RET State_t& operator[](std::size_t const s) { return *data[s]; }
+        MKN_KUL_FN_SIG_RET State_t const& operator[](std::size_t const s) const { return *data[s]; }
+        MKN_KUL_FN_SIG_RET std::size_t size() const { return data.size(); }
     };
 
     // a state's names: PHARE's for the advanced one, _s<s> after the others'
-    NO_DISCARD static std::string state_name(std::string const& name, std::size_t const s)
+    MKN_KUL_FN_SIG_RET static std::string state_name(std::string const& name, std::size_t const s)
     {
         return s == 0 ? name : name + "_s" + std::to_string(s);
     }

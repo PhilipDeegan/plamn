@@ -38,7 +38,7 @@ struct HybridPatchView
 };
 
 template<typename Patch>
-NO_DISCARD auto view(Patch& patch)
+MKN_KUL_FN_SIG_RET auto view(Patch& patch)
 {
     using View = HybridPatchView<typename Patch::VecField_t>;
     View v{{patch.em.E, patch.em.B}, patch.ions.massDensity(), patch.ions.chargeDensity(),

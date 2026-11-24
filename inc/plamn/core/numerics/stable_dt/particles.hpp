@@ -29,7 +29,7 @@ namespace plamn::core
 // the columns (or strided members) themselves: one pass per velocity component
 template<typename Particles>
     requires HasComponents<Particles>
-NO_DISCARD std::array<double, 3> max_abs_velocity(Particles const& particles)
+MKN_KUL_FN_SIG_RET std::array<double, 3> max_abs_velocity(Particles const& particles)
 {
     std::array<double, 3> m{0, 0, 0};
     auto const c = components(particles);
@@ -44,7 +44,7 @@ NO_DISCARD std::array<double, 3> max_abs_velocity(Particles const& particles)
 // any other layout (tiled ones tile by tile): particle by particle
 template<typename Particles>
     requires(!HasComponents<Particles>)
-NO_DISCARD std::array<double, 3> max_abs_velocity(Particles const& particles)
+MKN_KUL_FN_SIG_RET std::array<double, 3> max_abs_velocity(Particles const& particles)
 {
     std::array<double, 3> m{0, 0, 0};
     for_each_particle(particles, [&](auto const& p) {
@@ -57,8 +57,8 @@ NO_DISCARD std::array<double, 3> max_abs_velocity(Particles const& particles)
 }
 
 template<std::size_t dim>
-NO_DISCARD double particles_dt(std::array<double, dim> const& dx, auto const& particles,
-                               double const cfl_particles)
+MKN_KUL_FN_SIG_RET double particles_dt(std::array<double, dim> const& dx, auto const& particles,
+                                       double const cfl_particles)
 {
     auto const v = max_abs_velocity(particles);
     double dt    = std::numeric_limits<double>::max();

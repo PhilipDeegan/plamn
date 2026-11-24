@@ -25,7 +25,7 @@ namespace plamn::solver::hybrid
 {
 // the resources a restart stores
 template<auto opts>
-NO_DISCARD std::vector<std::string> restart_names(HybridModel<opts> const& model)
+MKN_KUL_FN_SIG_RET std::vector<std::string> restart_names(HybridModel<opts> const& model)
 {
     std::vector<std::string> names;
     for (auto const* em : {"EM_B", "EM_E"})

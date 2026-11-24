@@ -31,17 +31,17 @@ enum class BoundaryLocation : std::uint8_t {
     ZUpper = 5
 };
 
-NO_DISCARD constexpr Side side_of(BoundaryLocation const location)
+MKN_KUL_FN_SIG_RET constexpr Side side_of(BoundaryLocation const location)
 {
     return static_cast<std::uint8_t>(location) % 2 == 0 ? Side::Lower : Side::Upper;
 }
 
-NO_DISCARD constexpr Direction direction_of(BoundaryLocation const location)
+MKN_KUL_FN_SIG_RET constexpr Direction direction_of(BoundaryLocation const location)
 {
     return static_cast<Direction>(static_cast<std::uint8_t>(location) / 2);
 }
 
-NO_DISCARD constexpr BoundaryLocation boundary_location(Direction const d, Side const side)
+MKN_KUL_FN_SIG_RET constexpr BoundaryLocation boundary_location(Direction const d, Side const side)
 {
     return static_cast<BoundaryLocation>(2 * static_cast<std::uint8_t>(d)
                                          + (side == Side::Lower ? 0 : 1));
@@ -74,7 +74,7 @@ enum class Codim3BoundaryLocation : std::uint8_t {
 };
 
 // the faces an edge or a corner joins
-NO_DISCARD constexpr std::array<BoundaryLocation, 2>
+MKN_KUL_FN_SIG_RET constexpr std::array<BoundaryLocation, 2>
 adjacent_locations(Codim2BoundaryLocation const location)
 {
     using enum BoundaryLocation;
@@ -98,7 +98,7 @@ adjacent_locations(Codim2BoundaryLocation const location)
     return adjacent[i];
 }
 
-NO_DISCARD constexpr std::array<BoundaryLocation, 3>
+MKN_KUL_FN_SIG_RET constexpr std::array<BoundaryLocation, 3>
 adjacent_locations(Codim3BoundaryLocation const location)
 {
     using enum BoundaryLocation;
@@ -119,7 +119,7 @@ adjacent_locations(Codim3BoundaryLocation const location)
 }
 
 // "xlower", ..., "zupper" (pyphare's domain_boundaries keys)
-NO_DISCARD inline BoundaryLocation boundary_location(std::string const& name)
+MKN_KUL_FN_SIG_RET inline BoundaryLocation boundary_location(std::string const& name)
 {
     constexpr std::array<char const*, 6> names{"xlower", "xupper", "ylower",
                                                "yupper", "zlower", "zupper"};

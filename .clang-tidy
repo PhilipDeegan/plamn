@@ -17,8 +17,8 @@ Checks: >
   clang-diagnostic-unused-variable,
   modernize-use-nodiscard
 CheckOptions:
-  # plamn spells [[nodiscard]] through damn's NO_DISCARD macro (damn/core/def.hpp)
-  modernize-use-nodiscard.ReplacementString: NO_DISCARD
+  # [[nodiscard]] is spelled through mkn.kul's MKN_KUL_FN_SIG_RET (mkn/kul/lang/cpp/compiler/def.hpp)
+  modernize-use-nodiscard.ReplacementString: MKN_KUL_FN_SIG_RET
 HeaderFilterRegex: '.*/(inc|tst)/plamn/.*'
 # the compiler's unused warnings (misc-unused-parameters does not look into templates); before
 #  the command: a header's command is inferred from a source's, where after it they read as files

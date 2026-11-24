@@ -94,7 +94,7 @@ namespace mhd
     using Riemann_t = decltype(riemann<opts>());
 
     // the states (the advanced one and the stages) a scheme uses
-    NO_DISCARD inline std::size_t n_states(MHDOpts::TimeIntegratorType const scheme)
+    MKN_KUL_FN_SIG_RET inline std::size_t n_states(MHDOpts::TimeIntegratorType const scheme)
     {
         switch (scheme)
         {
@@ -134,7 +134,7 @@ struct MHDModel<opts, true>
     bool hall                          = false;
     core::BoundaryManager<Quantity> boundaries{};
 
-    NO_DISCARD std::size_t n_states() const { return mhd::n_states(scheme); }
+    MKN_KUL_FN_SIG_RET std::size_t n_states() const { return mhd::n_states(scheme); }
 
     // the levels from n on gone
     void truncate(std::size_t const n)
@@ -143,7 +143,7 @@ struct MHDModel<opts, true>
     }
 
     // from the input's simulation dict
-    NO_DISCARD static MHDModel from(initializer::Dict const& sim)
+    MKN_KUL_FN_SIG_RET static MHDModel from(initializer::Dict const& sim)
     {
         auto const& fv = sim["algo"]["fv_method"];
         MHDModel m;

@@ -26,7 +26,7 @@ namespace core
 
 
     public:
-        NO_DISCARD static std::unique_ptr<ParticleInitializerT>
+        MKN_KUL_FN_SIG_RET static std::unique_ptr<ParticleInitializerT>
         create(plamn::initializer::Dict const& dict, std::string const& populationName = "")
         {
             using FunctionType = plamn::initializer::InitFunction<dimension>;

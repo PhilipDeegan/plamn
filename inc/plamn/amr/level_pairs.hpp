@@ -14,7 +14,7 @@ namespace plamn::amr
 {
 // the pairs of a vector's components between levels: coarse (and coarse_new, if not
 //  empty) on the coarser level, fine on the finer
-NO_DISCARD inline std::vector<damn::amr::LevelPair>
+MKN_KUL_FN_SIG_RET inline std::vector<damn::amr::LevelPair>
 vector_pairs(std::string const& coarse, std::string const& fine, std::string const& coarse_new = "")
 {
     std::vector<damn::amr::LevelPair> pairs;

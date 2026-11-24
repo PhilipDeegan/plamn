@@ -34,7 +34,7 @@ namespace plamn
 namespace core
 {
     template<std::uint32_t lhs, std::uint32_t rhs>
-    NO_DISCARD constexpr std::uint32_t max()
+    MKN_KUL_FN_SIG_RET constexpr std::uint32_t max()
     {
         if constexpr (lhs < rhs)
         {
@@ -48,7 +48,7 @@ namespace core
 
 
     template<typename T>
-    NO_DISCARD std::string to_str(T&& t)
+    MKN_KUL_FN_SIG_RET std::string to_str(T&& t)
     {
         return t.to_str();
     }
@@ -56,7 +56,7 @@ namespace core
 
 
     template<typename Container, typename ContainedT = Container::value_type>
-    NO_DISCARD bool notIn(ContainedT& obj, Container& list)
+    MKN_KUL_FN_SIG_RET bool notIn(ContainedT& obj, Container& list)
     {
         auto sameItem = std::find_if(std::begin(list), std::end(list), [&obj](auto& currentItem) {
             return obj->name() == currentItem->name();

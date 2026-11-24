@@ -17,8 +17,9 @@
 namespace plamn::core
 {
 
-NO_DISCARD inline double fast_magnetosonic(double const gamma, double const rho, double const Bn,
-                                           double const BdotB, double const P) DAMN_ALL
+MKN_KUL_FN_SIG_RET inline double fast_magnetosonic(double const gamma, double const rho,
+                                                   double const Bn, double const BdotB,
+                                                   double const P) DAMN_ALL
 {
     auto const sound      = std::sqrt((gamma * P) / rho);
     auto const alfven_dir = std::sqrt(Bn * Bn / rho);
@@ -50,9 +51,9 @@ struct FaceCurrents
 };
 
 template<std::size_t dir>
-NO_DISCARD GodunovFaceResult rusanov(double const gamma, MHDPrimitive const& uL,
-                                     MHDPrimitive const& uR,
-                                     FaceCurrents const* const j = nullptr) DAMN_ALL
+MKN_KUL_FN_SIG_RET GodunovFaceResult rusanov(double const gamma, MHDPrimitive const& uL,
+                                             MHDPrimitive const& uR,
+                                             FaceCurrents const* const j = nullptr) DAMN_ALL
 {
     auto const b2  = [](auto const& B) { return B[0] * B[0] + B[1] * B[1] + B[2] * B[2]; };
     auto const cfL = fast_magnetosonic(gamma, uL.rho, uL.B[dir], b2(uL.B), uL.P);

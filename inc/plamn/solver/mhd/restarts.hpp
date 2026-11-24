@@ -17,7 +17,7 @@ namespace plamn::solver::mhd
 {
 // the resources a restart stores
 template<auto opts>
-NO_DISCARD std::vector<std::string> restart_names(MHDModel<opts> const&)
+MKN_KUL_FN_SIG_RET std::vector<std::string> restart_names(MHDModel<opts> const&)
 {
     std::vector<std::string> names{"rho", "Etot"};
     for (auto const* v : {"rhoV", "B"})

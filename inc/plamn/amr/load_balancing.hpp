@@ -22,7 +22,8 @@ struct CoarsestRebalanceCheck
     std::size_t interval{std::max<std::size_t>(first, 1)};
     std::size_t steps_to_next_check = 0;
 
-    NO_DISCARD static bool imbalanced(std::vector<double> const& workloads, double const tolerance)
+    MKN_KUL_FN_SIG_RET static bool imbalanced(std::vector<double> const& workloads,
+                                              double const tolerance)
     {
         if (workloads.empty())
             return false;
@@ -35,7 +36,7 @@ struct CoarsestRebalanceCheck
         return *std::max_element(workloads.begin(), workloads.end()) / average - 1 > tolerance;
     }
 
-    NO_DISCARD bool operator()(auto&& gather_workloads)
+    MKN_KUL_FN_SIG_RET bool operator()(auto&& gather_workloads)
     {
         if (steps_to_next_check > 0)
         {

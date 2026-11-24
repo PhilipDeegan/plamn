@@ -26,7 +26,7 @@ struct Masked
     int stencil = Op{}.stencil;
 
     // box less every covered box, the covered points of a box given by points(box)
-    NO_DISCARD std::vector<Box_t> uncovered(Box_t const& box, auto&& points) const
+    MKN_KUL_FN_SIG_RET std::vector<Box_t> uncovered(Box_t const& box, auto&& points) const
     {
         std::vector<Box_t> parts{box};
         for (auto const& c : *covered)

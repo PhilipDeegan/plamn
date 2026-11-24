@@ -49,27 +49,27 @@ struct IndexerStorage<StorageMode::SPAN, opts>
     IndexerStorage& operator=(IndexerStorage const&)     = default;
     IndexerStorage& operator=(IndexerStorage&&) noexcept = default;
 
-    NO_DISCARD auto data() const DAMN_ALL { return indexes_.data(); }
-    NO_DISCARD auto data() DAMN_ALL { return indexes_.data(); }
-    NO_DISCARD std::size_t size() const DAMN_ALL { return indexes_.size(); }
-    NO_DISCARD bool is_empty() const DAMN_ALL { return indexes_.size() == 0; }
+    MKN_KUL_FN_SIG_RET auto data() const DAMN_ALL { return indexes_.data(); }
+    MKN_KUL_FN_SIG_RET auto data() DAMN_ALL { return indexes_.data(); }
+    MKN_KUL_FN_SIG_RET std::size_t size() const DAMN_ALL { return indexes_.size(); }
+    MKN_KUL_FN_SIG_RET bool is_empty() const DAMN_ALL { return indexes_.size() == 0; }
 
-    NO_DISCARD auto begin() DAMN_ALL { return indexes_.begin(); }
-    NO_DISCARD auto begin() const DAMN_ALL { return indexes_.begin(); }
-    NO_DISCARD auto cbegin() const DAMN_ALL { return indexes_.begin(); }
-    NO_DISCARD auto end() DAMN_ALL { return indexes_.end(); }
-    NO_DISCARD auto end() const DAMN_ALL { return indexes_.end(); }
-    NO_DISCARD auto cend() const DAMN_ALL { return indexes_.end(); }
+    MKN_KUL_FN_SIG_RET auto begin() DAMN_ALL { return indexes_.begin(); }
+    MKN_KUL_FN_SIG_RET auto begin() const DAMN_ALL { return indexes_.begin(); }
+    MKN_KUL_FN_SIG_RET auto cbegin() const DAMN_ALL { return indexes_.begin(); }
+    MKN_KUL_FN_SIG_RET auto end() DAMN_ALL { return indexes_.end(); }
+    MKN_KUL_FN_SIG_RET auto end() const DAMN_ALL { return indexes_.end(); }
+    MKN_KUL_FN_SIG_RET auto cend() const DAMN_ALL { return indexes_.end(); }
 
-    NO_DISCARD auto& operator[](std::size_t i) DAMN_ALL { return indexes_[i]; }
-    NO_DISCARD auto& operator[](std::size_t i) const DAMN_ALL { return indexes_[i]; }
-    NO_DISCARD auto& back() DAMN_ALL { return indexes_[indexes_.size() - 1]; }
-    NO_DISCARD auto& front() const DAMN_ALL { return indexes_[0]; }
+    MKN_KUL_FN_SIG_RET auto& operator[](std::size_t i) DAMN_ALL { return indexes_[i]; }
+    MKN_KUL_FN_SIG_RET auto& operator[](std::size_t i) const DAMN_ALL { return indexes_[i]; }
+    MKN_KUL_FN_SIG_RET auto& back() DAMN_ALL { return indexes_[indexes_.size() - 1]; }
+    MKN_KUL_FN_SIG_RET auto& front() const DAMN_ALL { return indexes_[0]; }
 
     void sort() { std::sort(indexes_.begin(), indexes_.end()); }
     void swap(auto const& a, auto const& b) { std::swap(indexes_[a], indexes_[b]); }
 
-    NO_DISCARD bool is_indexed(std::size_t itemIndex) const
+    MKN_KUL_FN_SIG_RET bool is_indexed(std::size_t itemIndex) const
     {
         return std::end(indexes_) != std::find(std::begin(indexes_), std::end(indexes_), itemIndex);
     }
@@ -132,27 +132,27 @@ struct IndexerStorage<StorageMode::VECTOR, opts>
 
     // All CPU operations work directly on vec_ — no span involved.
 
-    NO_DISCARD auto data() const { return vec_.data(); }
-    NO_DISCARD auto data() { return vec_.data(); }
-    NO_DISCARD std::size_t size() const { return vec_.size(); }
-    NO_DISCARD bool is_empty() const { return vec_.empty(); }
+    MKN_KUL_FN_SIG_RET auto data() const { return vec_.data(); }
+    MKN_KUL_FN_SIG_RET auto data() { return vec_.data(); }
+    MKN_KUL_FN_SIG_RET std::size_t size() const { return vec_.size(); }
+    MKN_KUL_FN_SIG_RET bool is_empty() const { return vec_.empty(); }
 
-    NO_DISCARD auto begin() { return vec_.begin(); }
-    NO_DISCARD auto begin() const { return vec_.begin(); }
-    NO_DISCARD auto cbegin() const { return vec_.cbegin(); }
-    NO_DISCARD auto end() { return vec_.end(); }
-    NO_DISCARD auto end() const { return vec_.end(); }
-    NO_DISCARD auto cend() const { return vec_.cend(); }
+    MKN_KUL_FN_SIG_RET auto begin() { return vec_.begin(); }
+    MKN_KUL_FN_SIG_RET auto begin() const { return vec_.begin(); }
+    MKN_KUL_FN_SIG_RET auto cbegin() const { return vec_.cbegin(); }
+    MKN_KUL_FN_SIG_RET auto end() { return vec_.end(); }
+    MKN_KUL_FN_SIG_RET auto end() const { return vec_.end(); }
+    MKN_KUL_FN_SIG_RET auto cend() const { return vec_.cend(); }
 
-    NO_DISCARD auto& operator[](std::size_t i) { return vec_[i]; }
-    NO_DISCARD auto& operator[](std::size_t i) const { return vec_[i]; }
-    NO_DISCARD auto& back() { return vec_.back(); }
-    NO_DISCARD auto& front() const { return vec_.front(); }
+    MKN_KUL_FN_SIG_RET auto& operator[](std::size_t i) { return vec_[i]; }
+    MKN_KUL_FN_SIG_RET auto& operator[](std::size_t i) const { return vec_[i]; }
+    MKN_KUL_FN_SIG_RET auto& back() { return vec_.back(); }
+    MKN_KUL_FN_SIG_RET auto& front() const { return vec_.front(); }
 
     void sort() { std::sort(vec_.begin(), vec_.end()); }
     void swap(auto const& a, auto const& b) { std::swap(vec_[a], vec_[b]); }
 
-    NO_DISCARD bool is_indexed(std::size_t itemIndex) const
+    MKN_KUL_FN_SIG_RET bool is_indexed(std::size_t itemIndex) const
     {
         return std::end(vec_) != std::find(std::begin(vec_), std::end(vec_), itemIndex);
     }
@@ -179,7 +179,7 @@ struct IndexerStorage<StorageMode::VECTOR, opts>
     void empty() { vec_.resize(0); }
     void clear() { vec_.clear(); }
     void resize(std::size_t s) { vec_.resize(s); }
-    NO_DISCARD std::size_t capacity() const { return vec_.capacity(); }
+    MKN_KUL_FN_SIG_RET std::size_t capacity() const { return vec_.capacity(); }
 
     vec_t vec_;
 };

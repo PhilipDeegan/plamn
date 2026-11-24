@@ -27,9 +27,9 @@
 namespace plamn::core
 {
 template<std::size_t dir>
-NO_DISCARD GodunovFaceResult hlld(double const gamma, MHDPrimitive const& uL,
-                                  MHDPrimitive const& uR,
-                                  FaceCurrents const* const j = nullptr) DAMN_ALL
+MKN_KUL_FN_SIG_RET GodunovFaceResult hlld(double const gamma, MHDPrimitive const& uL,
+                                          MHDPrimitive const& uR,
+                                          FaceCurrents const* const j = nullptr) DAMN_ALL
 {
     std::size_t constexpr t0 = dir == 0 ? 1 : 0; // the transverse directions, in order
     std::size_t constexpr t1 = dir == 2 ? 1 : 2;
@@ -222,9 +222,9 @@ NO_DISCARD GodunovFaceResult hlld(double const gamma, MHDPrimitive const& uL,
 struct HLLDRiemann
 {
     template<std::size_t dir>
-    NO_DISCARD static GodunovFaceResult solve(double const gamma, MHDPrimitive const& uL,
-                                              MHDPrimitive const& uR,
-                                              FaceCurrents const* const j = nullptr) DAMN_ALL
+    MKN_KUL_FN_SIG_RET static GodunovFaceResult
+    solve(double const gamma, MHDPrimitive const& uL, MHDPrimitive const& uR,
+          FaceCurrents const* const j = nullptr) DAMN_ALL
     {
         return hlld<dir>(gamma, uL, uR, j);
     }
