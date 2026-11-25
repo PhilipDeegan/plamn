@@ -2,7 +2,8 @@ name: Slow
 
 # tests too long for every pull request: on merges to master and on demand, as gpu.yml
 #   test_plamn_core_slow   particle partitioning over ~17M particles (>10 min unoptimised)
-#   phare                  PHARE master and plamn on the same long runs: how far they differ
+#   phare                  the PHARE reference (see its checkout) and plamn on the same long
+#                          runs: how far they differ
 # damn is private: checked out where mkn looks for it (tpp/damn) with a read-only deploy key
 
 concurrency:
@@ -120,8 +121,10 @@ jobs:
         sparse-checkout: .github/workflows/slow.yml
         sparse-checkout-cone-mode: false
     - uses: actions/checkout@v4
-      with:
-        repository: PHAREHUB/PHARE
+      with: # the reference while Ohm's energy fix is unmerged upstream: back to PHAREHUB/PHARE
+        #  master when it is
+        repository: nicolasaunai/PHARE
+        ref: fix/ohm-energy-1577
         path: phare
         submodules: recursive
     - name: PHARE's commit
@@ -196,8 +199,10 @@ jobs:
     - uses: actions/checkout@v4
     - uses: ./.github/actions/setup
     - uses: actions/checkout@v4
-      with:
-        repository: PHAREHUB/PHARE
+      with: # the reference while Ohm's energy fix is unmerged upstream: back to PHAREHUB/PHARE
+        #  master when it is
+        repository: nicolasaunai/PHARE
+        ref: fix/ohm-energy-1577
         path: phare
         submodules: recursive
     - uses: actions/download-artifact@v4
