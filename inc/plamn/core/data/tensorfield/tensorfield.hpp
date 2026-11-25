@@ -54,10 +54,13 @@ R static tensor_field_names(std::string const& name)
             {name + "_xx", name + "_xy", name + "_xz", name + "_yy", name + "_yz", name + "_zz"}};
 }
 
+// the components from their names and quantities, args between (e.g. a layout, for grids)
 template<typename Field_t, std::size_t N, typename Qtys>
-auto static tensor_field_make_fields(std::array<std::string, N> const& names, Qtys const& qtys)
+auto static tensor_field_make_fields(std::array<std::string, N> const& names, Qtys const& qtys,
+                                     auto const&... args)
 {
-    return mkn::kul::for_N_make_array<N>([&](auto i) { return Field_t{names[i], qtys[i]}; });
+    return mkn::kul::for_N_make_array<N>(
+        [&](auto i) { return Field_t{names[i], args..., qtys[i]}; });
 }
 
 template<std::size_t rank>
@@ -214,8 +217,8 @@ public:
     TensorField& operator=(TensorField const& source) = default;
     TensorField& operator=(TensorField&& source)      = default;
 
-    TensorField(auto&& name, tensor_t physQty, auto&& cnames, auto&& cqts)
-        : Super{detail::tensor_field_make_fields<Field_t>(cnames, cqts)}
+    TensorField(auto&& name, tensor_t physQty, auto&& cnames, auto&& cqts, auto const&... args)
+        : Super{detail::tensor_field_make_fields<Field_t>(cnames, cqts, args...)}
         , qty_{physQty}
         , name_{name}
         , physQties_{cqts}
@@ -227,6 +230,14 @@ public:
     TensorField(std::string const& name, tensor_t physQty)
         : TensorField{name, physQty, detail::tensor_field_names<rank>(name),
                       PhysicalQuantity::componentsQuantities(physQty)}
+    {
+    }
+
+    // owning components made with the layout too (Field_t a Grid): a vector or tensor field
+    //  holding its own storage, components named name_x ... / name_xx ...
+    TensorField(std::string const& name, tensor_t physQty, auto const& layout)
+        : TensorField{name, physQty, detail::tensor_field_names<rank>(name),
+                      PhysicalQuantity::componentsQuantities(physQty), layout}
     {
     }
 

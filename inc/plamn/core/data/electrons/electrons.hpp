@@ -2,7 +2,6 @@
 #define PLAMN_ELECTRONS_HPP
 
 #include "damn/core/def/damn_config.hpp"
-
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/grid/grid_tiles.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
@@ -12,17 +11,12 @@
 #include "plamn/core/data/tensorfield/tensorfield.hpp"
 #include "plamn/core/data/vecfield/vecfield_component.hpp"
 #include "plamn/initializer/data_provider.hpp"
-
-#include "dict.hpp"
-
 #include "damn/core/exec/kernels/region_chunks.hpp" // IWYU pragma: keep (run_velocity_gpu)
+
 #include <array>
 #include <tuple>
 #include <cstddef>
 #include <stdexcept>
-#include <format>
-#include <string>
-#include <vector>
 #include <type_traits>
 
 namespace plamn::core
@@ -201,91 +195,6 @@ private:
 
 
 template<typename Ions>
-class IsothermalElectronPressureClosure
-{
-    using Layout     = Ions::layout_type;
-    using VecField   = Ions::vecfield_type;
-    using Field      = Ions::field_type;
-
-public:
-    using field_type = Field;
-
-    IsothermalElectronPressureClosure(plamn::initializer::Dict const& dict, Ions const& ions)
-        : ions_{ions}
-        , Te_{dict["Te"].template to<double>()}
-        , Pe_{"Pe", HybridQuantity::Scalar::P}
-    {
-    }
-
-
-    //-------------------------------------------------------------------------
-    //                  start the ResourcesUser interface
-    //-------------------------------------------------------------------------
-
-
-    MKN_KUL_FN_SIG_RET bool isUsable() const { return Pe_.isUsable() and ions_.isUsable(); }
-
-    MKN_KUL_FN_SIG_RET bool isSettable() const { return Pe_.isSettable(); }
-
-    struct PressureProperty
-    {
-        std::string name;
-        HybridQuantity::Scalar qty;
-    };
-
-    using PressureProperties = std::vector<PressureProperty>;
-
-    MKN_KUL_FN_SIG_RET auto getCompileTimeResourcesViewList() const
-    {
-        return std::forward_as_tuple(ions_, Pe_);
-    }
-
-    MKN_KUL_FN_SIG_RET auto getCompileTimeResourcesViewList()
-    {
-        return std::forward_as_tuple(ions_, Pe_);
-    }
-
-    //-------------------------------------------------------------------------
-    //                  ends the ResourcesUser interface
-    //-------------------------------------------------------------------------
-
-
-
-    MKN_KUL_FN_SIG_RET Field& pressure() { return Pe_; }
-    MKN_KUL_FN_SIG_RET Field const& pressure() const { return Pe_; }
-    MKN_KUL_FN_SIG_RET double Te() const { return Te_; }
-
-    void computePressure(Layout const& /*layout*/)
-    {
-        // static_assert(Field::is_contiguous, "Error - assumes Field date is contiguous");
-
-        if (!Pe_.isUsable())
-            throw std::runtime_error("Error - isothermal closure pressure not usable");
-
-        auto const& Ne_ = ions_.chargeDensity();
-        transform(Ne_, Pe_, [this](auto n) { return n * Te_; });
-    }
-
-    void computePressure(std::size_t const tile_idx)
-        requires(is_field_tile_set_v<Field>)
-    {
-        if (!Pe_.isUsable())
-            throw std::runtime_error("Error - isothermal closure pressure not usable");
-
-        auto const& Ne_ = ions_.chargeDensity();
-        transform(Ne_[tile_idx](), Pe_[tile_idx](), [this](auto n) { return n * Te_; });
-    }
-
-private:
-    Ions ions_;
-    double const Te_ = 0;
-    Field Pe_;
-};
-
-
-
-
-template<typename Ions>
 class ElectronMomentModel
 {
     using VecField     = Ions::vecfield_type;
@@ -294,9 +203,9 @@ class ElectronMomentModel
     using FluxComputer = StandardHybridElectronFluxComputer<Ions>;
 
 public:
-    ElectronMomentModel(plamn::initializer::Dict const& dict, Ions& ions, VecField& J)
+    ElectronMomentModel(plamn::initializer::Dict const& /*dict*/, Ions& ions, VecField& J)
         : fluxComput_{ions, J}
-        , pressureClosure_{dict["pressure_closure"], fluxComput_.getIons()}
+        , Pe_{"Pe", HybridQuantity::Scalar::P}
     {
     }
 
@@ -304,21 +213,18 @@ public:
     //                  start the ResourcesUser interface
     //-------------------------------------------------------------------------
 
-    MKN_KUL_FN_SIG_RET bool isUsable() const
-    {
-        return fluxComput_.isUsable() and pressureClosure_.isUsable();
-    }
+    MKN_KUL_FN_SIG_RET bool isUsable() const { return fluxComput_.isUsable() and Pe_.isUsable(); }
 
     MKN_KUL_FN_SIG_RET bool isSettable() const { return fluxComput_.isSettable(); }
 
     MKN_KUL_FN_SIG_RET auto getCompileTimeResourcesViewList() const
     {
-        return std::forward_as_tuple(fluxComput_, pressureClosure_);
+        return std::forward_as_tuple(fluxComput_, Pe_);
     }
 
     MKN_KUL_FN_SIG_RET auto getCompileTimeResourcesViewList()
     {
-        return std::forward_as_tuple(fluxComput_, pressureClosure_);
+        return std::forward_as_tuple(fluxComput_, Pe_);
     }
 
     //-------------------------------------------------------------------------
@@ -336,9 +242,9 @@ public:
     MKN_KUL_FN_SIG_RET VecField& velocity() { return fluxComput_.velocity(); }
 
 
-    MKN_KUL_FN_SIG_RET Field const& pressure() const { return pressureClosure_.pressure(); }
-    MKN_KUL_FN_SIG_RET Field& pressure() { return pressureClosure_.pressure(); }
-    MKN_KUL_FN_SIG_RET double Te() const { return pressureClosure_.Te(); }
+    // Pe: the model's closure writes it for a whole level (solver/hybrid/electron/closures.hpp)
+    MKN_KUL_FN_SIG_RET Field const& pressure() const { return Pe_; }
+    MKN_KUL_FN_SIG_RET Field& pressure() { return Pe_; }
 
 
 
@@ -351,14 +257,10 @@ public:
     {
         fluxComput_.computeBulkVelocity(layout_or_tile_idx);
     }
-    void computePressure(auto const& layout_or_tile_idx)
-    {
-        pressureClosure_.computePressure(layout_or_tile_idx);
-    }
 
 private:
     FluxComputer fluxComput_;
-    IsothermalElectronPressureClosure<Ions> pressureClosure_;
+    Field Pe_;
 };
 
 
@@ -377,14 +279,8 @@ public:
     }
 
 
+    // Ve; Pe is the model's closure's, for a whole level (solver/hybrid/electron/closures.hpp)
     void update(Layout const& layout) { update_(layout); }
-    // Ve only: the pressure from the level's charge density at once (Pe = Ne Te, Te())
-    void update_velocity(Layout const& layout)
-    {
-        momentModel_.computeChargeDensity();
-        momentModel_.computeBulkVelocity(layout);
-    }
-    MKN_KUL_FN_SIG_RET double Te() const { return momentModel_.Te(); }
     // update_velocity's Ve for a level at once (GPU_UNIFIED, untiled): an item per patch, one
     //  launch for the items (run_velocity_gpu)
     MKN_KUL_FN_SIG_RET auto make_velocity_item(Layout const& layout)
@@ -448,7 +344,6 @@ private:
 
         momentModel_.computeChargeDensity();
         momentModel_.computeBulkVelocity(layout_or_tile_idx);
-        momentModel_.computePressure(layout_or_tile_idx);
     }
 
     ElectronMomentModel<Ions> momentModel_;

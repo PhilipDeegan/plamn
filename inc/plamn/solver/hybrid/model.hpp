@@ -11,6 +11,7 @@
 #include "damn/core/def/constants.hpp"
 #include "plamn/amr/split/split.hpp" // IWYU pragma: keep (the Splitter specializations)
 #include "plamn/amr/split/splitter.hpp"
+#include "plamn/core/data/electrons/closures.hpp"
 #include "plamn/core/numerics/ohm/ohm.hpp"
 #include "plamn/diagnostic/quantities.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
@@ -52,6 +53,9 @@ struct HybridModel<opts, true>
     // damn's field copies by accessors, per resource key: resolved once (Simulator::copy_)
     std::map<std::string, std::vector<amr::FieldAccess<Patch_t::field_ghost_width>>> field_access{};
     std::optional<core::OhmInfo> ohm; // from the input, at setup
+    // the electrons' pressure closure, from the input at setup (solver/hybrid/electron/
+    //  closures.hpp)
+    std::optional<core::hybrid::ElectronClosure> electron_closure;
     std::vector<std::string> population_names{};
     // the particle schedules' pairs and accessors, from population_names (Simulator setup)
     std::optional<amr::ParticleRoutes<Patch_t>> particle_routes{};

@@ -163,7 +163,11 @@ void Simulator<opts>::rebuild_moments_(int const lowest)
                 continue;
             solver::hybrid::compute_moments<opts>(level_services_(l));
             if (l + 1 < levels_.size() and !models_.is_mhd(l + 1))
-                solver::hybrid::coarsen_moments(level_services_(l + 1));
+            { // with the closure's part (polytropic: Pe), as a synchronization
+                auto finer = level_services_(l + 1);
+                solver::hybrid::coarsen_moments(finer);
+                solver::hybrid::synchronize_level(models_.hybrid, finer);
+            }
             copy_(ln, damn::amr::fill_ghosts, "IonMoments");
         }
 }
@@ -348,7 +352,7 @@ damn::amr::RegridGhosts Simulator<opts>::moved_ghosts_(int const ln)
             simulator::for_each_field_grid(
                 *ld.data[0], [&](std::string const& name, auto&) { out.fields.push_back(name); });
         for (auto const& name : models_.hybrid.population_names)
-            out.particles.push_back(name + "_level_ghost_old");
+            out.items.push_back(name + "_level_ghost_old");
     }
     return out;
 }
@@ -441,6 +445,9 @@ void Simulator<opts>::regrid_hybrid_data_(int const ln, auto const& map,
     //  once the hierarchy is regridded (rebuild_moments_)
     solver::hybrid::refined_moments(models_.hybrid, level_services_(fine));
     copy_(ln, damn::amr::fill_ghosts, "IonPopMoments");
+    // the closure's state: its own where the old level was, the coarser level's on the new cells
+    auto level = level_services_(fine);
+    solver::hybrid::refine_state_level(models_.hybrid, level, masked_field, t);
     prepare_step_(ln, t);
 }
 
@@ -493,7 +500,12 @@ void Simulator<opts>::initialize_refined_level_(int const ln, double const t)
             initialize_refined_mhd_(fine, t);
     }
     else if constexpr (Models_t::hybrid_on)
-        solver::hybrid::initialize_refined(models_.hybrid, level_services_(fine), t);
+    {
+        auto level = level_services_(fine);
+        solver::hybrid::initialize_refined(models_.hybrid, level, t);
+        // made by a regrid: the closure's state from the coarser level now
+        solver::hybrid::refine_state_level(models_.hybrid, level, amr::FieldRefiner{}, t);
+    }
 }
 
 

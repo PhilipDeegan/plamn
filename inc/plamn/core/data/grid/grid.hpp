@@ -1,15 +1,14 @@
 #ifndef PLAMN_CORE_DATA_GRID_GRID_BASE_HPP
 #define PLAMN_CORE_DATA_GRID_GRID_BASE_HPP
 
+#include "damn/core/memory/memory.hpp"
 #include "mkn/kul/for.hpp"
-
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/field/field.hpp"
 
 #include <array>
 #include <string>
 #include <optional>
-#include <algorithm>
 #include <cstdint>
 #include <iosfwd>
 #include <stdexcept>
@@ -81,7 +80,8 @@ public:
         if (mkn::kul::for_N_any<dimension>(
                 [&](auto i) { return this->shape()[i] != that.shape()[i]; }))
             throw std::runtime_error("Grid::copyData: Incompatible input shape");
-        std::copy(that.data(), that.data() + Super::size(), Super::data());
+        // the allocator's copy: on the device for unified memory, not a host loop over it
+        damn::core::mem::copy<alloc_mode>(Super::data(), that.data(), Super::size());
     }
 
     void zero() { field_.zero(); }              // is always usable

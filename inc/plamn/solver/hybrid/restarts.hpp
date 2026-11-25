@@ -6,13 +6,14 @@
 
 #include "damn/amr/level_map.hpp"
 #include "damn/core/def.hpp"
-
 #include "plamn/amr/refine.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/numerics/ampere/ampere_transformer.hpp"
 #include "plamn/solver/hybrid/level_steps.hpp"
 #include "plamn/solver/hybrid/model.hpp"
+#include "plamn/core/data/electrons/closures.hpp"
+#include "plamn/solver/hybrid/electron/closures.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -41,6 +42,8 @@ MKN_KUL_FN_SIG_RET std::vector<std::string> restart_names(HybridModel<opts> cons
         for (auto const* m : {"_density", "_charge_density", "_flux_x", "_flux_y", "_flux_z"})
             names.push_back(pop + m);
     }
+    for (auto const& name : core::hybrid::electron_restart_names(*model.electron_closure))
+        names.push_back(name);
     return names;
 }
 
@@ -112,6 +115,7 @@ void restart_loaded(HybridModel<opts> const& model, auto&& level)
     });
     level.per_patch(
         [&](auto& patch) { core::AmpereTransformer{}(patch.layout, patch.em.B, patch.J); });
+    restart_loaded_level(model, level); // the closure's state from what was stored
 }
 
 } // namespace plamn::solver::hybrid

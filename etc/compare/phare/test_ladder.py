@@ -18,7 +18,7 @@ Environment (defaults in brackets):
   LADDER_REF     reference code [master]
   LADDER_CMP     compared code [plamn]
   PHARE_DIR      the PHARE checkout whose pyphare plamn runs with [/mkn/git/phare/master]
-  PHARESEE_DIR   the pharesee VTKHDF reader's checkout [/mkn/git/phare/pr_1595]
+  PHARESEE_DIR   the pharesee VTKHDF reader's checkout [/mkn/git/phare/master]
   LADDER_NP      MPI ranks per run [1]
   LADDER_OUT     where the runs write [phare_outputs/compare]
   LADDER_FORMAT  phareh5 (fields in their centering, particles, every time read directly) or
@@ -137,7 +137,7 @@ def tolerance(stem):
 class LadderTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        reader = Path(setting("PHARESEE_DIR", "/mkn/git/phare/pr_1595")) / "pyphare"
+        reader = Path(setting("PHARESEE_DIR", "/mkn/git/phare/master")) / "pyphare"
         sys.path.insert(0, str(reader))
         sys.path.insert(0, str(HERE))
 

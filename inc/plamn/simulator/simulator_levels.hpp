@@ -4,6 +4,7 @@
 // plamn::Simulator: making and initializing levels (PHARE's HybridLevelInitializer)
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
+#include "mkn/kul/env.hpp"
 #include "plamn/amr/untiled.hpp"
 #include "damn/amr/copy.hpp"
 #include "damn/amr/hierarchy.hpp"
@@ -133,10 +134,15 @@ auto Simulator<opts>::make_patch_(auto const& model, int const ln, Box_t const& 
     {
         using Patch_t  = Model_t::Patch_t;
         using Layout_t = Patch_t::Layout_t;
-        return std::make_unique<Patch_t>(Layout_t{box, damn::amr::mesh_size(hierarchy_, ln),
-                                                  damn::amr::position(hierarchy_, ln, box.lower),
-                                                  ln},
-                                         model.n_states());
+        auto patch     = std::make_unique<Patch_t>(
+            Layout_t{box, damn::amr::mesh_size(hierarchy_, ln),
+                     damn::amr::position(hierarchy_, ln, box.lower), ln},
+            model.n_states());
+        // the finest MHD level, a hybrid level over it (fixed by the index: max_mhd_level)
+        if constexpr (Models_t::hybrid_on)
+            if (ln + 1 < static_cast<int>(hierarchy_.max_levels) and !models_.is_mhd(ln + 1))
+                simulator::make_under_hybrid(*patch);
+        return patch;
     }
     else
         return solver::hybrid::make_patch(model, layout_of_(ln, box), dict_["simulation"],
@@ -305,7 +311,10 @@ void Simulator<opts>::initialize_refined_(std::size_t const ln, double const t)
     {
         if (models_.is_mhd(ln - 1))
             return initialize_hybrid_over_mhd_(ln, t);
-        solver::hybrid::initialize_refined(models_.hybrid, level_services_(ln), t);
+        auto level = level_services_(ln);
+        solver::hybrid::initialize_refined(models_.hybrid, level, t);
+        // the initial hierarchy: the closure's state from the input, as the root's
+        solver::hybrid::seed_level(models_.hybrid, level, dict_["simulation"]);
     }
 }
 
@@ -339,8 +348,7 @@ void Simulator<opts>::spawn_level_ghosts_(std::size_t const ln, bool const new_g
         using Patch_t     = solver::HybridModel<opts>::Patch_t;
         auto const pgw    = Patch_t::particle_ghost_width;
         auto const domain = damn::amr::level_domain(hierarchy_, static_cast<int>(ln));
-        double const Te
-            = dict_["simulation"]["electrons"]["pressure_closure"]["Te"].template to<double>();
+        double const Te   = core::hybrid::coupling_Te(*models_.hybrid.electron_closure);
         auto& ld = models_.hybrid.levels[static_cast<int>(ln)];
         for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
         {
@@ -382,8 +390,7 @@ void Simulator<opts>::initialize_hybrid_over_mhd_(std::size_t const ln, double c
         // the ions' internal energy is (3/2) Pi: MHD's (gamma - 1)^-1 P agrees with it at 5/3 only
         if (std::abs(models_.mhd.gamma - 5. / 3.) > 1e-12)
             throw std::runtime_error("plamn coupling: MHD under hybrid levels needs gamma 5/3");
-        double const Te
-            = dict_["simulation"]["electrons"]["pressure_closure"]["Te"].template to<double>();
+        double const Te = core::hybrid::coupling_Te(*models_.hybrid.electron_closure);
 
         mhd_prims_over_(ln, /*interior=*/true);
         auto level = level_services_(ln);
@@ -455,7 +462,9 @@ void Simulator<opts>::initialize_hybrid_()
     for (std::size_t ln = 1; ln <= refinement_boxes_.size(); ++ln)
     {
         make_level_(static_cast<int>(ln), refinement_boxes_[ln - 1]);
-        solver::hybrid::initialize_refined(models_.hybrid, level_services_(ln), startTime_);
+        auto level = level_services_(ln);
+        solver::hybrid::initialize_refined(models_.hybrid, level, startTime_);
+        solver::hybrid::seed_level(models_.hybrid, level, dict_["simulation"]); // the closure's
     }
     // tagging: each new level from the tags of the one under it, as long as some are (pretag:
     //  those boxes are known already)
@@ -470,12 +479,17 @@ void Simulator<opts>::initialize_hybrid_()
             clustered_.resize(static_cast<std::size_t>(ln) + 2);
             clustered_[ln + 1] = boxes;
             make_level_(ln + 1, boxes);
-            solver::hybrid::initialize_refined(
-                models_.hybrid, level_services_(static_cast<std::size_t>(ln) + 1), startTime_);
+            auto level = level_services_(static_cast<std::size_t>(ln) + 1);
+            solver::hybrid::initialize_refined(models_.hybrid, level, startTime_);
+            solver::hybrid::seed_level(models_.hybrid, level, dict_["simulation"]);
         }
     planned_.clear(); // made: later levels (regrids) level by level
     // the totals under a finer level the finer one's from the start, as after a synchronization
-    rebuild_moments_(0);
+    //  (PLAMN_INIT_SYNC=0: each level's own deposit until the first synchronization, as PHARE
+    //  master's initialization with refinement boxes: for comparisons)
+    static bool const init_sync = mkn::kul::env::get_as("PLAMN_INIT_SYNC", 1) != 0;
+    if (init_sync)
+        rebuild_moments_(0);
     // every level's E and B at t0, for the finer levels' time interpolation
     for (std::size_t ln = 0; ln < levels_.size(); ++ln)
         prepare_step_(static_cast<int>(ln), startTime_);

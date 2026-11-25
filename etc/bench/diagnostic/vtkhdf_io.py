@@ -43,7 +43,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-PYPHARE = Path(os.environ.get("PYPHARE", Path.home() / "git/phare/mkn"))
+PYPHARE = Path(os.environ.get("PYPHARE", Path.home() / "git/phare/tiling_gpu"))
 
 
 def cores_of(spec):

@@ -45,6 +45,7 @@
 #include "damn/core/def/constants.hpp"
 #include "damn/core/exec/thread_pool.hpp"
 #include "damn/mpi/scope_timing.hpp"
+#include "mkn/kul/env.hpp"
 #include "mkn/kul/range.hpp"
 #include "plamn/diagnostic/vtkhdf.hpp"
 #include "plamn/simulator/hybrid_patch_view.hpp"
@@ -306,8 +307,13 @@ public:
     MKN_KUL_FN_SIG_RET std::string summary();
 
     // substeps of a level per step of the coarser one: whistler waves need dt ~ dx^2 (PHARE's
-    //  getMaxFinerLevelDt)
-    MKN_KUL_FN_SIG_RET int time_ratio() const { return hierarchy_.ratio * hierarchy_.ratio; }
+    //  getMaxFinerLevelDt); PLAMN_TIME_RATIO overrides it (experiments: the fine levels' ghosts
+    //  interpolated in time over fewer or more substeps)
+    MKN_KUL_FN_SIG_RET int time_ratio() const
+    {
+        static int const forced = mkn::kul::env::get_as("PLAMN_TIME_RATIO", 0);
+        return forced > 0 ? forced : hierarchy_.ratio * hierarchy_.ratio;
+    }
 
 private:
     // one level, whatever its model: how its data moves (the data: the models')

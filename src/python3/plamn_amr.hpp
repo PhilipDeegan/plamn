@@ -253,8 +253,8 @@ damn::amr::Weigh<dim> weigh_of(nb::object const& weigh, std::map<std::string, do
         };
     damn::amr::CostModel model;
     for (auto const& [k, v] : costs)
-        if (k == "particle")
-            model.particle = v;
+        if (k == "particle") // damn's counted item: a particle here
+            model.item = v;
         else if (k == "cell")
             model.cell = v;
         else if (k == "ghost_cell")
