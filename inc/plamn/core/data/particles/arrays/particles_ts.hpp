@@ -28,7 +28,6 @@
 
 #include <cassert>
 #include <tuple>
-#include <iterator>
 #include <stdexcept>
 #include <array>
 #include <cstddef>
@@ -350,13 +349,6 @@ public:
     auto size() const { return total_size; }
     auto size(std::array<std::uint32_t, dim> const& icell) const { return cell_size_(icell); }
     auto size(std::size_t const& idx) const { return cell_size_.data()[idx]; }
-
-    template<typename Iterator>
-    auto erase(Iterator first, Iterator last)
-    {
-        return particles_.erase(particles_.begin() + first.curr_pos,
-                                particles_.begin() + last.curr_pos);
-    }
 
     void _inc(locell_t const& locell)
     {
@@ -718,29 +710,6 @@ struct TileSetParticles : public Super_
     {
     }
 
-    template<typename T>
-    struct iterator_impl;
-
-    template<typename T, auto S = storage_mode,
-             typename = std::enable_if_t<S == StorageMode::VECTOR>>
-    auto erase(iterator_impl<T> a, iterator_impl<T> b)
-    {
-        return Super::erase(a, b);
-    }
-
-    template<typename T, typename... Args>
-    auto static it(T* t, Args&&... args)
-    {
-        if constexpr (storage_mode == StorageMode::SPAN)
-            return iterator_impl<T>{*t, args...};
-        else
-            return iterator_impl<T&>{*t, args...};
-    }
-    auto begin() const DAMN_ALL { return it(this); }
-    auto begin() DAMN_ALL { return it(this); }
-    auto end() const DAMN_ALL { return it(this, true); }
-    auto end() DAMN_ALL { return it(this, true); }
-
     auto data() const DAMN_ALL { return particles_.data(); }
     auto data() DAMN_ALL { return particles_.data(); }
 
@@ -818,201 +787,6 @@ struct TileSetParticles : public Super_
 
 
 }; // TileSetParticles<Super>
-
-
-template<typename Particles>
-struct tile_set_iterator_base
-{
-    tile_set_iterator_base(Particles ps)
-        : particles{ps}
-    {
-    }
-
-    Particles particles;
-
-    std::size_t l = 0, i = 0;
-};
-
-template<auto layout_mode, typename Particles>
-struct tile_set_iterator_storage;
-
-#if DAMN_HAVE_THRUST
-template<typename Particles>
-struct tile_set_iterator_storage<LayoutMode::SoA, Particles>
-    : public tile_set_iterator_base<Particles>
-{
-    bool static constexpr is_const = std::is_const_v<std::remove_reference_t<Particles>>;
-    using Super                    = tile_set_iterator_base<Particles>;
-    using per_tile_particles       = typename std::decay_t<Particles>::per_tile_particles;
-    using Particle_t = typename SoAZipParticle_t<per_tile_particles, is_const>::value_type;
-    using Super::l, Super::i, Super::particles;
-
-    tile_set_iterator_storage(Particles ps) DAMN_ALL : Super{ps} {}
-
-    void set() { particle = Particle_t{particles.data()[l], i}; }
-
-    Particle_t particle;
-};
-
-template<typename Particles>
-struct tile_set_iterator_storage<LayoutMode::SoAVX, Particles>
-    : public tile_set_iterator_base<Particles>
-{
-    bool static constexpr is_const = std::is_const_v<std::remove_reference_t<Particles>>;
-    using Super                    = tile_set_iterator_base<Particles>;
-    using per_tile_particles       = std::decay_t<Particles>::per_tile_particles;
-    using Particle_t = typename SoAVXZipParticle_t<per_tile_particles, is_const>::value_type;
-    using Super::l, Super::i, Super::particles;
-
-    tile_set_iterator_storage(Particles ps) DAMN_ALL : Super{ps} {}
-
-    void set() { particle = Particle_t{particles.data()[l], i}; }
-
-    Particle_t particle;
-};
-
-#else
-
-#endif // DAMN_HAVE_THRUST
-
-template<typename Particles>
-struct tile_set_iterator_storage<LayoutMode::AoS, Particles>
-    : public tile_set_iterator_base<Particles>
-{
-    bool static constexpr is_const = std::is_const_v<std::remove_reference_t<Particles>>;
-    using Super                    = tile_set_iterator_base<Particles>;
-    using per_tile_particles       = std::decay_t<Particles>::per_tile_particles;
-    using Particle_t               = per_tile_particles::Particle_t;
-    using Particle_p = std::conditional_t<is_const, Particle_t const* const, Particle_t*>;
-    using Super::l, Super::i, Super::particles;
-
-    tile_set_iterator_storage(Particles ps) DAMN_ALL : Super{ps} {}
-
-    auto& delta() DAMN_ALL { return particles.data()[l][i].delta(); }
-    auto& iCell() DAMN_ALL { return particles.data()[l][i].iCell(); }
-    auto& weight() DAMN_ALL { return particles.data()[l][i].weight(); }
-    auto& v() DAMN_ALL { return particles.data()[l][i].v(); }
-
-    auto& delta() const DAMN_ALL { return particles.data()[l][i].delta(); }
-    auto& iCell() const DAMN_ALL { return particles.data()[l][i].iCell(); }
-    auto& weight() const DAMN_ALL { return particles.data()[l][i].weight(); }
-    auto& v() const DAMN_ALL { return particles.data()[l][i].v(); }
-
-    void set() { /*noop*/ }
-};
-
-template<typename Particles>
-struct tile_set_iterator_storage<LayoutMode::AoSMapped, Particles>
-    : public tile_set_iterator_storage<LayoutMode::AoS, Particles>
-{
-};
-
-
-template<auto layout_mode, typename Particles>
-struct tile_set_iterator_storage : public tile_set_iterator_base<Particles>
-{
-    using Super = tile_set_iterator_base<Particles>;
-
-    tile_set_iterator_storage(Particles ps) DAMN_ALL : Super{ps}
-    {
-        throw std::runtime_error(__func__);
-    }
-};
-
-template<typename T>
-struct tile_set_iterator_super
-{
-    using per_tile_particles = typename std::decay_t<T>::per_tile_particles;
-    using value_type         = tile_set_iterator_storage<per_tile_particles::layout_mode, T>;
-};
-template<typename T>
-using tile_set_iterator_super_v = typename tile_set_iterator_super<T>::value_type;
-
-template<typename OuterSuper>
-template<typename T>
-struct TileSetParticles<OuterSuper>::iterator_impl : public tile_set_iterator_super_v<T>
-{
-    auto static constexpr dimension = OuterSuper::dimension;
-    using Super                     = tile_set_iterator_super_v<T>;
-    using outer_type                = std::decay_t<T>;
-    using difference_type           = std::size_t;
-    using iterator_category         = std::forward_iterator_tag;
-    using Particle_t                = typename OuterSuper::Particle_t;
-    using value_type                = Particle_t;
-    using pointer                   = Particle_t*;
-    using reference                 = Particle_t&;
-    using Super::l, Super::i, Super::particles;
-
-    iterator_impl(T& particles_, bool end = false)
-        : Super{particles_}
-    {
-        if (end)
-        {
-            l = particles.particles_.size() - 1;
-            i = particles.size(l);
-        }
-        else
-            inc(); // find first particle
-    }
-    iterator_impl(iterator_impl&& that)                 = default;
-    iterator_impl(iterator_impl const& that)            = default;
-    iterator_impl& operator=(iterator_impl&& that)      = default;
-    iterator_impl& operator=(iterator_impl const& that) = default;
-
-    auto end() { return iterator_impl{particles, true}; }
-
-    auto& set()
-    {
-        Super::set();
-        return *this;
-    }
-    auto& inc()
-    {
-        i = 0;
-        for (; l < particles.particles_.size(); ++l)
-            if (*this == this->end() or particles.size(l) > 0)
-                break;
-        return set();
-    }
-
-    auto& operator++()
-    {
-        auto const last = end();
-        if (*this == last)
-            return *this;
-        ++i;
-        if (*this == last)
-            return *this;
-        if (i == particles.size(l))
-        {
-            ++l;
-            return inc();
-        }
-        return set();
-    }
-    auto operator++(int) // postfix increment
-    {
-        auto copy = *this;
-        ++(*this);
-        return copy;
-    }
-
-    auto operator==(iterator_impl const& that) const { return l == that.l and i == that.i; }
-    auto operator!=(iterator_impl const& that) const { return !(*this == that); }
-    auto operator<(iterator_impl const& that) const
-    {
-        if (l < that.l)
-            return true;
-        if (l == that.l)
-            return i < that.i;
-        return false;
-    }
-
-
-    auto copy() const DAMN_ALL { return particles.data()[l][i]; }
-};
-
-
 
 
 template<typename Particles>
