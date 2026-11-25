@@ -192,9 +192,9 @@ public:
     {
         if (newSize > particles_.capacity())
             damn::core::MemoryMonitoring::LOG(__PRETTY_FUNCTION__);
-        particles_.reserve(newSize);
+        damn::reserve(particles_, newSize);
     }
-    void resize(std::size_t newSize) { return particles_.resize(newSize); }
+    void resize(std::size_t newSize) { damn::resize(particles_, newSize); }
     // void shrink_to_fit() { particles_.shrink_to_fit(); }
 
 
@@ -678,6 +678,13 @@ public:
         empty_map();
         map_particles();
     };
+
+    // appended to (or resized) behind the map's back, e.g. by a tile set: mapped again
+    template<auto type>
+    void on_appended()
+    {
+        remap();
+    }
 
     template<typename... Args>
     auto nbr_particles_in(Args&&... args) const

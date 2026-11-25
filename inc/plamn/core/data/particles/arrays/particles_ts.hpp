@@ -491,26 +491,10 @@ public:
     }
 
 
-    void static resize(Particles& ps, std::size_t const& s, bool const& copy = true)
-    {
-        if constexpr (mkn::kul::any_in(layout_mode, LayoutMode::SoA))
-            mkn::kul::apply(ps.as_tuple(), [&](auto& v) { resize(v, s, copy); });
-        else
-            resize(ps.particles_, s, copy);
-    }
-
     template<typename V>
     void static resize(V& v, std::size_t const& s, bool const& copy = true)
     {
         damn::resize(v, s, copy);
-    }
-
-    void static reserve(Particles& ps, std::size_t const& s, bool const& copy = true)
-    {
-        if constexpr (mkn::kul::any_in(layout_mode, LayoutMode::SoA))
-            mkn::kul::apply(ps.as_tuple(), [&](auto& v) { reserve(v, s, copy); });
-        else
-            reserve(ps.particles_, s, copy);
     }
 
     template<typename V>
@@ -586,8 +570,6 @@ void TileSetVector<Particles>::sync_check_realloc()
 {
     DAMN_LOG_SCOPE(3, "TileSetVector::sync_check_realloc");
 
-    using enum LayoutMode;
-
     for (std::size_t i = 0; i < particles_.size(); ++i)
     {
         auto const lix       = local_cell(particles_[i].lower);
@@ -597,8 +579,8 @@ void TileSetVector<Particles>::sync_check_realloc()
         auto const& old_size = real.size();
         cell_size_(lix)      = old_size;
         auto const& new_size = real.size() + nu - left;
-        reserve(real, real.size() + nu); // we must add new before removing leavers
-        resize(real, new_size);
+        real.reserve(real.size() + nu); // we must add new before removing leavers
+        real.resize(new_size);
         cap_(lix) = real.capacity();
         assert(real.size() == cell_size_(lix) + nu - left);
         assert(cap_(lix) >= real.size());
@@ -646,8 +628,6 @@ void TileSetVector<Particles>::on_appended()
         cell_size_(local_cell(tile.lower)) = tile().size();
     }
 
-    using enum LayoutMode;
-
     on_tiles([&](auto& tile) {
         auto const lix  = local_cell(tile.lower);
         auto const& cs  = cell_size_(lix);
@@ -659,8 +639,7 @@ void TileSetVector<Particles>::on_appended()
             resize(gaps, cs, false);
         }
         cap_(lix) = cap;
-        if constexpr (mkn::kul::any_in(layout_mode, LayoutMode::AoSMapped))
-            tile().remap();
+        tile().template on_appended<type>(); // the tile's own, e.g. AoSMapped's cell map
     });
 
     DAMN_LOG_SCOPE(3, "TileSetVector::sync::reset_views");
@@ -740,7 +719,6 @@ struct TileSetParticles : public Super_
         assert(nidx < gaps.size());
         gaps[nidx] = idx;
 
-        using enum LayoutMode;
         if (isIn(newcell, Super::ghost_box()))
         {
             auto const nc = Super::local_tile_cell(newcell);
@@ -797,8 +775,6 @@ void TileSetSpan<Particles>::sync(Args&&... args) DAMN_ALL
     static constexpr auto alloc_mode = Particles::alloc_mode;
 
     auto& view = *this;
-
-    using enum LayoutMode;
 
     if constexpr (alloc_mode == damn::AllocatorMode::CPU)
     {
@@ -1047,7 +1023,7 @@ void TileSetVector<Particles>::erase_if_on_device(std::vector<std::size_t> const
     });
 
     for (auto const ti : tiles)
-        resize(particles_[ti](), particles_views_[ti]().size());
+        particles_[ti]().resize(particles_views_[ti]().size());
     on_appended<ParticleType::Domain>();
 #else
     throw std::runtime_error("TileSetVector::erase_if_on_device needs mkn.gpu");
@@ -1099,7 +1075,7 @@ void TileSetVector<Particles>::move_if_on_device(This& dst, std::vector<std::siz
     }
 
     for (auto const ti : tiles)
-        resize(particles_[ti](), particles_views_[ti]().size());
+        particles_[ti]().resize(particles_views_[ti]().size());
     on_appended<ParticleType::Domain>();
     dst.template on_appended<ParticleType::Domain>();
 #else
@@ -1165,7 +1141,6 @@ template<typename Super>
 void TileSetParticles<Super>::check() const
 {
     // static constexpr auto alloc_mode  = Super::alloc_mode;
-    using enum LayoutMode;
     if constexpr (storage_mode == StorageMode::VECTOR)
     {
         for (auto const& tile : particles_())

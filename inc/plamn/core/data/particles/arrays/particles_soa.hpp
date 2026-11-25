@@ -238,18 +238,9 @@ struct SoAVector
     }
 
 
-    void resize(std::size_t const& size)
+    void resize(std::size_t const& size) // each column as its allocator best grows
     {
-        if constexpr (damn::is_mkn_gpu_vector_v<std::decay_t<std::tuple_element_t<0, std::decay_t<decltype(as_tuple())>>>>)
-        {
-            DAMN_WITH_MKN_GPU(std::apply(
-                [&](auto&... container) {
-                    ((mkn::gpu::resize(container, size, /*copy=*/true)), ...);
-                },
-                as_tuple()));
-        }
-        else
-            std::apply([&](auto&... container) { ((container.resize(size)), ...); }, as_tuple());
+        std::apply([&](auto&... container) { ((damn::resize(container, size)), ...); }, as_tuple());
     }
 
     template<auto type>
@@ -484,16 +475,8 @@ public:
         if (size > capacity())
             damn::core::MemoryMonitoring::LOG(__PRETTY_FUNCTION__);
 
-        if constexpr (damn::is_mkn_gpu_vector_v<std::decay_t<std::tuple_element_t<0, std::decay_t<decltype(as_tuple())>>>>)
-        {
-            DAMN_WITH_MKN_GPU(std::apply(
-                [&](auto&... container) {
-                    ((mkn::gpu::reserve(container, size, /*copy=*/true)), ...);
-                },
-                as_tuple()));
-        }
-        else
-            std::apply([&](auto&... container) { ((container.reserve(size)), ...); }, as_tuple());
+        std::apply([&](auto&... container) { ((damn::reserve(container, size)), ...); },
+                   as_tuple());
     }
 
     // template<typename Src>
