@@ -54,14 +54,24 @@ struct PolytropicClosure
 
 using ElectronClosure = std::variant<IsothermalClosure, PolytropicClosure>;
 
+// the polytropic closure advects s with Ve on the moment nodes, from the moment nodes' ion
+//  flux, which the Ohm energy fix stops depositing in the time loop: off until that settles
+//  (its code still compiled, tests skipped)
+inline constexpr bool polytropic_enabled = false;
+
 // dict: the electrons' "pressure_closure" node
 inline ElectronClosure make_electron_closure(initializer::Dict const& dict)
 {
     auto const name = dict["name"].template to<std::string>();
     if (name == IsothermalClosure::name)
         return IsothermalClosure{dict["Te"].template to<double>()};
-    if (name == PolytropicClosure::name)
-        return PolytropicClosure{dict["gamma"].template to<double>()};
+    if (name == PolytropicClosure::name) // disabled: see polytropic_enabled
+    {
+        if constexpr (polytropic_enabled)
+            return PolytropicClosure{dict["gamma"].template to<double>()};
+        throw std::runtime_error("plamn: the polytropic electron closure is disabled for now "
+                                 "(#91: it waits on the Ohm energy fix's ion flux)");
+    }
     throw std::runtime_error("plamn: unknown electron pressure closure \"" + name + "\"");
 }
 

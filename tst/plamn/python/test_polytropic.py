@@ -151,6 +151,7 @@ class Translation:
         ph.ElectronModel(closure="polytropic", Pe=cls.Pe)
 
 
+@unittest.skip("the polytropic closure is disabled for now (#91)")
 class PolytropicClosureTest(unittest.TestCase):
     def uniform(self, ln, **layout):
         U = Uniform
