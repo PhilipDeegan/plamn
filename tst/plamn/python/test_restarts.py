@@ -25,8 +25,9 @@ timestep = 0.001
 restart_step = 4
 
 
-def setup_model(ppc=100):
-    """PHARE's test_restarts model: protons and alpha, a tanh by"""
+def setup_model(ppc=100, polytropic=False):
+    """PHARE's test_restarts model: protons and alpha, a tanh by; polytropic: the electrons'
+    (#91), Pe varying so that their entropy s = Pe / n^gamma does"""
     sim = ph.global_vars.sim
     L = sim.simulation_domain()[0]
 
@@ -77,11 +78,22 @@ def setup_model(ppc=100):
             "init": {"seed": 2334},
         },
     )
-    ph.ElectronModel(closure="isothermal", Te=0.12)
+    if polytropic:
+        ph.ElectronModel(
+            closure="polytropic",
+            Pe=lambda x: 0.24 * (1 + 0.1 * np.sin(2 * np.pi * x / L)),
+        )
+    else:
+        ph.ElectronModel(closure="isothermal", Te=0.12)
 
 
 def simulation(
-    restart_dir, restart_time=None, restart_options=None, setup=True, **kwargs
+    restart_dir,
+    restart_time=None,
+    restart_options=None,
+    setup=True,
+    polytropic=False,
+    **kwargs,
 ):
     """a Simulator, set up and initialized; restart_options: as is, else a restart at
     restart_step (restart_time None) or restarting at restart_time; setup=False: the Simulation
@@ -104,19 +116,24 @@ def simulation(
     )
     args.update(kwargs)
     sim = ph.Simulation(**args)
-    setup_model()
+    setup_model(polytropic=polytropic)
     if not setup:
         return sim
     return ph.Simulator(sim, log_to_file=False).setup().initialize()
 
 
-def state(simulator):
-    """everything the restarted run must match: per level B, E, moments, particles"""
+def state(simulator, restarted=False):
+    """everything the restarted run must match: per level B, E, moments, particles; the
+    polytropic electrons' Pe, and their entropy Se after a step (a stage's: restarted, the
+    run's first stage sets it)"""
     cpp = simulator.cpp_sim
     pops = ["protons", "alpha"]
     out = {"summary": cpp.summary(), "time": cpp.currentTime()}
     dw = simulator.data_wrangler()
+    polytropic = ph.global_vars.sim.electrons.closure.name() == "polytropic"
     for ln in range(cpp.n_levels()):
+        for q in (["Pe"] + ([] if restarted else ["Se"])) if polytropic else []:
+            out[f"{q}@{ln}"] = np.asarray(cpp.level_values(q, ln))
         for q in ["EM_B", "EM_E"]:
             for c in "xyz":
                 out[f"{q}_{c}@{ln}"] = np.asarray(cpp.level_values(f"{q}_{c}", ln))
@@ -173,7 +190,9 @@ class RestartsTest(unittest.TestCase):
         second = simulation(self.dir, restart_time=restart_time, **kwargs)
         self.simulators.append(second)
         self.assertEqual(second.cpp_sim.currentTime(), first.cpp_sim.currentTime())
-        self.assertSameState(state(first), state(second), "at the restart")
+        self.assertSameState(
+            state(first, restarted=True), state(second, restarted=True), "at the restart"
+        )
         for step in range(restart_step, steps):
             first.advance()
             second.advance()
@@ -189,6 +208,22 @@ class RestartsTest(unittest.TestCase):
 
     def test_tagging(self):
         first = self.run_both(steps=10, refinement="tagging", max_nbr_levels=3)
+        self.assertGreater(first.cpp_sim.n_levels(), 1)
+
+    # the polytropic electrons (#91): their entropy stored, Pe rebuilt from it
+    def test_polytropic_one_level(self):
+        self.run_both(steps=8, refinement_boxes={}, polytropic=True)
+
+    def test_polytropic_refinement_boxes(self):
+        first = self.run_both(
+            steps=5, refinement_boxes={"L0": {"B0": [[10], [19]]}}, polytropic=True
+        )
+        self.assertEqual(first.cpp_sim.n_levels(), 2)
+
+    def test_polytropic_tagging(self):
+        first = self.run_both(
+            steps=10, refinement="tagging", max_nbr_levels=3, polytropic=True
+        )
         self.assertGreater(first.cpp_sim.n_levels(), 1)
 
     # the chunked layouts: their domains' gaps not written, laid out again after writing as when

@@ -16,6 +16,7 @@
 //   <pop>_density, <pop>_charge_density, <pop>_flux_x...,
 //   ions_charge_density, ions_charge_flux_x... (the totals, what a synchronization coarsens),
 //   EM_E_old_x..., EM_B_old_x..., EM_fluxSum_E_x... (AMR),
+//   Pe (the electrons' pressure, a synchronization's), the closure's own fields (Se_old, Se, ...),
 //   <pop>_domain, <pop>_patch_ghost, <pop>_level_ghost[_old, _new] (particles)
 
 #include "mkn/kul/for.hpp"
@@ -23,6 +24,9 @@
 #include "mkn/kul/env.hpp"
 #include "plamn/core/def.hpp"
 #include "plamn/plamn_core.hpp"
+#include "plamn/core/data/electrons/closures.hpp"
+#include "plamn/core/data/tensorfield/tensorfield.hpp"
+#include "plamn/core/utilities/variants.hpp"
 #include "plamn/amr/resources.hpp"
 #include "plamn/amr/untiled.hpp"
 #include "plamn/core/data/ions/ion_population/particle_pack.hpp"
@@ -31,6 +35,7 @@
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/models/quantities/hybrid_quantities.hpp"
 #include "damn/core/def/damn_config.hpp"
+#include "dict.hpp"
 
 #include <array>
 #include <map>
@@ -42,6 +47,7 @@
 #include <optional>
 #include <type_traits>
 #include <utility>
+#include <variant>
 
 namespace plamn::simulator
 {
@@ -102,6 +108,12 @@ struct HybridPatch
         for (std::size_t i = 0; i < N; ++i)
             tf[i].setBuffer(&grids[i]);
     }
+
+    // the electrons' own fields (core::hybrid::electron_fields), owning their grids: a scalar, a
+    //  vector (name_x ...) or a symmetric tensor (name_xx ...)
+    using ElectronVector_t = core::TensorField<Grid_t, core::HybridQuantity, 1>;
+    using ElectronTensor_t = core::TensorField<Grid_t, core::HybridQuantity, 2>;
+    using ElectronField    = std::variant<Grid_t, ElectronVector_t, ElectronTensor_t>;
 
     // one population's data
     struct PopulationData
@@ -201,13 +213,33 @@ struct HybridPatch
         // the electrons copy the ions and J views: made once those point at data
         electrons_.emplace(dict["electrons"], ions, J);
         auto&& [moments]          = electrons_->getCompileTimeResourcesViewList();
-        auto&& [flux, closure]    = moments.getCompileTimeResourcesViewList();
+        auto&& [flux, pressure]   = moments.getCompileTimeResourcesViewList();
         auto&& [ve, ions_, J_]    = flux.getCompileTimeResourcesViewList();
-        auto&& [ions__, pressure] = closure.getCompileTimeResourcesViewList();
         electronVelocity.emplace(grids(ve, layout));
         electronPressure.emplace(grid(pressure, layout));
         bind(ve, *electronVelocity);
         pressure.setBuffer(&*electronPressure);
+
+        // the electrons' own fields, as the input's closure declares them: the same on every
+        //  patch (a fixed grid order, grid_table)
+        auto const fields = core::hybrid::electron_fields(
+            core::hybrid::make_electron_closure(dict["electrons"]["pressure_closure"]));
+        electron_fields.reserve(fields.size());
+        for (auto const& f : fields)
+            std::visit(core::overloads{
+                           [&](core::hybrid::ScalarFieldDescriptor const& d) {
+                               electron_fields.emplace_back(std::in_place_type<Grid_t>, d.name,
+                                                            layout, d.qty);
+                           },
+                           [&](core::hybrid::VectorFieldDescriptor const& d) {
+                               electron_fields.emplace_back(std::in_place_type<ElectronVector_t>,
+                                                            d.name, d.qty, layout);
+                           },
+                           [&](core::hybrid::TensorFieldDescriptor const& d) {
+                               electron_fields.emplace_back(std::in_place_type<ElectronTensor_t>,
+                                                            d.name, d.qty, layout);
+                           }},
+                       f);
 
         // debug: every value NaN until set, so a point nothing filled is found (Simulator's
         //  check_set_) rather than read
@@ -225,6 +257,7 @@ struct HybridPatch
         fn(massDensity);
         fn(chargeDensity);
         fn(*electronPressure);
+        for_each_electron_grid([&](std::string const&, auto& g) { fn(g); });
         for (auto& pop : populations)
         {
             fn(pop->density);
@@ -279,6 +312,32 @@ struct HybridPatch
     std::vector<std::unique_ptr<PopulationData>> populations;
     std::optional<Grids<3>> electronVelocity;
     std::optional<Grid_t> electronPressure;
+    std::vector<ElectronField> electron_fields; // reserved once: never reallocated
+
+    // fn(name, grid) for each grid of the electrons' own fields, in their declared order
+    void for_each_electron_grid(auto&& fn)
+    {
+        for (auto& field : electron_fields)
+            std::visit(core::overloads{[&](Grid_t& g) { fn(g.name(), g); },
+                                       [&](auto& tf) {
+                                           for (auto& g : tf)
+                                               fn(g.name(), g);
+                                       }},
+                       field);
+    }
+    // an electron field by its index (the closure's Field enum: its declared order and type)
+    MKN_KUL_FN_SIG_RET Grid_t& electron_scalar(std::size_t const i)
+    {
+        return std::get<Grid_t>(electron_fields[i]);
+    }
+    MKN_KUL_FN_SIG_RET ElectronVector_t& electron_vector(std::size_t const i)
+    {
+        return std::get<ElectronVector_t>(electron_fields[i]);
+    }
+    MKN_KUL_FN_SIG_RET ElectronTensor_t& electron_tensor(std::size_t const i)
+    {
+        return std::get<ElectronTensor_t>(electron_fields[i]);
+    }
 
     // tiled fields: their untiled temporaries while a whole patch operation (damn's schedules)
     //  works on them, see amr/untiled.hpp and Simulator::lease_
@@ -320,6 +379,9 @@ void for_each_fixed_field_grid(HybridPatch<opts>& patch, auto&& fn)
 
     fn("ions_charge_density", patch.chargeDensity);
     detail::vector_grids("ions_charge_flux", patch.chargeFlux, fn);
+
+    fn("Pe", *patch.electronPressure);
+    patch.for_each_electron_grid(fn);
 
     for (auto& pop : patch.populations)
     {

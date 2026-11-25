@@ -20,6 +20,9 @@
 #include "plamn/initializer/data_provider.hpp"
 #include "plamn/simulator/simulator_def.hpp"
 #include "plamn/solver/models.hpp"
+#include "plamn/solver/hybrid/electron/closures.hpp"
+#include "plamn/core/data/electrons/closures.hpp"
+#include "plamn/core/utilities/variants.hpp"
 
 #include "dict.hpp"
 #include "mpi.h"
@@ -34,6 +37,7 @@
 #include <string_view>
 #include <cstdlib>
 #include <type_traits>
+#include <variant>
 #include <vector>
 // plamn::Simulator: the input: hierarchy, refinement, tagging, load balancing, resources
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
@@ -260,6 +264,8 @@ template<auto opts>
 void Simulator<opts>::setup_hybrid_()
 {
     models_.hybrid.ohm.emplace(core::OhmInfo::FROM(dict_["simulation"]["algo"]["ohm"]));
+    models_.hybrid.electron_closure.emplace(
+        core::hybrid::make_electron_closure(dict_["simulation"]["electrons"]["pressure_closure"]));
     register_resources_();
     solver::hybrid::setup_computed(models_.hybrid, [&](std::string const& key, auto const& names) {
         resources_[key] = damn::amr::same_names(names);
@@ -318,6 +324,21 @@ void Simulator<opts>::register_resources_()
     //  chargeDensitySynchronizers_, ionChargeFluxSynchronizers_)
     add("IonMoments", components("ions_charge_flux"));
     add("IonMoments", damn::amr::same_names({"ions_charge_density"}));
+
+    // the electrons' own fields, each by its name (scalars), its components' (vectors, tensors)
+    for (auto const& field : core::hybrid::electron_fields(*models_.hybrid.electron_closure))
+        std::visit(
+            core::overloads{[&](core::hybrid::ScalarFieldDescriptor const& f) {
+                                add(f.name, damn::amr::same_names({f.name}));
+                            },
+                            [&](core::hybrid::VectorFieldDescriptor const& f) {
+                                add(f.name, components(f.name));
+                            },
+                            [&](core::hybrid::TensorFieldDescriptor const& f) {
+                                auto const names = core::detail::tensor_field_names<2>(f.name);
+                                add(f.name, damn::amr::same_names({names.begin(), names.end()}));
+                            }},
+            field);
 
     auto const& ions    = dict_["simulation"]["ions"];
     auto const nbr_pops = ions["nbrPopulations"].template to<std::size_t>();
