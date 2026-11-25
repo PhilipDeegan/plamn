@@ -41,7 +41,6 @@
 #include "plamn/core/models/quantities/mhd_quantities.hpp"
 #include "plamn/plamn_core.hpp"
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <limits>
@@ -326,8 +325,7 @@ void keep_E_old(MHDPatch<opts>& patch)
     if (!patch.coupling.under)
         return;
     for (std::size_t c = 0; c < 3; ++c)
-        std::copy(patch.E.grids[c].data(), patch.E.grids[c].data() + patch.E.grids[c].size(),
-                  patch.coupling.under->E_old.grids[c].data());
+        patch.coupling.under->E_old.grids[c].copyData(patch.E.grids[c]);
 }
 
 // fn(name, grid) for each field grid damn's schedules may move, by its name

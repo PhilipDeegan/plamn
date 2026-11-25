@@ -300,9 +300,7 @@ void Simulator<opts>::prepare_step_(int const ln, double const t)
             //  made by a regrid after this is still refluxed at the step's end)
             MHDLevel{*this, l}.per_patch([&](auto& patch) {
                 auto& u       = patch.states[0];
-                auto const cp = [](auto const& from, auto& to) {
-                    std::copy(from.data(), from.data() + from.size(), to.data());
-                };
+                auto const cp = [](auto const& from, auto& to) { to.copyData(from); };
                 cp(u.rho, patch.old.rho);
                 cp(u.Etot, patch.old.Etot);
                 for (std::size_t c = 0; c < 3; ++c)
