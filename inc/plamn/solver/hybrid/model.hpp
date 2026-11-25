@@ -34,18 +34,15 @@
 
 namespace plamn::solver
 {
-// ctx: the context of the levels it owns (simulator/level_context.hpp): their patches' storage
-template<auto opts, simulator::LevelContext ctx = simulator::LevelContext{},
-         bool enabled = has_hybrid_v<opts>>
+template<auto opts, bool enabled = has_hybrid_v<opts>>
 struct HybridModel
 {
 };
 
-template<auto opts, simulator::LevelContext ctx>
-struct HybridModel<opts, ctx, true>
+template<auto opts>
+struct HybridModel<opts, true>
 {
-    auto static constexpr context = ctx;
-    using Patch_t     = simulator::HybridPatch<opts, ctx>;
+    using Patch_t     = simulator::HybridPatch<opts>;
     using LevelData_t = damn::amr::LevelData<opts.dimension, std::unique_ptr<Patch_t>>;
     using Mover_t     = Patch_t::ParticlesSynchronisedMover_t;
     using Splitter_t  = amr::Splitter<damn::core::DimConst<opts.dimension>,

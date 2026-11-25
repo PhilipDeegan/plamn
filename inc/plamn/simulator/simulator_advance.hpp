@@ -298,7 +298,7 @@ void Simulator<opts>::prepare_step_(int const ln, double const t)
             // the state at the step's start (PHARE's MHDMessenger prepareStep), every point: the
             //  reflux redoes the step from it, so only a level that can have a finer one (one
             //  made by a regrid after this is still refluxed at the step's end)
-            MHDLevel{*this, l}.per_patch([&](auto& patch) {
+            MHDLevel{*this, l}.per_patch([&, hybrid_over = !models_.is_mhd(l + 1)](auto& patch) {
                 auto& u       = patch.states[0];
                 auto const cp = [](auto const& from, auto& to) {
                     std::copy(from.data(), from.data() + from.size(), to.data());
@@ -309,8 +309,9 @@ void Simulator<opts>::prepare_step_(int const ln, double const t)
                 {
                     cp(u.rhoV.grids[c], patch.old.rhoV.grids[c]);
                     cp(u.B.grids[c], patch.old.B.grids[c]);
+                    if (hybrid_over) // its E ghosts in time (simulator/coupling.hpp)
+                        cp(patch.E.grids[c], patch.E_old.grids[c]);
                 }
-                simulator::keep_E_old(patch); // under a hybrid level: its E ghosts in time
             });
     });
 }

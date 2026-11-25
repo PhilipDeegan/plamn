@@ -9,10 +9,6 @@
 //            interpolate in time between it and states[0] (PHARE's MHDMessenger rhoOld_...),
 //            the reflux redoes the step from it (PHARE's SolverMHD stateOld_)
 //   E        the constrained transport electric field of the last flux computation
-//   (context) MHDPatch<opts, ctx>, ctx the level's context (level_context.hpp): the default's
-//            patch is the core, another context's derives from it with that context's storage
-//            (MHDStorage): under a hybrid level E_old, E at the step's start (prepare_step:
-//            keep_E_old), the hybrid level's E ghosts interpolate in time between it and E
 //   fluxes   per face direction, of the last flux computation; ct its upwind constrained
 //            transport inputs; butcher, butcherE the schemes' weighted sums of them (the step's
 //            fluxes and E, what a reflux replaces under a finer level)
@@ -35,14 +31,12 @@
 //  F_Etot_butcher_<d>, F_rho_sum_<d>...; butcherE_x..., E_sum_x... (the last fluxes and the
 //  constrained transport inputs never move)
 
-#include "plamn/simulator/level_context.hpp"
 #include "damn/core/def.hpp"
 #include "plamn/amr/untiled.hpp"
 #include "plamn/core/models/mhd_state.hpp"
 #include "plamn/core/models/quantities/mhd_quantities.hpp"
 #include "plamn/plamn_core.hpp"
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <limits>
@@ -55,11 +49,9 @@
 
 namespace plamn::simulator
 {
-template<auto opts, LevelContext ctx = LevelContext{}>
+template<auto opts>
 struct MHDPatch
 {
-    auto static constexpr context = ctx;
-
     using Types      = core::PLAMN_Types<opts>::MHD;
     using Layout_t   = Types::Layout_t;
     using Grid_t     = Types::Grid_t;
@@ -211,6 +203,8 @@ struct MHDPatch
                 VecField{"B_old", layout, V::B},   Grid_t{"Etot_old", layout, S::Etot},
                 VecField{"V_old", layout, V::V},   Grid_t{"P_old", layout, S::P}};
     VecField E{"E", layout, V::E, 0.}, butcherE{"butcherE", layout, V::E, 0.};
+    // E at the step's start: a hybrid level over this one interpolates its E ghosts in time
+    VecField E_old{"E_old", layout, V::E, 0.};
     std::array<Fluxes_t, 3> fluxes{fluxes_("x", S::ScalarFlux_x, V::VecFlux_x),
                                    fluxes_("y", S::ScalarFlux_y, V::VecFlux_y),
                                    fluxes_("z", S::ScalarFlux_z, V::VecFlux_z)};
@@ -280,91 +274,9 @@ private:
     }
 };
 
-// what an MHD level holds for its neighbours (LevelContext): nothing by default
-template<auto opts, LevelContext ctx>
-struct MHDStorage
-{
-    explicit MHDStorage(auto const& /*layout*/) {}
-    void for_each_grid(auto&& /*fn*/) {}
-    void for_each_vector(auto&& /*vector*/) {}
-};
-
-// under a hybrid level: E at the step's start, the hybrid level's E ghosts interpolate in time
-//  between it and E (simulator/coupling.hpp)
-template<auto opts, LevelContext ctx>
-    requires(ctx.finer == LevelModel::hybrid)
-struct MHDStorage<opts, ctx>
-{
-    using Core = MHDPatch<opts>;
-
-    explicit MHDStorage(Core::Layout_t const& layout)
-        : E_old{"E_old", layout, Core::V::E, 0.}
-    {
-    }
-    void for_each_grid(auto&& fn)
-    {
-        for (auto& g : E_old.grids)
-            fn(g);
-    }
-    void for_each_vector(auto&& vector) { vector(E_old); }
-
-    Core::VecField E_old;
-};
-
-// an MHD patch of another context: the core and the context's storage
-template<auto opts, LevelContext ctx>
-    requires(ctx != LevelContext{})
-struct MHDPatch<opts, ctx> : MHDPatch<opts>
-{
-    using Base = MHDPatch<opts>;
-
-    auto static constexpr context = ctx;
-
-    template<typename... Args>
-    explicit MHDPatch(Args&&... args)
-        : Base(std::forward<Args>(args)...)
-        , storage{this->layout}
-    {
-    }
-
-    void for_each_grid(auto&& fn)
-    {
-        Base::for_each_grid(fn);
-        storage.for_each_grid(fn);
-    }
-
-    MHDStorage<opts, ctx> storage;
-};
-
-// a context's storage vector fields: none for the core
-template<auto opts>
-void for_each_storage_vector(MHDPatch<opts>&, auto&&)
-{
-}
-template<auto opts, LevelContext ctx>
-    requires(ctx != LevelContext{})
-void for_each_storage_vector(MHDPatch<opts, ctx>& patch, auto&& vector)
-{
-    patch.storage.for_each_vector(vector);
-}
-
-// prepare_step: E at the step's start, for a hybrid level over this one; nothing otherwise
-template<auto opts, LevelContext ctx>
-void keep_E_old(MHDPatch<opts, ctx>&)
-{
-}
-template<auto opts, LevelContext ctx>
-    requires(ctx.finer == LevelModel::hybrid)
-void keep_E_old(MHDPatch<opts, ctx>& patch)
-{
-    for (std::size_t c = 0; c < 3; ++c)
-        std::copy(patch.E.grids[c].data(), patch.E.grids[c].data() + patch.E.grids[c].size(),
-                  patch.storage.E_old.grids[c].data());
-}
-
 // fn(name, grid) for each field grid damn's schedules may move, by its name
-template<auto opts, LevelContext ctx>
-void for_each_field_grid(MHDPatch<opts, ctx>& patch, auto&& fn)
+template<auto opts>
+void for_each_field_grid(MHDPatch<opts>& patch, auto&& fn)
 {
     auto const scalar = [&](auto& grid) { fn(grid.name(), grid); };
     auto const vector = [&](auto& v) {
@@ -385,8 +297,8 @@ void for_each_field_grid(MHDPatch<opts, ctx>& patch, auto&& fn)
     vector(patch.old.B);
     scalar(patch.old.Etot);
     vector(patch.E);
-    for_each_storage_vector(patch, vector);
-    for (std::size_t d = 0; d < MHDPatch<opts, ctx>::dimension; ++d)
+    vector(patch.E_old);
+    for (std::size_t d = 0; d < MHDPatch<opts>::dimension; ++d)
         for (auto* f : {&patch.butcher[d], &patch.flux_sum[d]})
         {
             scalar(f->F_rho);
@@ -398,16 +310,16 @@ void for_each_field_grid(MHDPatch<opts, ctx>& patch, auto&& fn)
 }
 
 // MHD patches have no scratch grids: every one is fixed (grid_table)
-template<auto opts, LevelContext ctx>
-void for_each_fixed_field_grid(MHDPatch<opts, ctx>& patch, auto&& fn)
+template<auto opts>
+void for_each_fixed_field_grid(MHDPatch<opts>& patch, auto&& fn)
 {
     for_each_field_grid(patch, fn);
 }
 
-template<auto opts, LevelContext ctx>
-void for_each_resource(MHDPatch<opts, ctx>& patch, auto&& fn)
+template<auto opts>
+void for_each_resource(MHDPatch<opts>& patch, auto&& fn)
 {
-    using Patch   = MHDPatch<opts, ctx>;
+    using Patch   = MHDPatch<opts>;
     auto const gw = Patch::field_ghost_width;
     for_each_field_grid(patch, [&](std::string const& name, auto& grid) {
         amr::field_resource_for<gw>(patch.untiled, name, grid, fn);
@@ -415,8 +327,8 @@ void for_each_resource(MHDPatch<opts, ctx>& patch, auto&& fn)
 }
 
 // LevelData holds patches by unique_ptr
-template<auto opts, LevelContext ctx>
-void for_each_resource(std::unique_ptr<MHDPatch<opts, ctx>>& patch, auto&& fn)
+template<auto opts>
+void for_each_resource(std::unique_ptr<MHDPatch<opts>>& patch, auto&& fn)
 {
     for_each_resource(*patch, fn);
 }

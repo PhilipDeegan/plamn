@@ -107,21 +107,18 @@ namespace mhd
     }
 } // namespace mhd
 
-// ctx: the context of the levels it owns (simulator/level_context.hpp): their patches' storage
-template<auto opts, simulator::LevelContext ctx = simulator::LevelContext{},
-         bool enabled = has_mhd_v<opts>>
+template<auto opts, bool enabled = has_mhd_v<opts>>
 struct MHDModel
 {
 };
 
-template<auto opts, simulator::LevelContext ctx>
-struct MHDModel<opts, ctx, true>
+template<auto opts>
+struct MHDModel<opts, true>
 {
-    auto static constexpr context = ctx;
     using Reconstruction = mhd::Reconstruction_t<opts>;
     using Riemann        = mhd::Riemann_t<opts>;
     using Quantity       = core::MHDQuantity;
-    using Patch_t        = simulator::MHDPatch<opts, ctx>;
+    using Patch_t        = simulator::MHDPatch<opts>;
     using LevelData_t    = damn::amr::LevelData<opts.dimension, std::unique_ptr<Patch_t>>;
 
     std::map<int, LevelData_t> levels; // the levels the model is active on
