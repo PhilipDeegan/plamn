@@ -26,7 +26,7 @@
 #include "plamn/amr/refine.hpp"
 #include "plamn/core/data/particles/exporting/particles_exporting.hpp"
 #include "plamn/core/numerics/faraday/faraday_transformer.hpp"
-#include "plamn/solver/hybrid/closures.hpp"
+#include "plamn/solver/hybrid/electron/closures.hpp"
 #include "plamn/solver/hybrid/model.hpp"
 
 #include "phlop/timing/scope.hpp"

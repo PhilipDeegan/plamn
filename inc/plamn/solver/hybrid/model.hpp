@@ -53,8 +53,9 @@ struct HybridModel<opts, true>
     // damn's field copies by accessors, per resource key: resolved once (Simulator::copy_)
     std::map<std::string, std::vector<amr::FieldAccess<Patch_t::field_ghost_width>>> field_access{};
     std::optional<core::OhmInfo> ohm; // from the input, at setup
-    // the electrons' pressure closure, from the input at setup (solver/hybrid/closures.hpp)
-    std::optional<core::ElectronClosure> closure;
+    // the electrons' pressure closure, from the input at setup (solver/hybrid/electron/
+    //  closures.hpp)
+    std::optional<core::hybrid::ElectronClosure> electron_closure;
     std::vector<std::string> population_names{};
     // the particle schedules' pairs and accessors, from population_names (Simulator setup)
     std::optional<amr::ParticleRoutes<Patch_t>> particle_routes{};

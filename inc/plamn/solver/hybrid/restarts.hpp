@@ -13,7 +13,7 @@
 #include "plamn/solver/hybrid/level_steps.hpp"
 #include "plamn/solver/hybrid/model.hpp"
 #include "plamn/core/data/electrons/closures.hpp"
-#include "plamn/solver/hybrid/closures.hpp"
+#include "plamn/solver/hybrid/electron/closures.hpp"
 
 #include <algorithm>
 #include <cstddef>
@@ -42,7 +42,7 @@ MKN_KUL_FN_SIG_RET std::vector<std::string> restart_names(HybridModel<opts> cons
         for (auto const* m : {"_density", "_charge_density", "_flux_x", "_flux_y", "_flux_z"})
             names.push_back(pop + m);
     }
-    for (auto const& name : core::closure_restart_names(*model.closure))
+    for (auto const& name : core::hybrid::electron_restart_names(*model.electron_closure))
         names.push_back(name);
     return names;
 }

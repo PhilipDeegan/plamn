@@ -242,7 +242,7 @@ public:
     MKN_KUL_FN_SIG_RET VecField& velocity() { return fluxComput_.velocity(); }
 
 
-    // Pe: the model's closure writes it for a whole level (solver/hybrid/closures.hpp)
+    // Pe: the model's closure writes it for a whole level (solver/hybrid/electron/closures.hpp)
     MKN_KUL_FN_SIG_RET Field const& pressure() const { return Pe_; }
     MKN_KUL_FN_SIG_RET Field& pressure() { return Pe_; }
 
@@ -279,7 +279,7 @@ public:
     }
 
 
-    // Ve; Pe is the model's closure's, for a whole level (solver/hybrid/closures.hpp)
+    // Ve; Pe is the model's closure's, for a whole level (solver/hybrid/electron/closures.hpp)
     void update(Layout const& layout) { update_(layout); }
     // update_velocity's Ve for a level at once (GPU_UNIFIED, untiled): an item per patch, one
     //  launch for the items (run_velocity_gpu)

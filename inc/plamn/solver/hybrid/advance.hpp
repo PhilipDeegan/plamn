@@ -27,7 +27,7 @@
 #include "plamn/core/numerics/particles_synchronised_mover/particles_synchronised_mover.hpp"
 #include "plamn/core/numerics/particles_synchronised_mover/particles_synchronised_mover_def.hpp"
 #include "plamn/simulator/level_accessor.hpp"
-#include "plamn/solver/hybrid/closures.hpp"
+#include "plamn/solver/hybrid/electron/closures.hpp"
 #include "plamn/solver/hybrid/model.hpp"
 #include "phlop/timing/scope.hpp"
 #include "damn/core/def.hpp"

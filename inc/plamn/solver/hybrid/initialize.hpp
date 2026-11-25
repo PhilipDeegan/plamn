@@ -24,7 +24,7 @@
 #include "plamn/solver/hybrid/advance.hpp"
 #include "plamn/solver/hybrid/level_steps.hpp"
 #include "plamn/solver/hybrid/model.hpp"
-#include "plamn/solver/hybrid/closures.hpp"
+#include "plamn/solver/hybrid/electron/closures.hpp"
 
 #include <cstddef>
 #include <string>

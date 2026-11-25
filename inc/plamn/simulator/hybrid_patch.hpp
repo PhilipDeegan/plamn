@@ -25,6 +25,8 @@
 #include "plamn/core/def.hpp"
 #include "plamn/plamn_core.hpp"
 #include "plamn/core/data/electrons/closures.hpp"
+#include "plamn/core/data/tensorfield/tensorfield.hpp"
+#include "plamn/core/utilities/variants.hpp"
 #include "plamn/amr/resources.hpp"
 #include "plamn/amr/untiled.hpp"
 #include "plamn/core/data/ions/ion_population/particle_pack.hpp"
@@ -107,46 +109,11 @@ struct HybridPatch
             tf[i].setBuffer(&grids[i]);
     }
 
-    // the storage of a closure's own field (core::ClosureField): a scalar, a vector, a tensor
-    struct ClosureScalar
-    {
-        Grid_t grid;
-    };
-    struct ClosureVector
-    {
-        std::string name;
-        Grids<3> grids;
-    };
-    struct ClosureTensor
-    {
-        std::string name;
-        Grids<6> grids;
-    };
-    using ClosureStorage = std::variant<ClosureScalar, ClosureVector, ClosureTensor>;
-
-    static ClosureStorage storage(core::ClosureScalarField const& f, Layout_t const& layout)
-    {
-        return ClosureScalar{Grid_t{f.name, layout, f.qty}};
-    }
-    static ClosureStorage storage(core::ClosureVectorField const& f, Layout_t const& layout)
-    {
-        auto const qties = core::HybridQuantity::componentsQuantities(f.qty);
-        return ClosureVector{f.name,
-                             mkn::kul::for_N<3, mkn::kul::for_N_R_mode::make_array>([&](auto i) {
-                                 return Grid_t{f.name + vector_suffixes[i], layout, qties[i]};
-                             })};
-    }
-    static ClosureStorage storage(core::ClosureTensorField const& f, Layout_t const& layout)
-    {
-        auto const qties = core::HybridQuantity::componentsQuantities(f.qty);
-        return ClosureTensor{f.name,
-                             mkn::kul::for_N<6, mkn::kul::for_N_R_mode::make_array>([&](auto i) {
-                                 return Grid_t{f.name + tensor_suffixes[i], layout, qties[i]};
-                             })};
-    }
-    static constexpr std::array<char const*, 3> vector_suffixes{"_x", "_y", "_z"};
-    static constexpr std::array<char const*, 6> tensor_suffixes{"_xx", "_xy", "_xz",
-                                                                "_yy", "_yz", "_zz"};
+    // the electrons' own fields (core::hybrid::electron_fields), owning their grids: a scalar, a
+    //  vector (name_x ...) or a symmetric tensor (name_xx ...)
+    using ElectronVector_t = core::TensorField<Grid_t, core::HybridQuantity, 1>;
+    using ElectronTensor_t = core::TensorField<Grid_t, core::HybridQuantity, 2>;
+    using ElectronField    = std::variant<Grid_t, ElectronVector_t, ElectronTensor_t>;
 
     // one population's data
     struct PopulationData
@@ -253,14 +220,26 @@ struct HybridPatch
         bind(ve, *electronVelocity);
         pressure.setBuffer(&*electronPressure);
 
-        // the closure's own fields, as the input's closure declares them: the same on every
+        // the electrons' own fields, as the input's closure declares them: the same on every
         //  patch (a fixed grid order, grid_table)
-        auto const fields
-            = core::closure_fields(core::make_closure(dict["electrons"]["pressure_closure"]));
-        closure_storage.reserve(fields.size());
+        auto const fields = core::hybrid::electron_fields(
+            core::hybrid::make_electron_closure(dict["electrons"]["pressure_closure"]));
+        electron_fields.reserve(fields.size());
         for (auto const& f : fields)
-            closure_storage.push_back(
-                std::visit([&](auto const& d) { return storage(d, layout); }, f));
+            std::visit(core::overloads{
+                           [&](core::hybrid::ScalarFieldDescriptor const& d) {
+                               electron_fields.emplace_back(std::in_place_type<Grid_t>, d.name,
+                                                            layout, d.qty);
+                           },
+                           [&](core::hybrid::VectorFieldDescriptor const& d) {
+                               electron_fields.emplace_back(std::in_place_type<ElectronVector_t>,
+                                                            d.name, d.qty, layout);
+                           },
+                           [&](core::hybrid::TensorFieldDescriptor const& d) {
+                               electron_fields.emplace_back(std::in_place_type<ElectronTensor_t>,
+                                                            d.name, d.qty, layout);
+                           }},
+                       f);
 
         // debug: every value NaN until set, so a point nothing filled is found (Simulator's
         //  check_set_) rather than read
@@ -278,7 +257,7 @@ struct HybridPatch
         fn(massDensity);
         fn(chargeDensity);
         fn(*electronPressure);
-        for_each_closure_grid([&](std::string const&, auto& g) { fn(g); });
+        for_each_electron_grid([&](std::string const&, auto& g) { fn(g); });
         for (auto& pop : populations)
         {
             fn(pop->density);
@@ -333,34 +312,31 @@ struct HybridPatch
     std::vector<std::unique_ptr<PopulationData>> populations;
     std::optional<Grids<3>> electronVelocity;
     std::optional<Grid_t> electronPressure;
-    std::vector<ClosureStorage> closure_storage; // reserved once: never reallocated
+    std::vector<ElectronField> electron_fields; // reserved once: never reallocated
 
-    // fn(name, grid) for each grid of the closure's fields, in their declared order
-    void for_each_closure_grid(auto&& fn)
+    // fn(name, grid) for each grid of the electrons' own fields, in their declared order
+    void for_each_electron_grid(auto&& fn)
     {
-        for (auto& storage : closure_storage)
-            std::visit(
-                [&](auto& s) {
-                    if constexpr (requires { s.grid; })
-                        fn(s.grid.name(), s.grid);
-                    else
-                        for (auto& g : s.grids)
-                            fn(g.name(), g);
-                },
-                storage);
+        for (auto& field : electron_fields)
+            std::visit(core::overloads{[&](Grid_t& g) { fn(g.name(), g); },
+                                       [&](auto& tf) {
+                                           for (auto& g : tf)
+                                               fn(g.name(), g);
+                                       }},
+                       field);
     }
-    // a closure field by its index (the closure's Field enum: its declared order and type)
-    MKN_KUL_FN_SIG_RET Grid_t& closure_scalar(std::size_t const i)
+    // an electron field by its index (the closure's Field enum: its declared order and type)
+    MKN_KUL_FN_SIG_RET Grid_t& electron_scalar(std::size_t const i)
     {
-        return std::get<ClosureScalar>(closure_storage[i]).grid;
+        return std::get<Grid_t>(electron_fields[i]);
     }
-    MKN_KUL_FN_SIG_RET Grids<3>& closure_vector(std::size_t const i)
+    MKN_KUL_FN_SIG_RET ElectronVector_t& electron_vector(std::size_t const i)
     {
-        return std::get<ClosureVector>(closure_storage[i]).grids;
+        return std::get<ElectronVector_t>(electron_fields[i]);
     }
-    MKN_KUL_FN_SIG_RET Grids<6>& closure_tensor(std::size_t const i)
+    MKN_KUL_FN_SIG_RET ElectronTensor_t& electron_tensor(std::size_t const i)
     {
-        return std::get<ClosureTensor>(closure_storage[i]).grids;
+        return std::get<ElectronTensor_t>(electron_fields[i]);
     }
 
     // tiled fields: their untiled temporaries while a whole patch operation (damn's schedules)
@@ -405,7 +381,7 @@ void for_each_fixed_field_grid(HybridPatch<opts>& patch, auto&& fn)
     detail::vector_grids("ions_charge_flux", patch.chargeFlux, fn);
 
     fn("Pe", *patch.electronPressure);
-    patch.for_each_closure_grid(fn);
+    patch.for_each_electron_grid(fn);
 
     for (auto& pop : patch.populations)
     {

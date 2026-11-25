@@ -1,5 +1,5 @@
-#ifndef PLAMN_SOLVER_HYBRID_CLOSURES_HPP
-#define PLAMN_SOLVER_HYBRID_CLOSURES_HPP
+#ifndef PLAMN_SOLVER_HYBRID_ELECTRON_CLOSURES_HPP
+#define PLAMN_SOLVER_HYBRID_ELECTRON_CLOSURES_HPP
 
 // the electron pressure closures (core/data/electrons/closures.hpp) on a whole level: an overload
 //  per closure, std::visit on the model's closure picks it (pressure_level)
@@ -70,7 +70,7 @@ struct ClosureStage
 template<auto opts>
     requires(opts.alloc_mode == damn::AllocatorMode::GPU_UNIFIED
              and !core::is_tiled(opts.layout_mode))
-void pressure(core::IsothermalClosure const& closure, auto& level, ClosureStage const&)
+void pressure(core::hybrid::IsothermalClosure const& closure, auto& level, ClosureStage const&)
 {
     auto constexpr am = opts.alloc_mode;
     auto const Ne     = core::level_of<am>(
@@ -81,7 +81,7 @@ void pressure(core::IsothermalClosure const& closure, auto& level, ClosureStage 
 }
 template<auto opts>
     requires(opts.alloc_mode == damn::AllocatorMode::CPU or core::is_tiled(opts.layout_mode))
-void pressure(core::IsothermalClosure const& closure, auto& level, ClosureStage const&)
+void pressure(core::hybrid::IsothermalClosure const& closure, auto& level, ClosureStage const&)
 {
     level.per_patch_threaded([Te = closure.Te](auto& patch) {
         auto& electrons = patch.electrons();
@@ -90,13 +90,13 @@ void pressure(core::IsothermalClosure const& closure, auto& level, ClosureStage 
     });
 }
 template<auto opts>
-void seed(core::IsothermalClosure const&, auto&, auto const&)
+void seed(core::hybrid::IsothermalClosure const&, auto&, auto const&)
 { // no state
 }
 
 namespace polytropic
 {
-    using C = core::PolytropicClosure;
+    using C = core::hybrid::PolytropicClosure;
 
     // the plain views a polytropic kernel works on, one patch (device copyable: basic:: views,
     //  arrays), and the box its points run over
@@ -145,8 +145,8 @@ namespace polytropic
     {
         auto& electrons = patch.electrons();
         auto& Ve        = electrons.velocity();
-        fn(electrons.density(), electrons.pressure(), *patch.closure_scalar(C::step),
-           *patch.closure_scalar(C::subcycle), *patch.closure_scalar(C::scratch), Ve[0], Ve[1],
+        fn(electrons.density(), electrons.pressure(), *patch.electron_scalar(C::step),
+           *patch.electron_scalar(C::subcycle), *patch.electron_scalar(C::scratch), Ve[0], Ve[1],
            Ve[2]);
     }
 
@@ -162,9 +162,9 @@ namespace polytropic
         using Item_t  = decltype(make_item(std::declval<Patch_t&>().layout, false,
                                            std::declval<Patch_t&>().electrons().density(),
                                            std::declval<Patch_t&>().electrons().pressure(),
-                                           *std::declval<Patch_t&>().closure_scalar(0),
-                                           *std::declval<Patch_t&>().closure_scalar(0),
-                                           *std::declval<Patch_t&>().closure_scalar(0),
+                                           *std::declval<Patch_t&>().electron_scalar(0),
+                                           *std::declval<Patch_t&>().electron_scalar(0),
+                                           *std::declval<Patch_t&>().electron_scalar(0),
                                            std::declval<Patch_t&>().electrons().velocity()[0],
                                            std::declval<Patch_t&>().electrons().velocity()[1],
                                            std::declval<Patch_t&>().electrons().velocity()[2]));
@@ -299,10 +299,11 @@ namespace polytropic
 } // namespace polytropic
 
 template<auto opts>
-void pressure(core::PolytropicClosure const& closure, auto& level, ClosureStage const& stage)
+void pressure(core::hybrid::PolytropicClosure const& closure, auto& level,
+              ClosureStage const& stage)
 {
     namespace p        = polytropic;
-    using C            = core::PolytropicClosure;
+    using C            = core::hybrid::PolytropicClosure;
     bool constexpr gpu = opts.alloc_mode == damn::AllocatorMode::GPU_UNIFIED;
     if (stage.kind == ClosureStage::init or stage.kind == ClosureStage::first)
     {
@@ -353,14 +354,14 @@ void pressure(core::PolytropicClosure const& closure, auto& level, ClosureStage 
 // a new level at t = 0: Se_old from the input's initial entropy s (Pe / n^gamma of the analytic
 //  densities), Pe = Se_old Ne^gamma; sim: the input's "simulation" node
 template<auto opts>
-void seed(core::PolytropicClosure const& closure, auto& level, auto const& sim)
+void seed(core::hybrid::PolytropicClosure const& closure, auto& level, auto const& sim)
 {
-    using C           = core::PolytropicClosure;
+    using C           = core::hybrid::PolytropicClosure;
     auto const s_init = sim["electrons"]["pressure_closure"]["s"]
                             .template to<initializer::InitFunction<opts.dimension>>();
     level.per_patch([&](auto& patch) { // the input's functions on the host, as the root's
-        core::FieldUserFunctionInitializer::initialize(*patch.closure_scalar(C::step), patch.layout,
-                                                       s_init);
+        core::FieldUserFunctionInitializer::initialize(*patch.electron_scalar(C::step),
+                                                       patch.layout, s_init);
     });
     polytropic::pressure_from_state<opts>(closure, level);
 }
@@ -371,15 +372,15 @@ void seed(core::PolytropicClosure const& closure, auto& level, auto const& sim)
 //  moved with it, its Ne deposited again), Pe from it (PHARE's regrid: the entropy refined, not
 //  the pressure)
 template<auto opts>
-void refine_state(core::IsothermalClosure const&, auto&, auto const&, double)
+void refine_state(core::hybrid::IsothermalClosure const&, auto&, auto const&, double)
 { // no state
 }
 template<auto opts>
-void refine_state(core::PolytropicClosure const& closure, auto& level, auto const& op,
+void refine_state(core::hybrid::PolytropicClosure const& closure, auto& level, auto const& op,
                   double const t)
 {
     namespace p = polytropic;
-    using C     = core::PolytropicClosure;
+    using C     = core::hybrid::PolytropicClosure;
     auto coarse = level.coarser();
     p::run<opts>(coarse, false, p::begin_step(closure.gamma));
     p::fill_ghosts(coarse, C::step, t);
@@ -390,13 +391,13 @@ void refine_state(core::PolytropicClosure const& closure, auto& level, auto cons
     p::pressure_from_state<opts>(closure, level);
 }
 
-// a restart loaded (Pe stored, closure_restart_names): the closure's state from it
+// a restart loaded (Pe stored, electron_restart_names): the closure's state from it
 template<auto opts>
-void restart_loaded(core::IsothermalClosure const&, auto&)
+void restart_loaded(core::hybrid::IsothermalClosure const&, auto&)
 { // Pe from Ne at the first Ohm
 }
 template<auto opts>
-void restart_loaded(core::PolytropicClosure const& closure, auto& level)
+void restart_loaded(core::hybrid::PolytropicClosure const& closure, auto& level)
 { // Se_old and Se from Pe, as the first stage sets them (Pe as stored)
     namespace p = polytropic;
     p::run<opts>(level, false, p::begin_step(closure.gamma));
@@ -405,11 +406,11 @@ void restart_loaded(core::PolytropicClosure const& closure, auto& level)
 
 // a synchronization: what the coarser level under the level takes of its closure
 template<auto opts>
-void synchronize(core::IsothermalClosure const&, auto&)
+void synchronize(core::hybrid::IsothermalClosure const&, auto&)
 { // Pe from its own Ne
 }
 template<auto opts>
-void synchronize(core::PolytropicClosure const&, auto& level)
+void synchronize(core::hybrid::PolytropicClosure const&, auto& level)
 { // Pe, primal as the moments: the fine nodes' values (PHARE's electronPressureSynchronizers_)
     level.coarsen(amr::MomentsCoarsener{}, {damn::amr::LevelPair{"Pe", "Pe", ""}});
 }
@@ -418,14 +419,16 @@ void synchronize(core::PolytropicClosure const&, auto& level)
 template<auto opts>
 void pressure_level(HybridModel<opts> const& model, auto& level, ClosureStage const& stage)
 {
-    std::visit([&](auto const& closure) { pressure<opts>(closure, level, stage); }, *model.closure);
+    std::visit([&](auto const& closure) { pressure<opts>(closure, level, stage); },
+               *model.electron_closure);
 }
 
 // a new level's closure state from the input (sim: the "simulation" node), before its Pe
 template<auto opts>
 void seed_level(HybridModel<opts> const& model, auto& level, auto const& sim)
 {
-    std::visit([&](auto const& closure) { seed<opts>(closure, level, sim); }, *model.closure);
+    std::visit([&](auto const& closure) { seed<opts>(closure, level, sim); },
+               *model.electron_closure);
 }
 
 // a level made or regridded at t: its closure state from its coarser level (refine_state)
@@ -433,23 +436,25 @@ template<auto opts>
 void refine_state_level(HybridModel<opts> const& model, auto& level, auto const& op, double const t)
 {
     std::visit([&](auto const& closure) { refine_state<opts>(closure, level, op, t); },
-               *model.closure);
+               *model.electron_closure);
 }
 
 // a restart loaded: the closure's state from what was stored
 template<auto opts>
 void restart_loaded_level(HybridModel<opts> const& model, auto& level)
 {
-    std::visit([&](auto const& closure) { restart_loaded<opts>(closure, level); }, *model.closure);
+    std::visit([&](auto const& closure) { restart_loaded<opts>(closure, level); },
+               *model.electron_closure);
 }
 
 // a synchronization of the level onto its coarser one: the closure's part
 template<auto opts>
 void synchronize_level(HybridModel<opts> const& model, auto& level)
 {
-    std::visit([&](auto const& closure) { synchronize<opts>(closure, level); }, *model.closure);
+    std::visit([&](auto const& closure) { synchronize<opts>(closure, level); },
+               *model.electron_closure);
 }
 
 } // namespace plamn::solver::hybrid
 
-#endif // PLAMN_SOLVER_HYBRID_CLOSURES_HPP
+#endif // PLAMN_SOLVER_HYBRID_ELECTRON_CLOSURES_HPP

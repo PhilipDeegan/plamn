@@ -343,7 +343,7 @@ void Simulator<opts>::spawn_level_ghosts_(std::size_t const ln, bool const new_g
         using Patch_t     = solver::HybridModel<opts>::Patch_t;
         auto const pgw    = Patch_t::particle_ghost_width;
         auto const domain = damn::amr::level_domain(hierarchy_, static_cast<int>(ln));
-        double const Te   = core::coupling_Te(*models_.hybrid.closure);
+        double const Te   = core::hybrid::coupling_Te(*models_.hybrid.electron_closure);
         auto& ld = models_.hybrid.levels[static_cast<int>(ln)];
         for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
         {
@@ -385,7 +385,7 @@ void Simulator<opts>::initialize_hybrid_over_mhd_(std::size_t const ln, double c
         // the ions' internal energy is (3/2) Pi: MHD's (gamma - 1)^-1 P agrees with it at 5/3 only
         if (std::abs(models_.mhd.gamma - 5. / 3.) > 1e-12)
             throw std::runtime_error("plamn coupling: MHD under hybrid levels needs gamma 5/3");
-        double const Te = core::coupling_Te(*models_.hybrid.closure);
+        double const Te = core::hybrid::coupling_Te(*models_.hybrid.electron_closure);
 
         mhd_prims_over_(ln, /*interior=*/true);
         auto level = level_services_(ln);
