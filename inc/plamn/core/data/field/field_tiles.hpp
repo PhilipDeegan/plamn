@@ -10,6 +10,7 @@
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/memory/span.hpp"
+#include "damn/core/memory/memory.hpp"
 #include "plamn/core/def.hpp"
 
 #include <tuple>
@@ -24,7 +25,6 @@
 #include <array>
 #include <cstdlib>
 #include <iosfwd>
-#include <iterator>
 #include <version>
 
 // defined in tensorfield.hpp, which includes this file
@@ -291,11 +291,12 @@ public:
     bool isUsable() const { return Super::data() != nullptr; }
     bool isSettable() const { return !isUsable(); }
 
+    // tile by tile, the allocator's copy (on the device for unified memory)
     void copyData(FieldTileSet const& that)
     {
         for (std::size_t tidx = 0; tidx < super().size(); ++tidx)
-            std::copy(that[tidx]().data(), that[tidx]().data() + that[tidx]().size(),
-                      super()[tidx]().data());
+            damn::core::mem::copy<alloc_mode>(super()[tidx]().data(), that[tidx]().data(),
+                                              that[tidx]().size());
     }
     MKN_KUL_FN_SIG_RET auto size() const DAMN_ALL { return ghost_box_.size(); } // NOT ntiles!
     MKN_KUL_FN_SIG_RET auto shape() const DAMN_ALL { return *ghost_box_.shape().as_unsigned(); }
@@ -574,9 +575,10 @@ void copy_data(auto& dst, auto& src, auto const&... tile_idx)
         dst.copyData(src);
     else
     {
-        auto const copy = [](auto& d, auto const& s) {
+        auto const copy = [](auto& d, auto const& s) { // the allocator's copy
             assert(d.size() == s.size());
-            std::copy(s.data(), s.data() + s.size(), d.data());
+            damn::core::mem::copy<std::remove_cvref_t<decltype(d)>::alloc_mode>(d.data(), s.data(),
+                                                                                s.size());
         };
         auto d = tile_at(dst, tile_idx...);
         auto s = tile_at(src, tile_idx...);

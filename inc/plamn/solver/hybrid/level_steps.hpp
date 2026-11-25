@@ -24,6 +24,7 @@
 #include "plamn/amr/coarsen.hpp"
 #include "plamn/amr/level_pairs.hpp"
 #include "plamn/amr/refine.hpp"
+#include "plamn/core/data/field/level_fields.hpp"
 #include "plamn/core/data/particles/exporting/particles_exporting.hpp"
 #include "plamn/core/numerics/faraday/faraday_transformer.hpp"
 #include "plamn/solver/hybrid/electron/closures.hpp"
@@ -38,16 +39,21 @@
 
 namespace plamn::solver::hybrid
 {
+// the step's start: old E and B = the current ones, one level copy (unified memory: a launch
+//  per 128 buffers)
 template<auto opts>
 void prepare_step(HybridModel<opts> const&, auto&& level)
 {
-    level.per_patch([](auto& patch) {
-        for (std::size_t i = 0; i < 3; ++i)
-        {
-            patch.oldB[i].copyData(patch.emB[i]);
-            patch.oldE[i].copyData(patch.emE[i]);
-        }
-    });
+    core::level_copy<opts.alloc_mode>(
+        level,
+        [](auto& patch, auto& f) {
+            for (std::size_t i = 0; i < 3; ++i)
+                f.add(patch.oldB[i]), f.add(patch.oldE[i]);
+        },
+        [](auto& patch, auto& f) {
+            for (std::size_t i = 0; i < 3; ++i)
+                f.add(patch.emB[i]), f.add(patch.emE[i]);
+        });
 }
 
 // a level ghost particle lives in one patch, its cell's owner (Surroundings): the others' copies
