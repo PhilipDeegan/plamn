@@ -8,8 +8,11 @@
 
 #include "gtest/gtest.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <set>
+#include <type_traits>
+#include <utility>
 #include <string>
 #include <vector>
 
@@ -26,7 +29,16 @@ namespace
     using Patch_t       = MHDPatch<opts>;
     using Layout_t      = Patch_t::Layout_t;
 
-    std::vector<std::string> resource_names(Patch_t& patch)
+    // with the hybrid model too (interp order > 0): MHD levels under hybrid ones
+    auto constexpr coupled_opts
+        = SimOpts{.dimension           = 2,
+                  .interp_order        = 1,
+                  .reconstruction_type = MHDOpts::ReconstructionType::Linear,
+                  .slope_limiter_type  = MHDOpts::SlopeLimiterType::VanLeer,
+                  .riemann_solver_type = MHDOpts::RiemannSolverType::Rusanov};
+    using CoupledPatch_t = MHDPatch<coupled_opts>;
+
+    std::vector<std::string> resource_names(auto& patch)
     {
         std::vector<std::string> names;
         for_each_resource(patch, [&](std::string const& name, auto&) { names.push_back(name); });
@@ -62,14 +74,36 @@ TEST(MHDPatch, resourcesNamedOnce)
     std::set<std::string> const unique{names.begin(), names.end()};
     EXPECT_EQ(unique.size(), names.size());
     // per state 3 scalars and 3 vectors, the old state's conservative 2 scalars and 2 vectors,
-    //  E and its step start value (a hybrid level over it), per direction (2D) the step's and
-    //  the summed rho, rhoV, Etot fluxes, the step's and the summed E
-    EXPECT_EQ(names.size(), 2u * (3 + 3 * 3) + (2 + 2 * 3) + 2 * 3 + 2 * 2 * 5 + 2 * 3);
-    for (auto const* name :
-         {"rho", "rhoV_x", "B_z", "Etot", "V_y", "P", "rho_s1", "B_s1_x", "rho_old", "rhoV_old_y",
-          "B_old_z", "Etot_old", "E_x", "E_z", "E_old_y", "F_rho_butcher_y", "F_rhoV_sum_x_z",
-          "butcherE_x", "E_sum_y"})
+    //  E, per direction (2D) the step's and the summed rho, rhoV, Etot fluxes, the step's and
+    //  the summed E
+    EXPECT_EQ(names.size(), 2u * (3 + 3 * 3) + (2 + 2 * 3) + 3 + 2 * 2 * 5 + 2 * 3);
+    for (auto const* name : {"rho", "rhoV_x", "B_z", "Etot", "V_y", "P", "rho_s1", "B_s1_x",
+                             "rho_old", "rhoV_old_y", "B_old_z", "Etot_old", "E_x", "E_z",
+                             "F_rho_butcher_y", "F_rhoV_sum_x_z", "butcherE_x", "E_sum_y"})
         EXPECT_TRUE(unique.contains(name)) << name;
+    // no hybrid model in the build: no coupling storage at all
+    EXPECT_FALSE(unique.contains("E_old_x"));
+    static_assert(std::is_empty_v<decltype(std::declval<Patch_t&>().coupling)>);
+}
+
+// with both models, only the finest MHD level's patches (a hybrid level over them) hold E_old,
+//  after the other grids: the others' grid tables are the same, only longer
+TEST(MHDPatch, underHybridHoldsEOldLast)
+{
+    ::TestLayout<CoupledPatch_t::Layout_t> const layout{8};
+    CoupledPatch_t patch{layout, 2};
+    auto const plain = resource_names(patch);
+    EXPECT_EQ(std::count(plain.begin(), plain.end(), "E_old_x"), 0);
+
+    make_under_hybrid(patch);
+    auto const under = resource_names(patch);
+    ASSERT_EQ(under.size(), plain.size() + 3);
+    EXPECT_TRUE(std::equal(plain.begin(), plain.end(), under.begin()));
+    EXPECT_EQ(under[plain.size()], "E_old_x");
+
+    patch.E.grids[1].fill(2.5);
+    keep_E_old(patch);
+    EXPECT_EQ(patch.coupling.under->E_old.grids[1].data()[0], 2.5);
 }
 
 } // namespace plamn::simulator

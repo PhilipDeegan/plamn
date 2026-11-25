@@ -16,6 +16,9 @@
 //            transport E and to the face fluxes (PHARE's DissipativeElectricField)
 //   flux_sum, flux_sum_E  the step fluxes and E summed over the level's substeps in its coarser
 //            level's step (PHARE's SolverMHD fluxSum_, fluxSumE_), what its reflux coarsens
+//   coupling for a hybrid level over this one (coupling_storage.hpp, builds with both models):
+//            E_old, E at the step's start (keep_E_old), the hybrid level's E ghosts interpolate
+//            in time between it and E; on the finest MHD level only (make_under_hybrid)
 //   storage: grids, named as their views. The states not filled (NaN in debug builds): the
 //            simulator writes them before reading them. The others 0, as PHARE's (its fields
 //            start zeroed): E's component without an equation (E_x in 1D) stays 0, and a
@@ -26,17 +29,19 @@
 //
 // for_each_resource names what damn's schedules may move (PHARE's MHD names for the advanced
 //  state): rho, rhoV_x..., B_x..., Etot, V_x..., P; a stage s > 0: rho_s<s>, rhoV_s<s>_x...;
-//  the old state: rho_old, rhoV_old_x..., B_old_x..., Etot_old; E_x..., E_old_x...; per direction d
+//  the old state: rho_old, rhoV_old_x..., B_old_x..., Etot_old; E_x...; per direction d
 //  < dim the refluxed step fluxes and their sums: F_rho_butcher_<d>, F_rhoV_butcher_<d>_x...,
 //  F_Etot_butcher_<d>, F_rho_sum_<d>...; butcherE_x..., E_sum_x... (the last fluxes and the
-//  constrained transport inputs never move)
+//  constrained transport inputs never move); under a hybrid level, last: E_old_x...
 
 #include "damn/core/def.hpp"
 #include "plamn/amr/untiled.hpp"
+#include "plamn/simulator/coupling_storage.hpp"
 #include "plamn/core/models/mhd_state.hpp"
 #include "plamn/core/models/quantities/mhd_quantities.hpp"
 #include "plamn/plamn_core.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <limits>
@@ -195,6 +200,7 @@ struct MHDPatch
                 vector(h.jt);
                 fn(h.rhot);
             }
+        for_each_coupling_vector(*this, vector);
     }
 
     Layout_t layout;
@@ -203,8 +209,6 @@ struct MHDPatch
                 VecField{"B_old", layout, V::B},   Grid_t{"Etot_old", layout, S::Etot},
                 VecField{"V_old", layout, V::V},   Grid_t{"P_old", layout, S::P}};
     VecField E{"E", layout, V::E, 0.}, butcherE{"butcherE", layout, V::E, 0.};
-    // E at the step's start: a hybrid level over this one interpolates its E ghosts in time
-    VecField E_old{"E_old", layout, V::E, 0.};
     std::array<Fluxes_t, 3> fluxes{fluxes_("x", S::ScalarFlux_x, V::VecFlux_x),
                                    fluxes_("y", S::ScalarFlux_y, V::VecFlux_y),
                                    fluxes_("z", S::ScalarFlux_z, V::VecFlux_z)};
@@ -221,6 +225,19 @@ struct MHDPatch
     // resistive MHD (MHDSteps: eta > 0): J = curl B, the dissipative E = eta J; Hall: J too
     VecField J{"J", layout, V::J, 0.}, E_diss{"E_diss", layout, V::E, 0.};
     std::conditional_t<hall, std::array<HallCT, 3>, NoHall> hall_ct = hall_ct_();
+
+    // under a hybrid level: E at the step's start, its E ghosts interpolate in time between it
+    //  and E (simulator/coupling.hpp)
+    struct UnderHybrid
+    {
+        explicit UnderHybrid(Layout_t const& layout)
+            : E_old{"E_old", layout, V::E, 0.}
+        {
+        }
+        VecField E_old;
+    };
+    [[no_unique_address]] CouplingStorage<
+        std::conditional_t<opts.hybrid_enabled, UnderHybrid, void>, void> coupling{};
 
     // a face's fluxes' grids: F_rho, F_rhoV (x y z), F_Etot
     static std::vector<Grid_t*> flux_grids(Fluxes_t& f)
@@ -274,6 +291,45 @@ private:
     }
 };
 
+// the coupling's vector fields, where the patch has them (coupling_storage.hpp)
+template<auto opts>
+    requires(not opts.hybrid_enabled)
+void for_each_coupling_vector(MHDPatch<opts>&, auto&&)
+{
+}
+template<auto opts>
+    requires(opts.hybrid_enabled)
+void for_each_coupling_vector(MHDPatch<opts>& patch, auto&& vector)
+{
+    if (patch.coupling.under)
+        vector(patch.coupling.under->E_old);
+}
+
+// a patch of the finest MHD level, a hybrid level over it: its coupling storage
+template<auto opts>
+    requires(opts.hybrid_enabled)
+void make_under_hybrid(MHDPatch<opts>& patch)
+{
+    patch.coupling.under.emplace(patch.layout);
+}
+
+// the step's start (prepare_step): E, for a hybrid level over this one; nothing otherwise
+template<auto opts>
+    requires(not opts.hybrid_enabled)
+void keep_E_old(MHDPatch<opts>&)
+{
+}
+template<auto opts>
+    requires(opts.hybrid_enabled)
+void keep_E_old(MHDPatch<opts>& patch)
+{
+    if (!patch.coupling.under)
+        return;
+    for (std::size_t c = 0; c < 3; ++c)
+        std::copy(patch.E.grids[c].data(), patch.E.grids[c].data() + patch.E.grids[c].size(),
+                  patch.coupling.under->E_old.grids[c].data());
+}
+
 // fn(name, grid) for each field grid damn's schedules may move, by its name
 template<auto opts>
 void for_each_field_grid(MHDPatch<opts>& patch, auto&& fn)
@@ -297,7 +353,6 @@ void for_each_field_grid(MHDPatch<opts>& patch, auto&& fn)
     vector(patch.old.B);
     scalar(patch.old.Etot);
     vector(patch.E);
-    vector(patch.E_old);
     for (std::size_t d = 0; d < MHDPatch<opts>::dimension; ++d)
         for (auto* f : {&patch.butcher[d], &patch.flux_sum[d]})
         {
@@ -307,6 +362,7 @@ void for_each_field_grid(MHDPatch<opts>& patch, auto&& fn)
         }
     vector(patch.butcherE);
     vector(patch.flux_sum_E);
+    for_each_coupling_vector(patch, vector); // last: the other patches' indices unchanged
 }
 
 // MHD patches have no scratch grids: every one is fixed (grid_table)

@@ -134,10 +134,15 @@ auto Simulator<opts>::make_patch_(auto const& model, int const ln, Box_t const& 
     {
         using Patch_t  = Model_t::Patch_t;
         using Layout_t = Patch_t::Layout_t;
-        return std::make_unique<Patch_t>(Layout_t{box, damn::amr::mesh_size(hierarchy_, ln),
-                                                  damn::amr::position(hierarchy_, ln, box.lower),
-                                                  ln},
-                                         model.n_states());
+        auto patch     = std::make_unique<Patch_t>(
+            Layout_t{box, damn::amr::mesh_size(hierarchy_, ln),
+                     damn::amr::position(hierarchy_, ln, box.lower), ln},
+            model.n_states());
+        // the finest MHD level, a hybrid level over it (fixed by the index: max_mhd_level)
+        if constexpr (Models_t::hybrid_on)
+            if (ln + 1 < static_cast<int>(hierarchy_.max_levels) and !models_.is_mhd(ln + 1))
+                simulator::make_under_hybrid(*patch);
+        return patch;
     }
     else
         return solver::hybrid::make_patch(model, layout_of_(ln, box), dict_["simulation"],
