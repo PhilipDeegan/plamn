@@ -3,14 +3,12 @@
 
 #include "damn/core/memory/memory.hpp"
 #include "mkn/kul/for.hpp"
-
 #include "plamn/core/def.hpp"
 #include "plamn/core/data/field/field.hpp"
 
 #include <array>
 #include <string>
 #include <optional>
-#include <algorithm>
 #include <cstdint>
 #include <iosfwd>
 #include <stdexcept>
