@@ -210,9 +210,8 @@ namespace detail
         core::OhmTransformer const ohm{*model.ohm};
         auto const item_of = [&](auto& patch) {
             auto& em = patch.*electromag;
-            return ohm.make_item(patch.layout, patch.electrons().density(),
-                                 patch.electrons().velocity(), patch.electrons().pressure(), em.B,
-                                 patch.J, em.E);
+            return ohm.make_item(patch.layout, patch.electrons().density(), patch.ions.chargeFlux(),
+                                 patch.electrons().pressure(), em.B, patch.J, em.E);
         };
         using Patch_t = HybridModel<opts>::Patch_t;
         using Item_t  = decltype(item_of(std::declval<Patch_t&>()));
@@ -229,8 +228,8 @@ namespace detail
         level.per_patch_threaded([&](auto& patch) {
             auto& em = patch.*electromag;
             core::OhmTransformer{*model.ohm}(patch.layout, patch.electrons().density(),
-                                             patch.electrons().velocity(),
-                                             patch.electrons().pressure(), em.B, patch.J, em.E);
+                                             patch.ions.chargeFlux(), patch.electrons().pressure(),
+                                             em.B, patch.J, em.E);
         });
     }
 

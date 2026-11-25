@@ -68,6 +68,21 @@ namespace core
         return result;
     }
 
+    // values: anything that gives a value at a mesh index and is not a field, e.g. a product
+    //  computed on the fly that no field stores (Ohm's ideal term)
+    template<auto src, auto dst, std::size_t order = 2, typename Values, std::size_t dim>
+        requires(not std::is_enum_v<decltype(src)> and not requires { Values::dimension; })
+    MKN_KUL_FN_SIG_RET inline auto
+    project(Values const& values, damn::core::Point<std::size_t, dim> const& index) DAMN_ALL
+    {
+        constexpr auto stencil = recenteringStencil<src, dst, order>();
+
+        std::decay_t<decltype(values(index))> result = 0.;
+        for (auto const& wp : stencil)
+            result += wp.coef * values(index + wp.indexes);
+        return result;
+    }
+
 
     enum class InterpDir { DualToPrimal = 0, PrimalToDual = 1 };
 

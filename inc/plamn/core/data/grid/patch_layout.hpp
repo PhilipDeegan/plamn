@@ -141,6 +141,16 @@ project(Field const& field, damn::core::Point<std::size_t, Field::dimension> con
     return project<centering<dim>(src), centering<dim>(dst), order>(field, index);
 }
 
+// values at index (anything giving a value at a mesh index, not a field), src quantity
+//  recentered at the dst quantity's grid
+template<auto src, auto dst, std::size_t order = 2, typename Values, std::size_t dim>
+    requires(std::is_enum_v<decltype(src)> and not requires { Values::dimension; })
+MKN_KUL_FN_SIG_RET auto project(Values const& values,
+                                damn::core::Point<std::size_t, dim> const& index) DAMN_ALL
+{
+    return project<centering<dim>(src), centering<dim>(dst), order>(values, index);
+}
+
 
 // ---------------------------------------------------------------- sizes and boxes
 
