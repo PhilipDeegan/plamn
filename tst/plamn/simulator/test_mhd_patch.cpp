@@ -111,8 +111,10 @@ TEST(MHDPatch, underHybridHoldsEOldLast)
 
     patch.E.grids[1].fill(2.5);
     keep_E_old<coupled_opts>(OneLevel<CoupledPatch_t>{patch});
-    ASSERT_TRUE(patch.coupling.under);
-    EXPECT_EQ(patch.coupling.under->E_old.grids[1].data()[0], 2.5);
+    if (auto const& under = patch.coupling.under; !under)
+        FAIL() << "no coupling storage after make_under_hybrid";
+    else
+        EXPECT_EQ(under->E_old.grids[1].data()[0], 2.5);
 }
 
 } // namespace plamn::simulator
