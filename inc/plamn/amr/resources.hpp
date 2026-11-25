@@ -6,7 +6,7 @@
 //   field_resource<gw>(field):     BoxData, values on the field's nodes (its centering), gw
 //                                  ghost nodes each side; a C ordered field (not tiled) also
 //                                  gives damn::hdf5's checkpoints its buffer (box_span)
-//   particle_resource<gw>(array):  ParticleData, particles in cells, gw ghost cells; a layout
+//   particle_resource<gw>(array):  CellItemData, particles in cells, gw ghost cells; a layout
 //                                  with components() also gives checkpoints its columns
 //
 // both are small handles over the data, made on the fly in a for_each_resource
@@ -153,7 +153,7 @@ void append(ParticleResource<Particles, gw>& r, typename Particles::value_type p
 }
 
 // SoAVX, SoAVXChunked (host memory): moved between patches column by column, damn's
-//  particle_items hooks (damn/amr/particle_items.hpp). The bytes: the number of particles, then
+//  cell_items hooks (damn/amr/cell_items.hpp). The bytes: the number of particles, then
 //  each component's values contiguously, in components()' order (weight, iCell_x.., delta_x..,
 //  v_x, v_y, v_z). A selection reads the iCell columns only, or SoAVXChunked's per cell ranges
 //  when sorted; appends are column wise, SoAVXChunked sorted once after all of them
@@ -359,7 +359,7 @@ std::vector<typename Particles::value_type> read_items(ParticleResource<Particle
 }
 
 // AoS4SoAVXChunked (host memory): moved between patches as whole particle structures, damn's
-//  particle_items hooks as the columns' above. The bytes: the number of particles, then the
+//  cell_items hooks as the columns' above. The bytes: the number of particles, then the
 //  structures. A selection reads the per cell ranges when sorted; arrivals go into their chunks'
 //  gaps when sorted with slack (else appended, sorted once after all of them: items_appended)
 template<typename Particles>
@@ -489,7 +489,7 @@ void resize_columns(ParticleResource<Particles, gw> const& r, std::size_t const 
 
 namespace plamn::core
 {
-// a particle's cell, for damn::amr::ParticleData (found by ADL on the particle)
+// a particle's cell, for damn::amr::CellItemData (found by ADL on the particle)
 template<std::size_t dim>
 MKN_KUL_FN_SIG_RET auto cell(Particle<dim> const& particle)
 {

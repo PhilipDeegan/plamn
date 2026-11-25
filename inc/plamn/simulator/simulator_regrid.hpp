@@ -352,7 +352,7 @@ damn::amr::RegridGhosts Simulator<opts>::moved_ghosts_(int const ln)
             simulator::for_each_field_grid(
                 *ld.data[0], [&](std::string const& name, auto&) { out.fields.push_back(name); });
         for (auto const& name : models_.hybrid.population_names)
-            out.particles.push_back(name + "_level_ghost_old");
+            out.items.push_back(name + "_level_ghost_old");
     }
     return out;
 }
