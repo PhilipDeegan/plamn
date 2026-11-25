@@ -184,6 +184,16 @@ MKN_KUL_FN_SIG_RET auto level_of(auto&& level, auto&& quantities)
     return fields;
 }
 
+// dst's fields = src's, over a level (dst, src: quantities as level_of's, the same fields in the
+//  same order): one launch per 128 buffers on unified memory, no host loop over it
+template<auto alloc_mode>
+void level_copy(auto&& level, auto&& dst, auto&& src)
+{
+    using T = double;
+    level_of<alloc_mode>(level, dst)
+        .transform([] DAMN_ALL(T & d, T const s) { d = s; }, level_of<alloc_mode>(level, src));
+}
+
 // what the domain deposit sums into: every population's density and flux
 inline constexpr auto domain_moments = [](auto& patch, auto& fields) {
     for (auto& pop : patch.ions)
