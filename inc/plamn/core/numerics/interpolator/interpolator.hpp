@@ -875,6 +875,39 @@ public:
     }
 
 
+    // the flux on the E nodes: each component of fluxE spread with the start index and weights
+    //  that gather the same component of E to the particle (m2p), the transpose of the gather:
+    //  sum_p w_p v_p . E(x_p) = sum_nodes fluxE . E, the work of E on the particles, which Ohm's
+    //  law needs to conserve energy. A component on the moment nodes (primal along every
+    //  direction: E_z in 2D, E_y and E_z in 1D) has the moment flux's weights: not deposited
+    //  here, it is the flux (complete_fluxE)
+    template<typename Layout>
+    void fluxE_to_mesh(auto const& particle, auto& fluxE, Layout const& layout,
+                       double const coef = 1.) DAMN_ALL
+    {
+        using Scalar      = HybridQuantity::Scalar;
+        auto const amrBox = damn::core::grow(layout.cells, Layout::options.field_ghost_width);
+        indexAndWeights_<QtyCentering::dual>(amrBox, particle.iCell(), particle.delta());
+        indexAndWeights_<QtyCentering::primal>(amrBox, particle.iCell(), particle.delta());
+        auto const indexWeights = std::forward_as_tuple(dual_startIndex_, dual_weights_,
+                                                        primal_startIndex_, primal_weights_);
+        auto const w            = particle.weight() * coef;
+        auto const& v           = particle.v();
+        deposit_on_qty_<Layout, Scalar::Ex>(fluxE[0], indexWeights, w * v[0]);
+        deposit_on_qty_<Layout, Scalar::Ey>(fluxE[1], indexWeights, w * v[1]);
+        deposit_on_qty_<Layout, Scalar::Ez>(fluxE[2], indexWeights, w * v[2]);
+    }
+
+    // every particle of the range
+    void fluxE_to_mesh_range(auto const& particles, auto& fluxE, auto const& layout,
+                             double const coef = 1.)
+    {
+        for (auto it = particles.begin(); it != particles.end(); ++it)
+            fluxE_to_mesh(*it, fluxE, layout, coef);
+    }
+
+
+
 
     /**
      * @brief Given a delta and an interpolation order, deduce which lower index to start
@@ -934,6 +967,53 @@ protected:
     Weights primal_weights_;
 
 private:
+    // value spread on the nodes of quantity with the start index and weights the gather of
+    //  quantity uses (the transpose of meshToParticle); nothing for a quantity on the moment nodes
+    template<typename Layout, auto quantity>
+        requires(on_moment_nodes<Layout::dimension, quantity>())
+    DAMN_ALWAYS_INLINE void deposit_on_qty_(auto&, auto const&, double const) const DAMN_ALL
+    {
+    }
+    template<typename Layout, auto quantity>
+        requires(not on_moment_nodes<Layout::dimension, quantity>())
+    DAMN_ALWAYS_INLINE void deposit_on_qty_(auto& field, auto const& indexWeights,
+                                            double const value) const DAMN_ALL
+    {
+        auto const& [xStart, xWeights]
+            = resolve_start_index_and_weights<0, Layout, quantity>(indexWeights);
+        auto const order_size = xWeights.size();
+        if constexpr (dimension == 1)
+        {
+            for (auto ix = 0u; ix < order_size; ++ix)
+                Operator{field(xStart + ix)} += value * xWeights[ix];
+        }
+        else
+        {
+            auto const& [yStart, yWeights]
+                = resolve_start_index_and_weights<1, Layout, quantity>(indexWeights);
+            if constexpr (dimension == 2)
+            {
+                for (auto ix = 0u; ix < order_size; ++ix)
+                    for (auto iy = 0u; iy < order_size; ++iy)
+                        Operator{field(xStart + ix, yStart + iy)}
+                        += value * xWeights[ix] * yWeights[iy];
+            }
+            else
+            {
+                auto const& [zStart, zWeights]
+                    = resolve_start_index_and_weights<2, Layout, quantity>(indexWeights);
+                for (auto ix = 0u; ix < order_size; ++ix)
+                    for (auto iy = 0u; iy < order_size; ++iy)
+                    {
+                        auto const xyw = value * xWeights[ix] * yWeights[iy];
+                        for (auto iz = 0u; iz < order_size; ++iz)
+                            Operator{field(xStart + ix, yStart + iy, zStart + iz)}
+                            += xyw * zWeights[iz];
+                    }
+            }
+        }
+    }
+
     // always inlined: six per m2p, out of line (gcc merges the identical instantiations) they
     //  cost a call each per particle
     template<auto quantity, typename Layout>

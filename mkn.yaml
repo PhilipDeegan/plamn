@@ -59,6 +59,7 @@ profile:
         tst/plamn/core/data/particles/test_aos4soavx_chunked_gaps.cpp
         tst/plamn/core/data/particles/test_aos_transpose.cpp
         tst/plamn/core/numerics/interpolator/test_interpolator.cpp
+        tst/plamn/core/numerics/interpolator/test_interpolator_fluxE.cpp
         tst/plamn/core/numerics/boundary_condition/test_field_boundary_condition.cpp
         tst/plamn/core/numerics/boundary_condition/test_field_conditions_none.cpp
         tst/plamn/core/numerics/boundary_condition/test_field_conditions_neumann.cpp
@@ -88,6 +89,7 @@ profile:
         tst/plamn/solver/test_models.cpp
         tst/plamn/simulator/test_mhd_patch.cpp
         tst/plamn/core/numerics/ohm/test_tileset_ohm.cpp
+        tst/plamn/core/numerics/ohm/test_ohm_work.cpp
         tst/plamn/amr/test_refine_coarsen.cpp
         tst/plamn/amr/test_tagging.cpp
 

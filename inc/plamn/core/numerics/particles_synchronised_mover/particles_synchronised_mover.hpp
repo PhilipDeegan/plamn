@@ -586,6 +586,7 @@ void ParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositDomain_(
                            boxing.noop, boxing.inNonLevelGhostBox);
 
         interpolator_(allowed, pop.particleDensity(), pop.flux(), layout);
+        interpolator_.fluxE_to_mesh_range(allowed, pop.fluxE(), layout);
 
         // level ghosts: pushed while in the ghost box, deposited where they land on the level,
         //  as domain particles (each is held by one patch only)
@@ -600,6 +601,7 @@ void ParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositDomain_(
                                layout, boxing.inGhostBox, boxing.inNonLevelGhostBox);
 
             interpolator_(enteredInDomain, pop.particleDensity(), pop.flux(), layout);
+            interpolator_.fluxE_to_mesh_range(enteredInDomain, pop.fluxE(), layout);
         };
 
         // !TODO REVISE!

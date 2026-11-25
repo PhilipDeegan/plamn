@@ -209,6 +209,20 @@ public:
         interp_(particles, rhoP, flux, layout, coef);
     }
 
+    // the flux on the E nodes (deposits_fluxE): after particleToMesh of the same particles
+    template<auto type = ParticleType::Domain, typename Particles>
+    void fluxE_to_mesh(Particles const& particles, auto const& layout, auto& fluxE,
+                       double coef = 1.)
+        requires(deposits_fluxE(Particles::layout_mode))
+    {
+        interp_.fluxE_to_mesh_range(particles, fluxE, layout, coef);
+    }
+    template<auto type = ParticleType::Domain, typename Particles>
+    void fluxE_to_mesh(Particles const&, auto const&, auto&, double = 1.)
+        requires(not deposits_fluxE(Particles::layout_mode))
+    {
+    }
+
     template<auto type = ParticleType::Domain, typename Particles>
     void particleToMesh(Particles const& particles, auto const& /*layout: the tiles'*/, auto& rhoP,
                         auto& flux, double coef = 1.)

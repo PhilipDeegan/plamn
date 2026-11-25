@@ -34,8 +34,9 @@ MKN_KUL_FN_SIG_RET std::vector<std::string> restart_names(HybridModel<opts> cons
             names.push_back(std::string{em} + c);
     // the totals a synchronization coarsened: not the populations' sum on a coarser level
     names.push_back("ions_charge_density");
-    for (auto const* c : {"_x", "_y", "_z"})
-        names.push_back(std::string{"ions_charge_flux"} + c);
+    for (auto const* flux : {"ions_charge_flux", "ions_charge_fluxE"})
+        for (auto const* c : {"_x", "_y", "_z"})
+            names.push_back(std::string{flux} + c);
     for (auto const& pop : model.population_names)
     {
         names.push_back(pop + "_domain");
@@ -89,12 +90,14 @@ void restart_loaded(HybridModel<opts> const& model, auto&& level)
         });
     }
     // the mass density and bulk velocity from the populations' (stored); the charge density and
-    //  flux as stored (coarsened where a finer level was synchronized)
+    //  fluxes (moment and E nodes) as stored (coarsened where a finer level was synchronized)
     level.per_patch([&](auto& patch) {
         std::vector<std::vector<double>> stored;
         auto const each = [&](auto&& fn) {
             fn(patch.chargeDensity);
             for (auto& c : patch.chargeFlux)
+                fn(c);
+            for (auto& c : patch.chargeFluxE)
                 fn(c);
         };
         each([&](auto const& g) {

@@ -378,6 +378,7 @@ TYPED_TEST(OhmTest, ThatElectricFieldIsOkFromOhmsLaw)
 
     auto const layout = NDlayout<dim, interp>::create();
 
+    // V stands for the ion charge flux F here
     OhmTransformer{this->ohm_info}(layout, this->n, this->V, this->P, this->B, this->J, this->Enew);
 
 

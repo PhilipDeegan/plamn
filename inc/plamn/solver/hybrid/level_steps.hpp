@@ -123,6 +123,8 @@ void accumulate_flux_sum(auto&& level, double const coef)
 void coarsen_moments(auto&& level)
 {
     auto moments = amr::vector_pairs("ions_charge_flux", "ions_charge_flux");
+    for (auto const& pair : amr::vector_pairs("ions_charge_fluxE", "ions_charge_fluxE"))
+        moments.push_back(pair); // on the E nodes: as E
     moments.push_back({"ions_charge_density", "ions_charge_density", ""});
     level.coarsen(amr::MomentsCoarsener{}, moments);
 }

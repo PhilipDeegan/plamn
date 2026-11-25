@@ -118,6 +118,18 @@ MKN_KUL_FN_SIG_RET constexpr auto centering(PatchLayout<o> const&, auto const& q
     return centering<PatchLayout<o>::dimension>(qty);
 }
 
+// qty on the moment nodes: primal along every direction (an E component there, E_z in 2D or E_y
+//  and E_z in 1D, is gathered with the moment weights)
+template<std::size_t dim, auto qty>
+MKN_KUL_FN_SIG_RET constexpr bool on_moment_nodes()
+{
+    constexpr auto c = centering<dim>(qty);
+    for (std::size_t d = 0; d < dim; ++d)
+        if (c[d] != QtyCentering::primal)
+            return false;
+    return true;
+}
+
 
 // value of field, a src quantity, recentered at index of the dst quantity's grid
 template<auto src, auto dst, std::size_t order = 2, typename Field>
@@ -139,6 +151,16 @@ project(Field const& field, damn::core::Point<std::size_t, Field::dimension> con
         })
     }
     return project<centering<dim>(src), centering<dim>(dst), order>(field, index);
+}
+
+// values at index (anything giving a value at a mesh index, not a field), src quantity
+//  recentered at the dst quantity's grid
+template<auto src, auto dst, std::size_t order = 2, typename Values, std::size_t dim>
+    requires(std::is_enum_v<decltype(src)> and not requires { Values::dimension; })
+MKN_KUL_FN_SIG_RET auto project(Values const& values,
+                                damn::core::Point<std::size_t, dim> const& index) DAMN_ALL
+{
+    return project<centering<dim>(src), centering<dim>(dst), order>(values, index);
 }
 
 

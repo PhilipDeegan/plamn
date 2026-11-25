@@ -57,6 +57,7 @@ namespace core
                   dict["nbrPopulations"].template to<std::size_t>())}
             , momentumTensor_{"momentumTensor", HybridQuantity::Tensor::M}
             , chargeFlux_{"chargeFlux", HybridQuantity::Vector::V}
+            , chargeFluxE_{"chargeFluxE", HybridQuantity::Vector::E}
         {
         }
 
@@ -75,6 +76,10 @@ namespace core
 
         MKN_KUL_FN_SIG_RET vecfield_type const& chargeFlux() const { return chargeFlux_; }
         MKN_KUL_FN_SIG_RET vecfield_type& chargeFlux() { return chargeFlux_; }
+
+        // sum_s q_s fluxE_s: the ion current on the E nodes, Ohm's (layouts depositing fluxE)
+        MKN_KUL_FN_SIG_RET vecfield_type const& chargeFluxE() const { return chargeFluxE_; }
+        MKN_KUL_FN_SIG_RET vecfield_type& chargeFluxE() { return chargeFluxE_; }
 
         MKN_KUL_FN_SIG_RET std::string static chargeDensityName() { return "chargeDensity"; }
         MKN_KUL_FN_SIG_RET std::string static massDensityName() { return "massDensity"; }
@@ -177,6 +182,26 @@ namespace core
         }
 
 
+        // sum_s q_s fluxE_s, the ion current on the E nodes
+        void computeChargeFluxE(auto const&... tile_idx)
+        {
+            auto&& chargeFluxE = maybe_tile_at(chargeFluxE_, tile_idx...);
+            chargeFluxE.zero();
+
+            for (auto const& pop : populations_)
+            {
+                auto const plusCharge
+                    = [q = pop.charge()](Float const& c, Float const& f) { return c + q * f; };
+
+                auto&& fluxE = maybe_tile_at(pop.fluxE(), tile_idx...);
+
+                core::transform(chargeFluxE[0], fluxE[0], chargeFluxE[0], plusCharge);
+                core::transform(chargeFluxE[1], fluxE[1], chargeFluxE[1], plusCharge);
+                core::transform(chargeFluxE[2], fluxE[2], chargeFluxE[2], plusCharge);
+            }
+        }
+
+
         void computeFullMomentumTensor()
         {
             assert(momentumTensor_.isUsable());
@@ -200,6 +225,7 @@ namespace core
             computeChargeDensity(tile_idx...);
             computeBulkVelocity(tile_idx...);
             computeChargeFlux(tile_idx...);
+            computeChargeFluxE(tile_idx...);
         }
 
 
@@ -241,8 +267,8 @@ namespace core
         MKN_KUL_FN_SIG_RET bool isUsable() const
         {
             // not the momentum tensor: bound only when computed (plamn's computed quantities)
-            auto usable
-                = damn::core::isUsable(chargeDensity_, bulkVelocity_, massDensity_, chargeFlux_);
+            auto usable = damn::core::isUsable(chargeDensity_, bulkVelocity_, massDensity_,
+                                               chargeFlux_, chargeFluxE_);
             for (auto const& pop : populations_)
                 usable &= usable and pop.isUsable();
             return usable;
@@ -253,7 +279,7 @@ namespace core
         MKN_KUL_FN_SIG_RET bool isSettable() const
         {
             auto settable = damn::core::isSettable(chargeDensity_, bulkVelocity_, momentumTensor_,
-                                             massDensity_, chargeFlux_);
+                                                   massDensity_, chargeFlux_, chargeFluxE_);
             for (auto const& pop : populations_)
                 settable = settable and pop.isSettable();
             return settable;
@@ -275,7 +301,7 @@ namespace core
         MKN_KUL_FN_SIG_RET auto getCompileTimeResourcesViewList()
         {
             return std::forward_as_tuple(bulkVelocity_, momentumTensor_, chargeDensity_,
-                                         massDensity_, chargeFlux_);
+                                         massDensity_, chargeFlux_, chargeFluxE_);
         }
 
 
@@ -317,6 +343,7 @@ namespace core
         std::vector<IonPopulation> populations_;
         tensorfield_type momentumTensor_;
         vecfield_type chargeFlux_;
+        vecfield_type chargeFluxE_;
     };
 
 } // namespace core
