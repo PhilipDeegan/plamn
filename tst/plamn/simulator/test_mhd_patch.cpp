@@ -38,6 +38,14 @@ namespace
                   .riemann_solver_type = MHDOpts::RiemannSolverType::Rusanov};
     using CoupledPatch_t = MHDPatch<coupled_opts>;
 
+    // a level of one patch: what keep_E_old's level copy walks
+    template<typename Patch>
+    struct OneLevel
+    {
+        Patch& patch;
+        void per_patch(auto&& fn) { fn(patch); }
+    };
+
     std::vector<std::string> resource_names(auto& patch)
     {
         std::vector<std::string> names;
@@ -102,7 +110,7 @@ TEST(MHDPatch, underHybridHoldsEOldLast)
     EXPECT_EQ(under[plain.size()], "E_old_x");
 
     patch.E.grids[1].fill(2.5);
-    keep_E_old(patch);
+    keep_E_old<coupled_opts>(OneLevel<CoupledPatch_t>{patch});
     EXPECT_EQ(patch.coupling.under->E_old.grids[1].data()[0], 2.5);
 }
 

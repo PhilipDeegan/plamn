@@ -36,6 +36,7 @@
 
 #include "damn/core/def.hpp"
 #include "plamn/amr/untiled.hpp"
+#include "plamn/core/data/field/level_fields.hpp"
 #include "plamn/simulator/coupling_storage.hpp"
 #include "plamn/core/models/mhd_state.hpp"
 #include "plamn/core/models/quantities/mhd_quantities.hpp"
@@ -312,20 +313,27 @@ void make_under_hybrid(MHDPatch<opts>& patch)
     patch.coupling.under.emplace(patch.layout);
 }
 
-// the step's start (prepare_step): E, for a hybrid level over this one; nothing otherwise
+// a level's step start (prepare_step): E into E_old on the patches under a hybrid level (the
+//  finest MHD level's), one level copy; nothing without the hybrid model
 template<auto opts>
     requires(not opts.hybrid_enabled)
-void keep_E_old(MHDPatch<opts>&)
+void keep_E_old(auto&&)
 {
 }
 template<auto opts>
     requires(opts.hybrid_enabled)
-void keep_E_old(MHDPatch<opts>& patch)
+void keep_E_old(auto&& level)
 {
-    if (!patch.coupling.under)
-        return;
-    for (std::size_t c = 0; c < 3; ++c)
-        patch.coupling.under->E_old.grids[c].copyData(patch.E.grids[c]);
+    core::level_copy<opts.alloc_mode>(
+        level,
+        [](auto& patch, auto& f) {
+            if (patch.coupling.under)
+                f.add(patch.coupling.under->E_old);
+        },
+        [](auto& patch, auto& f) {
+            if (patch.coupling.under)
+                f.add(patch.E);
+        });
 }
 
 // fn(name, grid) for each field grid damn's schedules may move, by its name

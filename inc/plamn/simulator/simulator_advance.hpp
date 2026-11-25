@@ -9,6 +9,7 @@
 #include "damn/amr/time_refinement.hpp"
 #include "damn/core/logger.hpp"
 
+#include "plamn/core/data/field/level_fields.hpp"
 #include "plamn/simulator/simulator.hpp" // IWYU pragma: keep (the class)
 #include "plamn/simulator/level_accessor.hpp"
 #include "plamn/amr/coarsen.hpp"
@@ -298,18 +299,25 @@ void Simulator<opts>::prepare_step_(int const ln, double const t)
             // the state at the step's start (PHARE's MHDMessenger prepareStep), every point: the
             //  reflux redoes the step from it, so only a level that can have a finer one (one
             //  made by a regrid after this is still refluxed at the step's end)
-            MHDLevel{*this, l}.per_patch([&](auto& patch) {
-                auto& u       = patch.states[0];
-                auto const cp = [](auto const& from, auto& to) { to.copyData(from); };
-                cp(u.rho, patch.old.rho);
-                cp(u.Etot, patch.old.Etot);
-                for (std::size_t c = 0; c < 3; ++c)
-                {
-                    cp(u.rhoV.grids[c], patch.old.rhoV.grids[c]);
-                    cp(u.B.grids[c], patch.old.B.grids[c]);
-                }
-                simulator::keep_E_old(patch); // under a hybrid level: its E ghosts in time
-            });
+        {
+            MHDLevel level{*this, l};
+            core::level_copy<opts.alloc_mode>(
+                level,
+                [](auto& patch, auto& f) {
+                    for (auto* g : {&patch.old.rho, &patch.old.Etot})
+                        f.add(*g);
+                    f.add(patch.old.rhoV);
+                    f.add(patch.old.B);
+                },
+                [](auto& patch, auto& f) {
+                    auto& u = patch.states[0];
+                    for (auto* g : {&u.rho, &u.Etot})
+                        f.add(*g);
+                    f.add(u.rhoV);
+                    f.add(u.B);
+                });
+            simulator::keep_E_old<opts>(level); // under a hybrid level: its E ghosts in time
+        }
     });
 }
 
