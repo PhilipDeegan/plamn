@@ -317,6 +317,8 @@ void Simulator<opts>::register_resources_()
     // the totals a synchronization coarsens, their ghosts refilled after it (PHARE's
     //  chargeDensitySynchronizers_, ionChargeFluxSynchronizers_)
     add("IonMoments", components("ions_charge_flux"));
+    // on the E nodes: coarsened like E; Ohm reads it one node beyond its box (deposits_fluxE)
+    add("IonMoments", components("ions_charge_fluxE"));
     add("IonMoments", damn::amr::same_names({"ions_charge_density"}));
 
     auto const& ions    = dict_["simulation"]["ions"];
@@ -328,10 +330,12 @@ void Simulator<opts>::register_resources_()
 
         // every population's moments in one exchange, as PHARE
         add("IonPopBorderSum", components(name + "_flux"));
+        add("IonPopBorderSum", components(name + "_fluxE"));
         add("IonPopBorderSum",
             damn::amr::same_names({name + "_density", name + "_charge_density"}));
         // the same, as ghost fills (after a synchronization)
         add("IonPopMoments", components(name + "_flux"));
+        add("IonPopMoments", components(name + "_fluxE"));
         add("IonPopMoments", damn::amr::same_names({name + "_density", name + "_charge_density"}));
     }
     models_.hybrid.particle_routes.emplace(models_.hybrid.population_names);

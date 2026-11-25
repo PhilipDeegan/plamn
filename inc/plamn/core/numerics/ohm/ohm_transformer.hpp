@@ -39,6 +39,8 @@ struct OhmTile
 //  untiled: the patch's fields, or one tile's views (on_tile)
 //  tiled:   every tile of the patch, CPU tile by tile, GPU one launch with a block per tile
 //  E ghosts between tiles are not synced, see sync_inner_ghosts
+//  flux_on_E: F is on the E nodes (the ions' chargeFluxE, Ohm::operator())
+template<bool flux_on_E = false>
 class OhmTransformer
 {
 public:
@@ -64,8 +66,8 @@ public:
                 eval_on_box(
                     Enew(c), domain_box(layout, Enew(c)),
                     [] DAMN_ALL(auto const& ijk, auto const& ohm_, auto&&... args) {
-                        ohm_.template operator()<c, isResistive, isHyperResistive, hyper>(ijk,
-                                                                                          args...);
+                        ohm_.template operator()<c, isResistive, isHyperResistive, hyper,
+                                                 flux_on_E>(ijk, args...);
                     },
                     ohm, n, F, gradPe_c, B, J, Enew);
             };
@@ -117,13 +119,16 @@ public:
             damn::core::run_region_chunks(items, [] DAMN_ALL(auto& it, auto const c,
                                                              auto const& ijk) {
                 if (c == 0)
-                    it.ohm.template operator()<Component::X, isResistive, isHyperResistive, hyper>(
+                    it.ohm.template
+                    operator()<Component::X, isResistive, isHyperResistive, hyper, flux_on_E>(
                         ijk, it.n, it.F, it.gradPe.x, it.B, it.J, it.E);
                 else if (c == 1)
-                    it.ohm.template operator()<Component::Y, isResistive, isHyperResistive, hyper>(
+                    it.ohm.template
+                    operator()<Component::Y, isResistive, isHyperResistive, hyper, flux_on_E>(
                         ijk, it.n, it.F, it.gradPe.y, it.B, it.J, it.E);
                 else
-                    it.ohm.template operator()<Component::Z, isResistive, isHyperResistive, hyper>(
+                    it.ohm.template
+                    operator()<Component::Z, isResistive, isHyperResistive, hyper, flux_on_E>(
                         ijk, it.n, it.F, it.gradPe.z, it.B, it.J, it.E);
             });
         });
@@ -193,7 +198,8 @@ private:
                 auto& it        = ip[Launcher::tile_idx()];
                 auto const eval = [&]<auto c>(auto const& box, auto const& gradPe_c) {
                     Launcher::for_each_point(box, [&](auto const& ijk) {
-                        it.ohm.template operator()<c, isResistive, isHyperResistive, hyper>(
+                        it.ohm.template
+                        operator()<c, isResistive, isHyperResistive, hyper, flux_on_E>(
                             ijk, it.n, it.F, gradPe_c, it.B, it.J, it.E);
                     });
                 };

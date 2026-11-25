@@ -72,8 +72,9 @@ class UsableIonsPopulation : public _defaults::IonPopulation_t
 
     void set()
     {
-        auto&& [_F, _M, _pd, _cd, _particles] = Super::getCompileTimeResourcesViewList();
+        auto&& [_F, _M, _pd, _cd, _particles, _FE] = Super::getCompileTimeResourcesViewList();
         F.set_on(_F);
+        FE.set_on(_FE);
         M.set_on(_M);
         _pd.setBuffer(&rhoP);
         _cd.setBuffer(&rhoC);
@@ -91,6 +92,7 @@ public:
         , rhoP{this->name() + "_particleDensity", layout_, Quantity::Scalar::rho, 1}
         , rhoC{this->name() + "_chargeDensity", layout_, Quantity::Scalar::rho, 1}
         , F{this->name() + "_flux", layout, Quantity::Vector::V, 1}
+        , FE{this->name() + "_fluxE", layout, Quantity::Vector::E, 1}
         , M{this->name() + "_momentumTensor", layout, Quantity::Tensor::M, 1}
         , particles{this->name(), layout}
     {
@@ -103,6 +105,7 @@ public:
         , rhoP{that.rhoP}
         , rhoC{that.rhoC}
         , F{that.F}
+        , FE{that.FE}
         , M{that.M}
         , particles{that.particles}
     {
@@ -121,7 +124,7 @@ public:
 
     Layout_t layout_;
     _defaults::Grid_t rhoP, rhoC;
-    _defaults::UsableVecField_t F;
+    _defaults::UsableVecField_t F, FE;
     _defaults::UsableTensorField_t M;
     UsableParticlesPopulation<Particles_t> particles;
 };
@@ -158,9 +161,10 @@ class UsableIons : public Ions<typename _defaults::IonPopulation_t, typename _de
 
     void set()
     {
-        auto&& [_bV, _M, _cd, _md, _cF] = Super::getCompileTimeResourcesViewList();
+        auto&& [_bV, _M, _cd, _md, _cF, _cFE] = Super::getCompileTimeResourcesViewList();
         Vi.set_on(_bV);
         chargeFlux.set_on(_cF);
+        chargeFluxE.set_on(_cFE);
         M.set_on(_M);
         _cd.setBuffer(&rhoC);
         _md.setBuffer(&rhoM);
@@ -182,6 +186,7 @@ public:
         , rhoC{"chargeDensity", layout_, Quantity::Scalar::rho, 1}
         , Vi{"bulkVel", layout, Quantity::Vector::V, 1}
         , chargeFlux{"chargeFlux", layout, Quantity::Vector::V, 1}
+        , chargeFluxE{"chargeFluxE", layout, Quantity::Vector::E, 1}
         , M{"momentumTensor", layout, Quantity::Tensor::M, 0}
     {
         auto& super_pops = Super::getRunTimeResourcesViewList();
@@ -209,6 +214,7 @@ public:
         , rhoC{std::move(that.rhoC)}
         , Vi{std::move(that.Vi)}
         , chargeFlux{std::move(that.chargeFlux)}
+        , chargeFluxE{std::move(that.chargeFluxE)}
         , M{std::move(that.M)}
         , populations{std::move(that.populations)}
     {
@@ -222,6 +228,7 @@ public:
         , rhoC{that.rhoC}
         , Vi{that.Vi}
         , chargeFlux{that.chargeFlux}
+        , chargeFluxE{that.chargeFluxE}
         , M{that.M}
         , populations{that.populations}
     {
@@ -238,7 +245,7 @@ public:
 
     Layout_t layout_;
     _defaults::Grid_t rhoM, rhoC;
-    _defaults::UsableVecField_t Vi, chargeFlux;
+    _defaults::UsableVecField_t Vi, chargeFlux, chargeFluxE;
     _defaults::UsableTensorField_t M;
     std::vector<UsableIonsPopulation<_defaults>> populations;
 };

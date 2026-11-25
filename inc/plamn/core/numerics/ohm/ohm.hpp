@@ -59,14 +59,17 @@ public:
     //  vectorise), the projection / laplacian are skipped when eta or nu is zero. Where and how
     //  it is evaluated (boxes, tiles, GPU) is up to the caller, see
     //  core/numerics/ohm/ohm_transformer.hpp
-    //  n: the ion charge density, F: the total ion charge flux sum_s q_s F_s (moment nodes)
-    template<auto c, bool isResistive, bool isHyperResistive, HyperMode hyper>
+    //  n: the ion charge density, F: the total ion charge flux sum_s q_s F_s, on the moment
+    //  nodes, or on the E nodes (flux_on_E: deposited with the gather's weights, the ions'
+    //  chargeFluxE), then the ion current's work is exactly the particles' (deposits_fluxE)
+    template<auto c, bool isResistive, bool isHyperResistive, HyperMode hyper,
+             bool flux_on_E = false>
     void operator()(auto const& ijk, auto const& n, auto const& F, auto const& gradPe_c,
                     auto const& B, auto const& J, auto& E) const DAMN_ALL
     {
         static_assert(Components::check<c>());
 
-        auto E_ = ideal_<c>(n, F, B, J, ijk) + pressure_<c>(n, gradPe_c, ijk);
+        auto E_ = ideal_<c, flux_on_E>(n, F, B, J, ijk) + pressure_<c>(n, gradPe_c, ijk);
 
         if constexpr (isResistive)
             E_ += resistive_<c>(J, ijk);
@@ -79,6 +82,25 @@ public:
 private:
     Layout layout_; // GPU copy needs object not pointer!
 
+    // G = F - J, component c, at a point of its E node: F on the moment nodes averaged there, or
+    //  F already on the E nodes
+    template<auto c, auto Fq, auto Eq, bool flux_on_E>
+        requires(not flux_on_E)
+    static auto electron_flux_(auto const& F, auto const& J) DAMN_ALL
+    {
+        return [&](damn::core::Point<std::size_t, dimension> const& ijk) {
+            return project<Fq, Eq>(F(c), ijk) - J(c)(ijk);
+        };
+    }
+    template<auto c, auto Fq, auto Eq, bool flux_on_E>
+        requires(flux_on_E)
+    static auto electron_flux_(auto const& F, auto const& J) DAMN_ALL
+    {
+        return [&](damn::core::Point<std::size_t, dimension> const& ijk) {
+            return F(c)(ijk) - J(c)(ijk);
+        };
+    }
+
     // The ideal term -Ve x B = -G x B / n, G = n Ve = F - J the electron flux, written so that it
     //  does no work on the electrons: sum_i G_i E_i = 0 over a periodic grid. G is formed on the E
     //  nodes, w = B / n on the B nodes, each product averaged to the B node and back:
@@ -87,19 +109,15 @@ private:
     //  antisymmetric. Averaging Ve and B to the E node and multiplying there is not: particle
     //  noise then feeds a steady energy gain (grid scale B grows). Reads n and F one node beyond
     //  the box E is computed on, J one edge beyond.
-    template<auto component, typename VecField>
+    template<auto component, bool flux_on_E, typename VecField>
     auto ideal_(auto const& n, VecField const& F, VecField const& B, VecField const& J,
                 damn::core::Point<std::size_t, dimension> const index) const DAMN_ALL
     {
         using Point_t = damn::core::Point<std::size_t, dimension>;
 
-        // G component c on its E node
-        auto const G = [&]<auto c, auto Fq, auto Eq>() {
-            return [&](Point_t const& ijk) { return project<Fq, Eq>(F(c), ijk) - J(c)(ijk); };
-        };
-        auto const Gx = G.template operator()<Component::X, Scalar::Vx, Scalar::Ex>();
-        auto const Gy = G.template operator()<Component::Y, Scalar::Vy, Scalar::Ey>();
-        auto const Gz = G.template operator()<Component::Z, Scalar::Vz, Scalar::Ez>();
+        auto const Gx = electron_flux_<Component::X, Scalar::Vx, Scalar::Ex, flux_on_E>(F, J);
+        auto const Gy = electron_flux_<Component::Y, Scalar::Vy, Scalar::Ey, flux_on_E>(F, J);
+        auto const Gz = electron_flux_<Component::Z, Scalar::Vz, Scalar::Ez, flux_on_E>(F, J);
 
         // B_c / n on the B_c node times the G component Gq (on Eq nodes) averaged to it
         auto const wG = [&]<auto c, auto Bq, auto Eq>(auto const& Gq) {

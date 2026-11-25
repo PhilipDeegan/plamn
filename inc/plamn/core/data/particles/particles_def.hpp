@@ -81,6 +81,14 @@ bool constexpr is_chunked(LayoutMode lm)
     return mkn::kul::any_in(lm, SoAVXChunked, AoS4SoAVXChunked);
 }
 
+// deposits the flux on the E nodes with the gather's weights (ion population fluxE): Ohm then
+//  reads the ions' chargeFluxE; the other layouts give it the moment nodes' charge flux
+//  (averaged to the E nodes). One layout at a time until all deposit it
+bool constexpr deposits_fluxE(LayoutMode lm)
+{
+    return lm == LayoutMode::AoSMapped;
+}
+
 // guards a forwarding constructor `template<typename... Args> This(Args&&...)` so that a
 // single self-type argument (e.g. a non-const `This&`) is excluded and falls through to the
 // real copy/move constructor instead - otherwise the forwarding ctor is an exact match that

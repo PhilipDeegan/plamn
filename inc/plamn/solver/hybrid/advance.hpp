@@ -102,7 +102,11 @@ namespace detail
         requires(opts.alloc_mode == damn::AllocatorMode::CPU or core::is_tiled(opts.layout_mode))
     void compute_moments_level(auto& level)
     {
-        level.per_patch_threaded([](auto& patch) { patch.ions.update(); });
+        level.per_patch_threaded([](auto& patch) {
+            for (auto& pop : patch.ions)
+                core::complete_fluxE(pop, patch.layout);
+            patch.ions.update();
+        });
     }
 } // namespace detail
 
@@ -199,6 +203,21 @@ namespace detail
         });
     }
 
+    // the ion flux Ohm reads: on the E nodes where the layout deposits it (deposits_fluxE),
+    //  else on the moment nodes
+    template<typename Patch>
+        requires(core::deposits_fluxE(Patch::Particles_t::layout_mode))
+    auto& ohm_flux(Patch& patch)
+    {
+        return patch.ions.chargeFluxE();
+    }
+    template<typename Patch>
+        requires(not core::deposits_fluxE(Patch::Particles_t::layout_mode))
+    auto& ohm_flux(Patch& patch)
+    {
+        return patch.ions.chargeFlux();
+    }
+
     // E from Ohm's law on every patch of the level: unified memory, one launch for the level,
     //  its item list kept (an item per untiled patch; tiled patches through the transformer's
     //  own tiles path)
@@ -207,10 +226,10 @@ namespace detail
                  and !core::is_tiled(opts.layout_mode))
     void ohm_level(HybridModel<opts> const& model, auto& level)
     {
-        core::OhmTransformer const ohm{*model.ohm};
+        core::OhmTransformer<core::deposits_fluxE(opts.layout_mode)> const ohm{*model.ohm};
         auto const item_of = [&](auto& patch) {
             auto& em = patch.*electromag;
-            return ohm.make_item(patch.layout, patch.electrons().density(), patch.ions.chargeFlux(),
+            return ohm.make_item(patch.layout, patch.electrons().density(), ohm_flux(patch),
                                  patch.electrons().pressure(), em.B, patch.J, em.E);
         };
         using Patch_t = HybridModel<opts>::Patch_t;
@@ -227,9 +246,9 @@ namespace detail
     {
         level.per_patch_threaded([&](auto& patch) {
             auto& em = patch.*electromag;
-            core::OhmTransformer{*model.ohm}(patch.layout, patch.electrons().density(),
-                                             patch.ions.chargeFlux(), patch.electrons().pressure(),
-                                             em.B, patch.J, em.E);
+            core::OhmTransformer<core::deposits_fluxE(opts.layout_mode)>{*model.ohm}(
+                patch.layout, patch.electrons().density(), ohm_flux(patch),
+                patch.electrons().pressure(), em.B, patch.J, em.E);
         });
     }
 
@@ -289,6 +308,10 @@ void deposit_level_ghosts(auto& level, double const t)
                         patch.layout, 1. - alpha);
             interpolate(pop.levelGhostParticlesNew(), pop.particleDensity(), pop.flux(),
                         patch.layout, alpha);
+            interpolate.fluxE_to_mesh(pop.levelGhostParticlesOld(), patch.layout, pop.fluxE(),
+                                      1. - alpha);
+            interpolate.fluxE_to_mesh(pop.levelGhostParticlesNew(), patch.layout, pop.fluxE(),
+                                      alpha);
         }
     });
 }

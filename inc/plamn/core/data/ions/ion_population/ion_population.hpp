@@ -34,6 +34,7 @@ namespace core
             , mass_{initializer["mass"].template to<double>()}
             , charge_{initializer["particle_initializer"]["charge"].template to<double>()}
             , flux_{name_ + "_flux", HybridQuantity::Vector::V}
+            , fluxE_{name_ + "_fluxE", HybridQuantity::Vector::E}
             , momentumTensor_{name_ + "_momentumTensor", HybridQuantity::Tensor::M}
             , particleDensity_{name_ + "_particleDensity", HybridQuantity::Scalar::rho}
             , chargeDensity_{name_ + "_chargeDensity", HybridQuantity::Scalar::rho}
@@ -63,13 +64,14 @@ namespace core
         MKN_KUL_FN_SIG_RET bool isUsable() const
         {
             // not the momentum tensor: bound only when computed (plamn's computed quantities)
-            return damn::core::isUsable(particles_, particleDensity_, chargeDensity_, flux_);
+            return damn::core::isUsable(particles_, particleDensity_, chargeDensity_, flux_,
+                                        fluxE_);
         }
 
         MKN_KUL_FN_SIG_RET bool isSettable() const
         {
             return damn::core::isSettable(particles_, particleDensity_, chargeDensity_, flux_,
-                                    momentumTensor_);
+                                          fluxE_, momentumTensor_);
         }
 
         MKN_KUL_FN_SIG_RET auto& domainParticles() const { return particles_.domainParticles(); }
@@ -114,6 +116,10 @@ namespace core
         MKN_KUL_FN_SIG_RET VecField const& flux() const { return flux_; }
         MKN_KUL_FN_SIG_RET VecField& flux() { return flux_; }
 
+        // the flux on the E nodes, deposited with the weights gathering E (Ohm's ion current)
+        MKN_KUL_FN_SIG_RET VecField const& fluxE() const { return fluxE_; }
+        MKN_KUL_FN_SIG_RET VecField& fluxE() { return fluxE_; }
+
         MKN_KUL_FN_SIG_RET TensorField const& momentumTensor() const { return momentumTensor_; }
         MKN_KUL_FN_SIG_RET TensorField& momentumTensor() { return momentumTensor_; }
 
@@ -130,7 +136,7 @@ namespace core
         MKN_KUL_FN_SIG_RET auto getCompileTimeResourcesViewList()
         {
             return std::forward_as_tuple(flux_, momentumTensor_, particleDensity_, chargeDensity_,
-                                         particles_);
+                                         particles_, fluxE_);
         }
 
 
@@ -154,6 +160,7 @@ namespace core
         double mass_;
         double charge_;
         VecField flux_;
+        VecField fluxE_;
         TensorField momentumTensor_;
         field_type particleDensity_;
         field_type chargeDensity_;

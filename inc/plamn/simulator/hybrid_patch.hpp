@@ -110,6 +110,7 @@ struct HybridPatch
             : density{grid(pop.particleDensity(), layout)}
             , charge_density{grid(pop.chargeDensity(), layout)}
             , flux{grids(pop.flux(), layout)}
+            , fluxE{grids(pop.fluxE(), layout)}
             , domain{core::make_particles<Particles_t>(layout)}
             , patch_ghost{core::make_particles<Particles_t>(layout)}
             , level_ghost{core::make_particles<Particles_t>(layout)}
@@ -118,7 +119,7 @@ struct HybridPatch
             , pack{pop.name(),   &domain,          &patch_ghost,
                    &level_ghost, &level_ghost_old, &level_ghost_new}
         {
-            auto&& [F, M, pd, cd, particles] = pop.getCompileTimeResourcesViewList();
+            auto&& [F, M, pd, cd, particles, FE] = pop.getCompileTimeResourcesViewList();
             if constexpr (core::is_chunked(Particles_t::layout_mode)
                           and Particles_t::alloc_mode == damn::AllocatorMode::CPU)
             { // the domain's chunks with gaps between them (particles_chunked.hpp): changes
@@ -129,6 +130,7 @@ struct HybridPatch
                 domain.set_slack(slack, layout.cells, border);
             }
             bind(F, flux); // M: over scratch grids when computed (simulator_computed.hpp)
+            bind(FE, fluxE);
             pd.setBuffer(&density);
             cd.setBuffer(&charge_density);
             particles.setBuffer(&pack);
@@ -138,7 +140,7 @@ struct HybridPatch
         PopulationData(PopulationData&&)      = delete;
 
         Grid_t density, charge_density;
-        Grids<3> flux;
+        Grids<3> flux, fluxE;
         Particles_t domain, patch_ghost, level_ghost, level_ghost_old, level_ghost_new;
         core::ParticlesPack<Particles_t> pack;
     };
@@ -177,6 +179,7 @@ struct HybridPatch
         , chargeDensity{grid(ions.chargeDensity(), layout)}
         , bulkVelocity{grids(ions.velocity(), layout)}
         , chargeFlux{grids(ions.chargeFlux(), layout)}
+        , chargeFluxE{grids(ions.chargeFluxE(), layout)}
         , oldE{like(emE, "EM_E_old", layout)}
         , oldB{like(emB, "EM_B_old", layout)}
         , fluxSumE{like(emE, "EM_fluxSum_E", layout)}
@@ -190,11 +193,12 @@ struct HybridPatch
         bind(J, Jxyz);
         bind(Bold, oldB);
 
-        auto&& [bV, M, cd, md, cF] = ions.getCompileTimeResourcesViewList();
+        auto&& [bV, M, cd, md, cF, cFE] = ions.getCompileTimeResourcesViewList();
         bind(bV, bulkVelocity); // M: over scratch grids when computed
         cd.setBuffer(&chargeDensity);
         md.setBuffer(&massDensity);
         bind(cF, chargeFlux);
+        bind(cFE, chargeFluxE);
         for (auto& pop : ions)
             populations.emplace_back(std::make_unique<PopulationData>(pop, layout));
 
@@ -219,7 +223,7 @@ struct HybridPatch
     void for_each_grid(auto&& fn)
     {
         for (auto* grids : {&emE, &emB, &predE, &predB, &avgE, &avgB, &Jxyz, &bulkVelocity,
-                            &chargeFlux, &oldE, &oldB, &fluxSumE, &*electronVelocity})
+                            &chargeFlux, &chargeFluxE, &oldE, &oldB, &fluxSumE, &*electronVelocity})
             for (auto& g : *grids)
                 fn(g);
         fn(massDensity);
@@ -230,6 +234,8 @@ struct HybridPatch
             fn(pop->density);
             fn(pop->charge_density);
             for (auto& g : pop->flux)
+                fn(g);
+            for (auto& g : pop->fluxE)
                 fn(g);
         }
     }
@@ -262,7 +268,7 @@ struct HybridPatch
     // storage
     Grids<3> emE, emB, predE, predB, avgE, avgB, Jxyz;
     Grid_t massDensity, chargeDensity;
-    Grids<3> bulkVelocity, chargeFlux;
+    Grids<3> bulkVelocity, chargeFlux, chargeFluxE;
     // computed quantities' grids (e.g. the momentum tensor), by name, made on first use and kept
     // with the patch (simulator_computed.hpp)
     std::map<std::string, Grid_t> scratch;
@@ -320,6 +326,7 @@ void for_each_fixed_field_grid(HybridPatch<opts>& patch, auto&& fn)
 
     fn("ions_charge_density", patch.chargeDensity);
     detail::vector_grids("ions_charge_flux", patch.chargeFlux, fn);
+    detail::vector_grids("ions_charge_fluxE", patch.chargeFluxE, fn);
 
     for (auto& pop : patch.populations)
     {
@@ -327,6 +334,7 @@ void for_each_fixed_field_grid(HybridPatch<opts>& patch, auto&& fn)
         fn(name + "_density", pop->density);
         fn(name + "_charge_density", pop->charge_density);
         detail::vector_grids(name + "_flux", pop->flux, fn);
+        detail::vector_grids(name + "_fluxE", pop->fluxE, fn);
     }
 }
 
