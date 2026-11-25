@@ -19,7 +19,6 @@
 #include "mkn/kul/std/array.hpp"
 #include "mkn/kul/math.hpp"
 #include "mkn/kul/for.hpp"
-#include "mkn/kul/tuple.hpp"
 #include "mkn/kul/meta.hpp"
 #include "damn/core/vector.hpp"
 #include "plamn/core/def.hpp"
