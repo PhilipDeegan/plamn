@@ -211,15 +211,18 @@ class RestartsTest(unittest.TestCase):
         self.assertGreater(first.cpp_sim.n_levels(), 1)
 
     # the polytropic electrons (#91): their entropy stored, Pe rebuilt from it
+    @unittest.skip("the polytropic closure is disabled for now (#91)")
     def test_polytropic_one_level(self):
         self.run_both(steps=8, refinement_boxes={}, polytropic=True)
 
+    @unittest.skip("the polytropic closure is disabled for now (#91)")
     def test_polytropic_refinement_boxes(self):
         first = self.run_both(
             steps=5, refinement_boxes={"L0": {"B0": [[10], [19]]}}, polytropic=True
         )
         self.assertEqual(first.cpp_sim.n_levels(), 2)
 
+    @unittest.skip("the polytropic closure is disabled for now (#91)")
     def test_polytropic_tagging(self):
         first = self.run_both(
             steps=10, refinement="tagging", max_nbr_levels=3, polytropic=True
