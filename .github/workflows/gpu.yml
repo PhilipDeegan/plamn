@@ -90,19 +90,21 @@ jobs:
       run: |
         KLOG=3 vgpu run mkn clean build test -dKOqp test_plamn_core -x res/mkn/clang_cuda_ci -t 4
 
-  # test_layouts on the simulated RTX 5090: SoAVXChunked GPU_UNIFIED against AoSMapped CPU in 1D,
+  # test_layouts on a simulated GPU: SoAVXChunked GPU_UNIFIED against AoSMapped CPU in 1D,
   #  2D and 3D, the CPU modules with the image's gcc, Open MPI and HDF5 (/opt/mpi, /opt/hdf5), the
   #  GPU ones with clang through the same mpicxx. The CPU modules first: CPU and GPU builds share
   #  damn's bin/
   cuda_layouts:
     if: ${{ contains(fromJSON('["all", "cuda_layouts"]'), github.event.inputs.job || 'all') }}
-    name: cuda layouts (simulated RTX 5090)
+    name: cuda layouts (simulated H100)
     runs-on: ubuntu-24.04
     container: ghcr.io/0xz/hpc-containers:cuda
     timeout-minutes: 180
+    # sm_90 / H100, not the RTX 5090: the simulator cannot decode sm_120's named barriers with
+    #  register operands, which cub's DeviceScan uses (pantheongpu/pantheonsim#758)
     env:
-      CUDA_ARCH: sm_120
-      VGPU_GPU: nvidia/rtx5090
+      CUDA_ARCH: sm_90
+      VGPU_GPU: nvidia/h100
     steps:
     - uses: actions/checkout@v6
     - name: Install
