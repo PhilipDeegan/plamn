@@ -26,7 +26,8 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <unordered_map>
+#include <algorithm>
+#include <utility>
 #include <vector>
 
 namespace plamn::amr
@@ -114,13 +115,19 @@ namespace detail
         return lo;
     }
 
+    template<std::size_t dim>
     struct AppendBuffers // kept between copies (no allocation once large enough)
     {
         std::vector<std::size_t, mkn::gpu::NoConstructAllocator<std::size_t>> counts, scan, totals;
+        damn::core::gpu::Vec_t<AppendCells<dim>> cells;
+        damn::core::gpu::Vec_t<AppendColumns<dim>> columns;
+        std::vector<std::size_t> total, dst_at;
+        std::vector<std::pair<void*, std::size_t>> end_of; // per destination, its new size
     };
-    inline AppendBuffers& append_buffers()
+    template<std::size_t dim>
+    AppendBuffers<dim>& append_buffers()
     {
-        static thread_local AppendBuffers buffers;
+        static thread_local AppendBuffers<dim> buffers;
         return buffers;
     }
 } // namespace detail
@@ -143,11 +150,11 @@ void append_items_on_device(
     std::vector<damn::amr::AppendPiece<ParticleResource<Particles, gw>, ParticleResource<Src, gw>,
                                        dim>> const& pieces)
 {
-    auto& buffers = detail::append_buffers();
+    auto& buffers = detail::append_buffers<dim>();
 
     // 1. counts per (piece, cell)
-    damn::core::gpu::Vec_t<detail::AppendCells<dim>> cells;
-    cells.reserve(pieces.size());
+    auto& cells = buffers.cells;
+    cells.clear();
     std::size_t ncells = 0;
     for (auto const& piece : pieces)
     {
@@ -182,8 +189,9 @@ void append_items_on_device(
     thrust::exclusive_scan(thrust::device, buffers.counts.data(), buffers.counts.data() + ncells,
                            buffers.scan.data());
 
-    // the last piece's end: ncells
-    std::vector<std::size_t> total(pieces.size());
+    // per piece totals: the scan at its end minus at its first (the last piece's end: ncells)
+    auto& total = buffers.total;
+    total.resize(pieces.size());
     {
         auto const* const counts = buffers.counts.data();
         auto const* const scan   = buffers.scan.data();
@@ -201,22 +209,27 @@ void append_items_on_device(
     }
 
     // 3. destinations resized, pieces placed in plan order
-    std::unordered_map<Particles*, std::size_t> end_of;
-    std::vector<std::size_t> dst_at(pieces.size());
+    auto& end_of = buffers.end_of; // few destinations: a linear search
+    auto& dst_at = buffers.dst_at;
+    end_of.clear();
+    dst_at.resize(pieces.size());
     for (std::size_t k = 0; k < pieces.size(); ++k)
     {
-        auto* dst        = pieces[k].dst.particles;
-        auto [it, fresh] = end_of.try_emplace(dst, dst->size());
-        dst_at[k]        = it->second;
+        Particles* const dst = pieces[k].dst.particles;
+        auto it              = std::find_if(end_of.begin(), end_of.end(),
+                                            [&](auto const& e) { return e.first == dst; });
+        if (it == end_of.end())
+            it = end_of.insert(end_of.end(), {dst, dst->size()});
+        dst_at[k] = it->second;
         it->second += total[k];
     }
     for (auto const& [dst, end] : end_of)
-        if (end != dst->size())
-            dst->resize(end); // unsorted: items_appended sorts it
+        if (auto* const particles = static_cast<Particles*>(dst); end != particles->size())
+            particles->resize(end); // unsorted: items_appended sorts it
 
     // 4. a thread per particle
-    damn::core::gpu::Vec_t<detail::AppendColumns<dim>> columns;
-    columns.reserve(pieces.size());
+    auto& columns = buffers.columns;
+    columns.clear();
     std::size_t nparticles = 0;
     for (std::size_t k = 0; k < pieces.size(); ++k)
     {

@@ -36,7 +36,6 @@
 #include <array>
 #include <cstdint>
 #include <initializer_list>
-#include <memory>
 #include <stdexcept>
 #include <tuple>
 #include <type_traits>
@@ -142,11 +141,21 @@ struct MultiBorisBackend
     // must be called from the dispatching thread itself, never from inside a task already
     // running on `pool` — detach_task-then-wait on one's own pool deadlocks.
 
+    // a population's functors of a patch, alive until the pools are synced: their tile tasks
+    //  hold a pointer to them
     template<auto mode>
-    static void move_rest_pooled(auto& pool, auto& in, auto const i);
+    struct PooledFunctors
+    {
+        Functors<ParticleType::Domain, mode> domain;
+        Functors<ParticleType::LevelGhost, mode> ghost;
+    };
 
     template<auto mode>
-    static void move_cpu_copy_pooled(auto& pool, auto& in, auto& boxings, auto const i);
+    static void move_rest_pooled(auto& pool, auto& in, auto const i, auto& functors);
+
+    template<auto mode>
+    static void move_cpu_copy_pooled(auto& pool, auto& in, auto& boxings, auto const i,
+                                     auto& functors);
 
     // stream: mkn_xyz::MultiBoris passes the patch's stream for the particle array sync
     static void sync_ref(auto& view, auto&... stream);
@@ -216,7 +225,8 @@ void MultiBorisBackend<layout, ModelAccessor, Interpolator>::move_cpu_copy(auto&
 template<LayoutMode layout, typename ModelAccessor, typename Interpolator>
 template<auto mode>
 void MultiBorisBackend<layout, ModelAccessor, Interpolator>::move_rest_pooled(auto& pool, auto& in,
-                                                                              auto const i)
+                                                                              auto const i,
+                                                                              auto& functors)
 {
     auto view       = in.accessor[i];
     auto [ions, em] = view.args;
@@ -228,21 +238,17 @@ void MultiBorisBackend<layout, ModelAccessor, Interpolator>::move_rest_pooled(au
         auto& level_ghost = pop.levelGhostParticles();
         level_ghost.reset_views();
 
-        using DomainFn = Functors<ParticleType::Domain, mode>;
-        using GhostFn  = Functors<ParticleType::LevelGhost, mode>;
+        // self-contained (own pps view + electromag copy): alive for every deferred tile task
+        auto* const fns = &functors.emplace_back(
+            PooledFunctors<mode>{{in, view, pop, domain, em}, {in, view, pop, level_ghost, em}});
 
-        // shared_ptr keeps the (self-contained: own pps view + electromag copy)
-        // Functors alive for every deferred per-tile task below.
-        auto domain_fn = std::make_shared<DomainFn>(in, view, pop, domain, em);
-        auto ghost_fn  = std::make_shared<GhostFn>(in, view, pop, level_ghost, em);
-
-        auto const n_tiles = domain_fn->pps().size();
-        assert(n_tiles == ghost_fn->pps().size());
+        auto const n_tiles = fns->domain.pps().size();
+        assert(n_tiles == fns->ghost.pps().size());
 
         for (std::size_t t = 0; t < n_tiles; ++t)
-            pool.detach_task(damn::core::ThreadPool::INSTANCE().guard([domain_fn, ghost_fn, t] {
-                domain_fn->one_tile(t);
-                ghost_fn->one_tile(t);
+            pool.detach_task(damn::core::ThreadPool::INSTANCE().guard([fns, t] {
+                fns->domain.one_tile(t);
+                fns->ghost.one_tile(t);
             }));
     }
 }
@@ -250,14 +256,9 @@ void MultiBorisBackend<layout, ModelAccessor, Interpolator>::move_rest_pooled(au
 
 template<LayoutMode layout, typename ModelAccessor, typename Interpolator>
 template<auto mode>
-void MultiBorisBackend<layout, ModelAccessor, Interpolator>::move_cpu_copy_pooled(auto& pool,
-                                                                                  auto& in,
-                                                                                  auto& boxings,
-                                                                                  auto const i)
+void MultiBorisBackend<layout, ModelAccessor, Interpolator>::move_cpu_copy_pooled(
+    auto& pool, auto& in, auto& boxings, auto const i, auto& functors)
 {
-    using DomainFn = Functors<ParticleType::Domain, mode>;
-    using GhostFn  = Functors<ParticleType::LevelGhost, mode>;
-
     auto view       = in.accessor[i];
     auto [ions, em] = view.args;
 
@@ -268,19 +269,19 @@ void MultiBorisBackend<layout, ModelAccessor, Interpolator>::move_cpu_copy_poole
         auto& level_ghost = pop.levelGhostParticles();
         level_ghost.reset_views();
 
-        auto domain_fn     = std::make_shared<DomainFn>(in, view, pop, domain, em);
-        auto ghost_fn      = std::make_shared<GhostFn>(in, view, pop, level_ghost, em);
-        auto const n_tiles = domain_fn->pps().size();
-        assert(n_tiles == ghost_fn->pps().size());
+        auto* const fns = &functors.emplace_back(
+            PooledFunctors<mode>{{in, view, pop, domain, em}, {in, view, pop, level_ghost, em}});
+        auto const n_tiles = fns->domain.pps().size();
+        assert(n_tiles == fns->ghost.pps().size());
 
         // view/pop are cheap handles, safe to capture by copy. Domain and LevelGhost
         // for the SAME tile must run in the SAME task (shared rhoP/flux);
         // different tiles are independent.
         for (std::size_t t = 0; t < n_tiles; ++t)
-            pool.detach_task(damn::core::ThreadPool::INSTANCE().guard(
-                [domain_fn, ghost_fn, t, view, pop, &boxings]() mutable {
-                    domain_fn->one_copy_tile(t, boxings, view, pop);
-                    ghost_fn->one_copy_tile(t, boxings, view, pop);
+            pool.detach_task(
+                damn::core::ThreadPool::INSTANCE().guard([fns, t, view, pop, &boxings]() mutable {
+                    fns->domain.one_copy_tile(t, boxings, view, pop);
+                    fns->ghost.one_copy_tile(t, boxings, view, pop);
                 }));
     }
 }
@@ -316,15 +317,28 @@ void MultiBorisBackend<layout, ModelAccessor, Interpolator>::move_pooled(MultiBo
 
     { // tile tasks per patch queued on the pools: timed as a whole, per patch only queues
         DAMN_LOG_SCOPE(3, "MultiBoris::move_pooled::push");
+        // the dispatching thread's, reserved for every population of every patch before any
+        //  task holds one: no reallocation under the tasks
+        static thread_local std::vector<PooledFunctors<mode>> functors;
+        std::size_t n_pops = 0;
+        for (std::size_t i = 0; i < in.accessor.size(); ++i)
+        {
+            auto view      = in.accessor[i];
+            auto [ions, _] = view.args;
+            n_pops += ions.size();
+        }
+        functors.clear();
+        functors.reserve(n_pops);
         for (std::size_t i = 0; i < in.accessor.size(); ++i)
         {
             auto& pool = TP.get_pool(TP.first_ready_idx());
             if constexpr (copy and is_cpu)
-                move_cpu_copy_pooled<mode>(pool, in, boxings, i);
+                move_cpu_copy_pooled<mode>(pool, in, boxings, i, functors);
             else
-                move_rest_pooled<mode>(pool, in, i);
+                move_rest_pooled<mode>(pool, in, i, functors);
         }
         TP.sync(); // every patch's tiles, across every pool, are done
+        functors.clear();
     }
 
     if constexpr (not copy)

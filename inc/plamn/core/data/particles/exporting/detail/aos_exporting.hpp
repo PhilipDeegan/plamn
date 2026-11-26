@@ -18,7 +18,8 @@
 
 #include <cassert>
 #include <vector>
-#include <unordered_map>
+#include <functional>
+#include <numeric>
 #include <cstddef>
 #include <iterator>
 #include <algorithm>
@@ -26,6 +27,7 @@
 #include <array>
 #include <cstdint>
 #include <type_traits>
+#include <format>
 
 namespace plamn::core
 {
@@ -33,11 +35,14 @@ namespace plamn::core
 namespace detail
 {
     // tiles of a tile set whose particles can be outside of box: their tile box grown by reach
-    //  isn't inside box. Interior tiles have nothing to export
+    //  isn't inside box. Interior tiles have nothing to export. The thread's buffer (patches
+    //  export concurrently), valid until its next call
     template<typename Particles, typename Box_t>
-    auto tiles_not_inside(Particles const& ps, Box_t const& box, int const reach)
+    std::vector<std::size_t> const& tiles_not_inside(Particles const& ps, Box_t const& box,
+                                                     int const reach)
     {
-        std::vector<std::size_t> tiles;
+        static thread_local std::vector<std::size_t> tiles;
+        tiles.clear();
         for (std::size_t ti = 0; ti < ps().size(); ++ti)
         {
             auto const& tile = ps()[ti];
@@ -50,11 +55,13 @@ namespace detail
         return tiles;
     }
 
-    // tiles of a tile set whose box grown by reach touches any of boxes
+    // tiles of a tile set whose box grown by reach touches any of boxes: as tiles_not_inside's
     template<typename Particles, typename Boxes>
-    auto tiles_touching(Particles const& ps, Boxes const& boxes, int const reach)
+    std::vector<std::size_t> const& tiles_touching(Particles const& ps, Boxes const& boxes,
+                                                   int const reach)
     {
-        std::vector<std::size_t> tiles;
+        static thread_local std::vector<std::size_t> tiles;
+        tiles.clear();
         for (std::size_t ti = 0; ti < ps().size(); ++ti)
         {
             auto const& tile = ps()[ti];
@@ -751,8 +758,18 @@ namespace detail::pc_gpu
             void* dst_bucket;
             std::size_t n;
         };
-        std::vector<Job> jobs;
-        std::unordered_map<void*, std::size_t> added; // per dst bucket
+        struct Buffers // the thread's, kept between moves (patches move concurrently)
+        {
+            std::vector<Job> jobs;
+            std::vector<std::size_t> by_bucket; // jobs' indices, by dst bucket then job
+            std::vector<std::size_t> at;        // per job, its place in its dst bucket
+            std::vector<void*> tiles;           // src and dst tiles to refresh
+            std::vector<CellCopy<Particle_t>> host_copies;
+            damn::core::gpu::Vec_t<CellCopy<Particle_t>> copies;
+        };
+        static thread_local Buffers buffers;
+        auto& jobs = buffers.jobs;
+        jobs.clear();
 
         for (auto& tile : src())
         {
@@ -772,7 +789,6 @@ namespace detail::pc_gpu
                 auto& dcps = (*dst_tile)();
                 auto& dst_bucket = dcps(dcps.local_cell(amr));
                 jobs.push_back({&cps, &dcps, &bucket, &dst_bucket, bucket.size()});
-                added[&dst_bucket] += bucket.size();
             });
         }
         if (jobs.empty())
@@ -781,26 +797,43 @@ namespace detail::pc_gpu
         using PC_t     = std::decay_t<decltype(src()[0]())>;
         using Bucket_t = std::decay_t<decltype(src()[0]()(std::array<std::uint32_t, dim>{}))>;
 
-        std::unordered_map<void*, std::size_t> cursor; // dst buckets grow once, before copying
-        for (auto const& [bucket, n] : added)
+        // a dst bucket's jobs together, in job order: it grows once, before copying, its jobs'
+        //  particles after its own in job order
+        auto& by_bucket = buffers.by_bucket;
+        by_bucket.resize(jobs.size());
+        std::iota(by_bucket.begin(), by_bucket.end(), std::size_t{0});
+        std::sort(by_bucket.begin(), by_bucket.end(), [&](auto const a, auto const b) {
+            auto const pa = std::less<void*>{}(jobs[a].dst_bucket, jobs[b].dst_bucket);
+            auto const pb = std::less<void*>{}(jobs[b].dst_bucket, jobs[a].dst_bucket);
+            return pa or (!pb and a < b);
+        });
+        auto& at = buffers.at;
+        at.resize(jobs.size());
+        for (std::size_t first = 0; first < by_bucket.size();)
         {
-            auto& b         = *static_cast<Bucket_t*>(bucket);
-            cursor[bucket]  = b.size();
-            PC_t::resize(b, b.size() + n);
+            auto* const bucket = jobs[by_bucket[first]].dst_bucket;
+            auto& db           = *static_cast<Bucket_t*>(bucket);
+            std::size_t end    = db.size();
+            for (; first < by_bucket.size() and jobs[by_bucket[first]].dst_bucket == bucket;
+                 ++first)
+            {
+                at[by_bucket[first]] = end;
+                end += jobs[by_bucket[first]].n;
+            }
+            PC_t::resize(db, end);
         }
 
-        std::vector<CellCopy<Particle_t>> host_copies;
-        host_copies.reserve(jobs.size());
-        for (auto const& job : jobs)
+        auto& host_copies = buffers.host_copies;
+        host_copies.clear();
+        for (std::size_t j = 0; j < jobs.size(); ++j) // every bucket grown: their data final
         {
-            auto& sb   = *static_cast<Bucket_t*>(job.src_bucket);
-            auto& db   = *static_cast<Bucket_t*>(job.dst_bucket);
-            auto& at   = cursor[job.dst_bucket];
-            host_copies.push_back({sb.data(), db.data() + at, job.n});
-            at += job.n;
+            auto& sb = *static_cast<Bucket_t*>(jobs[j].src_bucket);
+            auto& db = *static_cast<Bucket_t*>(jobs[j].dst_bucket);
+            host_copies.push_back({sb.data(), db.data() + at[j], jobs[j].n});
         }
 
-        damn::core::gpu::Vec_t<CellCopy<Particle_t>> const copies(host_copies.begin(), host_copies.end());
+        auto& copies = buffers.copies;
+        copies.assign(host_copies.begin(), host_copies.end());
         auto const* const cp = copies.data();
         Launcher{copies.size()}([=] DAMN_ALL() {
             auto const& c = cp[Launcher::block_idx()];
@@ -808,14 +841,17 @@ namespace detail::pc_gpu
                 c.dst[i] = c.src[i];
         });
 
-        std::unordered_map<void*, bool> tiles; // src and dst tiles to refresh
+        auto& tiles = buffers.tiles;
+        tiles.clear();
         for (auto const& job : jobs)
         {
             static_cast<Bucket_t*>(job.src_bucket)->clear();
-            tiles[job.src_tile] = true;
-            tiles[job.dst_tile] = true;
+            tiles.push_back(job.src_tile);
+            tiles.push_back(job.dst_tile);
         }
-        for (auto const& [tile, _] : tiles)
+        std::sort(tiles.begin(), tiles.end(), std::less<void*>{});
+        tiles.erase(std::unique(tiles.begin(), tiles.end()), tiles.end());
+        for (auto* const tile : tiles)
             static_cast<PC_t*>(tile)->template on_appended<ParticleType::Ghost>();
         src.template on_appended<ParticleType::Domain>();
         dst.template on_appended<ParticleType::Domain>();

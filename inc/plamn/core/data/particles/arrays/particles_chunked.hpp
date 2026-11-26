@@ -462,7 +462,11 @@ bool ChunkedOps<Derived, dim, alloc_mode>::resettle(auto const& keep, auto&& lea
     };
     DAMN_LOG_SCOPE(2, "SoAVXChunked::resettle");
     DAMN_ASSERT(self().sorted());
-    std::vector<Particle_t> moved; // the particles that changed cell
+    // the thread's (patches resettle concurrently): moved, then overflow, used up here
+    static thread_local std::vector<Particle_t> moved;    // the particles that changed cell
+    static thread_local std::vector<Particle_t> overflow; // no room in their chunk
+    moved.clear();
+    overflow.clear();
     if (self().crossers_valid_)
         take_crossers_(moved);
     else
@@ -482,7 +486,6 @@ bool ChunkedOps<Derived, dim, alloc_mode>::resettle(auto const& keep, auto&& lea
                     i = self().starts_[c];
             }
         }
-    std::vector<Particle_t> overflow; // no room in their chunk
     for (auto const& p : moved)
     {
         if (!kept(p.iCell()))

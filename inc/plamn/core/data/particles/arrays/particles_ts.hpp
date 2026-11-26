@@ -1005,7 +1005,8 @@ void TileSetVector<Particles>::erase_if_on_device(std::vector<std::size_t> const
     using DAO      = TileSetBlockDAO<View_t>;
 
     reset_views();
-    damn::core::gpu::Vec_t<std::size_t> const tidxs(tiles.begin(), tiles.end());
+    static thread_local damn::core::gpu::Vec_t<std::size_t> tidxs; // kept between launches
+    tidxs.assign(tiles.begin(), tiles.end());
     auto const* const tp = tidxs.data();
     auto view            = View_t{*this};
 
@@ -1040,7 +1041,8 @@ void TileSetVector<Particles>::move_if_on_device(This& dst, std::vector<std::siz
     using View_t   = TileSetSpan<PSpan_t>;
     using DAO      = TileSetBlockDAO<View_t>;
 
-    damn::core::gpu::Vec_t<std::size_t> const tidxs(tiles.begin(), tiles.end());
+    static thread_local damn::core::gpu::Vec_t<std::size_t> tidxs; // kept between launches
+    tidxs.assign(tiles.begin(), tiles.end());
     auto const* const tp = tidxs.data();
 
     reset_views();
