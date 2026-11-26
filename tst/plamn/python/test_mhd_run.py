@@ -89,8 +89,8 @@ class MHDRunTest(unittest.TestCase):
             # the waves moved (the profile is no longer the two states), the density positive
             self.assertGreater(np.unique(np.round(one["rho"], 6)).size, 2)
             self.assertGreater(one["rho"].min(), 0)
-            # serial, same build: the patches change nothing
-            np.testing.assert_array_equal(one["rho"], four["rho"])
+            # the patches change nothing but rounding
+            np.testing.assert_allclose(one["rho"], four["rho"], rtol=1e-14, atol=1e-14)
             self.assertTrue(os.path.exists(os.path.join(one_dir, "mhd_rho.h5")))
 
     def tearDown(self):

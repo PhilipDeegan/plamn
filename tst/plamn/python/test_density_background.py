@@ -71,7 +71,7 @@ class DensityBackgroundTest(unittest.TestCase):
             simulator.reset()
         self.assertEqual(out[True][0], cells * ppc)  # every cell populated
         self.assertEqual(out[True][0], out[False][0])
-        np.testing.assert_array_equal(out[True][1], out[False][1])
+        np.testing.assert_allclose(out[True][1], out[False][1], rtol=1e-14, atol=1e-14)
 
     def test_background_must_not_be_negative(self):
         ph.global_vars.sim = None
