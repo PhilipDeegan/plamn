@@ -782,6 +782,17 @@ public:
     MKN_KUL_FN_SIG_RET auto& map(auto const& arr) { return cellMap_(arr); }
     MKN_KUL_FN_SIG_RET auto& map(auto const& arr) const { return cellMap_(arr); }
 
+    using Super::swap;
+    // the CellMap follows the particles
+    void swap(std::size_t const& a, std::size_t const& b)
+    {
+        if (a == b)
+            return;
+        cellMap_(particles_[a].iCell()).updateIndex(a, b);
+        cellMap_(particles_[b].iCell()).updateIndex(b, a);
+        Super::swap(a, b);
+    }
+
     auto& box() const { return box_; }
 };
 
