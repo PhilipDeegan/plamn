@@ -177,7 +177,7 @@ jobs:
         chmod +x mkn && mv mkn /usr/local/bin/mkn
     - name: CPU modules
       run: |
-        KLOG=3 ./mkn.py --no-etc --dim 1 2 3 --layout AoSMapped SoAVXChunked --jobs 4 -- -q \
+        KLOG=3 ./mkn.py --dim 1 2 3 --layout AoSMapped SoAVXChunked --jobs 4 -- -q \
           -x res/mkn/hpc_ci
     - name: GPU modules
       run: |

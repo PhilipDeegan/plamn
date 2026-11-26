@@ -93,7 +93,7 @@ jobs:
         damn-key: ${{ secrets.DAMN_DEPLOY_KEY }}
         mkn: "true"
     - run: >-
-        KLOG=3 ./mkn.py --no-etc --dim ${{ matrix.dim }} --layout AoSMapped AoSCMTS SoAVXChunked
+        KLOG=3 ./mkn.py --dim ${{ matrix.dim }} --layout AoSMapped AoSCMTS SoAVXChunked
         AoS4SoAVXChunked --jobs 4 -- -q -x res/mkn/mpi
         -W 9 -a "-Wno-unused-parameter -Wno-unused-variable -Wno-error=strict-aliasing"
     - uses: actions/checkout@v4
