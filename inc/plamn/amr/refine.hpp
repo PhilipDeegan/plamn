@@ -143,8 +143,8 @@ void divergence_free_touch_up(std::array<Resource*, 3> const& B,
         }
         return i;
     };
-    auto const div = damn::core::scratch<double, struct touch_up_div>(
-        static_cast<std::size_t>(region.size())); // every value set below
+    damn::core::Scratch<double> div{
+        static_cast<std::size_t>(region.size())}; // every value set below
     damn::core::for_each_point(region, [&](auto const& c) {
         double v = 0;
         for (std::size_t d = 0; d < dim; ++d)

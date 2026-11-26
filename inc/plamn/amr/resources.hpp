@@ -307,17 +307,12 @@ void append_items_from(ParticleResource<Particles, gw>& dst, ParticleResource<Sr
     if (n == 0)
         return;
     // the same array: its ranges taken before the resize, whose growth moves the chunk offsets
-    std::span<std::array<std::size_t, 2>> kept;
+    damn::core::ScratchVector<std::array<std::size_t, 2>> kept;
     if (same)
-    {
-        std::size_t ranges = 0;
-        detail::for_each_selected(*src.particles, box, shift, [&](auto, auto) { ++ranges; });
-        kept = damn::core::scratch<std::array<std::size_t, 2>, struct same_array_ranges>(ranges);
-        std::size_t r = 0;
-        detail::for_each_selected(
-            *src.particles, box, shift,
-            [&](std::size_t const start, std::size_t const size) { kept[r++] = {start, size}; });
-    }
+        detail::for_each_selected(*src.particles, box, shift,
+                                  [&](std::size_t const start, std::size_t const size) {
+                                      kept.push_back({start, size});
+                                  });
     auto& out      = *dst.particles;
     auto const was = out.size();
     out.resize(was + n); // src's columns too if the same: read after
@@ -480,8 +475,7 @@ void append_items_from(ParticleResource<Particles, gw>& dst, ParticleResource<Sr
         return;
     }
     // the same array: the selection copied first, appending moves it
-    auto const moving = damn::core::scratch<P, struct same_array_particles>(
-        detail::count_selected(*src.particles, box, shift));
+    damn::core::Scratch<P> moving{detail::count_selected(*src.particles, box, shift)};
     std::size_t k = 0;
     detail::for_each_selected(*src.particles, box, shift,
                               [&](std::size_t const start, std::size_t const size) {
