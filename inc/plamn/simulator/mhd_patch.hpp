@@ -211,13 +211,11 @@ struct MHDPatch
         std::conditional_t<opts.hybrid_enabled, UnderHybrid, void>, void> coupling{};
 
     // a face's fluxes' grids: F_rho, F_rhoV (x y z), F_Etot
-    static std::vector<Grid_t*> flux_grids(Fluxes_t& f)
+    static std::array<Grid_t*, 5> flux_grids(Fluxes_t& f)
     {
-        std::vector<Grid_t*> grids{std::addressof(f.F_rho)}; // Grid overloads operator&
-        for (auto& g : f.F_rhoV.grids)
-            grids.push_back(std::addressof(g));
-        grids.push_back(std::addressof(f.F_Etot));
-        return grids;
+        auto& v = f.F_rhoV.grids; // Grid overloads operator&
+        return {std::addressof(f.F_rho), std::addressof(v[0]), std::addressof(v[1]),
+                std::addressof(v[2]), std::addressof(f.F_Etot)};
     }
     static void for_each_flux_grid(Fluxes_t& f, auto&& fn)
     {

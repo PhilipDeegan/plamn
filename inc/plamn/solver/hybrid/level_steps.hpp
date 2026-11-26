@@ -95,7 +95,8 @@ void accumulate_flux_sum(auto&& level, double const coef)
     level.per_patch([&](auto& patch) {
         for (std::size_t i = 0; i < 3; ++i)
         { // the same tiling: their buffers pair up
-            std::vector<double const*> avg;
+            static thread_local std::vector<double const*> avg; // patches run concurrently
+            avg.clear();
             core::for_each_buffer(std::as_const(patch.avgE[i]),
                                   [&](auto const* data, auto) { avg.push_back(data); });
             std::size_t b = 0;
@@ -111,8 +112,11 @@ void accumulate_flux_sum(auto&& level, double const coef)
 // PHARE's chargeDensitySynchronizers_, ionChargeFluxSynchronizers_; their ghosts are the caller's
 void coarsen_moments(auto&& level)
 {
-    auto moments = amr::vector_pairs("ions_charge_flux", "ions_charge_flux");
-    moments.push_back({"ions_charge_density", "ions_charge_density", ""});
+    static auto const moments = [] { // the same every step: built once (read only after)
+        auto out = amr::vector_pairs("ions_charge_flux", "ions_charge_flux");
+        out.push_back({"ions_charge_density", "ions_charge_density", ""});
+        return out;
+    }();
     level.coarsen(amr::MomentsCoarsener{}, moments);
 }
 
@@ -123,13 +127,15 @@ void synchronize(HybridModel<opts> const& model, auto&& level, double const t)
 {
     DAMN_LOG_SCOPE(1, "Simulator::synchronize_");
     auto coarse = level.coarser();
+    static auto const E     = amr::vector_pairs("EM_E", "EM_E"),
+                      avg_E = amr::vector_pairs("EMAvg_E", "EM_fluxSum_E");
 
-    level.coarsen(amr::ElectricFieldCoarsener{}, amr::vector_pairs("EM_E", "EM_E"));
+    level.coarsen(amr::ElectricFieldCoarsener{}, E);
     coarsen_moments(level);
     synchronize_level(model, level); // the closure's (polytropic: Pe)
 
     // reflux: the coarser Eavg under the fine level is the fine one's time average
-    level.coarsen(amr::ElectricFieldCoarsener{}, amr::vector_pairs("EMAvg_E", "EM_fluxSum_E"));
+    level.coarsen(amr::ElectricFieldCoarsener{}, avg_E);
     coarse.copy(damn::amr::fill_ghosts, "EMAvg_E");
     auto const dt = level.coarse_dt();
     coarse.per_patch([&](auto& patch) {
