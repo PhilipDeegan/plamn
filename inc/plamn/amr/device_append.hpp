@@ -1,18 +1,9 @@
 #ifndef PLAMN_AMR_DEVICE_APPEND_HPP
 #define PLAMN_AMR_DEVICE_APPEND_HPP
 
-// damn's device Append hooks (damn/amr/device_copy.hpp) for unified memory SoAVXChunked
-//  particles: a copy's pieces (all of a resource pair's: every patch of the level) in a few
-//  launches, the particles never touched by the host
-//
-//   1. a thread per (piece, cell) of the pieces' boxes in their sources' cells: its count
-//   2. an exclusive scan of the counts (thrust), each piece's total read back (one per piece)
-//   3. the destinations resized (their columns' copies on the device: mkn::gpu::resize)
-//   4. a thread per particle: its cell by binary search over the scan, copied to its piece's
-//      place in its destination (pieces in plan order), iCell + shift
-//
-// Sources must be sorted (their chunks give a cell's particles), else the host path runs.
-//  damn sorts each destination after (items_appended)
+// damn's device Append hooks for unified memory SoAVXChunked particles, a few launches, the
+//  particles never touched by the host: doc/amr/device_append.md
+// sources must be sorted (their chunks give a cell's particles), else the host path runs
 
 #include "damn/core/def/damn_config.hpp"
 
@@ -191,7 +182,7 @@ void append_items_on_device(
     thrust::exclusive_scan(thrust::device, buffers.counts.data(), buffers.counts.data() + ncells,
                            buffers.scan.data());
 
-    // per piece totals: the scan at its end minus at its first (the last piece's end: ncells)
+    // the last piece's end: ncells
     std::vector<std::size_t> total(pieces.size());
     {
         auto const* const counts = buffers.counts.data();

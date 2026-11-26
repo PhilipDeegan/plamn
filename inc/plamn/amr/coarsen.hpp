@@ -1,14 +1,7 @@
 #ifndef PLAMN_AMR_COARSEN_HPP
 #define PLAMN_AMR_COARSEN_HPP
 
-// coarsen operators for damn::amr::coarsen (and damn::mpi's), over plamn's field resources
-// (resources.hpp), refinement ratio 2, as PHARE's:
-//
-//   DefaultFieldCoarsener:  per direction, primal: 1/4, 1/2, 1/4 of the fine nodes 2q - 1,
-//                           2q, 2q + 1; dual: the mean of fine cells 2q and 2q + 1 (B)
-//   ElectricFieldCoarsener: per direction, primal: fine node 2q; dual: the mean of fine cells
-//                           2q and 2q + 1 (E; moments, all primal, are injected: PHARE's
-//                           MomentsCoarsener; MHD face fluxes: PHARE's MHDFluxCoarsener)
+// coarsen operators (ratio 2, as PHARE's) over plamn's field resources: doc/amr/coarsen.md
 
 #include "damn/core/geometry/box_spans.hpp"
 #include "plamn/amr/resources.hpp"
@@ -104,8 +97,7 @@ struct ElectricFieldCoarsener
 };
 
 using MomentsCoarsener = ElectricFieldCoarsener;
-// PHARE's MHDFluxCoarsener: a coarse face's flux, the mean of the fine faces on it (primal:
-//  injected, dual: the mean), the same per direction rule
+// a coarse face's flux, the mean of the fine faces on it: the same per direction rule
 using MHDFluxCoarsener = ElectricFieldCoarsener;
 
 } // namespace plamn::amr

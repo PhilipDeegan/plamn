@@ -2,9 +2,8 @@
 #define PLAMN_SOLVER_MODELS_HPP
 
 // the models of a simulation and which levels each owns: levels [0, mhd_levels) MHD, the rest
-//  hybrid (PHARE's simulation/AMR/max_mhd_level). A disabled model is an empty specialization
-//  (model_def.hpp); with one model enabled, every level is that model's and visit is a direct
-//  call, without a run time test
+//  hybrid (PHARE's simulation/AMR/max_mhd_level). With one model enabled, every level is that
+//  model's and visit is a direct call, without a run time test
 
 #include "damn/core/def.hpp"
 #include "plamn/solver/hybrid/model.hpp"

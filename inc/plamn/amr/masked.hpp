@@ -1,9 +1,6 @@
 #ifndef PLAMN_AMR_MASKED_HPP
 #define PLAMN_AMR_MASKED_HPP
 
-// Masked<Op>: a refine operator (damn/amr/inter_level.hpp) applied only where none of the
-// covered cells is, e.g. the new cells of a regridded level (the old ones kept their data)
-
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/def.hpp"
 

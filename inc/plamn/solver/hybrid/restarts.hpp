@@ -1,8 +1,7 @@
 #ifndef PLAMN_SOLVER_HYBRID_RESTARTS_HPP
 #define PLAMN_SOLVER_HYBRID_RESTARTS_HPP
 
-// what a restart holds of a hybrid level, and what the level rebuilds from it (the simulator
-//  writes and reads the levels' resources by these names, simulator_restarts.hpp)
+// what a restart holds of a hybrid level, and what the level rebuilds from it
 
 #include "damn/amr/level_map.hpp"
 #include "damn/core/def.hpp"

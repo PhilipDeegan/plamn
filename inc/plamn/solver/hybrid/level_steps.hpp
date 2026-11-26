@@ -1,20 +1,8 @@
 #ifndef PLAMN_SOLVER_HYBRID_LEVEL_STEPS_HPP
 #define PLAMN_SOLVER_HYBRID_LEVEL_STEPS_HPP
 
-// a hybrid level and its coarser hybrid level, around the finer level's substeps (PHARE's
-//  HybridHybridMessengerStrategy, as damn::amr::advance's hooks call them)
-//   prepare_step   E and B at the start of a step: the finer level's time interpolation, reflux
-//   first_step     the finer level's level ghost particles of the coarser level's step end
-//   last_step      those become the old ones
-//   synchronize    the finer level onto the coarser one, its B refluxed, its ghosts refilled
-//
-// level: the simulator's services for one level (solver/hybrid/advance.hpp), and
-//   refine(op, region, pairs)            from the coarser level into it
-//   coarsen(op, pairs)                   from it onto the coarser level
-//   coarser()                            the coarser level's services
-//   coarse_dt()                          the coarser level's step it subcycles in
-//   time_ratio()                         the coarser level's dt over a new level's first substep
-//   substep_weight()                     its last step's share of its coarser level's step
+// a hybrid level and its coarser hybrid level around the finer level's substeps (PHARE's
+//  HybridHybridMessengerStrategy): doc/solver/hybrid/level_steps.md
 
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "damn/amr/copy.hpp"
@@ -120,12 +108,7 @@ void accumulate_flux_sum(auto&& level, double const coef)
     });
 }
 
-// the level onto the coarser one, both at t: E and the total ion charge density and flux
-// coarsened (as PHARE's synchronize: the populations' moments, the mass density and the bulk
-// velocity stay the coarser level's own), then the coarser level's B recomputed from the fine
-// time average of E (reflux), then its ghosts refilled
-// the totals a synchronization coarsens onto the coarser level under this one (PHARE's
-//  chargeDensitySynchronizers_, ionChargeFluxSynchronizers_); their ghosts are the caller's
+// PHARE's chargeDensitySynchronizers_, ionChargeFluxSynchronizers_; their ghosts are the caller's
 void coarsen_moments(auto&& level)
 {
     auto moments = amr::vector_pairs("ions_charge_flux", "ions_charge_flux");
@@ -133,6 +116,8 @@ void coarsen_moments(auto&& level)
     level.coarsen(amr::MomentsCoarsener{}, moments);
 }
 
+// both at t: the populations' moments, the mass density and the bulk velocity stay the coarser
+//  level's own (as PHARE's synchronize)
 template<auto opts>
 void synchronize(HybridModel<opts> const& model, auto&& level, double const t)
 {

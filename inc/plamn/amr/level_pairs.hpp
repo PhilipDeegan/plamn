@@ -1,8 +1,6 @@
 #ifndef PLAMN_AMR_LEVEL_PAIRS_HPP
 #define PLAMN_AMR_LEVEL_PAIRS_HPP
 
-// vector_pairs: the damn::amr::LevelPair of each of a vector's components (_x, _y, _z)
-
 #include "damn/amr/level_map.hpp"
 #include "damn/core/def.hpp"
 

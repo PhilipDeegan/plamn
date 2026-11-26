@@ -30,8 +30,6 @@ class RefinedParticlesConst : public damn::core::StrongIntegralConstant<Constant
 
 int constexpr refinementRatio = 2;
 
-// see meta_utilities.hpp for list of declared permutations.
-
 /** \brief A SplitPattern identifies where refined particles will be placed
  * relative to a coarse particle and their weight.
  *
@@ -155,14 +153,11 @@ struct ASplitter
 };
 
 
-/** \brief this class is just the template declaration of the Splitter class
- * Only its concrete specializations defined in split_1d, split_2d, split_3d
- * are to be used therefore the constructor here is deleted to prevent instantiation.
- */
+// only the specializations in split_1d, split_2d, split_3d are used
 template<typename dimension, typename interp_order, typename nbRefinedPart>
 class Splitter : public ASplitter<dimension, interp_order, nbRefinedPart>
 {
-    Splitter() = delete; // Unspecialized template class, never to be instantiated
+    Splitter() = delete;
 };
 
 template<typename dim>
