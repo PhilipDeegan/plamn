@@ -10,6 +10,7 @@
 #include "plamn/core/data/field/field_box.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
+#include "mkn/kul/lang/cpp/compiler/def.hpp"
 
 #include <array>
 #include <cstdint>

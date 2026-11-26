@@ -21,7 +21,6 @@
 #include <array>
 #include <cstddef>
 #include <algorithm>
-#include <span>
 #include <stdexcept>
 #include <cstdint>
 #include <vector>
