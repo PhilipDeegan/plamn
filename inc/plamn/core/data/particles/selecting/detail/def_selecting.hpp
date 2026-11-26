@@ -65,6 +65,9 @@ struct ParticlesSelector
     // fn(start, size) for each range of src's particles whose cells are in box
     template<typename Src, std::size_t dim, typename Fn>
     void operator()(Src const& src, damn::core::Box<int, dim> const& box, Fn&& fn) const;
+
+    template<typename Src, std::size_t dim>
+    std::size_t count(Src const& src, damn::core::Box<int, dim> const& box) const;
 };
 
 } // namespace plamn::core

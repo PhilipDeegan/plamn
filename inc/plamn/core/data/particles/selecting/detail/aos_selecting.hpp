@@ -30,6 +30,14 @@ void ParticlesSelector<LayoutMode::AoSMapped, damn::AllocatorMode::CPU>::operato
     runs.flush();
 }
 
+template<>
+template<typename Src, std::size_t dim>
+std::size_t ParticlesSelector<LayoutMode::AoSMapped, damn::AllocatorMode::CPU>::count(
+    Src const& src, damn::core::Box<int, dim> const& box) const
+{
+    return src.nbr_particles_in(box);
+}
+
 // unified memory: read on the host, as on the CPU
 template<>
 template<typename Src, std::size_t dim, typename Fn>
@@ -37,6 +45,14 @@ void ParticlesSelector<LayoutMode::AoSMapped, damn::AllocatorMode::GPU_UNIFIED>:
     Src const& src, damn::core::Box<int, dim> const& box, Fn&& fn) const
 {
     ParticlesSelector<LayoutMode::AoSMapped, damn::AllocatorMode::CPU>{}(src, box, fn);
+}
+
+template<>
+template<typename Src, std::size_t dim>
+std::size_t ParticlesSelector<LayoutMode::AoSMapped, damn::AllocatorMode::GPU_UNIFIED>::count(
+    Src const& src, damn::core::Box<int, dim> const& box) const
+{
+    return src.nbr_particles_in(box);
 }
 
 } // namespace plamn::core

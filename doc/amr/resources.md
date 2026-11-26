@@ -25,9 +25,10 @@ A layout with `components()` also gives checkpoints its columns (`for_each_colum
 
 Between patches, particles move through damn's cell_items hooks (`damn/amr/cell_items.hpp`):
 `pack_items`, `unpack_items`, `append_items_from` (the same without the bytes) and `read_items`
-(refine's coarse particles, to be split). Two layout families have their own hooks.
+(refine's coarse particles, to be split). Two layout families have their own hooks; unsorted
+layouts (`AoS`, `SoAVX`), for tests and benchmarks, take damn's default, a scan of every item.
 
-### Columns: `SoAVX`, `SoAVXChunked` (host memory)
+### Columns: `SoAVXChunked` (host memory)
 
 Moved column by column. The bytes:
 

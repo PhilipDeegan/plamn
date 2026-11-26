@@ -2,8 +2,8 @@
 #define PLAMN_CORE_DATA_PARTICLES_SELECTING_PARTICLES_SELECTING
 
 #include "plamn/core/data/particles/selecting/detail/def_selecting.hpp"
-#include "plamn/core/data/particles/selecting/detail/aos_selecting.hpp"   // IWYU pragma: keep
-#include "plamn/core/data/particles/selecting/detail/soavx_selecting.hpp" // IWYU pragma: keep
+#include "plamn/core/data/particles/selecting/detail/aos_selecting.hpp"     // IWYU pragma: keep
+#include "plamn/core/data/particles/selecting/detail/chunked_selecting.hpp" // IWYU pragma: keep
 
 #include <cstddef>
 #include <type_traits>
@@ -19,6 +19,13 @@ void for_each_range_in(Src const& src, Box_t const& box, Fn&& fn)
 {
     using Particles = std::remove_const_t<Src>;
     ParticlesSelector<Particles::layout_mode, Particles::alloc_mode>{}(src, box, fn);
+}
+
+template<typename Src, typename Box_t>
+std::size_t nbr_particles_in(Src const& src, Box_t const& box)
+{
+    using Particles = std::remove_const_t<Src>;
+    return ParticlesSelector<Particles::layout_mode, Particles::alloc_mode>{}.count(src, box);
 }
 
 template<typename Src, typename Box_t, typename Fn>

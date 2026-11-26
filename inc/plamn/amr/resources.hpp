@@ -153,19 +153,26 @@ void append(ParticleResource<Particles, gw>& r, typename Particles::value_type p
 // SoAVX, SoAVXChunked (host memory): moved column by column, the bytes: doc/amr/resources.md
 template<typename Particles>
 concept ParticleColumns = core::HasComponents<std::remove_const_t<Particles>>
-                          and core::is_soavx(Particles::layout_mode);
+                          and Particles::layout_mode == core::LayoutMode::SoAVXChunked;
 
 namespace detail
 {
+    // box in the particles' own cells
+    template<std::size_t dim>
+    auto unshifted(damn::core::Box<int, dim> const& box, damn::core::Point<int, dim> const& shift)
+    {
+        damn::core::Point<int, dim> back;
+        for (std::size_t d = 0; d < dim; ++d)
+            back[d] = -shift[d];
+        return damn::core::shift(box, back);
+    }
+
     template<typename Particles>
     void for_each_selected(Particles const& particles,
                            damn::core::Box<int, Particles::dimension> const& box,
                            damn::core::Point<int, Particles::dimension> const& shift, auto&& fn)
     {
-        damn::core::Point<int, Particles::dimension> back; // box in the particles' cells
-        for (std::size_t d = 0; d < Particles::dimension; ++d)
-            back[d] = -shift[d];
-        core::for_each_range_in(particles, damn::core::shift(box, back), fn);
+        core::for_each_range_in(particles, unshifted(box, shift), fn);
     }
 
     template<typename Particles>
@@ -173,9 +180,7 @@ namespace detail
                                damn::core::Box<int, Particles::dimension> const& box,
                                damn::core::Point<int, Particles::dimension> const& shift)
     {
-        std::size_t n = 0;
-        for_each_selected(particles, box, shift, [&](auto, std::size_t const size) { n += size; });
-        return n;
+        return core::nbr_particles_in(particles, unshifted(box, shift));
     }
 
     // fn(dst span, src span) for each component pair, the iCells with their direction
