@@ -428,6 +428,12 @@ private:
         }
     }
 
+    // the calling thread's, a cache line per patch: pool threads write their patches' own
+    struct alignas(64) PatchBusy
+    {
+        double seconds;
+    };
+
     // fn touches only its patch and never python; serial while scope timing (phlop's timer
     //  wants one thread a rank): doc/simulator/simulator.md
     void per_patch_threaded_(std::size_t const ln, auto&& fn)
@@ -441,13 +447,8 @@ private:
         if (Pool::n_pools < 2 or n < 2 or damn::mpi::scope_timing_active())
             return per_patch_(ln, fn);
 
-        // the calling thread's, a cache line per patch: pool threads write their patches' own
-        struct alignas(64) Busy
-        {
-            double seconds;
-        };
-        static thread_local std::vector<Busy> busy;
-        busy.assign(decomposition_.timing ? n : 0, Busy{0.});
+        static thread_local std::vector<PatchBusy> busy;
+        busy.assign(decomposition_.timing ? n : 0, PatchBusy{0.});
         Pool::INSTANCE().patch_exec(
             n, [](std::size_t const i) { return i; },
             [&](std::size_t const i) {
@@ -570,10 +571,9 @@ private:
         return amr::Lease::fill;
     }
 
-    // key: one of register_resources_'s
-    void copy_(std::size_t const ln, auto const how, std::string const& key)
+    // body(pairs, access, ld) for key's resources on level ln, leased while it runs
+    void with_copy_(std::size_t const ln, auto const how, std::string const& key, auto&& body)
     {
-        auto& l               = levels_[ln];
         auto const& resources = resources_.at(key);
         models_.visit(ln, [&](auto& model) {
             auto& ld = model.levels[static_cast<int>(ln)];
@@ -584,18 +584,14 @@ private:
             Leases leases;
             leases.add(ld, dst, lease_of_<std::decay_t<decltype(how)>>()); // first: dst wins
             leases.add(ld, src, amr::Lease::read);
-            if (n_ranks_ > 1)
-                damn::mpi::copy(how, l.neighbours, resources, access_(model, ld, key, how), ld);
-            else
-                damn::amr::copy(how, l.neighbours, resources, access_(model, ld, key, how), ld);
+            body(resources, access_(model, ld, key, how), ld);
         });
     }
 
     // a hybrid model's particle arrays, by the route's pairs (the plan) and accessors
     template<amr::ParticleRoute Copies>
-    void copy_(std::size_t const ln, auto const how, Copies const& copies)
+    void with_copy_(std::size_t const ln, auto const how, Copies const& copies, auto&& body)
     {
-        auto& l  = levels_[ln];
         auto& ld = models_.hybrid.levels[static_cast<int>(ln)];
         static thread_local std::vector<std::string> dst, src; // read by the leases only
         dst.clear(), src.clear();
@@ -604,10 +600,75 @@ private:
         Leases leases;
         leases.add(ld, dst, lease_of_<std::decay_t<decltype(how)>>()); // first: dst wins
         leases.add(ld, src, amr::Lease::read);
-        if (n_ranks_ > 1)
-            damn::mpi::copy(how, l.neighbours, copies.pairs, copies.access, ld);
-        else
-            damn::amr::copy(how, l.neighbours, copies.pairs, copies.access, ld);
+        body(copies.pairs, copies.access, ld);
+    }
+
+    // copies what (a resource key, or a particle route) between the patches of level ln
+    void copy_(std::size_t const ln, auto const how, auto const& what)
+    {
+        auto& l = levels_[ln];
+        with_copy_(ln, how, what, [&](auto const& pairs, auto const& access, auto& ld) {
+            if (n_ranks_ > 1)
+                damn::mpi::copy(how, l.neighbours, pairs, access, ld);
+            else
+                damn::amr::copy(how, l.neighbours, pairs, access, ld);
+        });
+    }
+
+    // fn(patch) on every patch of level ln, then the copy of what, overlapped per the work mode
+    //  (PLAMN_WORK_MODE): doc/simulator/simulator.md
+    enum class WorkMode : std::uint8_t { whole_patch, distance_first_overlaps };
+    static WorkMode work_mode_()
+    {
+        static WorkMode const mode = [] {
+            auto const* env = std::getenv("PLAMN_WORK_MODE");
+            std::string const name{env ? env : "whole_patch"};
+            if (name == "whole_patch")
+                return WorkMode::whole_patch;
+            if (name == "distance_first_overlaps")
+                return WorkMode::distance_first_overlaps;
+            throw std::runtime_error("plamn: PLAMN_WORK_MODE " + name
+                                     + ": whole_patch or distance_first_overlaps");
+        }();
+        return mode;
+    }
+
+    void per_patch_then_copy_(std::size_t const ln, auto&& fn, auto const how, auto const& what)
+    {
+        using Pool    = damn::core::ThreadPool;
+        using Patch_t = solver::HybridModel<opts>::Patch_t;
+        auto& ld      = data_(ln);
+        auto const n  = ld.data.size();
+        if constexpr (Patch_t::per_patch_mover)
+            if (work_mode_() == WorkMode::distance_first_overlaps and n_ranks_ > 1
+                and Pool::n_pools > 1 and n > 1 and !damn::mpi::scope_timing_active())
+            {
+                static thread_local std::vector<PatchBusy> busy;
+                busy.assign(decomposition_.timing ? n : 0, PatchBusy{0.});
+                with_copy_(ln, how, what, [&](auto const& pairs, auto const& access, auto& cld) {
+                    damn::mpi::Copy c{how, levels_[ln].neighbours, pairs, access, cld};
+                    auto const order = c.remote_first();
+                    Pool::INSTANCE().patch_exec(
+                        n, [](std::size_t const i) { return i; },
+                        [&](std::size_t const i) {
+                            auto const t0 = std::chrono::steady_clock::now();
+                            fn(*ld.data[i]);
+                            if (!busy.empty())
+                                busy[i].seconds = std::chrono::duration<double>(
+                                                      std::chrono::steady_clock::now() - t0)
+                                                      .count();
+                        },
+                        Pool::PatchHooks{.order   = order,
+                                         .on_done = [&](std::size_t const i) { c.done(i); },
+                                         .idle    = [&] { c.poll(); }});
+                    c.finish();
+                });
+                for (auto const i : mkn::kul::range(busy.size()))
+                    decomposition_.busy_of(ln, ld.patches[i].box) += busy[i].seconds;
+                return;
+            }
+        per_patch_threaded_(ln, fn);
+        copy_(ln, how, what);
     }
 
     // untiled field copies by accessors, resolved once per model; tiled patches (leased
@@ -973,6 +1034,11 @@ private:
         void copy(auto const how, amr::ParticleRoute auto const& copies)
         {
             self.copy_(ln, how, copies);
+        }
+        // fn(patch) on every patch, then the copy: overlapped per the work mode
+        void per_patch_then_copy(auto&& fn, auto const how, auto const& what)
+        {
+            self.per_patch_then_copy_(ln, fn, how, what);
         }
         void fill_magnetic_ghosts(std::string const& key, double const t)
         {

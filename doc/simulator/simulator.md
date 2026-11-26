@@ -140,3 +140,19 @@ name is printed: a rank stuck in a collective is the one whose file stops.
 `PHARE_SCOPE_TIMING=1` at setup turns on phlop's `DAMN_LOG_SCOPE` timers, a file per rank under
 `.phare/timings/`, written when the simulator goes (pyphare's reset; collective). Read them with
 `python3 -m phlop.timing.scope_timer`.
+
+## Work modes
+
+`PLAMN_WORK_MODE` chooses how a level's patch work and the copy after it run
+(`Simulator::per_patch_then_copy_`):
+
+| Mode | |
+|---|---|
+| `whole_patch` (default) | the patch work on every patch (`per_patch_threaded_`), then the copy |
+| `distance_first_overlaps` | the copy in flight while the patch work runs (`damn::mpi::Copy`): the patches feeding other ranks first, a peer's message sent once its patches are done, messages received while the others run, the rest of the copy after. The same values as `whole_patch` |
+
+`distance_first_overlaps` applies to untiled per patch movers (their leases are no-ops and the
+patch work runs on damn's pools) with several ranks and pools; otherwise `whole_patch`. It covers
+the push, with `gather_leaving` in flight, and each patch's deposits (domain, level ghosts) as one
+task, with `sum_borders` in flight.
+

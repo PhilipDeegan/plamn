@@ -6,6 +6,8 @@ timers (PHARE_SCOPE_TIMING=1, .phare/timings/rank.<r>.txt in each code's directo
   etc/bench/harris/harris.py [--codes master pr_1601 plamn] [--ndim 2] [--levels 3]
                              [--steps 1] [--ppc N] [--out DIR] [--tiling-gpu DIR]
                              [--plamn-layouts AoSMapped SoAVXChunked] [--np N]
+                             [--no-scope-timing] [--env K=V ...] [--label L] [--bind B]
+                             [--exec FILE]
 
 The runs, the input and reading the timers: doc/etc/bench/harris/harris.md
 """
@@ -25,6 +27,14 @@ PLAMN = HERE.parents[2]
 PHARES = Path("/mkn/git/phare")
 TILING_GPU = PHARES / "tiling_gpu"
 CODES = ["master", "pr_1601", "plamn"]
+
+
+def load_exec_module():
+    """plamn/exec.py by path: importing the plamn package loads its C++ module"""
+    spec = importlib.util.spec_from_file_location("plamn_exec", PLAMN / "plamn" / "exec.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def is_plamn(code):
@@ -95,6 +105,8 @@ def particles_per_level(simulator, pop="protons"):
 
 def child(args):
     """runs in the code's own process and cwd: one coarse step, timed"""
+    # PHARE makes the timings directory on rank 0 only: on another host (--exec) it is missing
+    Path(".phare/timings").mkdir(parents=True, exist_ok=True)
     if is_plamn(args.code):
         import plamn
 
@@ -206,12 +218,27 @@ def parent(args):
         for code in args.codes
         for c in ([f"plamn_{lay}" for lay in args.plamn_layouts] if code == "plamn" else [code])
     ]
+    extra = dict(kv.split("=", 1) for kv in args.env)
+    if args.exec:  # the ranks over the exec file's hosts
+        exec_file = load_exec_module()
+        spec = exec_file.load(args.exec)
+        args.np = args.np or exec_file.total_ranks(spec)
+    args.np = args.np or 1
     for code in codes:
-        cwd = out / code
+        name = f"{code}_{args.label}" if args.label else code
+        cwd = out / name
         cwd.mkdir(parents=True, exist_ok=True)
-        env = dict(os.environ, PHARE_SCOPE_TIMING="1", **counters)
+        timing = {"PHARE_SCOPE_TIMING": "1", **counters} if args.scope_timing else {}
+        env = dict(os.environ, **timing, **extra)
         env["PYTHONPATH"] = os.pathsep.join(str(p) for p in pythonpath(code))
-        mpi = ["mpirun", "-n", str(args.np), "--bind-to", "core"] if args.np > 1 else []
+        if args.exec:
+            env_names = ["PYTHONPATH", *timing, *extra]
+            mpi = exec_file.mpirun(spec, cwd.resolve(), env_names, args.np, args.bind)
+        else:
+            bind = {"core": ["--bind-to", "core"], "none": ["--bind-to", "none"]}.get(
+                args.bind or "core", ["--map-by", args.bind, "--bind-to", "core"]
+            )
+            mpi = ["mpirun", "-n", str(args.np)] + bind if args.np > 1 else []
         cmd = mpi + [sys.executable, str(Path(__file__).resolve()), "--child", code]
         cmd += ["--ndim", str(args.ndim), "--levels", str(args.levels), "--steps", str(args.steps)]
         cmd += ["--plots", str(Path(args.plots).resolve())] if args.plots else []
@@ -224,7 +251,7 @@ def parent(args):
             if subprocess.call(cmd, cwd=cwd, env=env, stdout=f, stderr=subprocess.STDOUT):
                 print(f"{code}: failed, see {log}")
                 continue
-        rows.append(json.loads((cwd / "result.json").read_text()))
+        rows.append(dict(json.loads((cwd / "result.json").read_text()), code=name))
 
     print(
         f"\nharris {args.ndim}D, {args.steps} coarse step(s), max {args.levels} levels, {args.np} rank(s)"
@@ -265,7 +292,15 @@ def main(argv):
         "--plots", default=None, help="a PNG per quantity per code here at the end (2D, 1 rank)"
     )
     p.add_argument(
-        "--np", type=int, default=1, help="MPI ranks per code (mpirun -n, a rank per core: no taskset)"
+        "--np",
+        type=int,
+        default=None,
+        help="MPI ranks per code (mpirun -n, a rank per core: no taskset); default 1, or the exec file's total",
+    )
+    p.add_argument(
+        "--exec",
+        default=os.environ.get("PLAMN_EXEC"),
+        help="exec file (plamn/exec.py): the hosts the ranks go to (default $PLAMN_EXEC)",
     )
     p.add_argument(
         "--plamn-layouts", nargs="+", default=["AoSMapped"], help="plamn runs once per layout"
@@ -274,6 +309,14 @@ def main(argv):
     p.add_argument("--out", default="bench_out/harris", help="one directory per code below it")
     p.add_argument(
         "--tiling-gpu", default=str(TILING_GPU), help="checkout holding the harris tests"
+    )
+    p.add_argument(
+        "--no-scope-timing", dest="scope_timing", action="store_false", help="wall clock only"
+    )
+    p.add_argument("--env", nargs="*", default=[], help="K=V for the codes' environment")
+    p.add_argument("--label", default=None, help="the run's directory: <code>_<label>")
+    p.add_argument(
+        "--bind", default=None, help="core (default), none, or an mpirun --map-by spec; overrides the exec file's"
     )
     p.add_argument("--child", dest="code", default=None, help=argparse.SUPPRESS)
     args = p.parse_args(argv)
