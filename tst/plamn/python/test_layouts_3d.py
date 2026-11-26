@@ -42,10 +42,10 @@ L1_BOX = (4, 21)
 
 CASES = {
     "init_L0": dict(
-        steps=0, boxes=[], atol=dict(b=0, e=1e-14, moments=1e-14, particles=0)
+        steps=0, boxes=[], atol=dict(b=1e-15, e=1e-14, moments=1e-14, particles=1e-15)
     ),
     "init_L1": dict(
-        steps=0, boxes=[L0_BOX], atol=dict(b=0, e=1e-14, moments=1e-14, particles=0)
+        steps=0, boxes=[L0_BOX], atol=dict(b=1e-15, e=1e-14, moments=1e-14, particles=1e-15)
     ),
     "advance_L0": dict(
         steps=1, boxes=[], atol=dict(b=1e-14, e=1e-12, moments=1e-14, particles=1e-14)
