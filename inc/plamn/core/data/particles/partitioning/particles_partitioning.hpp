@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <format>
 #include <vector>
+#include <span>
 
 namespace plamn::core
 {
