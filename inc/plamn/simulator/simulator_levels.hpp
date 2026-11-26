@@ -40,7 +40,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-// plamn::Simulator: making and initializing levels (PHARE's HybridLevelInitializer)
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
 namespace plamn

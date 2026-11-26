@@ -1,9 +1,7 @@
 #ifndef PLAMN_SIMULATOR_SIMULATOR_COMPUTED_HPP
 #define PLAMN_SIMULATOR_SIMULATOR_COMPUTED_HPP
 
-// computed quantities (solver/computed.hpp), the models' (solver/hybrid/computed.hpp):
-//   compute(ln, key)            runs key's steps on level ln (collective if it sums borders)
-//   computed(patch, key)        the patch's grids of key, as compute left them
+// plamn::Simulator: computed quantities, the models'; compute is collective if key sums borders
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
 #include "damn/core/logger.hpp"

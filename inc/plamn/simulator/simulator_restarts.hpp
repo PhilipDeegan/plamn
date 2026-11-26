@@ -1,21 +1,8 @@
 #ifndef PLAMN_SIMULATOR_SIMULATOR_RESTARTS_HPP
 #define PLAMN_SIMULATOR_SIMULATOR_RESTARTS_HPP
 
-// restarts (pyphare's restart_options, dict simulation/restarts): written by dump_restarts at
-// write_timestamps, or once each elapsed_timestamps seconds of wall time after setup, only
-// between steps (every level at the same time); loaded by initialize() when loadPath is set
-//
-//   <filePath>/<time {:021.10f}>/restart.h5    one file, every rank writing its own patches
-//     /restart      time, step, dt, levels, ranks, the serialized simulation, rebalance state
-//     /level<ln>    a damn::hdf5 checkpoint of EM_B_*, EM_E_*, each population's domain
-//                   particles and moments; /clustered<ln>: the boxes the level was clustered to
-//
-// only what the next step needs and cannot rebuild bit for bit (as PHARE's restarts): B, E and
-// the populations' moments with their ghosts (a refined level's level ghosts were filled from
-// the coarser level before its synchronization; the moments' border sums and coarsenings come
-// in an order a fresh deposit does not repeat), and the domain particles. The total moments,
-// J, the old copies and the level ghost particles are rebuilt after loading. Loading needs
-// the ranks that wrote it (the same decomposition)
+// plamn::Simulator: restarts, only between steps; the file and what it stores:
+// doc/simulator/simulator_restarts.md. Loading needs the ranks that wrote it
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
 #include "damn/hdf5/damn_hdf5.hpp"

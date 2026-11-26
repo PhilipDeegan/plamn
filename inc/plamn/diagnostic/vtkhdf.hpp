@@ -1,22 +1,8 @@
 #ifndef PLAMN_DIAGNOSTIC_VTKHDF_HPP
 #define PLAMN_DIAGNOSTIC_VTKHDF_HPP
 
-// pharevtkhdf diagnostics (PHARE's format, see damn/hdf5/vtkhdf.hpp for the file), the pieces:
-//
-//   Diagnostic, diagnostics_from(dict)   what pyphare declared (simulation/diagnostics/<type>/
-//                                        <type><N>: quantity, write_timestamps, flush_every,
-//                                        attributes); electromag, fluid and particle (phareh5
-//                                        only) ones (others: not written)
-//   due(diagnostic, t, dt)               PHARE's schedule: a timestamp within dt of t (as
-//                                        floats), past ones caught up
-//   file_name(quantity)                  /ions/pop/protons/flux -> ions_pop_protons_flux.vtkhdf
-//   hybrid_quantities, quantity_for      (diagnostic/quantities.hpp)
-//   primal_into(PrimalInto{field, cells, out, n_components, component})
-//                                        a patch's field on the primal nodes of its cells, x
-//                                        fastest, written straight into its rows: dual directions
-//                                        averaged (the neighbouring dual values: ghosts read),
-//                                        each value at row * n_components + component, the 1D /
-//                                        2D block repeated x_times (a 3D view)
+// pharevtkhdf diagnostics, PHARE's format (the file: damn/hdf5/vtkhdf.hpp), and what both
+// formats share: the declared diagnostics, their schedule: doc/diagnostic/vtkhdf.md
 
 #include "plamn/amr/untiled.hpp"
 #include "damn/core/def.hpp"
@@ -58,7 +44,7 @@ struct Diagnostic
     std::vector<std::pair<std::string, std::variant<std::string, double>>> attributes{};
 };
 
-// pyphare's diagnostics plamn writes: electromag and fluid, particle (phareh5 only)
+// pyphare's diagnostics plamn writes: electromag, fluid, mhd, particle (phareh5 only)
 MKN_KUL_FN_SIG_RET inline std::vector<Diagnostic> diagnostics_from(initializer::Dict const& dict)
 {
     std::vector<Diagnostic> out;
@@ -118,6 +104,7 @@ MKN_KUL_FN_SIG_RET inline std::string file_name(std::string const& quantity)
     return name + ".vtkhdf";
 }
 
+// a patch's field, its cells, where its rows go and which column it is
 template<typename Field, typename Float>
 struct PrimalInto
 {
@@ -127,6 +114,8 @@ struct PrimalInto
     std::size_t n_components = 1, component = 0;
 };
 
+// on the primal nodes of the cells, x fastest, dual directions averaged (ghosts read); each value
+//  at row * n_components + component, a 1D / 2D block repeated x_times (a 3D view)
 template<std::uint32_t gw, typename Field, typename Float>
 void primal_into_untiled_(PrimalInto<Field, Float> const& in)
 {

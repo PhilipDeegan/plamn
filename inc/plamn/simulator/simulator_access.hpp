@@ -29,7 +29,6 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-// plamn::Simulator: what tests and diagnostics read: domain values, particle counts, summary
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
 namespace plamn

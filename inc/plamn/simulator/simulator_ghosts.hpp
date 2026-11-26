@@ -43,7 +43,6 @@ namespace plamn::amr
 template<typename Field, std::uint32_t gw>
 struct FieldResource;
 } // namespace plamn::amr
-// plamn::Simulator: ghost fills (patch and level ghosts), the debug check of unset points
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
 namespace plamn::simulator::detail

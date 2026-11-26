@@ -1,15 +1,10 @@
 #ifndef PLAMN_SIMULATOR_COUPLING_STORAGE_HPP
 #define PLAMN_SIMULATOR_COUPLING_STORAGE_HPP
 
-// what a level's patches hold for neighbouring levels of another model (multi model runs):
-//   under  for a finer level of another model above it (MHD under hybrid: E at the step's
-//          start; hybrid under full kinetic, later)
-//   over   for a coarser level of another model below it (hybrid over MHD; full kinetic over
-//          hybrid, later)
-// Each an optional, emplaced on the boundary level's patches only (a level's model and its
-//  neighbours' are fixed by its index): the other levels' patches hold an empty optional. A
-//  side's type void: the build has no such neighbour model, no member at all (a one model build
-//  carries nothing)
+// what a level's patches hold for a neighbouring level of another model: `under` for a finer
+//  one above (MHD under hybrid: E at the step's start), `over` for a coarser one below (hybrid
+//  over MHD). Emplaced on the boundary level's patches only (a level's model is fixed by its
+//  index); a void side (no such model in the build) has no member at all
 
 #include <optional>
 #include <type_traits>

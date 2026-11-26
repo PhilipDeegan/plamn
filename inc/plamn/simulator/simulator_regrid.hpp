@@ -44,7 +44,6 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
-// plamn::Simulator: tagging, clustering, regrid, load balancing
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
 

@@ -1,23 +1,9 @@
 #ifndef PLAMN_SIMULATOR_HYBRID_PATCH_HPP
 #define PLAMN_SIMULATOR_HYBRID_PATCH_HPP
 
-// HybridPatch: one patch of a hybrid level, its data and the core views over it, as a
-// SAMRAI patch's data would be
-//   views:   em, J, ions (a runtime list of populations), electrons; and the PPC solver's
-//            predicted and averaged electromag (emPred, emAvg)
-//   storage: the grids and particle arrays the views point at, named as the views, not
-//            filled: the simulator writes everything before reading it
-//
-// not movable: the views, and the electrons' copies of the ions and J views, point at
-// members; LevelData keeps patches behind unique_ptr
-//
-// for_each_resource names what damn's schedules may move:
-//   EM_B_x... EM_E_x..., EMPred_B_x..., EMAvg_E_x...,
-//   <pop>_density, <pop>_charge_density, <pop>_flux_x...,
-//   ions_charge_density, ions_charge_flux_x... (the totals, what a synchronization coarsens),
-//   EM_E_old_x..., EM_B_old_x..., EM_fluxSum_E_x... (AMR),
-//   Pe (the electrons' pressure, a synchronization's), the closure's own fields (Se_old, Se, ...),
-//   <pop>_domain, <pop>_patch_ghost, <pop>_level_ghost[_old, _new] (particles)
+// one patch of a hybrid level, its views and the storage under them; the resources damn's
+// schedules may move: doc/simulator/hybrid_patch.md
+// not movable: the views, and the electrons' copies of the ions and J views, point at members
 
 #include "mkn/kul/for.hpp"
 #include "damn/core/geometry/box.hpp"
@@ -155,11 +141,9 @@ struct HybridPatch
         core::ParticlesPack<Particles_t> pack;
     };
 
-    // the patch's particle ghost box and the level's other patches, periodic images included
-    //   non_level_ghost:  the cells other patches cover (damn::amr::covered_by_level)
-    //   owned_elsewhere:  the cells another patch holding them owns (the nearest): their
-    //                     level ghost particles are its alone (Simulator's own_level_ghosts_;
-    //                     damn::amr::owned_elsewhere)
+    // in the patch's particle ghost box, periodic images included: the cells other patches
+    //  cover, and those another patch holding them owns (the nearest): their level ghost
+    //  particles are its alone
     struct Surroundings
     {
         std::vector<Box_t> non_level_ghost;
@@ -296,8 +280,7 @@ struct HybridPatch
     Grids<3> emE, emB, predE, predB, avgE, avgB, Jxyz;
     Grid_t massDensity, chargeDensity;
     Grids<3> bulkVelocity, chargeFlux;
-    // computed quantities' grids (e.g. the momentum tensor), by name, made on first use and kept
-    // with the patch (simulator_computed.hpp)
+    // computed quantities' grids (e.g. the momentum tensor), made on first use, kept
     std::map<std::string, Grid_t> scratch;
     Grid_t& scratch_grid(std::string const& name, core::HybridQuantity::Scalar const qty)
     {
@@ -340,7 +323,7 @@ struct HybridPatch
     }
 
     // tiled fields: their untiled temporaries while a whole patch operation (damn's schedules)
-    //  works on them, see amr/untiled.hpp and Simulator::lease_
+    //  works on them
     using Untiled_t = amr::UntiledFor_t<Grid_t>;
     Untiled_t untiled;
     // the grids for_each_field_grid moves, in its order, scratch grids apart (see grid_table)

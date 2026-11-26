@@ -1,38 +1,9 @@
 #ifndef PLAMN_SIMULATOR_MHD_PATCH_HPP
 #define PLAMN_SIMULATOR_MHD_PATCH_HPP
 
-// MHDPatch: one patch of an MHD level, what the time integration schemes use
-//  (core/numerics/time_integrator: the patch members they name)
-//   states   the scheme's: states[0] the advanced one, the others its stages (n_states, the
-//            scheme's: a run time choice)
-//   old      states[0] at the start of the level's step (prepare_step): a finer level's ghosts
-//            interpolate in time between it and states[0] (PHARE's MHDMessenger rhoOld_...),
-//            the reflux redoes the step from it (PHARE's SolverMHD stateOld_)
-//   E        the constrained transport electric field of the last flux computation
-//   fluxes   per face direction, of the last flux computation; ct its upwind constrained
-//            transport inputs; butcher, butcherE the schemes' weighted sums of them (the step's
-//            fluxes and E, what a reflux replaces under a finer level)
-//   J, E_diss  resistive MHD's: J = curl B, the dissipative E (eta J) added to the constrained
-//            transport E and to the face fluxes (PHARE's DissipativeElectricField)
-//   flux_sum, flux_sum_E  the step fluxes and E summed over the level's substeps in its coarser
-//            level's step (PHARE's SolverMHD fluxSum_, fluxSumE_), what its reflux coarsens
-//   coupling for a hybrid level over this one (coupling_storage.hpp, builds with both models):
-//            E_old, E at the step's start (keep_E_old), the hybrid level's E ghosts interpolate
-//            in time between it and E; on the finest MHD level only (make_under_hybrid)
-//   storage: grids, named as their views. The states not filled (NaN in debug builds): the
-//            simulator writes them before reading them. The others 0, as PHARE's (its fields
-//            start zeroed): E's component without an equation (E_x in 1D) stays 0, and a
-//            direction a lower dimension does not have has 0 fluxes
-//
-// not movable: the vector fields are views over their own grids; LevelData keeps patches behind
-//  unique_ptr
-//
-// for_each_resource names what damn's schedules may move (PHARE's MHD names for the advanced
-//  state): rho, rhoV_x..., B_x..., Etot, V_x..., P; a stage s > 0: rho_s<s>, rhoV_s<s>_x...;
-//  the old state: rho_old, rhoV_old_x..., B_old_x..., Etot_old; E_x...; per direction d
-//  < dim the refluxed step fluxes and their sums: F_rho_butcher_<d>, F_rhoV_butcher_<d>_x...,
-//  F_Etot_butcher_<d>, F_rho_sum_<d>...; butcherE_x..., E_sum_x... (the last fluxes and the
-//  constrained transport inputs never move); under a hybrid level, last: E_old_x...
+// one patch of an MHD level, what the time integration schemes use; its members and the
+// resources damn's schedules may move: doc/simulator/mhd_patch.md
+// not movable: the vector fields are views over their own grids
 
 #include "damn/core/def.hpp"
 #include "plamn/amr/untiled.hpp"
@@ -255,7 +226,7 @@ struct MHDPatch
     }
 
     // tiled fields: their untiled temporaries while a whole patch operation (damn's schedules)
-    //  works on them, see amr/untiled.hpp and Simulator::lease_
+    //  works on them
     using Untiled_t = amr::UntiledFor_t<Grid_t>;
     Untiled_t untiled;
     // the grids for_each_field_grid moves, in its order (see grid_table)

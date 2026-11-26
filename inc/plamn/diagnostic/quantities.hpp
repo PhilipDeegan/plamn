@@ -1,11 +1,8 @@
 #ifndef PLAMN_DIAGNOSTIC_QUANTITIES_HPP
 #define PLAMN_DIAGNOSTIC_QUANTITIES_HPP
 
-// a diagnostic quantity's fields on a patch (PHARE's diagnostics' accessors), whatever the format
-//   hybrid_quantities(population_names)  quantity -> its fields on a hybrid patch's view,
-//                                        components in file order
-//   mhd_quantities<Patch>()              the same on an MHD patch
-//   quantity_for(quantities, quantity)   an unknown quantity throws
+// a diagnostic quantity's fields on a patch (PHARE's diagnostics' accessors), whatever the
+// format; components in file order
 
 #include "damn/core/def.hpp"
 
@@ -86,8 +83,6 @@ quantity_for(std::map<std::string, Accessor<View>> const& quantities, std::strin
     return it->second;
 }
 
-
-// a patch's field, its cells, where its rows go and which column it is
 
 } // namespace plamn::diagnostic
 
