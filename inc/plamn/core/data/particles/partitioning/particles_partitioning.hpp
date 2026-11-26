@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <format>
 #include <vector>
 
 namespace plamn::core
