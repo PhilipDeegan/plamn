@@ -70,6 +70,7 @@ Simulator<opts>::decompose_in_(std::string const& partition)
             .partition  = partition,
             .spill      = lb_.spill,
             .block      = rebalance_block,
+            .level_size = level_size_,
             .near_band  = std::max(near_band, 0)};
 }
 

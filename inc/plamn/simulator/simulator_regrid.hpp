@@ -189,7 +189,8 @@ void Simulator<opts>::rebalance_(double const t)
                                              .weigh      = weigh,
                                              .patch_size = patch_size_,
                                              .partition  = "levels",
-                                             .block      = rebalance_block};
+                                             .block      = rebalance_block,
+                                             .level_size = level_size_};
     DAMN_SUPER_DEBUG_DO(auto const debug_before = rebalance_state_();)
     auto const old0 = hierarchy_.levels[0];
     // "finest" / "aligned": every level decomposed together (their boxes known: clustered_), on

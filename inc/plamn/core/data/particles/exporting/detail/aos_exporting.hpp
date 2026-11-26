@@ -384,9 +384,8 @@ template<>
 template<typename Src, typename Boxes>
 void ParticlesExporter<AoSMapped, CPU>::delete_particles_in(Src& src, Boxes const& boxes)
 {
-    auto range      = damn::core::makeIndexRange(src);
-    auto const kept = src.partition(range, [&](auto const& cell) { return !isIn(cell, boxes); });
-    src.erase(damn::core::makeRange(src, kept.iend(), src.size()));
+    auto const kept = partition_particles_not_in(src, boxes);
+    src.erase(damn::core::makeRange(src, kept, src.size()));
 }
 
 template<>

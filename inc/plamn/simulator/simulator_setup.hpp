@@ -137,6 +137,10 @@ void Simulator<opts>::setup_()
 
     // finer levels: the user's refinement boxes (cells of the coarser level), refined
     hierarchy_.max_levels = cppdict::get_value(dict_, "simulation/AMR/max_nbr_levels", 1);
+    if (!amr.contains("largest_patch_size"))
+        for (auto [ln, box] = std::pair{0, hierarchy_.domain}; ln < hierarchy_.max_levels;
+             ++ln, box = damn::core::refine(box, hierarchy_.ratio))
+            level_size_.push_back(box.shape().toArray());
     models_.set_levels(sim, hierarchy_.max_levels);
     if constexpr (Models_t::mhd_on)
         if (models_.has_mhd_levels()) // a coupled build's hybrid only input has no MHD options
