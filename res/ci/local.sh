@@ -2,9 +2,9 @@
 # what CI runs (build_nix.yml, format.yml), locally: before marking a PR ready, instead of
 # spending Actions minutes. From the repository root; JOBS=8 compile jobs by default;
 # PYPHARE: the PHARE checkout pyphare comes from (default /mkn/git/phare/wrangler: CI's).
-#   res/ci/local.sh [base, default origin/next: PRs target next]
+#   res/ci/local.sh [base, default origin/next if it exists, else origin/master]
 set -euo pipefail
-BASE=${1:-origin/master} # as CI: the PR base (next -> master)
+BASE=${1:-$(git rev-parse -q --verify origin/next >/dev/null && echo origin/next || echo origin/master)}
 J=${JOBS:-8}
 PYPHARE=${PYPHARE:-/mkn/git/phare/wrangler}
 mb=$(git merge-base "$BASE" HEAD)
