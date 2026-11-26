@@ -13,6 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  # the MPI profiles compile through ccache for local builds; CI keeps no cache between runs
+  CCACHE_DISABLE: 1
   CURL_GET: curl -fL --retry 3 --retry-delay 2
   PATH_GET: https://github.com/mkn/mkn/releases/latest/download
 
@@ -56,7 +58,7 @@ jobs:
     steps:
     - run: |  # git before checkout, so the checkout is a repository
         apt-get update
-        apt-get install -y --no-install-recommends ca-certificates curl git openssh-client \
+        apt-get install -y --no-install-recommends ca-certificates curl git openssh-client ccache \
           g++ openmpi-bin libopenmpi-dev iwyu
 
     - uses: actions/checkout@v4
@@ -102,8 +104,8 @@ jobs:
     # Debian 13's clang-tidy 22, the same as development machines (results differ between versions)
     - run: |  # git before checkout, so the checkout is a repository
         apt-get update
-        apt-get install -y --no-install-recommends ca-certificates curl git openssh-client g++ python3 \
-          clang-tidy-22 openmpi-bin libopenmpi-dev # mpicxx: the python modules' flags
+        apt-get install -y --no-install-recommends ca-certificates curl git openssh-client ccache \
+          g++ python3 clang-tidy-22 openmpi-bin libopenmpi-dev # mpicxx: the python modules' flags
         clang-tidy-22 --version
 
     - uses: actions/checkout@v4

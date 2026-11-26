@@ -9,6 +9,10 @@ on:
     #  marked ready for review runs everything once; test locally meanwhile
     types: [opened, synchronize, reopened, ready_for_review]
 
+env:
+  # the MPI profiles compile through ccache for local builds; CI keeps no cache between runs
+  CCACHE_DISABLE: 1
+
 # the C++ tests beside the python ones (a job per pyphare), in parallel; each python job builds
 #  its own modules: mkn's -O builds for the build machine (-march=native), so modules built on
 #  one runner can hold instructions another runner's CPU lacks (Illegal instruction)
