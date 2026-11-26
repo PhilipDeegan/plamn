@@ -1,24 +1,9 @@
 #ifndef PLAMN_PYTHON3_PLAMN_DATA_WRANGLER_HPP
 #define PLAMN_PYTHON3_PLAMN_DATA_WRANGLER_HPP
 
-// Live, zero-copy access to a running simulator's data from python, the API of PHARE's
-//  DataWrangler (PHARE's live DataWrangler), so pyphare's hierarchy_from_sim works unchanged:
-//
-//   DataWrangler(simulator, hierarchy)   hierarchy: unused, plamn's is the simulator's own
-//     getNumberOfLevels()
-//     getHybridPatchLevel(lvl) -> HybridPatchLevel
-//     sync(patch_datas)                  every rank's patch datas on rank 0 (copies), none on
-//                                        others; one rank: the input
-//   HybridPatchLevel: getB(c), getE(c), getNi(), getN(pop), getVi(c), getFlux(c, pop),
-//     getMassDensity(), getChargeFlux(c), getDensity(pop) (particle density; getN: charge
-//     density), getMomentumTensor(c, pop = ""), getParticles(pop): one PatchData per local
-//     patch; every quantity written as a diagnostic has one. getMomentumTensor computes it
-//     (collective: every rank calls it; c: xx xy xz yy yz zz; pop "": all ions)
-//   PatchData: patchID, origin, lower, upper (AMR cells), nGhosts (field or particle ghost
-//     width), data
-//
-// data is a writable numpy view on the patch's grid, particles the patch's domain particle
-//  array, by reference: only valid while the simulator and its patches exist
+// live, zero-copy access to a running simulator's data from python, the API of PHARE's live
+//  DataWrangler (pyphare's hierarchy_from_sim unchanged): doc/src/python3/plamn_data_wrangler.md
+// data and particles are views, by reference: only valid while the simulator and its patches exist
 
 #include "plamn/core/data/particles/particle_iteration.hpp"
 #include "damn/mpi/damn_mpi.hpp"

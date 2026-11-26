@@ -430,7 +430,7 @@ def _patch_coupled_input():
 
 
 def patch():
-    """idempotent: test classes call it from setUpClass (nothing runs at import)"""
+    """idempotent (nothing runs at import)"""
     global _patched
     if _patched:
         return
