@@ -5,7 +5,9 @@
 
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/memory/box_span.hpp"
+#include "damn/core/memory/scratch.hpp"
 #include "damn/core/geometry/point.hpp"
+#include "mkn/kul/for.hpp"
 #include "mkn/kul/std/array.hpp"
 #include "plamn/core/data/particles/particle_components.hpp"
 #include "plamn/core/def.hpp"
@@ -13,9 +15,13 @@
 #include "plamn/core/data/grid/patch_layout.hpp"
 #include "plamn/core/data/particles/particle_iteration.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
+#include "plamn/core/data/particles/selecting/particles_selecting.hpp"
 #include "damn/core/def/damn_config.hpp"
 
+#include <array>
 #include <cstddef>
+#include <algorithm>
+#include <span>
 #include <stdexcept>
 #include <cstdint>
 #include <vector>
@@ -147,44 +153,34 @@ void append(ParticleResource<Particles, gw>& r, typename Particles::value_type p
 // SoAVX, SoAVXChunked (host memory): moved column by column, the bytes: doc/amr/resources.md
 template<typename Particles>
 concept ParticleColumns = core::HasComponents<std::remove_const_t<Particles>>
-                          and core::is_soavx(Particles::layout_mode);
+                          and Particles::layout_mode == core::LayoutMode::SoAVXChunked;
 
 namespace detail
 {
-    // the particles whose cell + shift is in box, by index
-    template<typename Particles>
-    std::vector<std::size_t> selected(Particles const& particles,
-                                      damn::core::Box<int, Particles::dimension> const& box,
-                                      damn::core::Point<int, Particles::dimension> const& shift)
+    // box in the particles' own cells
+    template<std::size_t dim>
+    auto unshifted(damn::core::Box<int, dim> const& box, damn::core::Point<int, dim> const& shift)
     {
-        auto constexpr dim = Particles::dimension;
-        std::vector<std::size_t> out;
-        if constexpr (core::is_chunked(Particles::layout_mode))
-            if (particles.sorted())
-            {
-                damn::core::Point<int, dim> back; // box in the particles' cells
-                for (std::size_t d = 0; d < dim; ++d)
-                    back[d] = -shift[d];
-                auto const cells = damn::core::shift(box, back) * particles.shell();
-                if (cells)
-                    particles.for_each_range(*cells, [&](auto const start, auto const size) {
-                        for (std::size_t i = start; i < start + size; ++i)
-                            out.push_back(i);
-                    });
-                return out;
-            }
-        auto const c = core::components(particles);
-        for (std::size_t i = 0; i < particles.size(); ++i)
-        {
-            if (c.weight[i] == 0) // SoAVXChunked's gaps
-                continue;
-            damn::core::Point<int, dim> cell;
-            for (std::size_t d = 0; d < dim; ++d)
-                cell[d] = c.iCell[d][i] + shift[d];
-            if (isIn(cell, box))
-                out.push_back(i);
-        }
-        return out;
+        damn::core::Point<int, dim> back;
+        for (std::size_t d = 0; d < dim; ++d)
+            back[d] = -shift[d];
+        return damn::core::shift(box, back);
+    }
+
+    template<typename Particles>
+    void for_each_selected(Particles const& particles,
+                           damn::core::Box<int, Particles::dimension> const& box,
+                           damn::core::Point<int, Particles::dimension> const& shift, auto&& fn)
+    {
+        core::for_each_range_in(particles, unshifted(box, shift), fn);
+    }
+
+    template<typename Particles>
+    std::size_t count_selected(Particles const& particles,
+                               damn::core::Box<int, Particles::dimension> const& box,
+                               damn::core::Point<int, Particles::dimension> const& shift)
+    {
+        return core::nbr_particles_in(particles, unshifted(box, shift));
     }
 
     // fn(dst span, src span) for each component pair, the iCells with their direction
@@ -209,22 +205,24 @@ void pack_items(ParticleResource<Particles, gw> const& r,
                 std::vector<std::byte>& out)
 {
     auto const& particles = *r.particles;
-    auto const index      = detail::selected(particles, box, shift);
-    std::uint64_t const n = index.size();
-    auto at               = out.size();
+    auto const c          = core::components(particles);
+    std::uint64_t const n = detail::count_selected(particles, box, shift);
+    auto const at         = out.size() + sizeof(n);
     std::size_t bytes     = sizeof(n);
-    core::components(particles).for_each(
-        [&](auto const&, auto const& span) { bytes += n * sizeof(span[0]); });
-    out.resize(at + bytes);
-    std::memcpy(out.data() + at, &n, sizeof(n));
-    at += sizeof(n);
-    core::components(particles).for_each([&](auto const&, auto const& span) {
-        for (auto const i : index)
-        {
-            std::memcpy(out.data() + at, &span[i], sizeof(span[i]));
-            at += sizeof(span[i]);
-        }
-    });
+    c.for_each([&](auto const&, auto const& span) { bytes += n * sizeof(span[0]); });
+    out.resize(out.size() + bytes);
+    std::memcpy(out.data() + at - sizeof(n), &n, sizeof(n));
+    std::size_t k = 0;
+    detail::for_each_selected(
+        particles, box, shift, [&](std::size_t const start, std::size_t const size) {
+            auto column = at;
+            c.for_each([&](auto const&, auto const& span) {
+                auto constexpr bytes = sizeof(span[0]);
+                std::memcpy(out.data() + column + k * bytes, &span[start], size * bytes);
+                column += n * bytes;
+            });
+            k += size;
+        });
 }
 
 template<typename Particles, std::uint32_t gw>
@@ -288,32 +286,58 @@ void append_items_from(ParticleResource<Particles, gw>& dst, ParticleResource<Sr
                        damn::core::Box<int, Particles::dimension> const& box,
                        damn::core::Point<int, Particles::dimension> const& shift)
 {
-    auto const index = detail::selected(*src.particles, box, shift);
-    if (index.empty())
-        return;
+    bool const same = static_cast<void const*>(src.particles) == dst.particles;
     if constexpr (Particles::layout_mode == core::LayoutMode::SoAVXChunked)
-        if (dst.particles->sorted() and dst.particles->has_slack()
-            and src.particles != dst.particles)
+        if (!same and dst.particles->sorted() and dst.particles->has_slack())
         { // into their chunks' gaps
-            for (auto const i : index)
-            {
-                auto p = src.particles->copy(i);
-                for (std::size_t d = 0; d < Particles::dimension; ++d)
-                    p.iCell()[d] += shift[d];
-                if (!dst.particles->insert(p))
-                    dst.particles->push_back(p); // a sort after all of them (items_appended)
-            }
+            detail::for_each_selected(
+                *src.particles, box, shift, [&](std::size_t const start, std::size_t const size) {
+                    for (std::size_t i = start; i < start + size; ++i)
+                    {
+                        auto p = src.particles->copy(i);
+                        for (std::size_t d = 0; d < Particles::dimension; ++d)
+                            p.iCell()[d] += shift[d];
+                        if (!dst.particles->insert(p))
+                            dst.particles->push_back(p); // a sort after all (items_appended)
+                    }
+                });
             return;
         }
+    auto const n = detail::count_selected(*src.particles, box, shift);
+    if (n == 0)
+        return;
+    // the same array: its ranges taken before the resize, whose growth moves the chunk offsets
+    std::span<std::array<std::size_t, 2>> kept;
+    if (same)
+    {
+        std::size_t ranges = 0;
+        detail::for_each_selected(*src.particles, box, shift, [&](auto, auto) { ++ranges; });
+        kept = damn::core::scratch<std::array<std::size_t, 2>, struct same_array_ranges>(ranges);
+        std::size_t r = 0;
+        detail::for_each_selected(
+            *src.particles, box, shift,
+            [&](std::size_t const start, std::size_t const size) { kept[r++] = {start, size}; });
+    }
     auto& out      = *dst.particles;
     auto const was = out.size();
-    out.resize(was + index.size()); // src's columns too if the same: read after
-    detail::for_each_column_pair<Particles::dimension>(
-        core::components(out), core::components(std::as_const(*src.particles)),
-        [&](auto const& to, auto const& from, int const d) {
-            for (std::size_t k = 0; k < index.size(); ++k)
-                to[was + k] = from[index[k]] + (d < 0 ? 0 : shift[static_cast<std::size_t>(d)]);
-        });
+    out.resize(was + n); // src's columns too if the same: read after
+    auto const to   = core::components(out);
+    auto const from = core::components(std::as_const(*src.particles));
+    std::size_t k   = 0;
+    auto const copy = [&](std::size_t const start, std::size_t const size) {
+        detail::for_each_column_pair<Particles::dimension>(
+            to, from, [&](auto const& t, auto const& f, int const d) {
+                auto const by = d < 0 ? 0 : shift[static_cast<std::size_t>(d)];
+                for (std::size_t j = 0; j < size; ++j)
+                    t[was + k + j] = f[start + j] + by;
+            });
+        k += size;
+    };
+    if (same)
+        for (auto const& [start, size] : kept)
+            copy(start, size);
+    else
+        detail::for_each_selected(*src.particles, box, shift, copy);
 }
 
 // what pack_items wrote, as particles (refine's coarse particles, split into new ones)
@@ -345,22 +369,52 @@ std::vector<typename Particles::value_type> read_items(ParticleResource<Particle
     return out;
 }
 
-// AoS4SoAVXChunked (host memory): moved as whole structures, the bytes: doc/amr/resources.md
+// AoSMapped, AoS4SoAVXChunked (host memory): moved as whole structures, the bytes:
+//  doc/amr/resources.md
 template<typename Particles>
 concept ParticleStructs
-    = std::remove_const_t<Particles>::layout_mode == core::LayoutMode::AoS4SoAVXChunked;
+    = mkn::kul::any_in(std::remove_const_t<Particles>::layout_mode, core::LayoutMode::AoSMapped,
+                       core::LayoutMode::AoS4SoAVXChunked);
 
 namespace detail
 {
-    // its chunk's gaps if it can, else appended
+    bool has_gaps(auto const&)
+    {
+        return false;
+    }
+
     template<typename Particles>
-    void arrive(Particles& dst, typename Particles::value_type p,
-                damn::core::Point<int, Particles::dimension> const& shift, bool const gaps)
+        requires(core::is_chunked(Particles::layout_mode))
+    bool has_gaps(Particles const& particles)
+    {
+        return particles.sorted() and particles.has_slack();
+    }
+
+    template<typename Particles>
+    auto shifted(typename Particles::value_type p,
+                 damn::core::Point<int, Particles::dimension> const& shift)
     {
         for (std::size_t d = 0; d < Particles::dimension; ++d)
             p.iCell()[d] += shift[d];
-        if (!gaps or !dst.insert(p))
-            dst.push_back(p);
+        return p;
+    }
+
+    template<typename Particles>
+    void arrive(Particles& dst, typename Particles::value_type const& p,
+                damn::core::Point<int, Particles::dimension> const& shift, bool /*gaps*/)
+    {
+        dst.push_back(shifted<Particles>(p, shift));
+    }
+
+    // its chunk's gaps if it can, else appended
+    template<typename Particles>
+        requires(core::is_chunked(Particles::layout_mode))
+    void arrive(Particles& dst, typename Particles::value_type const& p,
+                damn::core::Point<int, Particles::dimension> const& shift, bool const gaps)
+    {
+        auto const q = shifted<Particles>(p, shift);
+        if (!gaps or !dst.insert(q))
+            dst.push_back(q);
     }
 } // namespace detail
 
@@ -373,17 +427,17 @@ void pack_items(ParticleResource<Particles, gw> const& r,
 {
     using P               = typename Particles::value_type;
     auto const& particles = *r.particles;
-    auto const index      = detail::selected(particles, box, shift);
-    std::uint64_t const n = index.size();
-    auto at               = out.size();
-    out.resize(at + sizeof(n) + n * sizeof(P));
-    std::memcpy(out.data() + at, &n, sizeof(n));
-    at += sizeof(n);
-    for (auto const i : index)
-    {
-        std::memcpy(out.data() + at, &particles[i], sizeof(P));
-        at += sizeof(P);
-    }
+    auto const count_at   = out.size(); // the count is known only once visited
+    out.resize(count_at + sizeof(std::uint64_t));
+    std::uint64_t n = 0;
+    detail::for_each_selected(particles, box, shift,
+                              [&](std::size_t const start, std::size_t const size) {
+                                  auto const at = out.size();
+                                  out.resize(at + size * sizeof(P));
+                                  std::memcpy(out.data() + at, &particles[start], size * sizeof(P));
+                                  n += size;
+                              });
+    std::memcpy(out.data() + count_at, &n, sizeof(n));
 }
 
 template<typename Particles, std::uint32_t gw>
@@ -396,7 +450,7 @@ void unpack_items(ParticleResource<Particles, gw>& r, std::byte const*& at,
     std::uint64_t n;
     std::memcpy(&n, at, sizeof(n));
     at += sizeof(n);
-    bool const gaps = particles.sorted() and particles.has_slack();
+    bool const gaps = detail::has_gaps(particles);
     for (std::uint64_t k = 0; k < n; ++k)
     {
         P p;
@@ -413,16 +467,27 @@ void append_items_from(ParticleResource<Particles, gw>& dst, ParticleResource<Sr
                        damn::core::Box<int, Particles::dimension> const& box,
                        damn::core::Point<int, Particles::dimension> const& shift)
 {
-    using P          = typename Particles::value_type;
-    auto const index = detail::selected(*src.particles, box, shift);
-    if (index.empty())
+    using P         = typename Particles::value_type;
+    bool const same = static_cast<void const*>(src.particles) == dst.particles;
+    bool const gaps = !same and detail::has_gaps(*dst.particles);
+    if (!same)
+    {
+        detail::for_each_selected(
+            *src.particles, box, shift, [&](std::size_t const start, std::size_t const size) {
+                for (std::size_t i = start; i < start + size; ++i)
+                    detail::arrive(*dst.particles, (*src.particles)[i], shift, gaps);
+            });
         return;
-    std::vector<P> moving;
-    moving.reserve(index.size());
-    for (auto const i : index)
-        moving.push_back((*src.particles)[i]);
-    bool const gaps = static_cast<void const*>(src.particles) != dst.particles
-                      and dst.particles->sorted() and dst.particles->has_slack();
+    }
+    // the same array: the selection copied first, appending moves it
+    auto const moving = damn::core::scratch<P, struct same_array_particles>(
+        detail::count_selected(*src.particles, box, shift));
+    std::size_t k = 0;
+    detail::for_each_selected(*src.particles, box, shift,
+                              [&](std::size_t const start, std::size_t const size) {
+                                  std::copy_n(&(*src.particles)[start], size, moving.data() + k);
+                                  k += size;
+                              });
     for (auto const& p : moving)
         detail::arrive(*dst.particles, p, shift, gaps);
 }

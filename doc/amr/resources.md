@@ -25,9 +25,10 @@ A layout with `components()` also gives checkpoints its columns (`for_each_colum
 
 Between patches, particles move through damn's cell_items hooks (`damn/amr/cell_items.hpp`):
 `pack_items`, `unpack_items`, `append_items_from` (the same without the bytes) and `read_items`
-(refine's coarse particles, to be split). Two layout families have their own hooks.
+(refine's coarse particles, to be split). Two layout families have their own hooks; unsorted
+layouts (`AoS`, `SoAVX`), for tests and benchmarks, take damn's default, a scan of every item.
 
-### Columns: `SoAVX`, `SoAVXChunked` (host memory)
+### Columns: `SoAVXChunked` (host memory)
 
 Moved column by column. The bytes:
 
@@ -36,22 +37,27 @@ Moved column by column. The bytes:
 | `n`, the number of particles | `std::uint64_t` |
 | each component's values, contiguous, in `components()`' order: `weight`, `iCell_x..`, `delta_x..`, `v_x`, `v_y`, `v_z` | `n` values each |
 
-- A selection reads the `iCell` columns only, or `SoAVXChunked`'s per cell ranges when sorted.
+- A selection is the layout's own, as index ranges (see
+  [particles_selecting.md](../core/data/particles/selecting/particles_selecting.md)): each range
+  is copied per column straight into damn's per peer buffer, no intermediate copy.
 - Appends are column wise; a `SoAVXChunked` array that is sorted with slack takes arrivals into
   its chunks' gaps, one at a time, and the rest are appended and sorted once after all of them
   (`items_appended`).
 - A resource over `Particles const` (a read only source, see `particle_access.hpp`) packs too.
-- `append_items_from` may have `src` be `dst`: its first particles stay, and the columns are read
-  after the resize.
+- `append_items_from` may have `src` be `dst`: its first particles stay, the selection's ranges
+  are taken before the resize (into a per thread `damn::core::scratch` buffer), and the columns
+  are read after it.
 
-### Structures: `AoS4SoAVXChunked` (host memory)
+### Structures: `AoSMapped`, `AoS4SoAVXChunked` (host memory)
 
 Moved as whole particle structures. The bytes: `n` (`std::uint64_t`), then the `n` structures.
 
-- A selection reads the per cell ranges when sorted.
+- A selection is the layout's own, as index ranges: `AoSMapped`'s CellMap lists, the per cell
+  ranges when sorted. A range's structures are copied at once; `n` is written once visited.
 - Arrivals go into their chunks' gaps when the destination is sorted with slack; otherwise they
   are appended, and sorted once after all of them (`items_appended`).
-- `append_items_from` may have `src` be `dst`: the selection is copied first.
+- `append_items_from` may have `src` be `dst`: the selection is copied first, into a per thread
+  `damn::core::scratch` buffer.
 
 ### Chunked layouts
 
