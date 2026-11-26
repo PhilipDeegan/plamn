@@ -49,7 +49,9 @@ namespace detail
             return core::level_of<am>(level,
                                       [&](auto& patch, auto& fields) { fields.add(get(patch)); });
         };
-        std::vector<std::pair<double, double>> pops; // (charge, mass), every patch the same
+        // (charge, mass), every patch the same; the thread's, used up in this call
+        static thread_local std::vector<std::pair<double, double>> pops;
+        pops.clear();
         level.per_patch([&](auto& patch) {
             if (pops.empty())
                 for (auto const& pop : patch.ions)

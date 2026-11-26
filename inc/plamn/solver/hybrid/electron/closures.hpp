@@ -39,6 +39,8 @@
 #include <cstdlib>
 #include <type_traits>
 #include <utility>
+#include <vector>
+#include <format>
 
 namespace plamn::solver::hybrid
 {
@@ -183,11 +185,16 @@ namespace polytropic
     //  interpolated at t (its step's start and end; alpha 1 out of a coarser step)
     void fill_ghosts(auto& level, C::Field const field, double const t)
     {
+        static auto const pairs = [] { // per field, the same every step: built once
+            std::array<std::vector<damn::amr::LevelPair>, C::count> out;
+            for (std::size_t f = 0; f < C::count; ++f)
+                out[f] = {{C::names[C::step], C::names[f], C::names[C::subcycle]}};
+            return out;
+        }();
         std::string const key = C::names[field];
         level.copy(damn::amr::fill_ghosts, key);
         if (level.number() > 0)
-            level.refine(amr::FieldRefiner{}, damn::amr::LevelRegion::LevelGhosts,
-                         {damn::amr::LevelPair{C::names[C::step], key, C::names[C::subcycle]}},
+            level.refine(amr::FieldRefiner{}, damn::amr::LevelRegion::LevelGhosts, pairs[field],
                          level.alpha(t));
     }
 
@@ -394,7 +401,8 @@ void synchronize(core::hybrid::IsothermalClosure const&, auto&)
 template<auto opts>
 void synchronize(core::hybrid::PolytropicClosure const&, auto& level)
 { // Pe, primal as the moments: the fine nodes' values (PHARE's electronPressureSynchronizers_)
-    level.coarsen(amr::MomentsCoarsener{}, {damn::amr::LevelPair{"Pe", "Pe", ""}});
+    static std::vector<damn::amr::LevelPair> const Pe{{"Pe", "Pe", ""}}; // built once
+    level.coarsen(amr::MomentsCoarsener{}, Pe);
 }
 
 template<auto opts>

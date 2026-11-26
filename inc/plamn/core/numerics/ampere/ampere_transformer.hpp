@@ -59,7 +59,7 @@ public:
     {
         if constexpr (VecField::field_type::alloc_mode == damn::AllocatorMode::GPU_UNIFIED)
         {
-            auto items = gpu_items(layout, B, J);
+            auto& items = gpu_items(layout, B, J);
             run_gpu(items);
             return;
         }
@@ -158,10 +158,12 @@ public:
                                          region_view(J, ti)));
     }
 
+    // the thread's list, kept between launches (run_gpu waits for its kernel)
     template<typename Layout, typename VecField>
-    static auto gpu_items(Layout const& layout, VecField const& B, VecField& J)
+    static auto& gpu_items(Layout const& layout, VecField const& B, VecField& J)
     {
-        gpu_item_list_t<Layout, VecField> items;
+        static thread_local gpu_item_list_t<Layout, VecField> items;
+        items.clear();
         gpu_items(layout, B, J, items);
         return items;
     }
@@ -189,7 +191,7 @@ public:
     template<typename VecField>
     void on_tiles_gpu(VecField const& B, VecField& J) const
     {
-        auto items = gpu_items(J[0][0].layout(), B, J);
+        auto& items = gpu_items(J[0][0].layout(), B, J);
         run_gpu(items);
     }
 };

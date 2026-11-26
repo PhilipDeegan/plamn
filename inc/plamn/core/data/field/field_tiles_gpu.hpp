@@ -59,7 +59,7 @@ void sync_inner_ghosts_on_device(auto& tiled)
 #if DAMN_HAVE_GPU
     using Launcher = damn::core::gpu::TileLauncher</*sync=*/true>;
 
-    auto const jobs = [&]() {
+    auto const& jobs = [&]() -> auto& {
         auto& first      = [&]() -> auto& {
             if constexpr (is_field_tile_set_v<std::remove_cvref_t<decltype(tiled)>>)
                 return tiled;
@@ -70,7 +70,8 @@ void sync_inner_ghosts_on_device(auto& tiled)
         using Box_t      = damn::core::Box<std::uint32_t, std::remove_cvref_t<decltype(first)>::dimension>;
         using Job_t      = detail::GhostCopyJob<View_t, Box_t>;
 
-        damn::core::gpu::Vec_t<Job_t> jobs_;
+        static thread_local damn::core::gpu::Vec_t<Job_t> jobs_; // kept between launches
+        jobs_.clear();
         detail::for_each_tiled_component(tiled, [&](auto& field) {
             for (std::size_t ti = 0; ti < field().size(); ++ti)
                 field.for_each_inner_ghost_overlap(

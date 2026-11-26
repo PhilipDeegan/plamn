@@ -177,7 +177,8 @@ void ParticlesAppender<LM::AoSMapped, AM::CPU, LM::AoSTS, AM::GPU_UNIFIED>::oper
 
 #if DAMN_HAVE_MKN_GPU
     using Particle_t = typename Dst::Particle_t;
-    damn::core::gpu::Vec_t<Particle_t> staged(src.size());
+    static thread_local damn::core::gpu::Vec_t<Particle_t> staged; // kept between appends
+    staged.resize(src.size());
     std::copy(src.data(), src.data() + src.size(), staged.data());
     dst.template append_on_device<type>(staged.data(), staged.size());
 #else

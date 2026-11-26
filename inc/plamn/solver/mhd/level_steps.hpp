@@ -98,17 +98,22 @@ template<auto opts>
 void synchronize(MHDModel<opts> const& model, auto&& level, double const t)
 {
     auto coarse = level.coarser();
-    std::vector<damn::amr::LevelPair> fluxes;
-    for (std::size_t d = 0; d < opts.dimension; ++d)
-    {
-        std::string const x{"xyz"[d]};
-        fluxes.push_back({"F_rho_butcher_" + x, "F_rho_sum_" + x, ""});
-        fluxes.push_back({"F_Etot_butcher_" + x, "F_Etot_sum_" + x, ""});
-        for (auto const& p : amr::vector_pairs("F_rhoV_butcher_" + x, "F_rhoV_sum_" + x))
-            fluxes.push_back(p);
-    }
+    // the same every step: built once (read only after)
+    static auto const fluxes = [] {
+        std::vector<damn::amr::LevelPair> out;
+        for (std::size_t d = 0; d < opts.dimension; ++d)
+        {
+            std::string const x{"xyz"[d]};
+            out.push_back({"F_rho_butcher_" + x, "F_rho_sum_" + x, ""});
+            out.push_back({"F_Etot_butcher_" + x, "F_Etot_sum_" + x, ""});
+            for (auto const& p : amr::vector_pairs("F_rhoV_butcher_" + x, "F_rhoV_sum_" + x))
+                out.push_back(p);
+        }
+        return out;
+    }();
+    static auto const electric = amr::vector_pairs("butcherE", "E_sum");
     level.coarsen(amr::MHDFluxCoarsener{}, fluxes);
-    level.coarsen(amr::ElectricFieldCoarsener{}, amr::vector_pairs("butcherE", "E_sum"));
+    level.coarsen(amr::ElectricFieldCoarsener{}, electric);
     coarse.copy(damn::amr::fill_ghosts, "MHDReflux");
 
     using R = MHDModel<opts>::Reconstruction;

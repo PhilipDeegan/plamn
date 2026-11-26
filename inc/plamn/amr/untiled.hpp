@@ -10,6 +10,7 @@
 #include "plamn/core/data/field/field_box.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
+#include "mkn/kul/lang/cpp/compiler/def.hpp"
 
 #include <array>
 #include <cstdint>
@@ -20,6 +21,7 @@
 #include <utility>
 #include <cstddef>
 #include <format>
+#include <vector>
 
 namespace plamn::amr
 {
@@ -35,8 +37,8 @@ public:
 
     field_type& lease(std::string const& name, Tiled& tiled, auto const& layout, Lease const how)
     {
-        if (auto const it = active_.find(name); it != active_.end())
-            return *it->second.tmp; // leased once for this operation (a name both src and dst)
+        if (auto* const leased = find(name))
+            return *leased; // leased once for this operation (a name both src and dst)
 
         auto const pq = tiled.physicalQuantity();
         auto& pool    = pools_[pq];
@@ -49,39 +51,49 @@ public:
             core::reduce_into(tmp, tiled); // zeroed, then every tile added
         else
             core::copy_fields(tmp, tiled); // zeroed, then every tile's values
-        active_.try_emplace(name,
-                            Active{std::addressof(tiled), std::addressof(tmp), how != Lease::read});
+        if (n_active_ == active_.size())
+            active_.emplace_back();
+        auto& a      = active_[n_active_++];
+        a.name       = name; // the kept string's storage
+        a.tiled      = std::addressof(tiled);
+        a.tmp        = std::addressof(tmp);
+        a.write_back = how != Lease::read;
         return tmp;
     }
 
     field_type* find(std::string const& name) const
     {
-        auto const it = active_.find(name);
-        return it == active_.end() ? nullptr : it->second.tmp;
+        for (std::size_t i = 0; i < n_active_; ++i)
+            if (active_[i].name == name)
+                return active_[i].tmp;
+        return nullptr;
     }
 
-    bool leased() const { return !active_.empty(); }
+    MKN_KUL_FN_SIG_RET bool leased() const { return n_active_ > 0; }
 
     void release()
     {
-        for (auto& [name, a] : active_)
-            if (a.write_back)
+        for (std::size_t i = 0; i < n_active_; ++i)
+            if (auto const& a = active_[i]; a.write_back)
                 core::copy_fields(*a.tiled, *a.tmp); // every tile's ghost box
-        active_.clear();
-        used_.clear();
+        n_active_ = 0;
+        for (auto& entry : used_) // the entries kept: leased again every step
+            entry.second = 0;
     }
 
 private:
     struct Active
     {
-        Tiled* tiled;
-        field_type* tmp;
-        bool write_back;
+        std::string name;
+        Tiled* tiled    = nullptr;
+        field_type* tmp = nullptr;
+        bool write_back = false;
     };
 
     std::map<pq_type, std::vector<std::unique_ptr<grid_type>>> pools_;
     std::map<pq_type, std::size_t> used_;
-    std::map<std::string, Active> active_;
+    std::vector<Active> active_; // [0, n_active_): this operation's, the rest kept for reuse
+    std::size_t n_active_ = 0;
 };
 
 // a patch's untiled temporaries when its grids are tiled, else a placeholder that holds none

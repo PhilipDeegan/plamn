@@ -441,18 +441,25 @@ private:
         if (Pool::n_pools < 2 or n < 2 or damn::mpi::scope_timing_active())
             return per_patch_(ln, fn);
 
-        std::vector<double> busy(decomposition_.timing ? n : 0, 0.);
+        // the calling thread's, a cache line per patch: pool threads write their patches' own
+        struct alignas(64) Busy
+        {
+            double seconds;
+        };
+        static thread_local std::vector<Busy> busy;
+        busy.assign(decomposition_.timing ? n : 0, Busy{0.});
         Pool::INSTANCE().patch_exec(
             n, [](std::size_t const i) { return i; },
             [&](std::size_t const i) {
                 auto const t0 = std::chrono::steady_clock::now();
                 fn(*ld.data[i]);
                 if (!busy.empty())
-                    busy[i] = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0)
-                                  .count();
+                    busy[i].seconds
+                        = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0)
+                              .count();
             });
         for (auto const i : mkn::kul::range(busy.size()))
-            decomposition_.busy_of(ln, ld.patches[i].box) += busy[i];
+            decomposition_.busy_of(ln, ld.patches[i].box) += busy[i].seconds;
     }
 
     // tiled fields: damn's schedules work on leased untiled temporaries: doc/simulator/simulator.md
@@ -520,17 +527,27 @@ private:
     // the leases of one operation, released when it ends (an exception too)
     struct Leases
     {
-        // a level's release, any model's (a refine leases levels of two patch types)
-        std::vector<std::function<void()>> releases;
+        // a level's release, any model's (a refine leases levels of two patch types): at most
+        //  four levels' per operation, held in place
+        struct Release
+        {
+            void (*fn)(void*);
+            void* ld;
+        };
+        std::array<Release, 4> releases{};
+        std::size_t n = 0;
         ~Leases()
         {
-            for (auto const& release : releases)
-                release();
+            for (std::size_t i = 0; i < n; ++i)
+                releases[i].fn(releases[i].ld);
         }
-        void add(auto& ld, std::vector<std::string> const& names, amr::Lease const how)
+        template<typename LD>
+        void add(LD& ld, std::vector<std::string> const& names, amr::Lease const how)
         {
+            if (n == releases.size())
+                throw std::logic_error("plamn Simulator::Leases: more than four leases");
             lease_(ld, names, how);
-            releases.emplace_back([&ld] { release_(ld); });
+            releases[n++] = {[](void* l) { release_(*static_cast<LD*>(l)); }, std::addressof(ld)};
         }
     };
     template<typename How>
@@ -548,7 +565,8 @@ private:
         auto const& resources = resources_.at(key);
         models_.visit(ln, [&](auto& model) {
             auto& ld = model.levels[static_cast<int>(ln)];
-            std::vector<std::string> dst, src;
+            static thread_local std::vector<std::string> dst, src; // read by the leases only
+            dst.clear(), src.clear();
             for (auto const& r : resources)
                 dst.push_back(r.dst), src.push_back(r.src);
             Leases leases;
@@ -567,7 +585,8 @@ private:
     {
         auto& l  = levels_[ln];
         auto& ld = models_.hybrid.levels[static_cast<int>(ln)];
-        std::vector<std::string> dst, src;
+        static thread_local std::vector<std::string> dst, src; // read by the leases only
+        dst.clear(), src.clear();
         for (auto const& r : copies.pairs)
             dst.push_back(r.dst), src.push_back(r.src);
         Leases leases;
@@ -719,7 +738,8 @@ private:
                                    bool const refine)
     {
         {
-            std::vector<std::string> fine, coarser;
+            static thread_local std::vector<std::string> fine, coarser, all; // read by add only
+            fine.clear(), coarser.clear();
             for (auto const& p : pairs)
             {
                 fine.push_back(p.fine);
@@ -727,7 +747,7 @@ private:
                 if (!p.coarse_new.empty())
                     coarser.push_back(p.coarse_new);
             }
-            auto all = fine;
+            all.assign(fine.begin(), fine.end());
             all.insert(all.end(), coarser.begin(), coarser.end());
             if (refine)
                 leases.add(fine_ld, fine, amr::Lease::fill);
@@ -761,16 +781,19 @@ private:
         using Access_t = level_access_t<FineLD, CoarseLD>;
         using Cached_t = std::optional<Access_t>;
         {
-            auto const key = LevelAccessKey{simulator::coupling::is_mhd_patch_v<F>,
-                                            simulator::coupling::is_mhd_patch_v<C>, pairs};
-            auto it        = level_access_cache_.find(key);
+            bool constexpr fine_mhd   = simulator::coupling::is_mhd_patch_v<F>;
+            bool constexpr coarse_mhd = simulator::coupling::is_mhd_patch_v<C>;
+            // looked up by reference: the pairs copied into a key once, when first resolved
+            auto it = level_access_cache_.find(
+                std::tuple<bool, bool, std::vector<damn::amr::LevelPair> const&>{
+                    fine_mhd, coarse_mhd, pairs});
             if (it == level_access_cache_.end())
             {
                 if (damn::amr::size(fine) == 0 or damn::amr::size(coarse) == 0)
                     return static_cast<Access_t const*>(nullptr);
                 it = level_access_cache_
                          .emplace(
-                             key,
+                             LevelAccessKey{fine_mhd, coarse_mhd, pairs},
                              amr::level_field_access<C::field_ghost_width, F::field_ghost_width>(
                                  *coarse.data[0], *fine.data[0], pairs))
                          .first;
@@ -780,7 +803,7 @@ private:
         }
     }
     using LevelAccessKey = std::tuple<bool, bool, std::vector<damn::amr::LevelPair>>;
-    std::map<LevelAccessKey, std::any> level_access_cache_; // level_access_'s
+    std::map<LevelAccessKey, std::any, std::less<>> level_access_cache_; // level_access_'s
 
     // from level ln onto level ln - 1
     void coarsen_(std::size_t const ln, auto const& op,

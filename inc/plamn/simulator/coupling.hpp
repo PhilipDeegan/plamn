@@ -83,11 +83,15 @@ inline std::string scratch_name(std::string const& prim)
     return "mhd_" + prim;
 }
 
-inline std::vector<damn::amr::LevelPair> prim_pairs()
+inline std::vector<damn::amr::LevelPair> const& prim_pairs()
 {
-    std::vector<damn::amr::LevelPair> pairs;
-    for (auto const& n : prim_names)
-        pairs.push_back({n, scratch_name(n), ""});
+    static auto const pairs = [] { // refined every step: built once (read only after)
+        std::vector<damn::amr::LevelPair> out;
+        out.reserve(prim_names.size());
+        for (auto const& n : prim_names)
+            out.push_back({n, scratch_name(n), ""});
+        return out;
+    }();
     return pairs;
 }
 

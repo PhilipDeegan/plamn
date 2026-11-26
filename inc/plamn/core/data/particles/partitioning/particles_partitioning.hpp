@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <format>
 #include <vector>
+#include <span>
 
 namespace plamn::core
 {
@@ -82,12 +83,12 @@ std::size_t partition_particles_not_in(Particles_t& particles, std::vector<Box_t
     std::size_t n = 0; // boxes may overlap: an upper bound, deduplicated below
     for (auto const& box : boxes)
         n += nbr_particles_in(particles, box);
-    auto const buffer = damn::core::scratch<std::size_t, struct partition_not_in>(n);
-    std::size_t k     = 0;
+    damn::core::Scratch<std::size_t> buffer{n};
+    std::size_t k = 0;
     for (auto const& box : boxes)
         for_each_particle_in(particles, box, [&](std::size_t const i) { buffer[k++] = i; });
     std::sort(buffer.begin(), buffer.end());
-    auto const in = buffer.first(
+    auto const in = buffer.span().first(
         static_cast<std::size_t>(std::unique(buffer.begin(), buffer.end()) - buffer.begin()));
     auto pivot = particles.size();
     // the highest first: those after it in `in` are already past the pivot, so the particle it
