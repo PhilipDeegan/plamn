@@ -1,6 +1,4 @@
 #include "plamn/core/def.hpp"
-//  tests/core/numerics/ohm/test_tileset_ohm.cpp
-//
 // #define DAMN_UNDEF_ASSERT
 
 #include "damn/core/logger.hpp"    // scope timing

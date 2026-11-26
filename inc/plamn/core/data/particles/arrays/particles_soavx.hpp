@@ -144,7 +144,7 @@ struct SoAVXSpan
     {
     }
 
-    template<typename Particles, // SFINAE protection to only allow particle arrays
+    template<typename Particles,
              typename = std::enable_if_t<is_soavx(std::decay_t<Particles>::layout_mode)>>
     SoAVXSpan(Particles& array)
         requires(!std::is_same_v<std::decay_t<Particles>, SoAVXSpan>) // not copies
@@ -152,7 +152,7 @@ struct SoAVXSpan
     {
     }
 
-    template<typename Particles, // SFINAE protection to only allow particle arrays
+    template<typename Particles,
              typename = std::enable_if_t<is_soavx(std::decay_t<Particles>::layout_mode)>>
     SoAVXSpan(Particles&& array)
         requires(!std::is_same_v<std::decay_t<Particles>, SoAVXSpan>) // not copies
@@ -241,7 +241,6 @@ struct SoAVXVector
     template<auto type>
     void on_appended()
     {
-        // noop
     }
 
 
@@ -312,7 +311,7 @@ public:
     {
     }
 
-    SoAVXParticles(iterator start, iterator end); // impl @ bottom of this file
+    SoAVXParticles(iterator start, iterator end);
 
     SoAVXParticles(This const& that)  = default;
     SoAVXParticles(This&& that)       = default;
@@ -556,7 +555,6 @@ public:
         if (a == b)
             return;
 
-        // particle a with particle b, in every component container
         std::apply([&](auto&... v) { (std::swap(v[a], v[b]), ...); }, as_tuple());
     }
 
@@ -620,7 +618,6 @@ public:
         std::apply([&](auto&... v) { ((v[dst] = v[src]), ...); }, as_tuple());
     }
 
-    // particle src into the columns at dst
     void assign(Particle<dimension> const& src, std::size_t const& dst) DAMN_ALL
     {
         weight_[dst] = src.weight();
@@ -681,7 +678,7 @@ struct SoAVXParticles<OuterSuper>::iterator_impl
     auto static constexpr dimension = OuterSuper::dimension;
     // T is the array, or a pointer to it: const if what it points to is
     auto static constexpr is_const = std::is_const_v<std::remove_pointer_t<std::remove_reference_t<T>>>;
-    auto static constexpr is_soavx = true; // used for SFINAE
+    auto static constexpr is_soavx = true;
 
     using outer_type        = std::decay_t<T>;
     using difference_type   = std::size_t;
@@ -716,7 +713,7 @@ struct SoAVXParticles<OuterSuper>::iterator_impl
         ++curr_pos;
         return set();
     }
-    auto operator++(int) // postfix increment
+    auto operator++(int)
     {
         auto copy = *this;
         ++(*this);
@@ -813,7 +810,7 @@ SoAVXParticles<Super>::SoAVXParticles(SoAVXParticles<Super>::iterator start,
                                       SoAVXParticles<Super>::iterator end)
     : Super{std::distance(start, end)}
 {
-    std::copy(start, end, this->begin()); // impl above
+    std::copy(start, end, this->begin());
 }
 
 } // namespace plamn::core

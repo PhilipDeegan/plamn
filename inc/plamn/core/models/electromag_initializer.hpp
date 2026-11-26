@@ -1,9 +1,8 @@
 #ifndef PLAMN_CORE_MODELS_ELECTROMAG_INITIALIZER_HPP
 #define PLAMN_CORE_MODELS_ELECTROMAG_INITIALIZER_HPP
 
-// sets an Electromag from the user's input, simulation/electromag in the dict:
-//   ElectromagInitializer<dim>{dict}(em, layout);
-// B from the magnetic initializer functions; E is left to the model (Ohm's law)
+// sets an Electromag from the input's simulation/electromag: B from the magnetic initializer
+// functions; E is left to the model (Ohm's law)
 
 #include "plamn/core/data/vecfield/vecfield_initializer.hpp"
 #include "plamn/initializer/data_provider.hpp"

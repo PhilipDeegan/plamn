@@ -1,17 +1,8 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTICLE_COMPONENTS_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLE_COMPONENTS_HPP
 
-// components(particles): every particle component as a mkn::kul::StridedSpan over the array's
-// own memory, whatever the layout:
-//
-//   AoS, AoSMapped        a member of Particle            stride sizeof(Particle)
-//   SoA                   a component of a member's array stride sizeof(std::array<., n>)
-//   SoAVX, SoAVXChunked   a column                        contiguous
-//
-// what the DataWrangler hands python (live numpy views) and what restarts write and read in
-// place, so neither copies nor needs to know the layout. Components in file order: weight,
-// iCell_x.., delta_x.., v_x, v_y, v_z (for_each). Tiled layouts (one span per tile) and device
-// memory: not yet
+// every particle component as a strided span over the array's own memory, whatever the
+//  layout, no copies: doc/core/data/particles/particle_components.md
 
 #include "damn/core/def.hpp"
 #include "damn/core/def/damn_config.hpp"

@@ -18,8 +18,6 @@ struct AmpereBox // structural type — usable as NTTP
 
 
 // J = curl(B), one component at one point: curlc is that component of curl(layout, B)
-//  where and how it is evaluated (boxes, tiles, GPU) is up to the caller,
-//  see core/numerics/ampere/ampere_transformer.hpp
 struct Ampere
 {
     void operator()(auto const& ijk, auto& Jc, auto const& curlc) const DAMN_ALL

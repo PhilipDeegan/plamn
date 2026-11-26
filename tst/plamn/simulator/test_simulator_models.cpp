@@ -1,6 +1,4 @@
-// an MHD only build's simulator: one MHD level from the user's functions, advanced by the model's
-//  scheme over patches (ghosts: copies, then the physical boundaries); inputs giving levels to a
-//  model the build does not enable refused at setup
+// an MHD only build's simulator
 
 #include "plamn/core/def.hpp"
 

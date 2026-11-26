@@ -426,8 +426,8 @@ void ParticlesExporter<AoSTS, CPU>::delete_particles_not_in(Src& src, Boxes cons
             continue;
 
         if (auto const tile_gbox = damn::core::grow(*tile, ghost_nbr); tile_gbox * src.box() != tile_gbox)
-        {                                                           // only patch border tiles
-            auto const ranges = partition_particles(tile(), boxes); // what
+        { // only patch border tiles
+            auto const ranges = partition_particles(tile(), boxes);
             auto const resiz
                 = mkn::kul::math::sum_from(ranges, [](auto const& r) { return r.size(); });
 
@@ -643,9 +643,8 @@ void ParticlesExporter<AoSPCTS, CPU>::delete_particles_in(Src& src, Boxes const&
 }
 
 
-// AoSPCTS domain <-> patch-ghost/level-ghost particle exchange: per-cell aware, mirrors
-// delete_particles_not_in<AoSPCTS, CPU> traversal. `dst.push_back()` resolves the
-// receiving tile+cell from the particle's own iCell(), so src/dst tiles need not align.
+// AoSPCTS domain <-> ghost exchange: dst.push_back() finds the receiving tile and cell from the
+//  particle's iCell(), src and dst tiles need not align
 template<>
 template<typename Dst, typename Src, std::size_t dim>
 void ParticlesExporter<AoSPCTS, CPU>::move_in_domain(Dst& dst, Src& src,

@@ -1,20 +1,8 @@
 #ifndef PLAMN_SOLVER_HYBRID_ADVANCE_HPP
 #define PLAMN_SOLVER_HYBRID_ADVANCE_HPP
 
-// a level of the hybrid model over a step (PHARE's SolverPPC): predictor 1, average, the ions
-//  moved (domain only), predictor 2, average, the ions moved (all), corrector. And the steps the
-//  simulator also uses to initialize and regrid a level: the moments, the ion border sums, Ampere
-//  and Ohm
-//
-// level: the simulator's services for one level (Simulator::LevelServices)
-//   number()                             the level number
-//   data()                               its patch data (LevelData of HybridPatch)
-//   per_patch_threaded(fn)               fn(patch) for every local patch, on the pool's
-//                                        threads (fn: its patch only, never python)
-//   copy(how, key)                       damn's copy of a resource key between its patches
-//   fill_magnetic_ghosts(key, t),        patch ghosts, then level ghosts from the coarser level
-//   fill_electric_ghosts(key, t)          at t
-//   alpha(t)                             t within the coarser level's step, in [0, 1]
+// a hybrid level's step (PHARE's SolverPPC), and the steps that initialize and regrid a level
+//  reuses: doc/solver/hybrid/advance.md
 
 #include "plamn/core/data/field/level_fields.hpp"
 #include "damn/amr/copy.hpp"
@@ -46,12 +34,10 @@
 
 namespace plamn::solver::hybrid
 {
-// the ions' totals from the populations' (complete) moments
 namespace detail
 {
-    // the ions' totals from their populations' moments (Ions::update's sums, in its order): on
-    //  unified memory a few kernels for the whole level (zero, then each population, then the
-    //  velocity's division) instead of host loops per patch
+    // Ions::update's sums, in its order: a few kernels for the whole level instead of host loops
+    //  per patch
     template<auto opts>
         requires(opts.alloc_mode == damn::AllocatorMode::GPU_UNIFIED
                  and !core::is_tiled(opts.layout_mode))
@@ -260,10 +246,9 @@ void ampere_ohm(HybridModel<opts> const& model, auto&& level, ClosureStage const
 
 namespace plamn::solver::hybrid::detail
 {
-// the level border's moments: the level ghost particles split from the coarser level
-// at both ends of its step, weighted linearly in time (PHARE's fillIonPopMomentGhosts),
-// before the border sums complete every patch's copy: each is held by one patch,
-// deposited once (as PHARE: each level ghost deposited once)
+// the level ghost particles split from the coarser level at both ends of its step, weighted
+// linearly in time (PHARE's fillIonPopMomentGhosts): each held by one patch, deposited once,
+// before the border sums complete every patch's copy
 template<auto opts>
 void deposit_level_ghosts(auto& level, double const t)
 {
@@ -388,10 +373,8 @@ void move_ions(HybridModel<opts>& model, auto& level, double const t, double con
     }
     if (mode != core::UpdaterMode::domain_only)
     {
-        // as PHARE's deposit after the exchange (and the level initialization): the
-        //  particles that left their patch go to the patch owning their cell first, then
-        //  each patch deposits its domain particles, every particle once (the
-        //  domain_only predictor deposits its pushed copies in the updater)
+        // every particle deposited once, by the patch owning its cell (the domain_only
+        //  predictor deposits its pushed copies in the updater)
         {
             DAMN_LOG_SCOPE(2, "Simulator::move_ions::gather_leaving");
             level.copy(damn::amr::gather_leaving, model.particle_routes->gather_leaving);
@@ -400,8 +383,7 @@ void move_ions(HybridModel<opts>& model, auto& level, double const t, double con
         detail::deposit_domains<opts>(level);
     }
 
-    // as PHARE: each level ghost particle deposited once, by the patch holding it,
-    //  then the border sums: every patch's copy of a node the same
+    // then the border sums: every patch's copy of a node the same
     {
         DAMN_LOG_SCOPE(2, "Simulator::move_ions::deposit_level_ghosts");
         deposit_level_ghosts<opts>(level, t + dt);

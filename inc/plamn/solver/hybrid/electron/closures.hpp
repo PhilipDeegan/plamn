@@ -1,23 +1,8 @@
 #ifndef PLAMN_SOLVER_HYBRID_ELECTRON_CLOSURES_HPP
 #define PLAMN_SOLVER_HYBRID_ELECTRON_CLOSURES_HPP
 
-// the electron pressure closures (core/data/electrons/closures.hpp) on a whole level: an overload
-//  per closure, std::visit on the model's closure picks it (pressure_level)
-//
-//   pressure(closure, level, stage)   every patch's Pe from its Ne (after the electrons' Ve), at
-//                                     a stage of the step (ClosureStage)
-//   seed(closure, level, sim)         a new level's closure state from the input (t = 0)
-//
-// unified memory (untiled): one launch per operation for the level, else per patch on the pool
-//  (tiled: on untiled copies). polytropic: per stage, as PHARE's polytropic closure,
-//   first stage (and init): Se_old = Pe / Ne^gamma on the domain (Pe, Ne at t), its ghosts
-//     from the level's patches and, at its border, the coarser level's Se_old (t_n) and Se
-//     (t_n+1) interpolated at t
-//   every stage: Se from Se_old, n sub-steps of dt / n (n: the level's largest electron Courant
-//     number, rounded up, the same on every rank: the ghost fills between them are collective),
-//     upwind ds/dt + Ve.grad s = 0, Se's ghosts filled between them as Se_old's at their times;
-//     then Pe = Se Ne^gamma on the domain. A node with Ne <= 0 keeps its s and Pe
-//   last stage: Se's ghosts at t + dt (what the finer level's ghosts interpolate to)
+// the electron pressure closures on a whole level, an overload per closure:
+//  doc/solver/hybrid/electron/closures.md
 
 #include "plamn/amr/coarsen.hpp"
 #include "plamn/amr/refine.hpp"
@@ -366,11 +351,8 @@ void seed(core::hybrid::PolytropicClosure const& closure, auto& level, auto cons
     polytropic::pressure_from_state<opts>(closure, level);
 }
 
-// a level made or regridded at t (every level synchronized) from its coarser level, op: where
-//  (amr::FieldRefiner: everywhere, a Masked one: the new cells, the others moved from the old
-//  level): Se_old from the coarser level's Pe and Ne now, the level's own where it was (its Pe
-//  moved with it, its Ne deposited again), Pe from it (PHARE's regrid: the entropy refined, not
-//  the pressure)
+// a level made or regridded at t from its coarser level, op: where (FieldRefiner, or Masked: the
+//  new cells): the entropy refined, not the pressure (PHARE's regrid)
 template<auto opts>
 void refine_state(core::hybrid::IsothermalClosure const&, auto&, auto const&, double)
 { // no state
@@ -415,7 +397,6 @@ void synchronize(core::hybrid::PolytropicClosure const&, auto& level)
     level.coarsen(amr::MomentsCoarsener{}, {damn::amr::LevelPair{"Pe", "Pe", ""}});
 }
 
-// the model's closure's Pe on every patch of the level, at a stage of its step
 template<auto opts>
 void pressure_level(HybridModel<opts> const& model, auto& level, ClosureStage const& stage)
 {
@@ -431,7 +412,6 @@ void seed_level(HybridModel<opts> const& model, auto& level, auto const& sim)
                *model.electron_closure);
 }
 
-// a level made or regridded at t: its closure state from its coarser level (refine_state)
 template<auto opts>
 void refine_state_level(HybridModel<opts> const& model, auto& level, auto const& op, double const t)
 {
@@ -439,7 +419,6 @@ void refine_state_level(HybridModel<opts> const& model, auto& level, auto const&
                *model.electron_closure);
 }
 
-// a restart loaded: the closure's state from what was stored
 template<auto opts>
 void restart_loaded_level(HybridModel<opts> const& model, auto& level)
 {
@@ -447,7 +426,6 @@ void restart_loaded_level(HybridModel<opts> const& model, auto& level)
                *model.electron_closure);
 }
 
-// a synchronization of the level onto its coarser one: the closure's part
 template<auto opts>
 void synchronize_level(HybridModel<opts> const& model, auto& level)
 {

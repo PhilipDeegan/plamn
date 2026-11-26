@@ -1,6 +1,6 @@
 #include "plamn/core/def.hpp"
-// Dirichlet (field_boundary_condition.hpp): a scalar's ghosts past a boundary at value v, by
-//  linear (2 v - the interior value) or constant (v) extrapolation, in 1D, 2D and 3D
+// a scalar's ghosts past a boundary at value v, by linear (2 v - the interior value) or constant
+//  (v) extrapolation
 
 #include "plamn/core/boundary/boundary_defs.hpp"
 #include "plamn/core/numerics/boundary_condition/field_boundary_condition.hpp"

@@ -42,7 +42,6 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
-// plamn::Simulator: time refined advance, SolverPPC per level, synchronization and reflux
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
 namespace plamn

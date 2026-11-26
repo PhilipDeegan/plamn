@@ -9,8 +9,6 @@
 //  the star states from the HLL average, SL* = SR* = SM for the flux. The upwind constrained
 //  transport inputs (Mignone & Del Zanna 2021) from the speeds before that fallback; as HLL's
 //  where it applies.
-//
-// HLLDRiemann: its Riemann solver for GodunovFace (solve<dir>(gamma, uL, uR))
 
 #include "damn/core/def.hpp"
 #include "damn/core/def/damn_config.hpp"

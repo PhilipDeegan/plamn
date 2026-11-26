@@ -1,6 +1,4 @@
 #include "plamn/core/def.hpp"
-//  upwind constrained transport (UpwindCTTransformer): ideal Ohm's law E = -v x B on a uniform
-//  state, and tiled (per tile pool tasks, or one GPU launch) == untiled
 
 #include "damn/core/def/damn_config.hpp"
 #include "mkn/kul/for.hpp"

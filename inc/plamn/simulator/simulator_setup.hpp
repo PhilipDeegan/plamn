@@ -39,7 +39,6 @@
 #include <type_traits>
 #include <variant>
 #include <vector>
-// plamn::Simulator: the input: hierarchy, refinement, tagging, load balancing, resources
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
 namespace plamn

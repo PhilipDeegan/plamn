@@ -1,23 +1,8 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_AOS_TRANSPOSE_HPP
 #define PLAMN_CORE_DATA_PARTICLES_AOS_TRANSPOSE_HPP
 
-// 8 particle structures (Particle<dim>) to and from columns (weight, iCell, delta, v: SoAVX's), by
-//  an 8 x 8 transpose of doubles in AVX-512 registers: each particle one masked row load / store of
-//  its 64 bit words (weight, the cells packed two ints a word, delta, v), the words' columns one
-//  register each. 3D's ninth word (v_z) per particle. Without AVX-512: per particle and field.
-//
-//   to_columns<dim>(ps, n, cols)     particles [0, n) (n <= 8) into the columns' slots [0, n),
-//   slots
-//                                    [n, 8) weight 0 (cells, delta, v unset)
-//   from_columns<dim>(ps, n, cols)   the columns' slots [0, n) back into particles [0, n)
-//   to_columns_each, from_columns_each  the same per particle and field (no AVX-512 needed)
-//
-//  Measured (harris 2D, AoS4SoAVXChunked): the transpose wins writing back (the push's REF) and
-//  loading without cells (the deposit), the per particle copy wins loading a push's stage (its
-//  cell ints then read per lane by partial blocks: whole vector stores forwarded piecewise)
-//
-//  cols: the columns at the block's first slot (pointers), c may be null (no cells, the deposit's)
-//  PLAMN_AOS_TRANSPOSE_SCALAR: the per particle copy even with AVX-512 (to compare)
+// 8 particles to and from SoAVX columns, an 8 x 8 transpose in AVX-512 registers, else per
+//  particle and field: doc/core/data/particles/aos_transpose.md
 
 #include "plamn/core/data/particles/particle.hpp"
 

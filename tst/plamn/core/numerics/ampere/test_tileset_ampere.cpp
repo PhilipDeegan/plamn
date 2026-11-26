@@ -1,6 +1,4 @@
 #include "plamn/core/def.hpp"
-//  tests/core/numerics/ampere/test_tileset_ampere.cpp
-//
 //  requires
 //  - cmake:    -DwithPhlop
 //  - cxxflags: -DDAMN_LOG_LEVEL=1
@@ -292,7 +290,7 @@ TYPED_TEST(AmpereTileTest, device_ops)
                 for (std::size_t i = 0; i < a.size(); ++i)
                     a.data()[i] = (x0.data()[i] + x1.data()[i]) * .5;
             }
-        core::average(dev.em.E, dev.J, dev.em.B); // GPU_UNIFIED: device jobs, see algorithm.hpp
+        core::average(dev.em.E, dev.J, dev.em.B); // GPU_UNIFIED: device jobs
         expect_same_tiles(host.em.B, dev.em.B, "average");
     }
 }

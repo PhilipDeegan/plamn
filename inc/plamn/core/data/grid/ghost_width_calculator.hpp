@@ -6,9 +6,7 @@
 namespace plamn::core
 {
 
-// ============================================================================
-// Utility: Round up to nearest even number
-// ============================================================================
+// ghost widths of both models: doc/core/data/grid/ghost_width_calculator.md
 
 constexpr inline std::uint32_t roundUpToEven(std::uint32_t n)
 {
@@ -16,38 +14,20 @@ constexpr inline std::uint32_t roundUpToEven(std::uint32_t n)
 }
 
 
-// ============================================================================
-// Ghost Width Computation Functions
-// ============================================================================
-
-/**
- * @brief Most cells a domain particle may move in one advance (two half pushes): a CFL for
- * particles.
- *
- * A domain particle moving further throws (the cell jump limit); level ghost particles leaving the
- * particle ghost box are dropped. The particle and field ghost widths below follow from it.
- * PLAMN_PARTICLE_ALLOWED_CELL_JUMP=1: PHARE master's widths (fields 2, 4, 4 and particles 1, 2, 2
- * for interp 1, 2, 3), e.g. to compare with PHARE
- */
+// most cells a domain particle may move in one advance (two half pushes): a CFL for particles.
+//  1: PHARE master's widths, to compare with PHARE
 #ifndef PLAMN_PARTICLE_ALLOWED_CELL_JUMP
 #define PLAMN_PARTICLE_ALLOWED_CELL_JUMP 2
 #endif
 inline constexpr std::uint32_t particle_allowed_cell_jump = PLAMN_PARTICLE_ALLOWED_CELL_JUMP;
 
-/**
- * @brief How far past its cell's start a particle may be after a half push (|delta|) before the
- * Boris pusher throws: PHARE's 2 (core/numerics/pusher/boris.hpp), or the allowed cell jump if
- * larger. The same as the jump by default; a narrower jump (PHARE's ghost widths) keeps PHARE's
- * limit.
- */
+// |delta| past its cell's start after a half push before the Boris pusher throws: PHARE's 2, or
+//  the allowed cell jump if larger
 inline constexpr std::uint32_t particle_half_push_limit
     = particle_allowed_cell_jump > 2 ? particle_allowed_cell_jump : 2;
 
-/**
- * @brief Cells the interpolation stencil reaches outside a particle's cell, the worst of primal
- * and dual, either side: a particle in cell c touches nodes c - shift ... c - shift + order, with
- * shift from Interpolator::computeStartLeftShift.
- */
+// cells the interpolation stencil reaches outside a particle's cell, the worst of primal and
+//  dual, either side
 template<std::uint32_t interp_order>
 constexpr std::uint32_t stencilReach()
 {
@@ -55,10 +35,7 @@ constexpr std::uint32_t stencilReach()
     return interp_order == 3 ? 2 : 1;
 }
 
-/**
- * @brief Ghost cells level ghost particles must cover for their deposits to reach every domain
- * node of the level.
- */
+// ghost cells level ghost particles must cover for their deposits to reach every domain node
 template<std::uint32_t interp_order>
 constexpr std::uint32_t levelGhostParticleWidth()
 {
@@ -66,10 +43,7 @@ constexpr std::uint32_t levelGhostParticleWidth()
     return interp_order == 1 ? 1 : 2;
 }
 
-/**
- * @brief Particle ghost width: room for level ghost particles, and for domain particles that moved
- * out by up to the allowed cell jump.
- */
+// room for level ghost particles, and for domain particles that moved out by up to the jump
 template<std::uint32_t interp_order, std::uint32_t jump = particle_allowed_cell_jump>
 constexpr std::uint32_t particleGhostWidth()
 {
@@ -77,19 +51,7 @@ constexpr std::uint32_t particleGhostWidth()
     return jump > level_ghost ? jump : level_ghost;
 }
 
-/**
- * @brief Compute ghost width for Hybrid PIC model based on interpolation order.
- *
- * Ghost cells are needed for:
- * - Particle-mesh interpolation of particles in the particle ghost box: particleGhostWidth plus
- *   the stencil reach
- * - Rounded to even so the ghost box stays a whole-coarse-cell union (lower even / upper odd) at
- *   refinement ratio 2 — the invariant the magnetic touch-up's fill-box round-out clips
- *   against (see coarse_cell_round_out.hpp and
- *   MagneticRefinePatchStrategy::reconstructionRegion)
- *
- * With a jump of 1: 2, 4, 4 for interp orders 1, 2, 3, PHARE's widths. With 2: 4, 4, 4.
- */
+// even: the ghost box stays a union of whole coarse cells at ratio 2
 template<std::uint32_t interp_order, std::uint32_t jump = particle_allowed_cell_jump>
 constexpr std::uint32_t nbrGhostsFromInterpOrder()
 {
@@ -100,22 +62,7 @@ static_assert(nbrGhostsFromInterpOrder<1, 1>() == 2 and nbrGhostsFromInterpOrder
               and nbrGhostsFromInterpOrder<3, 1>() == 4); // PHARE's widths, jump 1
 
 
-/**
- * @brief Compute ghost width for MHD model based on reconstruction stencil.
- *
- * Ghost cells are needed for:
- * - Reconstruction stencil width
- * - One layer because ampere computes J on the ghost box shrinked by one, so J is only valid on
- *   ghost_width - 1 layers while the reconstruction reads it out to the stencil width
- * - Rounded to even so the ghost box stays a whole-coarse-cell union (lower even / upper odd) at
- *   refinement ratio 2 — the invariant the magnetic touch-up's fill-box round-out clips
- *   against (see coarse_cell_round_out.hpp and
- *   MagneticRefinePatchStrategy::reconstructionRegion)
- *
- * There is no hyper-resistivity layer: the dissipative electric field takes its Laplacian on J at
- * its native edge location, and the flux contributions project it to the face, so they stay within
- * the reconstruction reach. See DissipativeElectricField and Godunov::transverse_on_face_.
- */
+// + 1: Ampere's J is only valid on ghost_width - 1 layers; even, as nbrGhostsFromInterpOrder
 template<std::uint32_t reconstruction_nghosts>
 constexpr std::uint32_t nbrGhostsFromReconstruction()
 {

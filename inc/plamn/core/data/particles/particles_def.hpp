@@ -81,10 +81,8 @@ bool constexpr is_chunked(LayoutMode lm)
     return mkn::kul::any_in(lm, SoAVXChunked, AoS4SoAVXChunked);
 }
 
-// guards a forwarding constructor `template<typename... Args> This(Args&&...)` so that a
-// single self-type argument (e.g. a non-const `This&`) is excluded and falls through to the
-// real copy/move constructor instead - otherwise the forwarding ctor is an exact match that
-// beats the copy ctor's `This const&` in overload resolution.
+// for a forwarding constructor: a self-type first argument (e.g. a non-const This&) excluded,
+//  else it is an exact match beating the copy constructor's This const&
 template<typename This, typename Super, typename... Args>
 bool consteval self_excluding_constructible()
 {

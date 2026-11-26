@@ -19,13 +19,9 @@
 #include <type_traits>
 #endif
 
-// m2p at interpolation order 1 for the particles of one cell, on lanes: the E and B values
-//  every particle of the cell can need (per direction, a primal component's nodes cell and
-//  cell + 1, a dual's cell - 1 to cell + 1: the stencils' union) loaded once per cell, then per
-//  lane the weights of Interpolator's Weighter<1> and computeStartLeftShift, as dense rows over
-//  the union (a dual direction's unused node weighted 0, first or last in its sum: the sums are
-//  Interpolator::m2p's), summed as MeshToParticle<dim>::op: x outer, the last direction inner
-//  A lane's particle must be in the cell (its delta in [0, 1) of it)
+// m2p at interpolation order 1 for the particles of one cell, on lanes, the sums
+//  Interpolator::m2p's: doc/core/numerics/interpolator/cell_gather.md
+// a lane's particle must be in the cell (its delta in [0, 1) of it)
 namespace plamn::core
 {
 
@@ -250,11 +246,10 @@ private:
     }
 };
 
-// the deposit of a cell's particles at interpolation order 1, on lanes: per node of the cell's
-//  primal stencil (the cell and + 1 per direction) density and flux accumulate on lanes, summed
-//  over the lanes and added to the moments once (flush). The weights from the deltas alone,
-//  as Interpolator::particleToMesh (Weighter<1>, primal), its products in its
-//  order (weight, x, y, z); the sums per node differ from its particle by particle order
+// the deposit of a cell's particles at interpolation order 1, on lanes, added to the moments
+//  once (flush): doc/core/numerics/interpolator/cell_gather.md
+// Interpolator::particleToMesh's products in its order; the sums per node differ from its
+//  particle by particle order
 template<std::size_t dim, std::size_t L>
 struct CellDepositV
 {

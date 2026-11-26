@@ -1,15 +1,10 @@
 #ifndef PLAMN_CORE_DATA_FIELD_LEVEL_FIELDS_HPP
 #define PLAMN_CORE_DATA_FIELD_LEVEL_FIELDS_HPP
 
-// a level's fields as one: the contiguous buffers (for_each_buffer: a tiled field's tiles, an
-//  untiled one's data) of the quantities chosen on every patch, an operation on all of them at
-//  once. Unified memory: one kernel over the concatenated buffers (up to 128 a launch, their
-//  prefix offsets passed by value: no padding, no host access to the values, no allocation);
-//  host memory: per buffer.
-//
-//   level_of<alloc_mode>(level, quantities).zero()
-//     quantities(patch, fields): fields.add(f) for each field f (or tensor field) of the patch,
-//     e.g. domain_moments: every population's density and flux
+// a level's fields as one: the contiguous buffers of the quantities chosen on every patch, an
+//  operation on all of them at once. Unified memory: one kernel over the concatenated buffers
+//  (up to 128 a launch, their prefix offsets passed by value: no padding, no host access to the
+//  values, no allocation); host memory: per buffer.
 
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/exec/kernels.hpp"
@@ -184,8 +179,8 @@ MKN_KUL_FN_SIG_RET auto level_of(auto&& level, auto&& quantities)
     return fields;
 }
 
-// dst's fields = src's, over a level (dst, src: quantities as level_of's, the same fields in the
-//  same order): one launch per 128 buffers on unified memory, no host loop over it
+// dst, src: the same fields in the same order: one launch per 128 buffers on unified memory, no
+//  host loop over it
 template<auto alloc_mode>
 void level_copy(auto&& level, auto&& dst, auto&& src)
 {

@@ -1,28 +1,7 @@
 #ifndef PLAMN_AMR_TAGGING_HPP
 #define PLAMN_AMR_TAGGING_HPP
 
-// the cells of a level to refine, from its fields, after PHARE's tagging:
-//
-//   a quantity (B, or one component of it) is read at cell centres (cell_centred: each primal
-//   direction averaged over the cell's two nodes), a criterion gives one indicator per cell
-//   from the quantity's components around it, and a cell is tagged if any quantity's indicator
-//   is above that quantity's threshold
-//
-//   criteria (indicator(components, cells, cell, dx), reach: cells read either side):
-//     DefaultCriterion:  PHARE's default.
-//                        1D: per component, |avg(c-1..c+3) - avg(c-2..c+2)| / (1 +
-//                        |avg(c-2..c+2)|), the L2 norm over the components (reach 3) 2D/3D: the max
-//                        over components and directions of |F(c+2e) - F(c)| / (1 + |F(c+e) - F(c)|)
-//                        (reach 2)
-//     LohnerCriterion:   Lohner's estimator as PLUTO's (Mignone et al. 2012, eq. 50-51), a
-//                        vector as a whole (norms of the components): along each direction,
-//                        n = |a+ - 2 a0 + a-|, D = |a+ - a0| + |a0 - a-|
-//                        + reltol (|a-| + 2 |a0| + |a+|) + abstol, the indicator
-//                        sqrt(sum n^2 / sum D^2) (reach 1)
-//
-//   tagging_from(dict, method_key): the input's simulation/AMR/refinement/tagging: a model's
-//   method (hybrid_method, mhd_method) "default" or "lohner-per-direction", Q<i>/name and
-//   Q<i>/threshold (or B at threshold), params/reltol and params/abstol
+// the cells of a level to refine, from its fields, after PHARE's tagging: doc/amr/tagging.md
 
 #include "damn/core/geometry/box_spans.hpp"
 

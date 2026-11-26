@@ -1,6 +1,6 @@
 #include "plamn/core/def.hpp"
-// Symmetric (field_boundary_condition.hpp): a scalar's is Neumann; a vector's normal component is
-//  Dirichlet 0 (its boundary nodes 0, its ghosts minus their mirrors), its tangential ones Neumann
+// a scalar's is Neumann; a vector's normal component is Dirichlet 0 (its boundary nodes 0, its
+//  ghosts minus their mirrors), its tangential ones Neumann
 
 #include "plamn/core/boundary/boundary_defs.hpp"
 #include "plamn/core/numerics/boundary_condition/field_boundary_condition.hpp"

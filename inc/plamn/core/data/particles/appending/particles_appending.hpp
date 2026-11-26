@@ -22,10 +22,8 @@ template<auto src_layout_mde, auto src_alloc_mde, auto dst_layout_mde, auto dst_
 struct ParticlesAppender;
 
 
-// Deals with one box at a time - no ParticleType, no domain/ghost distinction, so callers
-// passing overlapping boxes across multiple calls will over-reserve the overlap. Resolves
-// cells through the container's own local_cell/local_tile_cell (not a box*tile guess), so
-// ghost-layer cells clamp-owned by a border tile (see TileSet::tag_cells_) land correctly.
+// one box at a time, no domain / ghost distinction: overlapping boxes over several calls
+//  over-reserve the overlap
 template<typename Dst, typename Box_t>
 void reserve(Dst& dst, Box_t const& box, std::size_t const& ppc)
 {
@@ -33,15 +31,13 @@ void reserve(Dst& dst, Box_t const& box, std::size_t const& ppc)
 
     if constexpr (Dst::layout_mode == AoSPC)
     {
-        // PerCellVector exposes indexed per-cell access directly, ghost cells included
-        // (its NdArray spans the whole ghost_box, no tiling to worry about).
+        // its cells span the whole ghost box
         for_each_point(box, [&](auto const& bix) { dst(dst.local_cell(*bix)).reserve(ppc); });
     }
     else if constexpr (Dst::layout_mode == AoSPCTS)
     {
-        // tiles are per-cell (PerCellVector) here, not flat - no tile-level reserve exists,
-        // reserve each cell in the overlap directly instead. Approximate: box*tile misses
-        // ghost cells clamp-owned outside a tile's own box, but reserve is just a hint.
+        // per cell tiles, no tile reserve. box * tile misses the clamp-owned ghost cells
+        //  outside a tile's box: reserve is a hint
         for (auto& tile : dst())
             if (auto const overlap = box * tile)
                 damn::core::for_each_point(tile().local_box(*overlap),
@@ -49,8 +45,7 @@ void reserve(Dst& dst, Box_t const& box, std::size_t const& ppc)
     }
     else if constexpr (Dst::layout_mode == AoSTS or Dst::layout_mode == AoSCMTS)
     {
-        // one flat vector per tile. Approximate: box*tile misses ghost cells clamp-owned
-        // outside a tile's own box, but reserve is just a hint
+        // box * tile misses the clamp-owned ghost cells outside a tile's box: reserve is a hint
         for (auto& tile : dst())
             if (auto const overlap = box * tile)
                 tile().reserve(tile().size() + ppc * overlap->size());
@@ -62,11 +57,9 @@ void reserve(Dst& dst, Box_t const& box, std::size_t const& ppc)
 }
 
 
-// reserves box, then for every cell in box emplaces ppc particles built by fn(icell, id) -
-// id is a running counter across the whole box, not reset per cell. emplace_back already
-// resolves the owning cell/tile per particle (including clamp-owned ghost cells for tiled
-// layouts, via the same particles_.at() lookup the span side uses) - no faster path exists
-// on the vector side for tiled layouts, which expose that lookup only through their span.
+// ppc particles per cell of box from fn(icell, id), id counting over the whole box (not per
+//  cell). emplace_back finds each particle's tile (clamp-owned ghost cells too): tiled vectors
+//  have no faster path, the lookup is their span's
 template<auto type, typename Dst, typename Box_t>
 void add_particles(Dst& dst, Box_t const& box, std::size_t const& ppc, auto&& fn)
 {

@@ -1,8 +1,4 @@
-// plamn's tagging criteria on one 2D patch of each Yee centering's B component:
-//   cell_centred averages the primal directions over the cell's nodes
-//   DefaultCriterion and LohnerCriterion are 0 on a constant, tag a step and nothing far from it
-//   LohnerCriterion: 0 on a ramp, 1 / (1 + reltol) at most; a vector as a whole
-//   tagged_cells: the union over quantities, each at its own threshold
+// one 2D patch of each Yee centering's B component
 
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/box_spans.hpp"

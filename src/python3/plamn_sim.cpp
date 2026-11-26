@@ -1,13 +1,5 @@
-// plamn_cpp_<id>: one simulator build permutation, as pyphare's cpp_<id> modules
-//
-//   make_simulator(dict) -> Simulator, dict: the plamn_etc.Dict pyphare filled, handed over
-//   by pyphare as the "hierarchy" (plamn.etc.make_hierarchy returns it)
-//
-// the permutation comes from PLAMN_SIM_DIM, PLAMN_SIM_INTERP, PLAMN_SIM_REFINED,
-// PLAMN_SIM_LAYOUT and PLAMN_SIM_ALLOCATOR (defaults 1, 1, pyphare's default refined particle
-// number, AoSMapped, CPU), and for MHD PLAMN_SIM_RECONSTRUCTION, PLAMN_SIM_LIMITER,
-// PLAMN_SIM_RIEMANN (default MHDOff: no MHD; interp 0: no hybrid), set by ./mkn.py, which also
-// names the module. A model's bindings only where the build enables it
+// plamn_cpp_<id>: one simulator build permutation, as pyphare's cpp_<id> modules, from the
+//  PLAMN_SIM_* definitions ./mkn.py sets: doc/src/python3/plamn_sim.md
 
 #include "plamn/simulator/simulator.hpp"
 

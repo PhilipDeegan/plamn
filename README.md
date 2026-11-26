@@ -7,3 +7,5 @@ damn is found at `tpp/damn`, cloned by mkn by default; for local development it 
 ```sh
 mkn clean build test -p test_plamn_core -dKO -t 8 -x res/mkn/thrust
 ```
+
+[doc/overview.md](doc/overview.md) maps the code; [CONVENTIONS.md](CONVENTIONS.md) is how it is written.

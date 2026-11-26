@@ -1,6 +1,5 @@
 #include "plamn/core/def.hpp"
-//  MHD time integrators (Euler, TVDRK2, TVDRK3, SSPRK4_5) on one periodic patch, 1D 2D 3D:
-//  a uniform state stays uniform; mass, momentum, energy are conserved; div B stays ~0
+// one periodic patch, 1D 2D 3D
 
 #include "mkn/kul/for.hpp"
 #include "mkn/kul/env.hpp"

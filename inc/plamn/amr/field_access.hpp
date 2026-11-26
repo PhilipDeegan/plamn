@@ -1,21 +1,9 @@
 #ifndef PLAMN_AMR_FIELD_ACCESS_HPP
 #define PLAMN_AMR_FIELD_ACCESS_HPP
 
-// damn's copies reach a patch's fields through accessors (damn/amr/copy.hpp), not by their names:
-//  no name is built or compared per patch and piece
-//
-//   grid_table(patch)          its fixed grids' addresses, in for_each_fixed_field_grid's order,
-//                              made on first use (the grids never move: patches are not movable,
-//                              populations are held by unique_ptr)
-//   FieldAccess<gw>            a resource pair's source and destination, each a grid table
-//                              index, or a scratch grid's name (scratch grids come and go, so
-//                              they are not in the table)
-//   field_access<gw>(patch, pairs)  the pairs' accessors, the indices from one patch's
-//                              enumeration: every patch of a model has the same table
-//   level_field_access<cgw, fgw>(coarse_patch, fine_patch, pairs)
-//                              refine / coarsen's: coarse, coarse_new and fine sides, each in
-//                              its level's (model's) table; none if a name is no field of its
-//                              patch (particles: by name)
+// damn's copies reach a patch's fields through accessors, not by name: no name built or
+//  compared per patch and piece: doc/amr/field_access.md
+// the grids' addresses are kept: patches are not movable, populations held by unique_ptr
 
 #include "damn/amr/level_map.hpp"
 #include "damn/amr/neighbours.hpp"

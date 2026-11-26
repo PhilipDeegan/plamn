@@ -5,8 +5,6 @@
 //  same results), ideal MHD (Hall: not yet): the outermost wave speeds SL, SR (the fast
 //  magnetosonic one either side), the flux of the state between them; the upwind constrained
 //  transport inputs from the speeds clipped at 0 (Mignone & Del Zanna 2021, eqs 14, 32)
-//
-// the Riemann solvers for GodunovFace: RusanovRiemann, HLLRiemann (solve<dir>(gamma, uL, uR))
 
 #include "damn/core/def.hpp"
 #include "plamn/core/numerics/godunov/mhd_equations.hpp"

@@ -1,7 +1,7 @@
 """etc/bench/amr/model_hybrid.py against its references (etc/bench/amr/ref/<case>.json and .npz):
 the decomposition emulation's partitions (levels, finest + spill, processes and threads, the chop
-under finer levels) as the python first wrote them, kept so the same steps moved into damn give
-the same owners and numbers, or show where and why they differ.
+under finer levels), kept so the same steps in damn give the same owners and numbers, or show
+where and why they differ.
 
 Both backends (--backend python: the partitions in model_hybrid.py; cpp: damn::amr::decompose
 through plamn_etc, the simulator's code) against the same references. Owners compare exactly (a

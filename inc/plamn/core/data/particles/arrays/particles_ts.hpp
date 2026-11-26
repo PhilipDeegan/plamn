@@ -325,9 +325,8 @@ public:
     }
 
 
-    // not = default: the defaulted memberwise copy/move leaves particles_views_
-    // stale (it isn't rebuilt the way on_appended()/reset_views() does at the end of the
-    // copy/move constructors), so reconstruct in place via those constructors instead
+    // not = default: a memberwise copy leaves particles_views_ stale, reconstructed in place
+    //  by the constructors (on_appended())
     TileSetVector& operator=(TileSetVector&& that)
     {
         if (this == &that)
@@ -437,18 +436,16 @@ public:
         return lobox_t{local_cell(from.lower), local_cell(from.upper)};
     }
 
-    // refreshes recount/gap-sizing/views after particles were added without going through
-    // move_check (a raw append) - see on_moved() for the post-move_check pipeline.
+    // recount, gap sizing, views: after a raw append, or the end of on_moved()
     template<auto type = ParticleType::Domain>
     void on_appended();
 
-    // applies move_check-registered moves: realloc/resize, span-side cross-tile copy, then
-    // on_appended() to finalize.
+    // applies move_check's registered moves: realloc, the span's cross-tile copy, on_appended()
     template<auto type>
     void on_moved(auto&&... args);
 
     template<auto type>
-    void sync_moved(); // realloc ahead of the span-side copy (see sync_check_realloc)
+    void sync_moved(); // realloc ahead of the span's copy
 
     // GPU_UNIFIED, one block per listed tile: removes the particles pred(particle) selects.
     //  pred runs on the device
@@ -476,9 +473,8 @@ public:
         for (auto& tile : particles_views_)
             tile().clear();
 
-        // cell_size_ here is cached per-tile (set in on_appended()), not read back from
-        // each tile's own size() - reset it and the rest of the move_check bookkeeping
-        // the same way the constructor does, or size(icell) stays stale after clear().
+        // cell_size_ is cached per tile (on_appended()), not the tile's own size(): stale,
+        //  size(icell) would be wrong after clear()
         cell_size_.zero();
         gap_idx_.zero();
         add_into_.zero();
@@ -606,10 +602,10 @@ template<typename Particles>
 template<auto type>
 void TileSetVector<Particles>::on_moved(auto&&... args)
 {
-    sync_moved<type>();                                       // realloc + resize
-    TileSetSpan<PSpan_t>{*this}.template sync<type>(args...); // cross-tile copy
+    sync_moved<type>();
+    TileSetSpan<PSpan_t>{*this}.template sync<type>(args...);
 
-    on_appended<type>(); // finalize: recount, size gaps, reset views
+    on_appended<type>();
 }
 
 template<typename Particles>

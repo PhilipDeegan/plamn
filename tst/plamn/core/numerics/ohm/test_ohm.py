@@ -1,7 +1,4 @@
-# the goal of this scrip is to generate a file for the faraday unit test
-# the file will contain expected values for the unit testself.
-
-# the code consists in calculating the curl of a function numerically
+# expected values for the ohm unit test, from analytical profiles
 
 import os
 import sys
@@ -13,11 +10,7 @@ from pyphare.core import gridlayout
 
 class TestVariables:
     def __init__(self):
-        """This class only has a constructor
-        in order to set the variables to test the derivatives
-        all quantities are 3D
-
-        """
+        """all quantities are 3D"""
 
         self.nbrCells = (50, 40, 30)
         self.meshSize = (0.1, 0.2, 0.3)

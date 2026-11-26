@@ -4,10 +4,7 @@
 // a hybrid level's data at its creation (PHARE's HybridLevelInitializer): the root level from the
 //  user's functions, a refined level from its coarser level (B divergence free, E, the particles
 //  split), and their moments; a level moved to other ranks (rebalance) keeps its moments
-//
-// level: the simulator's services for one level (solver/hybrid/advance.hpp, level_steps.hpp), and
-//   check_set(key, where)                debug: throws if a ghost of key was not filled
-//   mesh_size()                          the level's
+// level: the simulator's services for one level: doc/solver/hybrid/level_steps.md
 
 #include "plamn/amr/untiled.hpp"
 #include "damn/amr/copy.hpp"

@@ -1,27 +1,8 @@
 #ifndef PLAMN_SIMULATOR_SIMULATOR_SUMS_HPP
 #define PLAMN_SIMULATOR_SIMULATOR_SUMS_HPP
 
-// heavy debugging, compiled only with -DDAMN_SUPER_DEBUG (the calls are in DAMN_SUPER_DEBUG_DO):
-//
-//   sums_(ln, stage, t)      per level and stage, every resource of the level's model summed:
-//                            fields over the level's nodes once each ("dom": the patch owning a
-//                            node, its cells' range plus the level's last node row) and over
-//                            the level ghost nodes once each ("gh": the first patch in box order
-//                            holding it), whatever the patches; particle arrays as counts. One
-//                            line each:  SUMS L<ln> t=<t> <stage> <name> dom <sum> gh <sum>
-//                            The hybrid model's PHARE names (Bx, PredBx, AvgEx, rhoC, ...) as
-//                            the PHARE debug branch's SolverPPC::debug_sums_ prints them, so the
-//                            two runs' lines diff. Bit equal only on one rank (sums in node
-//                            order); with more, each rank prints its own (R<rank>).
-//   debug_regrid_(ln, t)     PLAMN_DEBUG_REGRID_TIMES="t0,t1,...": the finest level, just
-//                            synchronized at one of those times, regridded onto its own boxes
-//                            (as SAMRAI does with refinement boxes): to isolate regrid bugs
-//   rebalance_state_(), check_rebalance_(before, t)
-//                            a rebalance moves data: every level's E, B and moments on its
-//                            domain nodes, and its domain and old level ghost particles (count,
-//                            sums of weights, velocities, positions: order independent, every
-//                            rank's) the same after it as before; the moments, deposited again,
-//                            and the sums to round off. Throws naming what changed
+// plamn::Simulator: heavy debugging, -DDAMN_SUPER_DEBUG only: per stage sums that diff against
+// PHARE's debug branch, forced regrids, rebalance checks: doc/simulator/simulator_sums.md
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
 #include "damn/core/def.hpp"

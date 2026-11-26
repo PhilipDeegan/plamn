@@ -86,13 +86,11 @@ public:
     auto& operator()(locell_t const& cell) DAMN_ALL { return particles_(cell); }
     auto& operator()(locell_t const& cell) const DAMN_ALL { return particles_(cell); }
 
-    // CPU: walks every cell on the host; GPU_UNIFIED: one kernel thread per cell, on the
-    // given stream if one is passed
+    // CPU: every cell on the host; GPU_UNIFIED: a kernel thread per cell, on args' stream
     template<std::uint8_t PHASE = 0, auto type = ParticleType::Domain, typename... Args>
     void sync(Args&&... args);
 
-    // per-thread entry points for the GPU kernels launched by sync() - cell from
-    // damn::kernel::idx()
+    // sync()'s kernels, the cell from damn::kernel::idx()
     template<std::uint8_t PHASE = 0, auto type = ParticleType::Domain>
     void sync_add_new() DAMN_ALL;
 
@@ -105,14 +103,13 @@ public:
     template<std::uint8_t PHASE = 0, auto type = ParticleType::Domain>
     void sync_rm_left(locell_t const& bix) DAMN_ALL;
 
-    // as above, but also removes an externally registered, ascending-sorted list of
-    // leavers in the same descending swap-pop — two separate passes would move particles
-    // the other list still indexes
+    // also removes x_gaps (ascending) in the same descending swap-pop: two separate passes
+    //  would move particles the other list still indexes
     template<std::uint8_t PHASE = 0, auto type = ParticleType::Domain>
     void sync_rm_left(locell_t const& bix, std::size_t const* x_gaps, SIZE_T& x_size,
                       SIZE_T& x_left) DAMN_ALL;
 
-    // append src[idx] into cell bix if capacity allows — false when the cell is full
+    // false: the cell is full
     bool append_from(locell_t const& bix, auto const& src, std::size_t const idx) DAMN_ALL;
 
     void static sort(auto from, auto to) DAMN_ALL { damn::core::seq_sort(from, to); }
@@ -284,30 +281,27 @@ public:
     auto& operator()(locell_t const& cell) const { return particles_(cell); }
     auto& operator()(std::uint32_t const& cell) const { return particles_.data() + cell; }
 
-    // refreshes recount/gap-sizing/views after particles were added without going through
-    // move_check (a raw append) - see on_moved() for the post-move_check pipeline.
+    // recount, gap sizing, views: after a raw append, or the end of on_moved()
     template<auto type = ParticleType::Domain>
     void on_appended();
 
-    // applies move_check-registered moves: realloc/resize, append movers, compact leavers,
-    // then on_appended() to finalize.
+    // applies move_check's registered moves: doc/core/data/particles/arrays/particles_pc.md
     template<auto type>
     void on_moved();
 
     template<auto type>
-    void sync_moved(); // realloc for particles registered as incoming via add_into_
+    void sync_moved();
 
-    // realloc + resize one cell ahead of span-side copies; in/out are externally
-    // registered arrivals/departures on top of this cell's own counters; records the
-    // pre-move size so freshly reset views start the copy step from it
+    // in / out: arrivals / departures registered outside this cell's counters (cross-tile).
+    //  Records the pre-move size: freshly reset views start the copy step from it
     template<auto type>
     void sync_moved(locell_t const& bix, std::size_t const in, std::size_t const out);
 
     template<auto type>
-    void sync_add_new(); // append registered movers into their new cells
+    void sync_add_new();
 
     template<auto type>
-    void sync_rm_left(); // swap-delete registered leavers, reset gap/add counters
+    void sync_rm_left();
 
     void clear();
 
@@ -422,25 +416,18 @@ void PerCellVector<Particles>::sync_moved(locell_t const& bix, std::size_t const
     reserve(real, old_size + nu); // copies transiently exceed the final size before rm
     resize(real, old_size + nu - (gap_idx_(bix) + out));
     cap_(bix) = real.capacity();
-    // add_into_(bix) is deliberately left as-is here (not zeroed): sync_add_new still
-    // needs it as the precise "is an arrival actually expected at this cell" signal
-    // (move_check only increments it when it intends the particle to land here — a
-    // departure handed off to another tile is counted at that tile instead) — a plain
-    // isIn(ghost_box()) re-check can't tell "stays local" from "crossed into a sibling
-    // tile's own domain that happens to overlap this tile's ghost reach" apart, since
-    // both are geometrically within ghost_box(). sync_rm_left resets it to 0 once consumed.
+    // add_into_(bix) not zeroed: sync_add_new's signal that an arrival is expected here,
+    //  geometry can't tell (doc/core/data/particles/arrays/particles_pc.md)
 }
 
 
-// add incoming particles - move_check only registered the move, the particle's own
-// iCell() was already updated by the caller before registering, so it tells us where
-// each registered departure from this cell should actually land
+// a registered departure's own iCell() is already its new cell
 template<typename Particles>
 template<auto type>
 void PerCellVector<Particles>::sync_add_new()
 {
-    // arrivals are assigned into the slots opened by sync_moved's resize, cursored by
-    // left_ — never emplaced, so per-cell sizes stay stable for the rm pass
+    // assigned into the slots sync_moved's resize opened, never emplaced: per cell sizes stay
+    //  stable for the rm pass
     damn::core::for_each_point(local_box(), [&](auto const& bix) {
         auto& real            = particles_(bix);
         auto const& gaps      = gaps_(bix);
@@ -450,15 +437,14 @@ void PerCellVector<Particles>::sync_add_new()
             auto const& idx   = gaps[gidx];
             auto const& icell = real.iCell(idx);
             if (not isIn(icell, ghost_box()))
-                continue; // ghost-box leaver (level ghost): no destination bucket,
-                          // the rm pass deletes it from its old cell
+                continue; // left the ghost box (level ghost): the rm pass deletes it
             auto const newcell = local_cell(icell);
             particles_(newcell).assign(real, idx, cell_size_(newcell) + left_(newcell)++);
         }
     });
 }
 
-// delete outgoing particles from their old cell (descending order keeps indices valid)
+// descending order keeps the indexes still to remove valid
 template<typename Particles>
 template<auto type>
 void PerCellVector<Particles>::sync_rm_left()
@@ -524,9 +510,8 @@ void PerCellVector<Particles>::clear()
     damn::core::for_each_point(local_box(), [&](auto const& bix) { particles_(bix).clear(); });
     total_size = 0;
 
-    // iteration/size() go through cell_size_, not each cell vector's own size(), so
-    // leaving it stale here makes clear() a no-op from any caller's perspective -
-    // reset every bit of per-cell bookkeeping the same way the constructor does.
+    // iteration / size() go through cell_size_, not the cells' own size(): stale, clear()
+    //  would be a no-op
     zero_bookkeeping();
     reset_views();
 }
@@ -585,8 +570,7 @@ struct PerCellParticles : public Super_
     Super& operator*() { return *this; }
     Super const& operator*() const { return *this; }
 
-    // the particle already carries its NEW cell (set by the caller); pt carries the OLD
-    // cell so the departure can be registered against it — mirrors the TS/PCTS move_check
+    // particle already in its new cell, pt the old: registers only, on_moved() applies
     template<auto particle_type>
     auto& move_check(auto const& pt, std::size_t const& idx, auto& particle) DAMN_ALL;
 
@@ -601,8 +585,6 @@ struct PerCellParticles : public Super_
 }; // PerCellParticles<Super>
 
 
-// the particle already carries its NEW cell (set by the caller); pt carries the OLD
-// cell so the departure can be registered against it — mirrors the TS/PCTS move_check
 template<typename Super_>
 template<auto particle_type>
 auto& PerCellParticles<Super_>::move_check(auto const& pt, std::size_t const& idx,
@@ -615,7 +597,7 @@ auto& PerCellParticles<Super_>::move_check(auto const& pt, std::size_t const& id
 
     auto const& newcell = particle.iCell();
     if (mkn::kul::array_equals(newcell, pt.icell))
-        return *this; // old cell == new cell, no change required
+        return *this;
 
     auto const old_lcl_cell = Super::local_cell(pt.icell);
     Super::gaps_(old_lcl_cell)[Op{Super::gap_idx_(old_lcl_cell)}.increment_return_old()] = idx;
@@ -735,23 +717,15 @@ void PerCellSpan<Particles>::sync_add_new(locell_t const& bix) DAMN_ALL
         auto const& gidx    = gaps[n_gaps - (1 + i)];
         auto const& newcell = real.iCell(gidx);
         if (not isIn(newcell, ghost_box()))
-        { // truly outside this tile's own tracked storage: no destination bucket to
-          // append into, but still counts toward sync_rm_left's removal count below
-          // (left drives how many of this cell's registered departures actually get
-          // swap-popped out)
+        { // outside this tile's storage: nowhere to append, still removed (left counts them)
             ++left;
             continue;
         }
         auto const newcell_local = local_cell(newcell);
         auto& expected           = add_into_(newcell_local);
         if (expected == 0)
-        { // still geometrically within this tile's own ghost_box() reach, but no
-          // arrival was actually registered for it here — move_check only
-          // increments add_into_ at the destination when it intends the particle to
-          // land there; a departure handed off to a SIBLING tile (whose domain this
-          // tile's ghost_box() alone can't distinguish from staying local, since a
-          // tile's domain overlaps its neighbours' grown ghost box) is added there
-          // instead. Trust that signal over blind geometry: nothing to add here.
+        { // in ghost_box() but no arrival registered here: handed off to a sibling tile,
+          //  whose domain overlaps this ghost box. add_into_ over geometry
             ++left;
             continue;
         }
@@ -776,12 +750,8 @@ template<typename Particles>
 template<std::uint8_t PHASE, auto type>
 void PerCellSpan<Particles>::sync_rm_left(locell_t const& bix) DAMN_ALL
 {
-    // add_into_(bix) is now precisely decremented, once per accepted arrival, right
-    // in sync_add_new (see there) — so by the time every tile's own sync_add_new
-    // pass has run, it should already be back to 0 for every cell. Reset it
-    // unconditionally here (rather than the old `-= left_(bix)`, which conflated
-    // bix's arrival count with a same-named but differently-scoped departure count)
-    // so the next cycle starts clean regardless.
+    // 0 already once every tile's sync_add_new ran (one decrement per arrival): reset
+    //  regardless, the next cycle starts clean
     add_into_(bix) = 0;
     SIZE_T x_size = 0, x_left = 0;
     sync_rm_left<PHASE, type>(bix, nullptr, x_size, x_left);
@@ -819,10 +789,10 @@ template<typename Particles>
 template<auto type>
 void PerCellVector<Particles>::on_moved()
 {
-    sync_moved<type>();   // realloc
-    sync_add_new<type>(); // movers appended to their new cells
-    sync_rm_left<type>(); // leavers compacted out of their old cells
-    on_appended<type>();  // finalize
+    sync_moved<type>();
+    sync_add_new<type>();
+    sync_rm_left<type>();
+    on_appended<type>();
 }
 
 } // namespace plamn::core

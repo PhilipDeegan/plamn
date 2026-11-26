@@ -1,21 +1,10 @@
 #ifndef PLAMN_SIMULATOR_TIMESTEPPER_HPP
 #define PLAMN_SIMULATOR_TIMESTEPPER_HPP
 
-// the simulation's time steps, from what pyphare's timestepper.py writes in the dict:
-// simulation/time_step/{mode, value, cfl_wave, cfl_diffusive, cfl_particles,
-// fine_level_substeps_max, level0_dt_shrink_max}, simulation/final_time (cfl_particles: plamn's,
-// see core/numerics/stable_dt/particles.hpp; plamn/__init__.py lets pyphare pass it)
-//
-//   constant  the dict's dt; the time after n steps is start + n * dt (PHARE's
-//             ConstantTimeStamper: no rounding accumulated over the steps)
-//   adaptive  each step's dt from a stable bound (the caller's, given the cfl numbers), no
-//             further than final_time; the time a Kahan sum of the steps (PHARE's
-//             KahanTimeStamper)
-//
-// start is 0, or a restart's time: the steps are counted from it, so a restart may change dt
-// (or the mode). A restart of the same mode (and, constant, dt) resumes the stepper as it was
-// (state / resume: its start, steps and Kahan compensation): the times those of the run that kept
-// going, bit for bit
+// the simulation's time steps, constant or adaptive, from simulation/time_step:
+// doc/simulator/timestepper.md
+// times counted from the start (constant: start + n * dt, adaptive: a Kahan sum) so a restart of
+// the same mode and dt resumes the times bit for bit
 
 #include "damn/core/def.hpp"
 #include "plamn/initializer/data_provider.hpp"

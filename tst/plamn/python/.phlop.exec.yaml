@@ -1,6 +1,5 @@
-# phlop.run.test_cases (python3 -m phlop.run.test_cases -i tst): every test runs once in its own
-# process; the files below also run on 3 ranks with --tags mpi (CI). See phlop's
-# phlop/testing/test_cases.py load_config_tests for the format.
+# every test runs once in its own process; the files below also run on 3 ranks with --tags mpi
+# (CI)
 
 test_load_balancing.py:
   - {}

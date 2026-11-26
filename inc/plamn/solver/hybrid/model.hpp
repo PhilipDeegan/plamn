@@ -50,24 +50,21 @@ struct HybridModel<opts, true>
                                       amr::RefinedParticlesConst<opts.nbRefinedPart>>;
 
     std::map<int, LevelData_t> levels;
-    // damn's field copies by accessors, per resource key: resolved once (Simulator::copy_)
+    // damn's field copies by accessors, per resource key: resolved once
     std::map<std::string, std::vector<amr::FieldAccess<Patch_t::field_ghost_width>>> field_access{};
     std::optional<core::OhmInfo> ohm; // from the input, at setup
-    // the electrons' pressure closure, from the input at setup (solver/hybrid/electron/
-    //  closures.hpp)
+    // the electrons' pressure closure, from the input at setup
     std::optional<core::hybrid::ElectronClosure> electron_closure;
     std::vector<std::string> population_names{};
-    // the particle schedules' pairs and accessors, from population_names (Simulator setup)
+    // the particle schedules' pairs and accessors, from population_names
     std::optional<amr::ParticleRoutes<Patch_t>> particle_routes{};
-    // per level, what its push needs of its decomposition (level_boxings.hpp), kept until a
-    //  regrid / rebalance
+    // per level, what its push needs of its decomposition, kept until a regrid / rebalance
     std::map<int, LevelBoxings<typename Patch_t::Boxing_t, opts.alloc_mode>> level_boxings{};
     using Grid_t     = Patch_t::Grid_t;
     using Computed_t = Computed<Patch_t, Grid_t, core::HybridQuantity::Scalar>;
-    std::map<std::string, Computed_t> computed{}; // by key (solver/hybrid/computed.hpp)
-    // the computed quantities asked for so far: their scratch grids on every patch (made
-    //  with them, make_patch), the others on none. The diagnostics' at setup, any other at its
-    //  first compute (Simulator::compute: on every patch then, collective)
+    std::map<std::string, Computed_t> computed{}; // by key
+    // the computed quantities asked for so far: their scratch grids on every patch, the others
+    //  on none. The diagnostics' at setup, any other at its first compute (collective)
     std::set<std::string> requested{};
     using View_t = decltype(simulator::view(std::declval<Patch_t&>())); // what diagnostics read
     std::map<std::string, diagnostic::Accessor<View_t>> quantities{};   // diagnostics' fields

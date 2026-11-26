@@ -60,7 +60,6 @@ public:
                 on_tile(ti, dt, U, Fx, Fy, Fz, Unew);
     }
 
-    // one tile of the tiled fields, eg as one task of a thread pool
     void on_tile(std::size_t const tile_idx, double const dt, auto const& U, auto const& Fx,
                  auto const& Fy, auto const& Fz, auto& Unew) const
     {

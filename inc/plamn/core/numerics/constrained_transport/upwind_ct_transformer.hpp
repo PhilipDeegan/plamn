@@ -105,8 +105,7 @@ public:
         });
     }
 
-    // one tile of the tiled fields, eg as one task of a thread pool; the arguments as
-    //  operator()'s, without the layout: B, x's, y's, z's CT fields, E
+    // operator()'s arguments without the layout: B, x's, y's, z's CT fields, E
     template<typename... Args>
     void on_tile(std::size_t const tile_idx, Args&&... args_then_E) const
     {

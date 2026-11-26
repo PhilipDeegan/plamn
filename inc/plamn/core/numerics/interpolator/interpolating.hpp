@@ -465,7 +465,7 @@ public:
     }
 #endif
 
-    // accumulates into one tile's rhoP + flux (global memory) as deposit_v says, see TileDeposit.
+    // accumulates into one tile's rhoP + flux (global memory) as deposit_v says (TileDeposit).
     //  each_particle(dep) must call dep(particle) for every particle this thread deposits; every
     //  thread of the block calls it, and it may __syncthreads. With shared_one it runs four times
     template<auto deposit_v>
@@ -599,23 +599,9 @@ public:
         return 2 * block_size * sizeof(Particle_t) + sizeof(int);
     }
 
-    // Combined Boris push + particle-to-mesh deposit in a single GPU kernel.
-    // Originals are untouched: each thread works on a register copy.
-    // Qualifying particles (isIn filter_box and not in exclude_boxes after push) are atomically
-    // placed into a shared block buffer. Once the buffer holds a full block the whole block
-    // deposits together; any remainder is flushed at the end. With shared_one the push runs
-    // once per staged field.
-    // Grid: x = tile, y = blocks per tile, each block a strided share of the tile's particles.
-    //
-    // Shared memory layout (launcher.ds = tile_deposit_bytes(deposit_v, ziz,
-    //                                                        push_deposit_extra_bytes<Particle_t>())):
-    //   [tile_deposit_fields(deposit_v) * ziz * sizeof(double)]  staged fields
-    //   [2 * blockDim.x * sizeof(Particle_t)]                    block buffer
-    //   [sizeof(int)]                                            atomic fill counter
-    //
-    // 2*blockDim.x slots are the minimum needed: before a batch buf_count can be
-    // blockDim.x-1, and if every thread in the batch qualifies buf_count reaches
-    // 2*blockDim.x-1 — still within bounds.
+    // Boris push + deposit in one kernel on register copies (originals untouched), the deposited
+    //  ones batched through a block buffer in shared memory: doc/core/numerics/interpolator/
+    //  interpolating.md
     template<typename Field_t, auto particle_type_v, auto alloc_mode_v,
              auto deposit_v = TileDeposit::shared_all>
     static void on_tiles_push_deposit(auto& particles, auto const& electromag, auto& Flux,
@@ -646,7 +632,6 @@ public:
         auto& buf_count      = *reinterpret_cast<int*>(reinterpret_cast<char*>(part_buf)
                                                        + 2 * ws * sizeof(Particle_t));
 
-        // Per-tile EM view and layout
         auto const em      = electromag.template as<Electromag_vt>([=] DAMN_ALL(auto const& vf) {
             return mkn::kul::for_N_make_array<3>(
                 [&vf] DAMN_ALL(auto i) { return vf[i][blockIdx.x](); });
@@ -687,7 +672,6 @@ public:
 
                 __syncthreads();
 
-                // Once a full warp is available, deposit it and compact the buffer.
                 if (buf_count >= static_cast<int>(ws))
                 {
                     dep(part_buf[tidx]);
@@ -706,7 +690,6 @@ public:
                 }
             }
 
-            // Flush any remaining particles (partial warp).
             if (static_cast<int>(tidx) < buf_count)
                 dep(part_buf[tidx]);
         };

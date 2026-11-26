@@ -1,21 +1,10 @@
 #ifndef PLAMN_AMR_UNTILED_HPP
 #define PLAMN_AMR_UNTILED_HPP
 
-// untiled temporaries of a patch's tiled fields, for what works on whole patches: damn's
-//  schedules (copies, sums, refines, coarsens), and whatever else reads or writes a patch field
-//  as one array (tiling_gpu's messengers keep their MPI buffers untiled the same way)
-//
-//   Untiled<Tiled> u;                         one per patch
-//   u.lease(name, tiled, layout, Lease::...)  a temporary for name, every value set from tiled:
-//       read, fill: the tiles' values (domains, and the patch border ghosts their tiles hold)
-//       sum:        zeroed, then every tile added (the tiles' partial ghost contributions too)
-//   u.find(name)                              name's temporary while leased, else nullptr
-//   u.release()                               every lease ended: fill and sum ones written
-//       back into every tile's ghost box (outer and inner ghosts), read ones dropped
-//
+// untiled temporaries of a patch's tiled fields, for what works on whole patches (damn's
+//  schedules): doc/amr/untiled.md
 // a lease sets every value of its temporary, nothing carries over from an earlier use (no NaN
-//  into a sum). The temporaries are kept and reused, a pool per physical quantity (a grid's
-//  centering, so its shape on this patch)
+//  into a sum)
 
 #include "plamn/amr/resources.hpp"
 #include "plamn/core/data/field/field_box.hpp"
@@ -144,7 +133,7 @@ void modify_untiled(auto& field, auto&& fn)
 }
 
 // fn(name, the field resource damn sees for a patch's grid): a tiled grid's leased untiled
-//  temporary (none outside a lease, see Simulator::lease_), an untiled grid itself
+//  temporary (none outside a lease), an untiled grid itself
 template<std::uint32_t gw>
 void field_resource_for(auto const& untiled, std::string const& name, core::TiledField auto&,
                         auto&& fn)

@@ -1,6 +1,6 @@
 #include "plamn/core/def.hpp"
-//  the wave speeds of the stable time steps and the Riemann solvers, as PHARE's
-//  compute_whistler_ / compute_fast_magnetosonic_ (core/numerics/riemann_solvers/mhd_speeds.hpp)
+// as PHARE's compute_whistler_ / compute_fast_magnetosonic_
+//  (core/numerics/riemann_solvers/mhd_speeds.hpp)
 
 #include "plamn/core/numerics/godunov/rusanov.hpp"
 #include "plamn/core/numerics/stable_dt/whistler.hpp"

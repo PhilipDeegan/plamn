@@ -1,7 +1,5 @@
 #include "plamn/core/def.hpp"
-//  MHD finite volume update (FiniteVolumeEulerTransformer): linear fluxes give an exact constant
-//  divergence; tiled (per tile pool tasks, or one GPU launch) == untiled; and B's update, the
-//  hybrid's FaradayTransformer, on the MHD layout, tiled == untiled
+// B's update is the hybrid's FaradayTransformer, on the MHD layout
 
 #include "damn/core/def/damn_config.hpp"
 #include "mkn/kul/env.hpp"

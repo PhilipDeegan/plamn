@@ -1,25 +1,8 @@
 #ifndef PLAMN_CORE_NUMERICS_BOUNDARY_CONDITION_FIELD_BOUNDARY_CONDITION_HPP
 #define PLAMN_CORE_NUMERICS_BOUNDARY_CONDITION_FIELD_BOUNDARY_CONDITION_HPP
 
-// a field's ghosts past a physical boundary of the domain, filled from its domain values
-//  (PHARE's core/numerics/boundary_condition), applied on a box of ghost cells (local index
-//  space) beyond the boundary at `location`, each field over the nodes of its centering there:
-//
-//   Neumann        zero gradient: a ghost takes its mirror's value (mirrored across the
-//                  boundary: the boundary node for a primal direction, the boundary face for a
-//                  dual one)
-//   Dirichlet      the value v at the boundary: v (constant extrapolation, and on a boundary
-//                  node), else 2 v - its mirror's value (linear)
-//   Symmetric      a scalar Neumann; a vector's normal component Dirichlet 0 (linear), its
-//                  tangential ones Neumann
-//   AntiSymmetric  a scalar Dirichlet 0 (linear); a vector's normal component Neumann, its
-//                  tangential ones Dirichlet 0
-//   DivergenceFreeTransverseNeumann / Dirichlet  B: its tangential components Neumann (or
-//                  Dirichlet at the condition's values), then its normal one set face by face
-//                  outward so each ghost cell's discrete divergence is zero
-//
-// A FieldCondition holds which, and Dirichlet's values (one per component) and extrapolation:
-//  plain data, as many boundaries carry one per quantity
+// a field's ghosts past a physical boundary, filled from its domain values:
+//  doc/core/numerics/boundary_condition/field_boundary_condition.md
 
 #include "damn/core/geometry/box_spans.hpp"
 #include "damn/core/geometry/point.hpp"
@@ -57,6 +40,7 @@ enum class FieldConditionType : std::uint8_t {
 
 enum class DirichletExtrapolation : std::uint8_t { Constant = 0, Linear = 1 };
 
+// plain data: many boundaries carry one per quantity
 struct FieldCondition
 {
     FieldConditionType type              = FieldConditionType::None;
@@ -167,7 +151,6 @@ void dirichlet(Field& field, BoundaryLocation const location,
         });
 }
 
-// a scalar field's condition
 template<typename Field, typename Layout>
 void apply_scalar(FieldCondition const& condition, Field& field, BoundaryLocation const location,
                   damn::core::Box<std::uint32_t, Layout::dimension> const& ghost_cells,

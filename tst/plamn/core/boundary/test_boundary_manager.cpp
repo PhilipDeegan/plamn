@@ -1,7 +1,6 @@
 #include "plamn/core/def.hpp"
-// BoundaryManager (boundary.hpp): which adjacent face an edge or a corner takes the conditions of,
-//  by direction (the highest) or by boundary type (none < reflective < inflow < open), and
-//  validate_physical_boundaries: every non periodic direction's faces declare a boundary
+// an edge or corner takes its conditions from an adjacent face by direction (the highest) or by
+//  boundary type (none < reflective < inflow < open)
 
 #include "plamn/core/boundary/boundary.hpp"
 #include "plamn/core/boundary/boundary_defs.hpp"
@@ -83,7 +82,6 @@ TEST(BoundaryManager, hasPriorityPolicyByBoundaryTypes)
         expectMasterHasHighestType(bm, static_cast<Codim3BoundaryLocation>(i));
 }
 
-// --- validate_physical_boundaries ---------------------------------------------------------
 
 namespace
 {

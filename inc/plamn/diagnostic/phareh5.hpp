@@ -1,24 +1,9 @@
 #ifndef PLAMN_DIAGNOSTIC_PHAREH5_HPP
 #define PLAMN_DIAGNOSTIC_PHAREH5_HPP
 
-// phareh5 diagnostics (PHARE's default format: diagnostic/detail/h5writer.hpp and types/), the
-// pieces; Simulator::dump_phareh5_ (simulator_diagnostics.hpp) writes them. A file per quantity:
-//
-//   /t/<time, 10 decimals>/pl<level>/p<rank>#<id>     a patch: attributes lower, upper (its
-//                                                      cells), nbrCells, origin, mpi_rank
-//     fields     <name>_<component> (B, E, vectors: x y z; tensors: xx xy xz yy yz zz; scalars:
-//                <name>) on PHARE's ghost box of the patch (field_ghosts per interp order), in
-//                the quantity's own (Yee) centering, C order (x slowest); attribute ghosts
-//     particles  weight (n, 1), iCell (n, dim) int32, delta (n, dim), v (n, 3), memory order
-//                (none when there are no particles); the patch's attribute ghosts
-//                (particle_ghosts)
-//   /           dimension, interpOrder, layoutType yee, domain_box (its upper), cell_width,
-//               origin, periodicities; pop_mass and pop_charge for a population's quantity
-//   /py_attrs   the diagnostic's attributes (pyphare's git hash, versions, the serialized
-//               simulation)
-//
-// a dump at a time covers every level, or one (PHARE's dump_level, fine_dump_lvl_max): such a
-// time holds that level only
+// phareh5 diagnostics, PHARE's default format, a file per quantity: the pieces; the file layout:
+// doc/diagnostic/phareh5.md. A dump of one level only (fine_dump_lvl_max): its time holds that
+// level only
 
 #include "plamn/amr/untiled.hpp"
 #include "plamn/core/data/particles/particle_iteration.hpp"

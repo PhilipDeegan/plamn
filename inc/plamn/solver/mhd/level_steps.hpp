@@ -2,22 +2,7 @@
 #define PLAMN_SOLVER_MHD_LEVEL_STEPS_HPP
 
 // an MHD level's steps with its coarser level (PHARE's SolverMHD and MultiPhysicsIntegrator for
-//  an MHD pair: MHDMessenger's synchronize does nothing, the reflux is all of it)
-//
-//   first_step(model, level)               its flux sums zeroed (resetFluxSum), at its first
-//                                          substep in the coarser level's step
-//   accumulate_flux_sum(model, level, c)   flux sums += c the step's fluxes and E (the scheme's
-//                                          butcher sums), every point (accumulateFluxSum)
-//   synchronize(model, level, t)           the reflux: the coarser level's step fluxes and E
-//                                          under the level replaced by the level's sums
-//                                          (MHDFluxCoarsener, ElectricFieldCoarsener), their
-//                                          patch ghosts refilled, then the coarser level's step
-//                                          redone from its old state with them, to t (the coarser
-//                                          level's sum accumulated if it has a coarser level)
-//
-// level: the simulator's MHD level (Simulator::MHDLevel): per_patch, fill_state_ghosts,
-//  fill_electric_ghosts, number, coarser, coarsen, copy, old_time, time_ratio, substep_weight (its
-//  last step's share of its coarser level's step)
+//  an MHD pair): the reflux is all of the synchronization: doc/solver/mhd/level_steps.md
 
 #include "damn/amr/copy.hpp"
 #include "damn/amr/level_map.hpp"

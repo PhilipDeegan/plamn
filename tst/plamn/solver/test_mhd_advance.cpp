@@ -1,8 +1,6 @@
 #include "plamn/core/def.hpp"
-// solver::advance of the MHD model on one 1D patch covering a non periodic domain, its ghosts past
-//  the domain filled by the model's physical boundaries: the model from its input, a uniform
-//  state between open boundaries stays uniform, and between reflective walls nothing crosses them
-//  (mass, energy and the transverse B are conserved), for every time integration scheme
+// one 1D patch covering a non periodic domain, its ghosts past the domain filled by the model's
+//  physical boundaries
 
 #include "damn/amr/hierarchy.hpp"
 #include "damn/amr/physical_boundary.hpp"

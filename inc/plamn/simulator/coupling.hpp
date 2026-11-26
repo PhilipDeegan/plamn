@@ -1,21 +1,8 @@
 #ifndef PLAMN_SIMULATOR_COUPLING_HPP
 #define PLAMN_SIMULATOR_COUPLING_HPP
 
-// a hybrid level over an MHD level (the model boundary, AMR/max_mhd_level): what crosses it from
-//  MHD to hybrid. Coupled runs are plamn's own (no PHARE reference).
-//
-//   to_mhd_coarse(pairs)        a hybrid level's pairs read from the MHD level under it: the
-//                               coarse names as MHD holds them (EM_B_x: B_x, EM_B_old_x: B_old_x,
-//                               EM_E_x: E_x, EM_E_old_x: E_old_x); B and E are on the same
-//                               staggered grid in both models
-//   prim_pairs()                MHD's primitives (rho, V, P) into the hybrid patch's cell centred
-//                               scratch grids (mhd_rho, mhd_V_x.., mhd_P)
-//   make_prim_scratch(patch)    those scratch grids, only on the hybrid level over MHD
-//   spawn(patch, cells, ...)    each population's particles in cells from the scratch values:
-//                               n = rho / m, V, an isotropic Maxwellian of the ion pressure
-//                               Pi = max(P - Pe, 0), Pe = Te q n (isothermal electrons)
-//
-// one ion population for now: MHD's rho is that species' mass density
+// what crosses the model boundary from an MHD level to the hybrid level over it:
+// doc/simulator/coupling.md. One ion population for now: MHD's rho is that species' mass density
 
 #include "damn/amr/level_map.hpp"
 #include "damn/core/math/random.hpp"
@@ -119,7 +106,7 @@ struct Salt
     static std::uint64_t ghosts_new(double const t) { return std::bit_cast<std::uint64_t>(t); }
 };
 
-// the streams of a spawn: the population's seed (a random one if none), told apart from the
+// the streams of a spawn: the population's seed (0x5eed if none), told apart from the
 //  root loader's and from other spawns of the same cells by salt (e.g. a level ghost's coarse
 //  step)
 inline std::uint64_t spawn_seed(auto const& pop, std::uint64_t const salt)

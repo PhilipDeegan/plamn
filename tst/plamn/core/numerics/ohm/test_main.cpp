@@ -314,7 +314,7 @@ TYPED_TEST(OhmTest, ThatOhmInfoCanBeBuiltFromDict)
 }
 
 
-// asEnumConstant enumerates [0, Enum::count), which is what replaced the EnumTraits value table
+// asEnumConstant enumerates [0, Enum::count)
 static_assert(std::is_same_v<mkn::kul::EnumConstantVariant_t<HyperMode>,
                              std::variant<std::integral_constant<HyperMode, HyperMode::constant>,
                                           std::integral_constant<HyperMode, HyperMode::spatial>>>);
@@ -330,7 +330,7 @@ TYPED_TEST(OhmTest, ThatAsEnumConstantLiftsEveryHyperMode)
 
 
 // hyper_mode is written to the dict as the int of the HyperMode member exposed to python by
-// cpp_etc (see damnin.initialize.add_enum_int), and read back as the enum
+// cpp_etc, and read back as the enum
 TYPED_TEST(OhmTest, ThatHyperModeIsReadFromDictAsAnEnum)
 {
     EXPECT_EQ(HyperMode::constant, OhmInfo::FROM(createDict()).hyper_mode); // absent, defaulted

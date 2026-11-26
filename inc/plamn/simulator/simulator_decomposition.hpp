@@ -1,37 +1,8 @@
 #ifndef PLAMN_SIMULATOR_SIMULATOR_DECOMPOSITION_HPP
 #define PLAMN_SIMULATOR_SIMULATOR_DECOMPOSITION_HPP
 
-// what the running hierarchy's decomposition costs, for load balancing (not a PHARE comparison):
-//  simulation/AMR/decomposition/log (or PLAMN_DECOMPOSITION) a file rank 0 writes one JSON line
-//  to per event, truncated at setup:
-//
-//   "init"       after initialize
-//   "regrid"     after a regrid that changed some level's boxes or owners
-//   "rebalance"  after a rebalance that changed them
-//   "sample"     every simulation/AMR/decomposition/every (PLAMN_DECOMPOSITION_EVERY) steps,
-//                changed or not (the particles move)
-//
-// a line: event, t, step, the hierarchy's frame (domain, periodic, ratio, dl, interp, reach) and
-//  each rank's node, then per level
-//   patches    [lower, upper, rank] each: the decomposition itself
-//   weights    each patch's particles (cells: an MHD level, or load balancing "homogeneous")
-//   metrics    damn::amr::metrics with those weights: weight per rank, imbalance, the cells
-//              exchanged by Distance within reach (the field ghost width, as PHARE's run
-//              summary): ghost_cells (same level, patch ghosts), coarse_cells (the coarser cells
-//              under each grown patch), and ghost_box_cells (every patch's grown box less the
-//              patch: level ghosts and physical boundary cells = ghost_box_cells less the
-//              ghost_cells)
-//   busy       hybrid levels: seconds of work in the level's advance since the last line
-//              (per_patch_ timed: outside the exchanges; the push too only with a per patch
-//              mover: "busy_push") of each patch of the PREVIOUS line's level (the
-//              decomposition that did the work; none if the level is new), summed over the
-//              ranks; busy_rank: each rank's
-//   migration  damn::amr::migration from the previous line's decomposition (moved, refined
-//              cells by Distance), when there is one
-//  and busy_steps: the steps since the last line (a line within a step: 0)
-// the costs (critical path, distance weighted exchanges, migration) are derived from it in
-//  python (plamn.amr.read_decomposition), so their per cell costs can change without a build.
-// Collective: the weights are summed over the ranks, so every rank calls it at the same points.
+// plamn::Simulator: the decomposition log: doc/simulator/simulator_decomposition.md
+// collective: the weights are summed over the ranks, so every rank calls it at the same points
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
 #include "damn/amr/metrics.hpp"

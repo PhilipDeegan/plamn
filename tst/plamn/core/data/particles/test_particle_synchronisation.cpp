@@ -1,7 +1,3 @@
-// ported from PHARE tiling_gpu's tests/core/data/particles/test_particle_array_synchronisation.cpp:
-// each layout's move registration (move_check / on_moved / change_icell) after a move to a
-// corner neighbour cell, against an AoS reference moved directly; level ghost arrays re-bucketed
-// anywhere in the ghost box, leavers deleted, and move_in_domain
 
 #include "damn/core/logger.hpp"
 #include "mkn/kul/meta.hpp"
@@ -120,9 +116,8 @@ auto add_icell(ICell const& a, ICell const& b)
 }
 
 
-// Function templates can't be partially specialised (fixing layout_mode while leaving
-// Particles deduced), so the per-layout dispatch lives on a class template instead,
-// which can be. One specialisation per layout_mode, each still generic over Particles.
+// function templates can't be partially specialised (layout_mode fixed, Particles deduced): the
+// per-layout dispatch is a class template, one specialisation per layout_mode
 template<auto layout_mode>
 struct MoveParticles;
 
@@ -207,8 +202,8 @@ struct MoveParticles<LayoutMode::AoSTS>
                 auto const newcell   = add_icell(oldcell, offsets[counter % offsets.size()]);
                 ++counter;
                 p.iCell() = newcell;
-                // production contract (see MultiBoris): only particles staying in the patch
-                // box register; patch-leavers stay put in their tile with a ghost iCell
+                // as MultiBoris: only particles staying in the patch box register; patch
+                // leavers stay put in their tile with a ghost iCell
                 if (isIn(newcell, particles.box()))
                 {
                     TiledParticleTracker<dim> const pt{oldcell, tile_cell};

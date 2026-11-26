@@ -23,7 +23,7 @@ namespace plamn::core
 {
 
 
-// what one patch's Ve needs on the device (make_velocity_item): plain views
+// what one patch's Ve needs on the device: plain views
 template<typename Field_t, typename VecFieldJ_t, typename VecField_t, typename Box_t>
 struct VelocityItem
 {

@@ -1,15 +1,7 @@
 #ifndef PLAMN_AMR_RESOURCES_HPP
 #define PLAMN_AMR_RESOURCES_HPP
 
-// plamn data as damn::amr resources, for damn's schedules
-//
-//   field_resource<gw>(field):     BoxData, values on the field's nodes (its centering), gw
-//                                  ghost nodes each side; a C ordered field (not tiled) also
-//                                  gives damn::hdf5's checkpoints its buffer (box_span)
-//   particle_resource<gw>(array):  CellItemData, particles in cells, gw ghost cells; a layout
-//                                  with components() also gives checkpoints its columns
-//
-// both are small handles over the data, made on the fly in a for_each_resource
+// plamn data as damn::amr resources, small handles made on the fly: doc/amr/resources.md
 
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/memory/box_span.hpp"
@@ -80,8 +72,8 @@ MKN_KUL_FN_SIG_RET auto& value(FieldResource<Field, gw> const& r,
 }
 
 
-// what checkpoints hold of a field: its ghosts too (a refined level's level ghosts were filled
-//  from the coarser level before its synchronization: they cannot be rebuilt bit for bit)
+// ghosts too: a refined level's level ghosts were filled from the coarser level before its
+//  synchronization, they cannot be rebuilt bit for bit
 template<typename Field, std::uint32_t gw>
 MKN_KUL_FN_SIG_RET auto checkpoint_box(FieldResource<Field, gw> const& r,
                                        damn::core::Box<int, Field::dimension> const& cells)
@@ -152,12 +144,7 @@ void append(ParticleResource<Particles, gw>& r, typename Particles::value_type p
     r.particles->emplace_back(particle);
 }
 
-// SoAVX, SoAVXChunked (host memory): moved between patches column by column, damn's
-//  cell_items hooks (damn/amr/cell_items.hpp). The bytes: the number of particles, then
-//  each component's values contiguously, in components()' order (weight, iCell_x.., delta_x..,
-//  v_x, v_y, v_z). A selection reads the iCell columns only, or SoAVXChunked's per cell ranges
-//  when sorted; appends are column wise, SoAVXChunked sorted once after all of them
-//  A resource over Particles const (a read only source, amr/particle_access.hpp) packs too
+// SoAVX, SoAVXChunked (host memory): moved column by column, the bytes: doc/amr/resources.md
 template<typename Particles>
 concept ParticleColumns = core::HasComponents<std::remove_const_t<Particles>>
                           and core::is_soavx(Particles::layout_mode);
@@ -358,17 +345,14 @@ std::vector<typename Particles::value_type> read_items(ParticleResource<Particle
     return out;
 }
 
-// AoS4SoAVXChunked (host memory): moved between patches as whole particle structures, damn's
-//  cell_items hooks as the columns' above. The bytes: the number of particles, then the
-//  structures. A selection reads the per cell ranges when sorted; arrivals go into their chunks'
-//  gaps when sorted with slack (else appended, sorted once after all of them: items_appended)
+// AoS4SoAVXChunked (host memory): moved as whole structures, the bytes: doc/amr/resources.md
 template<typename Particles>
 concept ParticleStructs
     = std::remove_const_t<Particles>::layout_mode == core::LayoutMode::AoS4SoAVXChunked;
 
 namespace detail
 {
-    // p, its cells moved by shift, into dst: its chunk's gaps if it can, else appended
+    // its chunk's gaps if it can, else appended
     template<typename Particles>
     void arrive(Particles& dst, typename Particles::value_type p,
                 damn::core::Point<int, Particles::dimension> const& shift, bool const gaps)
@@ -469,7 +453,6 @@ void items_appended(ParticleResource<Particles, gw>& r)
         r.particles->sort();
 }
 
-// the particles' components as checkpoint columns (weight, iCell_x.., delta_x.., v_x..)
 template<typename Particles, std::uint32_t gw>
     requires core::HasComponents<Particles>
 void for_each_column(ParticleResource<Particles, gw> const& r, auto&& fn)
@@ -497,7 +480,7 @@ MKN_KUL_FN_SIG_RET auto cell(Particle<dim> const& particle)
 }
 } // namespace plamn::core
 
-// damn's device Append hooks (GPU builds), after the resources they use
+// after the resources it uses
 #include "plamn/amr/device_append.hpp" // IWYU pragma: export
 
 #endif // PLAMN_AMR_RESOURCES_HPP

@@ -1,8 +1,7 @@
 #ifndef PLAMN_SOLVER_MHD_RESTARTS_HPP
 #define PLAMN_SOLVER_MHD_RESTARTS_HPP
 
-// what a restart holds of an MHD level, and what the level rebuilds from it (the simulator
-//  writes and reads the levels' resources by these names, simulator_restarts.hpp): the advanced
+// what a restart holds of an MHD level, and what the level rebuilds from it: the advanced
 //  state's conservative variables. The scheme's stages, E and the primitive variables are made
 //  again within a step; the state's ghosts are filled again after loading
 

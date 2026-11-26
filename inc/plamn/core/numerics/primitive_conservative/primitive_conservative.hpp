@@ -10,8 +10,7 @@
 
 // MHD primitive (rho, V, B, P) <-> conservative (rho, rhoV, B, Etot) variables, PHARE's
 //  core/numerics/primite_conservative_converter: per value functions, and per cell functors on
-//  the cell centred grid (B, face centred, projected there). Where and how they are evaluated
-//  (boxes, tiles, GPU) is up to the caller, see primitive_conservative_transformer.hpp
+//  the cell centred grid (B, face centred, projected there)
 namespace plamn::core
 {
 

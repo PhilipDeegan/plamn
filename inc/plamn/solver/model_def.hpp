@@ -1,8 +1,8 @@
 #ifndef PLAMN_SOLVER_MODEL_DEF_HPP
 #define PLAMN_SOLVER_MODEL_DEF_HPP
 
-// the models a build enables, from its SimOpts (simulator_def.hpp): a disabled model's types and
-//  storage are empty specializations (models, stacks.hpp), never naming its patches, particles...
+// the models a build enables, from its SimOpts: a disabled model's types and storage are empty
+//  specializations, never naming its patches, particles...
 //  Levels are MHD..., then hybrid..., then fully kinetic...: above MHD MHD or hybrid, above
 //  hybrid hybrid or fully kinetic
 

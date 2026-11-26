@@ -1,9 +1,8 @@
 #ifndef PLAMN_SIMULATOR_LEVEL_ACCESSOR_HPP
 #define PLAMN_SIMULATOR_LEVEL_ACCESSOR_HPP
 
-// a level's patches as the level-wide particle movers take them (ParticlesSynchronisedMoverFor_t's
-// parallel and flat ones, their MultiBoris): per patch its id (the key of the boxings), layout,
-// and args (ions, electromag), electromag the HybridPatch member pushed with (e.g. emAvg)
+// a level's patches as the level-wide particle movers take them: per patch its id (the key of
+// the boxings), layout and args; electromag: the HybridPatch member pushed with (e.g. emAvg)
 
 #include "damn/core/def.hpp"
 

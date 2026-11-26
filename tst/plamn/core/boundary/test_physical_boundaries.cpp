@@ -1,7 +1,5 @@
 #include "plamn/core/def.hpp"
-// a patch's ghosts past the physical boundaries (physical_boundaries.hpp): a 2D patch covering a
-//  non periodic domain, open in x and reflective in y, its regions (faces then a corner) filled
-//  by their boundaries' conditions
+// a 2D patch covering a non periodic domain, open in x and reflective in y
 
 #include "damn/amr/hierarchy.hpp"
 #include "damn/amr/physical_boundary.hpp"

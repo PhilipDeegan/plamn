@@ -1,8 +1,6 @@
 #ifndef PLAMN_AMR_LOAD_BALANCING_HPP
 #define PLAMN_AMR_LOAD_BALANCING_HPP
 
-// PHARE's load balancing schedule: when to rebalance level 0 (CoarsestRebalanceCheck)
-
 #include "damn/core/def.hpp"
 
 #include <algorithm>
