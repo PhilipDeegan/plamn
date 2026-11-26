@@ -1,26 +1,9 @@
 #ifndef PLAMN_SIMULATOR_SIMULATOR_DIAGNOSTICS_HPP
 #define PLAMN_SIMULATOR_SIMULATOR_DIAGNOSTICS_HPP
 
-// diagnostics (pyphare's diag_options and *Diagnostics, simulation/diagnostics), written as
-// phareh5 (PHARE's default, see diagnostic/phareh5.hpp: fields in their own centering, ghosts
-// included, and particles) or pharevtkhdf (a step per dump, every level up to max_nbr_levels,
-// an empty entry while a level is not there): a file per quantity
-//
-// phareh5, as PHARE's H5Writer: per level, every rank creates every patch's datasets
-// (create_data_set_per_mpi: a rank with fewer patches passes empty ones), writes its own, then
-// the patch attributes (write_attributes_per_mpi), then the file's
-//
-// a coupled hierarchy (MHD and hybrid levels): a field quantity is written on the levels whose
-// model provides it (provides: its quantity table, or a hybrid computed quantity), the others
-// get nothing (phareh5) or an empty entry (pharevtkhdf), as a level not there. B, E, the ions'
-// mass density and bulk velocity are on both (MHD: B, E, rho, V); a quantity no model owning
-// levels has: an error at setup
-//
-// pharevtkhdf
-// a dump of a quantity, level by level: this rank's patches' rows (damn::hdf5::vtkhdf::rows_of)
-// in one buffer (diagnostics_.buffer, reused), each patch converted straight into its slice
-// (plamn::diagnostic::primal_into), the patches in parallel (damn's thread pool), then one
-// write per rank (damn::hdf5::vtkhdf::append_level). Scopes: dump, convert, write per level
+// plamn::Simulator: diagnostics, phareh5 or pharevtkhdf, a file per quantity; the formats, the
+// ranks' order of writes, coupled hierarchies: doc/simulator/simulator_diagnostics.md
+// phareh5: every rank creates every patch's datasets (collective), a rank with fewer passes empty
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
 #include "plamn/core/numerics/primitive_conservative/primitive_conservative_transformer.hpp"

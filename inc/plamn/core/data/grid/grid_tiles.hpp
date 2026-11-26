@@ -49,7 +49,6 @@ struct GridTile : public FieldTile<Layout_t, Field_t>
         reset();
     }
 
-    // called when making tiles
     GridTile(auto const& box, auto const& patch_layout, auto const& pq)
         : GridTile(sub_layout(patch_layout, box), pq)
     {

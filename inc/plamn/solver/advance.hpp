@@ -3,11 +3,8 @@
 
 // a level of one model from t0 to t1: one overload per model, each there only when the
 //  simulation's options enable it
-//
-//   MHD    Godunov fluxes and constrained transport, integrated in time by the model's scheme
-//          (core/numerics/time_integrator): the level adapter's patches hold the scheme's states
-//          (states[0] advanced), and it fills their ghosts (fill_state_ghosts,
-//          fill_electric_ghosts: neighbours, coarser levels, physical boundaries)
+// MHD: the level adapter's patches hold the scheme's states (states[0] advanced), the adapter
+//  fills their ghosts (neighbours, coarser levels, physical boundaries)
 
 #include "plamn/core/models/options/mhd_options_def.hpp"
 #include "plamn/core/numerics/time_integrator/mhd_time_integrator.hpp"

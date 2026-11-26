@@ -10,6 +10,7 @@
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/memory/span.hpp"
+#include "damn/core/memory/memory.hpp"
 #include "plamn/core/def.hpp"
 
 #include <tuple>
@@ -24,7 +25,6 @@
 #include <array>
 #include <cstdlib>
 #include <iosfwd>
-#include <iterator>
 #include <version>
 
 // defined in tensorfield.hpp, which includes this file
@@ -47,8 +47,8 @@ namespace detail
     }();
 } // namespace detail
 
-// applies Operator{dst}(src) between two equally shaped local boxes of two arrays, one
-// contiguous span at a time (see box_spans.hpp) rather than an ndarray lookup per index
+// Operator{dst}(src) over two equally shaped local boxes, one contiguous span at a time rather
+// than an ndarray lookup per index
 template<typename Operator, typename Dst, typename Src, std::size_t dim>
 void operate_on_spans(Dst& dst, damn::core::Box<std::uint32_t, dim> const& dst_lcl_box, Src const& src,
                       damn::core::Box<std::uint32_t, dim> const& src_lcl_box)
@@ -56,7 +56,7 @@ void operate_on_spans(Dst& dst, damn::core::Box<std::uint32_t, dim> const& dst_l
     using value_type = Dst::value_type;
 
     auto const on_span = [](auto* d, auto const* s, std::uint32_t const size) {
-        if constexpr (requires { Operator::span(d, s, size); }) // the operator does whole spans
+        if constexpr (requires { Operator::span(d, s, size); })
             Operator::span(d, s, size);
         else if constexpr (std::is_same_v<Operator, mkn::kul::SetEqual<value_type>>)
             std::copy_n(s, size, d);
@@ -131,7 +131,7 @@ public:
     Super const& operator*() const DAMN_ALL { return *this; }
     auto& layout() const DAMN_ALL { return layout_; }
 
-    // same box, other mesh size/origin, see GridTileSet::reset_layout
+    // same box, other mesh size/origin
     void reset_layout(Layout_t const& layout)
     {
         assert(layout.cells == layout_.cells);
@@ -291,11 +291,12 @@ public:
     bool isUsable() const { return Super::data() != nullptr; }
     bool isSettable() const { return !isUsable(); }
 
+    // tile by tile, the allocator's copy (on the device for unified memory)
     void copyData(FieldTileSet const& that)
     {
         for (std::size_t tidx = 0; tidx < super().size(); ++tidx)
-            std::copy(that[tidx]().data(), that[tidx]().data() + that[tidx]().size(),
-                      super()[tidx]().data());
+            damn::core::mem::copy<alloc_mode>(super()[tidx]().data(), that[tidx]().data(),
+                                              that[tidx]().size());
     }
     MKN_KUL_FN_SIG_RET auto size() const DAMN_ALL { return ghost_box_.size(); } // NOT ntiles!
     MKN_KUL_FN_SIG_RET auto shape() const DAMN_ALL { return *ghost_box_.shape().as_unsigned(); }
@@ -330,8 +331,7 @@ public:
     }
 
     // fn(t0, t1, dst, src) for each neighbour t1 of tile `tile_idx` (t0) whose field box t0's
-    //  ghosts overlap: dst / src the overlap as local boxes of t0 / t1, see inner_ghost_overlap_
-    //  shared by the host sync above and the device sync (field_tiles_gpu.hpp)
+    //  ghosts overlap: dst / src the overlap as local boxes of t0 / t1
     void for_each_inner_ghost_overlap(std::size_t const tile_idx, auto&& fn)
     {
         auto& t0 = super()[tile_idx];
@@ -374,8 +374,7 @@ private:
                                                                                t1(), boxes->second);
     }
 
-    // the ghosts of tile t0 that neighbour t1's field box, as local boxes of t0 (dst) and t1
-    //  (src), or nullopt if none
+    // as local boxes of t0 (dst) and t1 (src)
     static auto inner_ghost_overlap_(auto const& t0, auto const& t1)
     {
         using Box_t   = decltype(damn::core::as_unsigned(shift(t0.ghost_box(), t0.ghost_box().lower * -1)));
@@ -442,7 +441,7 @@ concept is_field_tile_set_c = requires(T* p) {
 template<typename T>
 inline constexpr bool is_field_tile_set_v = is_field_tile_set_c<T>;
 
-// a tiled field (a tile set), whatever its cv/ref: what the tile/untiled overloads branch on
+// a tile set, whatever its cv/ref
 template<typename T>
 concept TiledField = is_field_tile_set_v<std::decay_t<T>>;
 
@@ -451,8 +450,8 @@ concept has_tiled_field_type_c = requires {
     typename std::remove_cvref_t<T>::field_type;
 } and is_field_tile_set_v<typename std::remove_cvref_t<T>::field_type>;
 
-// structs of (vec)fields naming their view type over a given vecfield type, see
-// core/models/mhd_state.hpp, tiled through their as<V>(fn) member
+// structs of (vec)fields naming their view type over a given vecfield type, tiled through their
+// as<V>(fn) member
 template<typename T>
 concept has_view_t_c = requires {
     typename std::remove_cvref_t<T>::vecfield_type;
@@ -467,8 +466,7 @@ namespace basic
 } // namespace basic
 
 // a (vec)field as plain device copyable views (basic:: types, no names): an untiled one, or a
-//  tiled one as its tile set view (basic::FieldTileSet: pointers to its tiles); tile_at gives
-//  one tile of a tiled one
+//  tiled one as its tile set view (basic::FieldTileSet: pointers to its tiles)
 template<typename T>
 auto untiled_view(T&& untiled)
 {
@@ -574,9 +572,10 @@ void copy_data(auto& dst, auto& src, auto const&... tile_idx)
         dst.copyData(src);
     else
     {
-        auto const copy = [](auto& d, auto const& s) {
+        auto const copy = [](auto& d, auto const& s) { // the allocator's copy
             assert(d.size() == s.size());
-            std::copy(s.data(), s.data() + s.size(), d.data());
+            damn::core::mem::copy<std::remove_cvref_t<decltype(d)>::alloc_mode>(d.data(), s.data(),
+                                                                                s.size());
         };
         auto d = tile_at(dst, tile_idx...);
         auto s = tile_at(src, tile_idx...);
@@ -590,7 +589,6 @@ void copy_data(auto& dst, auto& src, auto const&... tile_idx)
 
 // fn(data, size) for each contiguous buffer of a field: a tiled one's tiles (ghosts included) in
 //  tile order, an untiled one's single buffer. Two fields of one tiling give the same buffers
-//  (pointwise operations, saving and restoring values)
 void for_each_buffer(TiledField auto& field, auto&& fn)
 {
     for (auto& tile : field())

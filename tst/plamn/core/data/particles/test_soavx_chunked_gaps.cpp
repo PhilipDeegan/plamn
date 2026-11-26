@@ -1,8 +1,6 @@
-// SoAVXChunked's gaps (particles_chunked.hpp), 1D, 2D and 3D: chunks per cell with free slots
-// between them (PLAMN_GAPS_LAYOUT: the layout, default SoAVXChunked;
-// test_aos4soavx_chunked_gaps.cpp: AoS4SoAVXChunked), so particles change cells without a full
-// sort. No updater, no pusher: particles' cells are changed by hand, as a push would, then
-// resettle() puts them back in their cells' chunks.
+// chunks per cell with free slots between them, so particles change cells without a full sort
+// (PLAMN_GAPS_LAYOUT: the layout, default SoAVXChunked). Cells are changed by hand, as a push
+// would, then resettle() puts the particles back in their cells' chunks
 //
 // every particle's weight is its id (1, 2, ...): after each operation, each chunk must hold the
 // ids of exactly the particles in its cell (a reference id -> cell), real particles only (weight

@@ -5,7 +5,7 @@ property:
     -I/opt/rocm/include
 # rocThrust: /opt/rocm/include (-I, not -isystem: ahead of the profiles' -I tpp/cccl, CCCL's
 #  thrust for the host) and of /usr/include, where a distro (CUDA) thrust can be
-#  (Debian libthrust-dev): hipcc would otherwise pick that one. See hip.yaml for no thrust
+#  (Debian libthrust-dev): hipcc would otherwise pick that one
 
   lnk.flags: -pthread -lamdhip64
 local:

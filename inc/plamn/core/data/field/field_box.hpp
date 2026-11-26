@@ -77,8 +77,7 @@ bool constexpr is_border_max_op()
 template<typename Op>
 auto constexpr static is_border_max_op_v = is_border_max_op<Op>();
 
-// a box over a field, as operate_on_fields' untiled fallthrough needs it:
-//  local box + field indexable by local point (FieldBox, or bench ArrayBox with no Layout)
+// a local box + a field indexable by local point (FieldBox, or bench ArrayBox with no Layout)
 template<typename T>
 concept field_box_c = requires(T& t) {
     t.lcl_box;
@@ -147,13 +146,12 @@ FieldBox(Field_t&, auto const&) -> FieldBox<Field_t>;
 template<typename Field_t>
 FieldBox(Field_t&, auto const&, auto const&) -> FieldBox<Field_t>;
 
-// Operator{dst[i]}(src[i]) for i in [0, size) (Operator: SetEqual, PlusEquals, SetMax, see
-//  field_traits.hpp). A plain loop on purpose, which the compiler vectorizes: memcpy is an
-//  out-of-line call that costs more than the copy on the 2-cell spans of thin ghost layers.
+// A plain loop on purpose, which the compiler vectorizes: memcpy is an out-of-line call that
+//  costs more than the copy on the 2-cell spans of thin ghost layers.
 template<typename Operator>
 void operate_on_span(auto* dst, auto const* src, std::size_t const size)
 {
-    if constexpr (requires { Operator::span(dst, src, size); }) // the operator does whole spans
+    if constexpr (requires { Operator::span(dst, src, size); })
         Operator::span(dst, src, size);
     else
         for (std::size_t i = 0; i < size; ++i)
@@ -272,7 +270,8 @@ void operate_on_fields(FieldBox<GridTileSet<Layout_t, Args...>>& dst,
     // resolve those once rather than intersecting every dst tile with every src tile
     using SrcTile = std::decay_t<decltype(src.field()[0])>;
     using Box_t   = std::decay_t<decltype(src_selection_box)>;
-    std::vector<std::pair<SrcTile const*, Box_t>> src_tiles;
+    static thread_local std::vector<std::pair<SrcTile const*, Box_t>> src_tiles; // the thread's
+    src_tiles.clear();
     for (auto const& src_tile : src.field())
         if (auto const src_overlap = src_selection_box * get_src_box(src_tile))
             src_tiles.emplace_back(&src_tile, *src_overlap);
@@ -399,7 +398,6 @@ template<typename Operator, typename... T0s, typename... T1s>
 void operate_on_fields(FieldBox<Grid<T0s...>>& dst, FieldBox<GridTileSet<T1s...> const> const& src)
     requires(is_border_op_v<Operator> and !is_border_max_op_v<Operator>)
 {
-    // USED IN BORDER SUM SCHEDULES FOR TILES!
     DAMN_LOG_SCOPE(3, "operate_on_fields_border_sum<Grid, GridTileSet>");
 
     auto const pq         = dst.field.physicalQuantity();
@@ -564,7 +562,7 @@ void append_from_fields(FieldBox<FieldTileSet<Args...> const> const& src, auto& 
     }
     else
     {
-        // set/max: use reduce_single — one canonical tile per cell, correct for all values
+        // set/max: one canonical tile per cell, correct for all values
         reduce_single(view, src.field, amr_selection_box);
     }
 }
@@ -729,8 +727,7 @@ auto& reduce_single_(Grid_t const& grid, GridTiles_t& tiles)
     return grid;
 }
 
-// the cells each tile owns, as read by reduce_single_: its own cell box, border tiles grown out
-// to the patch ghost box
+// the cells each tile owns: its own cell box, border tiles grown out to the patch ghost box
 template<typename Tiles>
 auto tile_owner_expander(Tiles const& tiles)
     requires(is_field_tile_set_v<Tiles>)

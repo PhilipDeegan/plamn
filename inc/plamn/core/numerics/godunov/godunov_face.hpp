@@ -14,8 +14,7 @@
 // one face of direction dir: the left / right states reconstructed from the primitive fields
 //  (rho, V, P cell centred; B face centred: its normal component is on the face already, the
 //  transverse ones are projected to the cell centre then reconstructed), then the Riemann flux,
-//  PHARE's reconstructor.hpp + Godunov::operator() for one face. Where and how it is evaluated
-//  (boxes, tiles, GPU) is up to the caller, see godunov_transformer.hpp
+//  PHARE's reconstructor.hpp + Godunov::operator() for one face
 namespace plamn::core
 {
 
@@ -83,7 +82,6 @@ private:
     }
 
 public:
-    // the face's result into the direction's flux and constrained transport fields
     static void store(auto const& ijk, GodunovFaceResult const& r, auto& F_rho, auto& F_rhoV,
                       auto& F_Etot, auto& vt, auto& aL, auto& aR, auto& dL, auto& dR) DAMN_ALL
     {

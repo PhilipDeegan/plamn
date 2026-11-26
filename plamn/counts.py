@@ -8,16 +8,8 @@ partitions over many configurations (memory: a number per cell, not ~250 B per p
     c.refined(boxes, ratio, refined_nbr)               # a refined level's counts
     tags = c.tags(threshold)                           # a density gradient tagging
 
-advance: each particle moves by vbulk dt plus a thermal displacement (a Gaussian of vth dt per
-direction, a Maxwellian's), from a uniform position in its cell; a cell's count is dealt to the
-cells it can reach with the probability of landing in each (sequential binomials: integer
-counts, the total exact). Direction by direction (each particle's displacements independent).
-The counts' variance grows by (vth dt / dx)^2 + 1/6 cells^2 a step: 1/6 is the cell's own
-discretization (where in the cell a particle is), a numerical diffusion of counting by cells.
-Counts keep no velocities: one advance(T) spreads a blob ballistically (vth T, as particles
-streaming freely), n advances of T / n as a random walk (vth T / sqrt(n)): advance once per regrid
-interval. No fields: the counts drift and spread, they do not feel B or E (a harris sheet
-diffuses, it does not reconnect): regrids follow the particles, not the physics.
+advance: a cell's count dealt to the cells its particles can reach, the total exact; no
+velocities (advance once per regrid interval), no fields: doc/plamn/counts.md
 
 Nothing runs on import.
 """

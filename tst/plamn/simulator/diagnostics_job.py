@@ -1,5 +1,4 @@
-"""the simulation test_diagnostics_<dim>d.cpp runs (as PHARE's tests/diagnostic/job_<dim>d.py),
-read by the C++ test through its embedded interpreter:
+"""read by test_diagnostics.ipp through its embedded interpreter:
 
     PLAMN_TEST_DIM         1, 2 or 3
     PLAMN_DIAGS_TEST_DIR   where the diagnostics go (per binary and rank count)

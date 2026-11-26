@@ -1,7 +1,4 @@
-# the goal of this script is to generate a file for the ampere unit test
-# the file will contain expected values for the unit test.
-
-# the code consists in calculating the curl of a function numerically
+# expected values for the ampere unit test: the curl of a function, computed numerically
 
 import os
 import sys
@@ -13,11 +10,7 @@ from pyphare.core import gridlayout
 
 class TestVariables:
     def __init__(self):
-        """This class only has a constructor
-        in order to set the variables to test the derivatives
-        all quantities are 3D
-
-        """
+        """all quantities are 3D"""
 
         self.nbrCells = (50, 30, 40)
         self.meshSize = (0.1, 0.2, 0.3)

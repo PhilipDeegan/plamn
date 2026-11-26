@@ -13,14 +13,9 @@ namespace plamn
 {
 namespace core
 {
-    //! ParticlePack is used to pack three Particles together
-    /**
-     * For convenience, particles are often stored in arrays specific to their
-     * location. Ghost particles are particles coming from neighbor patches of
-     * the same level, incoming particles are particles coming from coarse-to-fine
-     * boundaries, and interior particles are those within the patch physical domain.
-     * ParticlesPack conveniently store the three arrays together.
-     */
+    // a patch's particle arrays by location: domain (in the patch's physical domain), patch
+    //  ghosts (from neighbour patches of the same level), level ghosts (from coarse to fine
+    //  boundaries)
     template<typename Particles>
     struct ParticlesPack
     {

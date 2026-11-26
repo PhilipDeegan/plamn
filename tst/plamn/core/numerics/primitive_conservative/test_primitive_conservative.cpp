@@ -1,6 +1,4 @@
 #include "plamn/core/def.hpp"
-//  MHD primitive <-> conservative conversion (PrimitiveConservativeTransformer): values against the
-//  formulas, the round trip, and tiled (per tile pool tasks, or one GPU launch) == untiled
 
 #include "damn/core/def/damn_config.hpp"
 #include "mkn/kul/for.hpp"

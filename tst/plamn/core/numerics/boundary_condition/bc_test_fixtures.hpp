@@ -1,11 +1,10 @@
 #ifndef PLAMN_TEST_CORE_NUMERICS_BOUNDARY_CONDITION_BC_TEST_FIXTURES_HPP
 #define PLAMN_TEST_CORE_NUMERICS_BOUNDARY_CONDITION_BC_TEST_FIXTURES_HPP
 
-// field conditions' test patches (PHARE's hybrid_bc_test_fixtures.hpp and
-//  mhd_bc_test_fixtures.hpp): 10 (x 8 (x 6)) cells from 0, the ghost cells past a boundary in local
-//  index space (the whole patch, ghosts included, along the other directions), a hybrid rho
-//  (primal) or B (Yee) holding an interior value over its domain nodes and a sentinel on its
-//  ghosts. The field conditions are model agnostic: hybrid fields test them as PHARE's do
+// 10 (x 8 (x 6)) cells from 0, the ghost cells past a boundary in local index space (the whole
+//  patch, ghosts included, along the other directions), a hybrid rho (primal) or B (Yee) holding
+//  an interior value over its domain nodes and a sentinel on its ghosts. The field conditions are
+//  model agnostic: hybrid fields test them as PHARE's do
 
 #include "plamn/core/def.hpp"
 

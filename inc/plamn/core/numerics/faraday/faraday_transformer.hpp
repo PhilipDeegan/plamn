@@ -33,12 +33,11 @@ struct FaradayTile
 // Bnew = B - dt curl(E) over one patch: Faraday per point, on the domain box of each Bnew component
 //  untiled: the patch's fields, or one tile's views (on_tile)
 //  tiled:   every tile of the patch, CPU tile by tile, GPU one launch with a block per tile
-//  Bnew ghosts between tiles are not synced, see sync_inner_ghosts
+//  Bnew ghosts between tiles are not synced (sync_inner_ghosts)
 //  B and Bnew may be the same vecfield (corrector), curl(E) does not read B
 class FaradayTransformer
 {
 public:
-    // the box Bnew component Bnc is computed on, as eval_on_box below
     template<typename Layout>
     static auto box_for(Layout const& layout, auto const& Bnc)
     {
@@ -104,7 +103,6 @@ public:
 #endif
     }
 
-    // one tile of tiled B, E and Bnew, eg as one task of a thread pool
     void on_tile(std::size_t const tile_idx, auto const& B, auto const& E, auto& Bnew,
                  double const dt) const
     {
@@ -142,7 +140,8 @@ private:
         using Item_t = decltype(make_item(0));
 
         auto const n_tiles = tile_count(Bnew);
-        damn::core::gpu::Vec_t<Item_t> items;
+        static thread_local damn::core::gpu::Vec_t<Item_t> items; // kept between launches
+        items.clear();
         items.reserve(n_tiles);
         for (std::size_t ti = 0; ti < n_tiles; ++ti)
             items.emplace_back(make_item(ti));

@@ -2,8 +2,7 @@
 #define PLAMN_CORE_MODELS_MHD_STATE_HPP
 
 // the MHD model's per patch data, as aggregates of (vec)fields owned by whoever builds them (an
-//  MHD patch, a test): the time integrators (core/numerics/time_integrator/mhd_time_integrator.hpp)
-//  only name the members
+//  MHD patch, a test): the time integrators only name the members
 namespace plamn::core
 {
 

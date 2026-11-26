@@ -1,7 +1,4 @@
-// plamn::core::components: for each layout with views (AoS, AoSMapped, SoA, SoAVX,
-// SoAVXChunked) and dimension, the views read the same particles as an AoS array filled the same
-// way (as a set: SoAVXChunked keeps them by cell), write into the array's own storage (a copy of
-// the array has the writes), are empty for no particles, and are const for a const array
+// compared as sets: SoAVXChunked keeps the particles by cell
 
 #include "plamn/core/data/particles/particle_components.hpp"
 

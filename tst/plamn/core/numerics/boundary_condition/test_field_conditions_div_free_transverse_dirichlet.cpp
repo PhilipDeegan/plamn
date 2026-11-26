@@ -1,8 +1,7 @@
 #include "plamn/core/def.hpp"
-// DivergenceFreeTransverseDirichlet (field_boundary_condition.hpp): past each boundary B's
-//  tangential components are Dirichlet at the condition's values (linear: 2 v - the interior
-//  value), its normal one keeps every ghost cell's discrete divergence zero (with a uniform B,
-//  the interior value), on isotropic and anisotropic meshes
+// past each boundary B's tangential components are Dirichlet at the condition's values (linear:
+//  2 v - the interior value), its normal one keeps every ghost cell's discrete divergence zero
+//  (with a uniform B, the interior value)
 
 #include "damn/core/geometry/box_spans.hpp"
 

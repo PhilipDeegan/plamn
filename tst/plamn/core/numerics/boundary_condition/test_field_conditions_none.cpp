@@ -1,5 +1,4 @@
 #include "plamn/core/def.hpp"
-// the None field condition (field_boundary_condition.hpp): leaves a field's ghosts untouched
 
 #include "plamn/core/boundary/boundary_defs.hpp"
 #include "plamn/core/numerics/boundary_condition/field_boundary_condition.hpp"

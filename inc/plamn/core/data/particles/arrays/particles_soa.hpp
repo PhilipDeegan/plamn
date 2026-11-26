@@ -130,13 +130,13 @@ struct SoASpan
     {
     }
 
-    template<typename Particles, // SFINAE protection to only allow particle arrays
+    template<typename Particles,
              typename = std::enable_if_t<Particles::layout_mode == LayoutMode::SoA>>
     SoASpan(Particles&& array)
         : SoASpan{array, 0, array.size()}
     {
     }
-    template<typename Particles, // SFINAE protection to only allow particle arrays
+    template<typename Particles,
              typename = std::enable_if_t<Particles::layout_mode == LayoutMode::SoA>>
     SoASpan(Particles& array)
         : SoASpan{array, 0, array.size()}
@@ -246,13 +246,11 @@ struct SoAVector
     template<auto type>
     void on_moved()
     {
-        // noop
     }
 
     template<auto type>
     void on_appended()
     {
-        // noop
     }
 
 
@@ -341,7 +339,6 @@ public:
     auto& v() const DAMN_ALL { return v_; }
 
 
-    // for performing the same operation across all vectors e.g. with std apply
     auto as_tuple(std::size_t i) DAMN_ALL
     {
         return std::forward_as_tuple(this->weight_[i], this->iCell_[i], this->delta_[i],
@@ -364,9 +361,8 @@ public:
     }
 
 
-    // no begin()/end() here - SoA has no single Particle_t& to hand back (fields live in
-    // separate arrays), only index-based access (see weight(i)/iCell(i)/... above), or
-    // the thrust zip iterator when needed.
+    // no begin() / end(): no single Particle_t& to hand back, index access or the thrust zip
+    //  iterator instead
 
 
     template<typename Particle_t, auto S = storage_mode,
@@ -390,7 +386,7 @@ public:
         Super::get_vec(this->iCell_).emplace_back(particle.iCell());
         Super::get_vec(this->delta_).emplace_back(particle.delta());
         Super::get_vec(this->v_).emplace_back(particle.v());
-        return size() - 1; // index of the appended particle
+        return size() - 1; // an index: no Particle_t& to hand back
     }
 
     template<typename That>
@@ -415,8 +411,7 @@ public:
         Super::get_vec(this->iCell_).emplace_back(particle.iCell());
         Super::get_vec(this->delta_).emplace_back(particle.delta());
         Super::get_vec(this->v_).emplace_back(particle.v());
-        return size() - 1; // index of the appended particle - SoA has no per-particle
-                           // reference/iterator to hand back, unlike std::vector
+        return size() - 1; // an index: no Particle_t& to hand back
     }
 
     template<typename That, auto S = storage_mode,
@@ -464,7 +459,7 @@ public:
         else
             throw std::runtime_error("NO IMPL!");
 
-        return size() - 1; // index of the appended particle - see emplace_back(Particle_t const&)
+        return size() - 1;
     }
 
 
@@ -591,10 +586,8 @@ public:
 };
 
 
-// Per-index particle-like proxy for generic code (e.g. amr::Splitter) written against a
-// Particle_t interface (.weight()/.iCell()/.delta()/.v()) that SoA can't satisfy
-// with a real begin()/end()/operator[] (see "no begin()/end() here" above). Reads and writes
-// go straight through to the underlying SoA arrays at index `i`, no copy involved.
+// particle i as a Particle_t interface (weight(), iCell(), delta(), v()) for generic code,
+//  reads and writes through to the columns, no copy
 template<typename SoAParticles_t>
 struct SoAParticleView
 {

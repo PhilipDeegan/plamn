@@ -10,9 +10,7 @@
 //  dR of GodunovFaceResult) and the reconstructed B, PHARE's core/numerics/constrained_transport/
 //  upwind_constrained_transport.hpp: ideal (E), Hall (E_hall: the ideal E, then its Hall term
 //  added, from the faces' current and rho averages jt, rhot), its expressions term for term (its
-//  results are the reference; the resistive E is added by the caller). One E component at one edge:
-//  where and how it is evaluated (boxes, tiles, GPU) is up to the caller, see
-//  upwind_ct_transformer.hpp
+//  results are the reference; the resistive E is added by the caller). One E component at one edge
 namespace plamn::core
 {
 

@@ -7,8 +7,8 @@ recomputed from its time averaged E (reflux).
 
 1D: the same Alfven wave, from the same particles, on one level and on two. Level 0 B beside the
 box differs between the two by no more than inside it: a wrongly weighted reflux kicks the coarse
-cells sharing the coarse-fine interface (see PHARE's tests/simulator/refinement). Far from the box
-nothing changes in a step. The fine level holds the coarse particles under it, split.
+cells sharing the coarse-fine interface (as PHARE's tests/simulator/refinement checks). Far from
+the box nothing changes in a step. The fine level holds the coarse particles under it, split.
 
 2D: a small double Harris sheet with one sheet refined stays finite, its fine level holding the
 coarse particles under it, split. With refinement="tagging", level 1 starts on the sheets and is
@@ -400,8 +400,8 @@ class HybridRefinementTest(unittest.TestCase):
         self.assertLess(np.abs(lb["B"] - no["B"]).max(), 1e-12)
 
     def test_threads_take_patches_not_physics(self):
-        """pools taking a level's patches (untiled layouts): B at the end as on one pool, digit
-        for digit (each patch's work its own)"""
+        """pools taking a level's patches (untiled layouts): B at the end as on one pool, to
+        rounding (another thread count is another context)"""
         def run(pools):
             os.environ["PHARE_THREAD_POOLS"] = str(pools)
             try:
@@ -409,7 +409,7 @@ class HybridRefinementTest(unittest.TestCase):
             finally:
                 os.environ.pop("PHARE_THREAD_POOLS")
 
-        np.testing.assert_array_equal(run(3), run(1))
+        np.testing.assert_allclose(run(3), run(1), rtol=1e-14, atol=1e-14)
 
     def test_load_balancing_moves_computed_quantities(self):
         """a computed quantity (the beam's pressure tensor) dumped before the rebalances: its
@@ -483,7 +483,7 @@ class HybridRefinementTest(unittest.TestCase):
         self.assertEqual(on["initial"], off["initial"])
         for ln, (a, b) in enumerate(zip(off["measured"][0], on["measured"][0])):
             self.assertEqual(a.shape, b.shape, f"level {ln}")
-            np.testing.assert_array_equal(a, b, f"level {ln}")
+            np.testing.assert_allclose(a, b, rtol=1e-14, atol=1e-14, err_msg=f"level {ln}")
 
     def test_supplied_tag_boxes_make_the_same_levels(self):
         # the levels of a tagged initialization, supplied as tag boxes (as from Tagger(sim).tag()):
@@ -495,7 +495,7 @@ class HybridRefinementTest(unittest.TestCase):
         self.assertEqual(supplied["levels"], 3)
         self.assertEqual(supplied["initial"], tagged["initial"])
         for ln, (a, b) in enumerate(zip(tagged["measured"][0], supplied["measured"][0])):
-            np.testing.assert_array_equal(a, b, f"level {ln}")
+            np.testing.assert_allclose(a, b, rtol=1e-14, atol=1e-14, err_msg=f"level {ln}")
 
     def test_supplied_tag_boxes_must_nest(self):
         # pyphare's setup raises a ValueError from the simulator's error

@@ -5,8 +5,8 @@ fields, particles, ions, electrons, electromagnetics, their numerics, and a simu
 patch hierarchy. It follows PHARE's algorithms (hybrid PIC, MHD, AMR with time refinement) and
 takes PHARE's python input (pyphare) unchanged, so the same input script can run on either code.
 
-This is a work in progress: the headers' leading comments are the reference, this page is only
-a map of them and of how to run things.
+This is a work in progress: a map of the headers and of how to run things. Longer explanations
+live in `doc/`, beside this page.
 
 ## Layout
 

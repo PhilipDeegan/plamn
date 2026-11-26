@@ -1,4 +1,4 @@
-// each step of a particles mover timed on its own, per layout (MoveSpec, see
+// each step of a particles mover timed on its own, per layout (MoveSpec,
 //  particles_synchronised_mover_def.hpp): the push in place, + its sync, + the deposit of the
 //  pushed particles, all three, and the copy push with its deposit (UpdaterMode::domain_only). The
 //  patches are copies of one patch for the load only: no patch ghost exchange between them.

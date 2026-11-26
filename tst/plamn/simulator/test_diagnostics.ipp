@@ -1,14 +1,7 @@
 // pharevtkhdf diagnostics from C++, as PHARE's tests/diagnostic (test-diagnostics.cpp): the
 // simulation is a python script (diagnostics_job.py), run by an embedded interpreter through
 // pyphare and plamn, which fill plamn's Dict; the Simulator is made from that Dict here, dumps,
-// and the files are read back with HighFive and checked against the patches' data:
-//
-//   every file: PHARE's root attributes, VTKHDF's, one step at t0
-//   every level up to max_nbr_levels: its spacing, its boxes (every rank's, rank major), its
-//     rows' offsets, and this rank's rows: each primal node of each patch (dual directions
-//     averaged, Fortran order, the X_TIMES copies), from the patch's own grids
-//   the momentum tensors: the total is the populations' sum
-//   an unsupported quantity throws
+// and the files are read back with HighFive and checked against the patches' data
 //
 // a binary per dimension (test_diagnostics_<dim>d.cpp defines PLAMN_TEST_DIM, as PHARE's per
 // dimension binaries keep a compile's memory down); run from the plamn root, on any number of

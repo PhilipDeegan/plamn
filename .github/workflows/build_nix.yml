@@ -75,3 +75,33 @@ jobs:
         path: .phlop/
         include-hidden-files: true
         if-no-files-found: ignore
+
+  # test_layouts in 2D and 3D, a runner per dimension (the python job above has 1D's modules):
+  #  AoSMapped, the reference, and the other CPU layouts
+  layouts:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-24.04
+    container: ghcr.io/pharchive/phare_dep/ubuntu:26.04
+    strategy:
+      fail-fast: false
+      matrix:
+        dim: [2, 3]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: ./.github/actions/setup
+      with:
+        damn-key: ${{ secrets.DAMN_DEPLOY_KEY }}
+        mkn: "true"
+    - run: >-
+        KLOG=3 ./mkn.py --dim ${{ matrix.dim }} --layout AoSMapped AoSCMTS SoAVXChunked
+        AoS4SoAVXChunked --jobs 4 -- -q -x res/mkn/mpi
+        -W 9 -a "-Wno-unused-parameter -Wno-unused-variable -Wno-error=strict-aliasing"
+    - uses: actions/checkout@v4
+      with:
+        repository: PhilipDeegan/PHARE
+        ref: wrangler
+        path: phare
+        sparse-checkout: pyphare
+    - run: |
+        PYTHONPATH=.:phare/pyphare:tst/plamn/python \
+          python3 -m unittest -v tst.plamn.python.test_layouts.Layouts${{ matrix.dim }}dTest

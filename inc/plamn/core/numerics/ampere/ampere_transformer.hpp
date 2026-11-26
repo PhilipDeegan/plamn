@@ -39,12 +39,11 @@ struct AmpereTile
 // J = curl(B) over one patch: Ampere per point, on the box `box` selects per J component
 //  untiled: the patch's fields, or one tile's views (on_tile)
 //  tiled:   every tile of the patch, CPU tile by tile, GPU one launch with a block per tile
-//  J ghosts between tiles are not synced, see sync_inner_ghosts
+//  J ghosts between tiles are not synced (sync_inner_ghosts)
 template<AmpereBox box = AmpereBox{}>
 class AmpereTransformer
 {
 public:
-    // the box J component Jc is computed on
     template<typename Layout>
     static auto box_for(Layout const& layout, auto const& Jc)
     {
@@ -60,7 +59,7 @@ public:
     {
         if constexpr (VecField::field_type::alloc_mode == damn::AllocatorMode::GPU_UNIFIED)
         {
-            auto items = gpu_items(layout, B, J);
+            auto& items = gpu_items(layout, B, J);
             run_gpu(items);
             return;
         }
@@ -92,7 +91,6 @@ public:
                 on_tile(ti, B, J);
     }
 
-    // one tile of tiled B and J, eg as one task of a thread pool
     void on_tile(std::size_t const tile_idx, auto const& B, auto& J) const
     {
         tile_exec_with_layout_at(
@@ -110,8 +108,8 @@ private:
     }
 
 public:
-    // GPU_UNIFIED, as region items (an untiled patch is one region, a tiled one a region per tile)
-    //  collected per patch or across a level (see AmpereLevelTransformer), one launch per run_gpu
+    // GPU_UNIFIED: an untiled patch is one region, a tiled one a region per tile; items may be
+    //  collected across a level, one launch per run_gpu
     template<typename VecField>
     static auto region_layout(auto const& layout, VecField const& J, std::size_t const ti)
     {
@@ -160,10 +158,12 @@ public:
                                          region_view(J, ti)));
     }
 
+    // the thread's list, kept between launches (run_gpu waits for its kernel)
     template<typename Layout, typename VecField>
-    static auto gpu_items(Layout const& layout, VecField const& B, VecField& J)
+    static auto& gpu_items(Layout const& layout, VecField const& B, VecField& J)
     {
-        gpu_item_list_t<Layout, VecField> items;
+        static thread_local gpu_item_list_t<Layout, VecField> items;
+        items.clear();
         gpu_items(layout, B, J, items);
         return items;
     }
@@ -191,7 +191,7 @@ public:
     template<typename VecField>
     void on_tiles_gpu(VecField const& B, VecField& J) const
     {
-        auto items = gpu_items(J[0][0].layout(), B, J);
+        auto& items = gpu_items(J[0][0].layout(), B, J);
         run_gpu(items);
     }
 };

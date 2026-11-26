@@ -1,6 +1,6 @@
 #include "plamn/core/def.hpp"
-// AntiSymmetric (field_boundary_condition.hpp): a scalar's is Dirichlet 0; a vector's normal
-//  component is Neumann, its tangential ones Dirichlet 0 (ghosts minus their mirrors)
+// a scalar's is Dirichlet 0; a vector's normal component is Neumann, its tangential ones
+//  Dirichlet 0 (ghosts minus their mirrors)
 
 #include "plamn/core/boundary/boundary_defs.hpp"
 #include "plamn/core/numerics/boundary_condition/field_boundary_condition.hpp"

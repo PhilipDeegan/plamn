@@ -1,8 +1,7 @@
-// Ohm's law over one patch (OhmTransformer), PHAREHUB/PHARE#1487's cases: 2D and 3D, ideal,
-//  resistive + constant hyper-resistivity, resistive + spatial hyper-resistivity, a small and a
-//  large grid each. Per case: the fastest and the median call over PLAMN_REPEATS (default 20)
-//  after one untimed call, and a checksum of E's bits (results bitwise the same across a change:
-//  the same checksum)
+// Ohm's law over one patch (OhmTransformer): 2D and 3D, ideal, resistive + constant
+//  hyper-resistivity, resistive + spatial hyper-resistivity, a small and a large grid each. Per
+//  case: the fastest and the median call over PLAMN_REPEATS (default 20) after one untimed call,
+//  and a checksum of E's bits (results bitwise the same across a change: the same checksum)
 //
 //   mkn build -p bench_ohm -a "-DNDEBUG -O3 -march=native" -x res/mkn/clang -g 0 -t 4
 //   ./bin/bench_ohm/plamn

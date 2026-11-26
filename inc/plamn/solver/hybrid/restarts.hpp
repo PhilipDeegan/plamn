@@ -1,13 +1,11 @@
 #ifndef PLAMN_SOLVER_HYBRID_RESTARTS_HPP
 #define PLAMN_SOLVER_HYBRID_RESTARTS_HPP
 
-// what a restart holds of a hybrid level, and what the level rebuilds from it (the simulator
-//  writes and reads the levels' resources by these names, simulator_restarts.hpp)
+// what a restart holds of a hybrid level, and what the level rebuilds from it
 
 #include "damn/amr/level_map.hpp"
 #include "damn/core/def.hpp"
 #include "plamn/amr/refine.hpp"
-#include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/numerics/ampere/ampere_transformer.hpp"
 #include "plamn/solver/hybrid/level_steps.hpp"
@@ -15,11 +13,8 @@
 #include "plamn/core/data/electrons/closures.hpp"
 #include "plamn/solver/hybrid/electron/closures.hpp"
 
-#include <algorithm>
-#include <cstddef>
 #include <string>
 #include <vector>
-#include <format>
 #include <initializer_list>
 
 namespace plamn::solver::hybrid
@@ -89,30 +84,9 @@ void restart_loaded(HybridModel<opts> const& model, auto&& level)
         });
     }
     // the mass density and bulk velocity from the populations' (stored); the charge density and
-    //  flux as stored (coarsened where a finer level was synchronized)
-    level.per_patch([&](auto& patch) {
-        std::vector<std::vector<double>> stored;
-        auto const each = [&](auto&& fn) {
-            fn(patch.chargeDensity);
-            for (auto& c : patch.chargeFlux)
-                fn(c);
-        };
-        each([&](auto const& g) {
-            auto& values = stored.emplace_back();
-            core::for_each_buffer(g, [&](auto const* data, auto const size) {
-                values.insert(values.end(), data, data + size);
-            });
-        });
-        patch.ions.update();
-        std::size_t i = 0;
-        each([&](auto& g) {
-            auto const* from = stored[i++].data();
-            core::for_each_buffer(g, [&](auto* data, auto const size) {
-                std::copy(from, from + size, data);
-                from += size;
-            });
-        });
-    });
+    //  flux as stored (coarsened where a finer level was synchronized): neither is read nor
+    //  written by computeBulkVelocity
+    level.per_patch([](auto& patch) { patch.ions.computeBulkVelocity(); });
     level.per_patch(
         [&](auto& patch) { core::AmpereTransformer{}(patch.layout, patch.em.B, patch.J); });
     restart_loaded_level(model, level); // the closure's state from what was stored

@@ -105,8 +105,7 @@ public:
         });
     }
 
-    // one tile of the tiled fields, eg as one task of a thread pool; the arguments as
-    //  operator()'s, without the layout: B, x's, y's, z's CT fields, E
+    // operator()'s arguments without the layout: B, x's, y's, z's CT fields, E
     template<typename... Args>
     void on_tile(std::size_t const tile_idx, Args&&... args_then_E) const
     {
@@ -146,7 +145,8 @@ private:
         using Item_t = decltype(make_item(0));
 
         auto const n_tiles = tile_count(E);
-        damn::core::gpu::Vec_t<Item_t> items;
+        static thread_local damn::core::gpu::Vec_t<Item_t> items; // kept between launches
+        items.clear();
         items.reserve(n_tiles);
         for (std::size_t ti = 0; ti < n_tiles; ++ti)
             items.emplace_back(make_item(ti));

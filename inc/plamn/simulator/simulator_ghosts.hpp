@@ -28,6 +28,7 @@
 #include <type_traits>
 #include <vector>
 #include <cstdint>
+#include <deque>
 #include "damn/amr/physical_boundary.hpp"
 #include "plamn/core/boundary/physical_boundaries.hpp"
 
@@ -43,7 +44,6 @@ namespace plamn::amr
 template<typename Field, std::uint32_t gw>
 struct FieldResource;
 } // namespace plamn::amr
-// plamn::Simulator: ghost fills (patch and level ghosts), the debug check of unset points
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
 namespace plamn::simulator::detail
@@ -88,7 +88,7 @@ void Simulator<opts>::fill_magnetic_ghosts_(std::size_t const ln, std::string co
     if (ln > 0)
     {
         refine_(ln, amr::FieldRefiner{}, damn::amr::LevelRegion::LevelGhosts,
-                amr::vector_pairs("EM_B_old", key, "EM_B"), alpha_(ln, t));
+                amr::kept_vector_pairs("EM_B_old", key, "EM_B"), alpha_(ln, t));
         touch_up_level_ghosts_(ln, key);
     }
     check_set_(ln, key, "magnetic ghosts");
@@ -101,7 +101,7 @@ void Simulator<opts>::fill_electric_ghosts_(std::size_t const ln, std::string co
     copy_(ln, damn::amr::fill_ghosts, key);
     if (ln > 0)
         refine_(ln, amr::FieldRefiner{}, damn::amr::LevelRegion::LevelGhosts,
-                amr::vector_pairs("EM_E_old", key, "EM_E"), alpha_(ln, t));
+                amr::kept_vector_pairs("EM_E_old", key, "EM_E"), alpha_(ln, t));
     check_set_(ln, key, "electric ghosts");
 }
 
@@ -142,15 +142,18 @@ void Simulator<opts>::touch_up_level_ghosts_(std::size_t const ln, std::string c
                                             Patch_t::field_ghost_width>;
         auto& ld       = model.levels[static_cast<int>(ln)];
         // tiled B: touched up on its untiled temporaries, written back into the tiles
+        static thread_local std::vector<std::string> names; // read by add only
+        names.assign({key + "_x", key + "_y", key + "_z"});
         Leases leases;
-        leases.add(ld, {key + "_x", key + "_y", key + "_z"}, amr::Lease::fill);
+        leases.add(ld, names, amr::Lease::fill);
         for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
         {
-            std::vector<Resource> B;
+            std::array<Resource, 3> B{};
+            std::size_t nb = 0;
             for (auto const* c : {"_x", "_y", "_z"})
                 damn::amr::with_resource(ld.data[i], key + c, [&](auto& r) {
                     if constexpr (std::is_same_v<std::decay_t<decltype(r)>, Resource>)
-                        B.push_back(r);
+                        B[nb++] = r;
                 });
             for (auto const& region : l.level_ghost_cells[i])
                 amr::divergence_free_touch_up(std::array{&B[0], &B[1], &B[2]}, ld.patches[i].box,
@@ -205,13 +208,20 @@ void Simulator<opts>::refine_mhd_level_ghosts_(std::size_t const ln, std::size_t
     using Patch_t    = solver::MHDModel<opts>::Patch_t;
     auto const name  = [&](std::string const& q) { return Patch_t::state_name(q, s); };
     auto const alpha = alpha_(ln, t);
-    std::vector<damn::amr::LevelPair> pairs{{"rho_old", name("rho"), "rho"},
-                                            {"Etot_old", name("Etot"), "Etot"}};
-    for (auto const& p : amr::vector_pairs("rhoV_old", name("rhoV"), "rhoV"))
-        pairs.push_back(p);
-    refine_(ln, amr::FieldRefiner{}, damn::amr::LevelRegion::LevelGhosts, pairs, alpha);
+    // per state, the same every step: built once per thread (a deque: they stay where they are)
+    static thread_local std::deque<std::vector<damn::amr::LevelPair>> by_state;
+    while (by_state.size() <= s)
+    {
+        auto const k = by_state.size();
+        auto& pairs  = by_state.emplace_back(std::vector<damn::amr::LevelPair>{
+            {"rho_old", Patch_t::state_name("rho", k), "rho"},
+            {"Etot_old", Patch_t::state_name("Etot", k), "Etot"}});
+        for (auto const& p : amr::vector_pairs("rhoV_old", Patch_t::state_name("rhoV", k), "rhoV"))
+            pairs.push_back(p);
+    }
+    refine_(ln, amr::FieldRefiner{}, damn::amr::LevelRegion::LevelGhosts, by_state[s], alpha);
     refine_(ln, amr::FieldRefiner{}, damn::amr::LevelRegion::LevelGhosts,
-            amr::vector_pairs("B_old", name("B"), "B"), alpha);
+            amr::kept_vector_pairs("B_old", name("B"), "B"), alpha);
     touch_up_level_ghosts_(ln, name("B"));
 }
 

@@ -1,6 +1,5 @@
 #include "plamn/core/def.hpp"
-// Neumann (field_boundary_condition.hpp): a scalar's ghosts past a boundary take the interior
-//  value, in 1D, 2D (x boundaries) and 3D (z boundaries)
+// a scalar's ghosts past a boundary take the interior value
 
 #include "plamn/core/boundary/boundary_defs.hpp"
 #include "plamn/core/numerics/boundary_condition/field_boundary_condition.hpp"

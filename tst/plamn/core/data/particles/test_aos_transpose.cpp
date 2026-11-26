@@ -1,6 +1,5 @@
-// aos_transpose.hpp: 8 particle structures to columns and back by the AVX-512 transpose (or per
-//  particle without it), against the per particle copy: every dimension, every block size n, the
-//  slots past n (to_columns: weight 0; from_columns: particle n untouched)
+// the AVX-512 transpose (or per particle without it) against the per particle copy; the slots
+//  past n: to_columns writes weight 0, from_columns leaves particle n untouched
 
 #include "plamn/core/data/particles/aos_transpose.hpp"
 #include "plamn/core/data/particles/particle.hpp"

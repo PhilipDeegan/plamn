@@ -1,13 +1,8 @@
 #ifndef PLAMN_SOLVER_MHD_MODEL_HPP
 #define PLAMN_SOLVER_MHD_MODEL_HPP
 
-// the MHD model of a simulation: its patch data per level number, for the levels it is active
-//  on, and what its levels' advance needs that is not the levels' data
-//  (pyphare's MHDModel input: simulation/algo/fv_method, simulation/algo/time_integrator_type,
-//  simulation/grid/domain_boundaries): the heat capacity ratio, the time integration scheme
-//  (Euler, TVDRK2, TVDRK3, SSPRK4_5: a run time choice), resistivity and hyper resistivity, Hall,
-//  and the physical boundaries' conditions. The reconstruction (and its slope limiter) is the
-//  simulation's compile time options'. Empty if the build does not enable it
+// the MHD model of a simulation: its patch data per level number, and what its levels' advance
+//  needs that is not the levels' data: doc/solver/mhd/model.md
 
 #include "plamn/amr/field_access.hpp" // IWYU pragma: keep (a member's type)
 #include "damn/amr/level_data.hpp"
@@ -122,7 +117,7 @@ struct MHDModel<opts, true>
     using LevelData_t    = damn::amr::LevelData<opts.dimension, std::unique_ptr<Patch_t>>;
 
     std::map<int, LevelData_t> levels; // the levels the model is active on
-    // damn's field copies by accessors, per resource key: resolved once (Simulator::copy_)
+    // damn's field copies by accessors, per resource key: resolved once
     std::map<std::string, std::vector<amr::FieldAccess<Patch_t::field_ghost_width>>> field_access{};
     std::map<std::string, diagnostic::Accessor<Patch_t>> quantities{}; // diagnostics' fields
 

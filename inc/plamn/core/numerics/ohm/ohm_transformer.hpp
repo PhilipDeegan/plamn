@@ -37,7 +37,7 @@ struct OhmTile
 // E from Ohm's law over one patch: Ohm per point, on the domain box of each E component
 //  untiled: the patch's fields, or one tile's views (on_tile)
 //  tiled:   every tile of the patch, CPU tile by tile, GPU one launch with a block per tile
-//  E ghosts between tiles are not synced, see sync_inner_ghosts
+//  E ghosts between tiles are not synced (sync_inner_ghosts)
 class OhmTransformer
 {
 public:
@@ -46,7 +46,6 @@ public:
     {
     }
 
-    // the box E component Ec is computed on, as eval_on_box below
     static auto box_for(auto const& layout, auto const& Ec) { return domain_box(layout, Ec); }
 
     template<typename Layout, typename VecField, typename Field>
@@ -87,8 +86,7 @@ public:
                 on_tile(ti, n, Ve, Pe, B, J, Enew);
     }
 
-    // GPU_UNIFIED, an item per untiled patch collected across a level (one launch per run_gpu):
-    //  the patch's fields as views, its E components' boxes, Ohm over its layout
+    // GPU_UNIFIED, an item per untiled patch collected across a level (one launch per run_gpu)
     template<typename Layout>
     auto make_item(Layout const& layout, auto const& n, auto const& Ve, auto const& Pe,
                    auto const& B, auto const& J, auto& Enew) const
@@ -131,7 +129,6 @@ public:
 #endif
     }
 
-    // one tile of the tiled fields, eg as one task of a thread pool
     void on_tile(std::size_t const tile_idx, auto const& n, auto const& Ve, auto const& Pe,
                  auto const& B, auto const& J, auto& Enew) const
     {
@@ -181,7 +178,8 @@ private:
         using Item_t = decltype(make_item(0));
 
         auto const n_tiles = tile_count(Enew);
-        damn::core::gpu::Vec_t<Item_t> items;
+        static thread_local damn::core::gpu::Vec_t<Item_t> items; // kept between launches
+        items.clear();
         items.reserve(n_tiles);
         for (std::size_t ti = 0; ti < n_tiles; ++ti)
             items.emplace_back(make_item(ti));

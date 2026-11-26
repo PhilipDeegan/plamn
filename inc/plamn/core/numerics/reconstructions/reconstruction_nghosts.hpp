@@ -8,8 +8,7 @@
 namespace plamn::MHDOpts
 {
 
-// Compile-time mapping from ReconstructionType enum to stencil width (nghosts).
-// These values correspond to the nghosts member in each reconstruction class.
+// stencil width per ReconstructionType: must match each reconstruction's nghosts
 template<ReconstructionType R>
 struct ReconstructionNghosts;
 

@@ -8,10 +8,7 @@
 //
 // (cell_jump: core::particle_allowed_cell_jump, what the ghost widths are made for; a domain
 //  particle moving further throws, the cell jump limit). Gap slots (weight 0, SoAVXChunked) are
-//  not particles: skipped
-//
-//   max_abs_velocity(particles)          max |v_d| per direction (3 components)
-//   particles_dt(dx, particles, cfl)     the bound (no particle, or at rest: no bound, max())
+//  not particles: skipped. No particle, or at rest: no bound, max()
 
 #include "plamn/core/data/grid/ghost_width_calculator.hpp"
 #include "plamn/core/data/particles/particle_components.hpp"

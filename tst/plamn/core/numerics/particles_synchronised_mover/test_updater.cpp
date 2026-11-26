@@ -213,7 +213,6 @@ struct ParticlesSynchronisedMoverTest : public ::testing::Test
 
     double const dt{0.01};
 
-    // grid configuration
     Layout const layout{damn::core::Box<int, 1>{{0}, {99}}, {0.1}}; // 100 cells
 
 
@@ -227,10 +226,6 @@ struct ParticlesSynchronisedMoverTest : public ::testing::Test
 
     ParticlesSynchronisedMoverTest()
     {
-        // ok all resources pointers are set to buffers
-        // now let's initialize Electromag fields to user input functions
-        // and ion population particles to user supplied moments
-
         assert(no_nans(ions.velocity()(Component::X)));
         ElectromagInitializer<dim>{init_dict["electromag"]}(*EM, layout);
         for (auto& pop : ions)
@@ -243,15 +238,12 @@ struct ParticlesSynchronisedMoverTest : public ::testing::Test
         }
         assert(no_nans(ions.velocity()(Component::X)));
 
-        // now all domain particles are loaded we need to manually insert
-        // ghost particles (this is in reality SAMRAI's job)
-        // these are needed if we want all used nodes to be complete
+        // ghost particles by hand (in a run the messengers fill them), so every node used is
+        // complete
 
 
-        // in 1D we assume left border is touching the level border
-        // and right is touching another patch
-        // so on the left no patchGhost but levelGhost(and old and new)
-        // on the right no levelGhost but patchGhosts
+        // 1D: the left border on the level border (level ghosts, old and new), the right on
+        // another patch (patch ghosts)
 
         for (auto& pop : ions)
         {
@@ -261,12 +253,8 @@ struct ParticlesSynchronisedMoverTest : public ::testing::Test
                 int firstPhysCell = cells.lower[0];
                 auto firstAMRCell = to_amr(layout, damn::core::Point{firstPhysCell});
 
-                // we need to put levelGhost particles in the cell just to the
-                // left of the first cell. In reality these particles should
-                // come from splitting particles of the next coarser level
-                // in this test we just copy those of the first cell
-                // we also assume levelGhostOld and New are the same particles
-                // for simplicity
+                // level ghosts: copies of the first cells' particles (in a run, split from the
+                // coarser level), the old and new ones the same
 
                 auto& domainPart        = pop.domainParticles();
                 auto& levelGhostPartOld = pop.levelGhostParticlesOld();
@@ -276,29 +264,6 @@ struct ParticlesSynchronisedMoverTest : public ::testing::Test
 
 
 
-                // copies need to be put in the ghost cell
-                // we have copied particles be now their iCell needs to be udpated
-                // our choice is :
-                //
-                // first order:
-                //
-                //   ghost| domain...
-                // [-----]|[-----][-----][-----][-----][-----]
-                //     ^      v
-                //     |      |
-                //     -------|
-                //
-                // second and third order:
-
-                //   ghost        | domain...
-                // [-----]|[-----][-----][-----][-----][-----][-----]
-                //     ^      ^       v     v
-                //     |      |       |     |
-                //     -------|-------|     |
-                //            ---------------
-
-                // per_particle() dispatches per layout (flat for AoS/AoSMapped, per tile for
-                // AoSCMTS), so no manual tile loop is needed here
                 // the first particle_ghost_width domain cells, copied into the as many ghost
                 // cells left of the domain
                 auto constexpr pgw = static_cast<int>(Layout::options.particle_ghost_width);
@@ -398,7 +363,7 @@ struct ParticlesSynchronisedMoverTest : public ::testing::Test
 
             for (auto& pop : this->ions)
             {
-                sum(pop.particleDensity()); // pop charge density is q * n, see Ions
+                sum(pop.particleDensity()); // pop charge density is q * n
                 for (auto& component : pop.flux())
                     sum(component);
             }
@@ -548,7 +513,6 @@ TYPED_TEST(ParticlesSynchronisedMoverTest, ionUpdaterTakesPusherParamsFromDictAt
 }
 
 
-// the following 3 tests are testing the fixture is well configured.
 
 
 TYPED_TEST(ParticlesSynchronisedMoverTest, loadsDomainPatchAndLevelGhostParticles)
@@ -601,10 +565,6 @@ TYPED_TEST(ParticlesSynchronisedMoverTest, loadsLevelGhostParticlesOnLeftGhostAr
     }
 }
 
-
-
-
-// start of DAMN TESTS
 
 
 

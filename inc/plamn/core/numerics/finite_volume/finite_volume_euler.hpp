@@ -10,8 +10,7 @@
 // one conserved quantity's finite volume (forward Euler) update in one cell from its face fluxes,
 //  PHARE's core/numerics/finite_volume_euler/finite_volume_euler_per_field.hpp, its expression
 //  order: Unew = U - (dt / dx) (F_x(i + 1) - F_x(i)) - (dt / dy) (...) - ...
-//  The face i of a flux field is the lower face of cell i (GodunovFace's indexing). Where and how
-//  it is evaluated (boxes, tiles, GPU) is up to the caller, see finite_volume_euler_transformer.hpp
+//  The face i of a flux field is the lower face of cell i (GodunovFace's indexing)
 namespace plamn::core
 {
 

@@ -81,7 +81,7 @@ struct FieldTileOverlaps
                 {
                 }
 
-                // local boxes, walk with for_each_span (box_spans.hpp)
+                // local boxes, walk with for_each_span
                 damn::core::Box<std::uint32_t, opts.dimension> domain_box, ghost_box;
                 std::vector<Overlap> overlaps{};
             };

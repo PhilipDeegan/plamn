@@ -19,13 +19,10 @@
 
 namespace plamn::solver::hybrid
 {
-// the hybrid model's computed quantities: the momentum tensor (PHARE's FluidDiagnosticWriter),
-//  of all populations ("/ions/momentum_tensor", all deposited into one) and of each
-//  ("/ions/pop/<name>/momentum_tensor", with its mass): domain particles and the level ghosts
-//  at the end of the coarser step (levelGhostParticlesOld, after last_step), then the border
-//  sum: a level ghost is held by one patch, so deposited before the sum completes every
-//  patch's copy (as the moments, deposit_level_ghosts). resource(key, names): the grids a
-//  border sum adds up
+// the momentum tensor (PHARE's FluidDiagnosticWriter), of all populations deposited into one and
+//  of each (with its mass): domain particles and the level ghosts at the end of the coarser step
+//  (levelGhostParticlesOld), each held by one patch, so deposited before the border sum completes
+//  every patch's copy (as the moments). resource(key, names): the grids a border sum adds up
 template<auto opts>
 void setup_computed(HybridModel<opts>& model, auto&& resource)
 {

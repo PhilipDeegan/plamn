@@ -1,6 +1,6 @@
 #include "plamn/core/def.hpp"
-// field conditions at a physical boundary (field_boundary_condition.hpp): a patch's ghosts past
-//  its lower and upper x boundaries, on MHD fields (rho: dual, Bx: primal along x)
+// a patch's ghosts past its lower and upper x boundaries, on MHD fields (rho: dual, Bx: primal
+//  along x)
 
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"

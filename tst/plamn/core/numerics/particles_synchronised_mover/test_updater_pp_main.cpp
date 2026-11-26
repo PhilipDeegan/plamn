@@ -1,6 +1,4 @@
 #include "plamn/core/def.hpp"
-// tests/core/numerics/particles_synchronised_mover/test_updater_pp_main.cpp
-//
 //  requires
 //  - cmake:    -DwithPhlop
 //  - cxxflags: -DDAMN_LOG_LEVEL=1
@@ -285,7 +283,7 @@ void compare(auto const& layout, auto& ref, C& cmp)
 
     double diff = 1e-13; // 0.0000000000000011102230
     if constexpr (Particles_t::alloc_mode == GPU_UNIFIED)
-        diff *= 1e2; // atomics no order guaranteed#
+        diff *= 1e2; // atomics: no order guaranteed
     // else if constexpr (any_in(Particles_t::layout_mode, AoSTS, SoATS))
     //     diff *= 1e1; // p2m op order diff
     // else if constexpr (any_in(Particles_t::layout_mode, SoAVX))

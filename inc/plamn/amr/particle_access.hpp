@@ -1,22 +1,8 @@
 #ifndef PLAMN_AMR_PARTICLE_ACCESS_HPP
 #define PLAMN_AMR_PARTICLE_ACCESS_HPP
 
-// damn's particle copies and refines reach a patch's particle arrays through accessors (damn's
-//  copy.hpp, inter_level.hpp), not by their names: a population (its index in the patch's
-//  populations, the ions' order on every patch) and one of its arrays (a member of the patch's
-//  PopulationData, a template argument). The arrays by role, a wrong one does not compile:
-//
-//   sources        domain (splits' coarse side), patch_ghost (gather_leaving): read only, their
-//                  resources hold a Particles const*
-//   destinations   domain (gather_leaving, interior splits), level_ghost_old (init / regrid /
-//                  restart splits), level_ghost_new (a coarse step's splits): appended to
-//   level_ghost    neither: never in a schedule (made from the old and new arrays)
-//
-//   ParticleCopies<Patch, src, dst>      damn::amr::copy's pairs (names: the plans) and
-//                                        accessors, one per population
-//   ParticleRefines<Patch, coarse, fine> damn::amr::refine's, the same coarse and fine Patch
-//
-// made once per model from its population names (HybridModel::particle_routes)
+// damn's particle copies and refines reach a patch's arrays through accessors, not by name,
+//  each array by role (a wrong one does not compile): doc/amr/particle_access.md
 
 #include "plamn/amr/resources.hpp"
 #include "damn/amr/copy.hpp"      // IWYU pragma: keep (ResourcePair: a member's element type)

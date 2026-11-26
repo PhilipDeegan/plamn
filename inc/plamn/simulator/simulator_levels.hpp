@@ -40,7 +40,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-// plamn::Simulator: making and initializing levels (PHARE's HybridLevelInitializer)
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
 namespace plamn
@@ -71,6 +70,7 @@ Simulator<opts>::decompose_in_(std::string const& partition)
             .partition  = partition,
             .spill      = lb_.spill,
             .block      = rebalance_block,
+            .level_size = level_size_,
             .near_band  = std::max(near_band, 0)};
 }
 
@@ -353,8 +353,8 @@ void Simulator<opts>::spawn_level_ghosts_(std::size_t const ln, bool const new_g
         for (std::size_t i = 0; i < damn::amr::size(ld); ++i)
         {
             auto const& cell = ld.patches[i].box;
-            std::vector<Box_t> ghosts{
-                damn::core::grow(cell, mkn::kul::ConstArray<int, dimension>(pgw))};
+            static thread_local std::vector<Box_t> ghosts, rest; // used up per patch
+            ghosts.assign(1, damn::core::grow(cell, mkn::kul::ConstArray<int, dimension>(pgw)));
             for (std::size_t d = 0; d < dimension; ++d)
                 if (!hierarchy_.periodic[d])
                 {
@@ -364,11 +364,11 @@ void Simulator<opts>::spawn_level_ghosts_(std::size_t const ln, bool const new_g
             for (auto const& covered :
                  damn::amr::covered_by_level(hierarchy_, static_cast<int>(ln), ghosts.front()))
             {
-                std::vector<Box_t> rest;
+                rest.clear();
                 for (auto const& g : ghosts)
                     for (auto const& r : g.remove(covered))
                         rest.push_back(r);
-                ghosts = std::move(rest);
+                std::swap(ghosts, rest);
             }
             simulator::coupling::spawn(
                 *ld.data[i], ghosts,

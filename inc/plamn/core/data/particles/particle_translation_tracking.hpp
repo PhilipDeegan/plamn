@@ -23,13 +23,9 @@ class Point;
 namespace plamn::core
 {
 
-// Shared per-cell bookkeeping for the owning (VECTOR) side of PerCellVector / TileSetVector /
-// PCTileSetVector: the gap/arrival/capacity counters used to register and apply particle moves,
-// plus the box/local-cell plumbing they're indexed by. Identical across all three layouts.
-//
-// What is NOT here on purpose: sync/sync_moved/on_appended/move_check and friends. Those walk
-// genuinely different index spaces per layout (per-cell, per-tile via a representative slot,
-// per-tile-wall-cell layered on a nested per-cell level) and stay implemented separately.
+// the move counters (gaps, arrivals, capacity) and local cell indexing common to PerCellVector,
+//  TileSetVector and PCTileSetVector. Not sync / move_check: they walk different index spaces
+//  per layout (per cell, per tile by a representative slot, wall cells over nested per cells)
 template<std::size_t dim, auto alloc_mode>
 class ParticleTranslationTracker
 {
@@ -102,14 +98,8 @@ protected:
 };
 
 
-// Span-side counterpart of ParticleTranslationTracker: the same box/local-cell plumbing plus
-// the subset of bookkeeping views identical across PerCellSpan / TileSetSpan / PCTileSetSpan
-// (gaps_/gap_idx_/add_into_/cap_/left_, size_, box_/ghost_box_/local_ghost_box_).
-//
-// cell_size_ is deliberately excluded: PerCellSpan has no such member (it tracks per-cell size
-// via each cell's own vector), so it isn't identical across all three - it stays declared
-// locally on TileSetSpan/PCTileSetSpan instead. Same reasoning as PerCellVector's off_sets_ on
-// the VECTOR side above.
+// the spans' side: the views common to PerCellSpan, TileSetSpan and PCTileSetSpan. Not
+//  cell_size_: PerCellSpan sizes through each cell's own vector
 template<std::size_t dim>
 class ParticleTranslationTrackerSpan
 {
@@ -138,8 +128,7 @@ public:
     }
 
 protected:
-    // named fields (rather than positional ctor args) so callers can't silently swap two
-    // same-typed values (e.g. box vs ghost_box, or the several std::size_t views)
+    // named fields: no silent swap of two same-typed values (box and ghost_box, ...)
     struct Init
     {
         damn::core::NdArrayView<dim, damn::core::Span<std::size_t>> gaps;

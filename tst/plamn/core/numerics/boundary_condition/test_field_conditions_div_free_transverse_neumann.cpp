@@ -1,8 +1,6 @@
 #include "plamn/core/def.hpp"
-// DivergenceFreeTransverseNeumann (field_boundary_condition.hpp) on an MHD B linear in the local
-//  indexes: past each boundary its tangential components mirror the domain's, its normal one
-//  makes every ghost cell's discrete divergence zero, on isotropic and anisotropic 2D meshes and
-//  in 3D
+// an MHD B linear in the local indexes: past each boundary its tangential components mirror the
+//  domain's, its normal one makes every ghost cell's discrete divergence zero
 
 #include "damn/core/geometry/box_spans.hpp"
 

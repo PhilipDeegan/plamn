@@ -1,30 +1,13 @@
 #ifndef PLAMN_AMR_REFINE_HPP
 #define PLAMN_AMR_REFINE_HPP
 
-// refine operators for damn::amr::refine (and damn::mpi's), over plamn's resources
-// (resources.hpp), refinement ratio 2:
-//
-//   FieldRefiner:       PHARE's composite linear refinement, any centering. Per direction:
-//                       primal, a fine node on a coarse node copies it, one between two coarse
-//                       nodes is their mean; dual, the two fine cells of coarse cell I are
-//                       u_I -/+ (u_{I+1} - u_{I-1}) / 8 (they mean back to u_I). The value is
-//                       the tensor product of the per direction stencils
-//   divergence_free_touch_up(B, cells, region, dx):
-//                       stage 2 of PHARE's divergence free magnetic refinement (Balsara et al.
-//                       2023, see PHARE's magnetic_refine_patch_strategy.hpp): after B's
-//                       components were refined with FieldRefiner over whole coarse cells,
-//                       the faces inside each coarse cell are corrected so the divergences of
-//                       its fine cells are all the coarse cell's: a div free coarse B refines
-//                       div free
-//   ParticleSplitter<Splitter>:
-//                       PHARE's particle refinement: each coarse particle split in
-//                       Splitter::nbRefinedPart fine ones (split/split.hpp), those in the
-//                       target box kept
+// refine operators (ratio 2, as PHARE's) over plamn's resources: doc/amr/refine.md
 
 #include "damn/core/def.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/geometry/box_spans.hpp"
+#include "damn/core/memory/scratch.hpp"
 #include "plamn/amr/resources.hpp"
 #include "plamn/amr/split/splitter.hpp"
 #include "plamn/core/data/particles/particle.hpp"
@@ -36,7 +19,6 @@
 #include <span>
 #include <stdexcept>
 #include <utility>
-#include <vector>
 
 namespace damn::amr
 {
@@ -129,8 +111,9 @@ struct CellInjector
 };
 
 
-// B: the components' resources (x, y, z), cells: the fine patch's, region: fine cells, a union
-// of whole coarse cells whose faces FieldRefiner wrote, dx: the fine mesh size
+// after FieldRefiner over region (whole coarse cells), the faces inside each coarse cell
+//  corrected so its fine cells' divergences are the coarse cell's: doc/amr/refine.md
+// cells, dx: the fine patch's
 template<typename Resource, std::size_t dim>
 void divergence_free_touch_up(std::array<Resource*, 3> const& B,
                               damn::core::Box<int, dim> const& cells,
@@ -160,7 +143,8 @@ void divergence_free_touch_up(std::array<Resource*, 3> const& B,
         }
         return i;
     };
-    std::vector<double> div(region.size());
+    damn::core::Scratch<double> div{
+        static_cast<std::size_t>(region.size())}; // every value set below
     damn::core::for_each_point(region, [&](auto const& c) {
         double v = 0;
         for (std::size_t d = 0; d < dim; ++d)

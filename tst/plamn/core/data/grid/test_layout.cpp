@@ -1,9 +1,5 @@
 #include "plamn/core/def.hpp"
-//  tst/plamn/core/data/grid/test_layout.cpp
-//
-//  fixed values for the stateless layout functions (layout.hpp) and the hybrid Yee
-//  centerings, worked out by hand from the Yee definitions: the reference for
-//  replacing Layout with layout.hpp
+// expected values worked out by hand from the Yee definitions
 
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"

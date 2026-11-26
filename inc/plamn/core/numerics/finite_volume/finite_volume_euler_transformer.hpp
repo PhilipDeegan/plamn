@@ -60,7 +60,6 @@ public:
                 on_tile(ti, dt, U, Fx, Fy, Fz, Unew);
     }
 
-    // one tile of the tiled fields, eg as one task of a thread pool
     void on_tile(std::size_t const tile_idx, double const dt, auto const& U, auto const& Fx,
                  auto const& Fy, auto const& Fz, auto& Unew) const
     {
@@ -96,7 +95,8 @@ private:
         using Item_t = decltype(make_item(0));
 
         auto const n_tiles = tile_count(Unew);
-        damn::core::gpu::Vec_t<Item_t> items;
+        static thread_local damn::core::gpu::Vec_t<Item_t> items; // kept between launches
+        items.clear();
         items.reserve(n_tiles);
         for (std::size_t ti = 0; ti < n_tiles; ++ti)
             items.emplace_back(make_item(ti));

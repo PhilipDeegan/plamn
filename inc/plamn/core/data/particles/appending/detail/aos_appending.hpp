@@ -137,8 +137,7 @@ void ParticlesAppender<LM::AoSMapped, AM::CPU, LM::AoSPC, AM::GPU_UNIFIED>::oper
 }
 
 
-// into one AoSPCTS tile (AoSPC), e.g. the refined particle chunks of the AoSPCTS GPU refiner
-//  (forwards to the CPU one, src is a span over a host buffer)
+// into one AoSPCTS tile (AoSPC), src a span over a host buffer
 template<> // slow - unified memory, CPU path
 template<auto type, typename Src, typename Dst>
 void ParticlesAppender<LM::AoS, AM::GPU_UNIFIED, LM::AoSPC, AM::GPU_UNIFIED>::operator()( //
@@ -178,7 +177,8 @@ void ParticlesAppender<LM::AoSMapped, AM::CPU, LM::AoSTS, AM::GPU_UNIFIED>::oper
 
 #if DAMN_HAVE_MKN_GPU
     using Particle_t = typename Dst::Particle_t;
-    damn::core::gpu::Vec_t<Particle_t> staged(src.size());
+    static thread_local damn::core::gpu::Vec_t<Particle_t> staged; // kept between appends
+    staged.resize(src.size());
     std::copy(src.data(), src.data() + src.size(), staged.data());
     dst.template append_on_device<type>(staged.data(), staged.size());
 #else

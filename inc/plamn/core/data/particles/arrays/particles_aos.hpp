@@ -201,13 +201,11 @@ public:
     template<auto type>
     void on_moved()
     {
-        // noop
     }
 
     template<auto type>
     void on_appended()
     {
-        // noop
     }
 
 
@@ -224,14 +222,8 @@ public:
     template<typename Iterator>
     auto erase(Iterator first, Iterator last)
     {
-        // should we erase particles indexes associated with these iterators from the cellmap?
-        // probably it does not matter if not. The reason is that
-        // particles erased from the particlearray are so because they left
-        // the patch cells to an outside cell.
-        // But in principle that cell will never be accessed because it is outside the patch.
-        // The only thing "bad" if these indexes are not deleted is that the
-        // size of the cellmap becomes unequal to the size of the particleArray.
-        // but  ¯\_(ツ)_/¯
+        // the cellmap keeps the erased indexes: erased particles left for cells outside the
+        //  patch, never looked up. Only the map's size no longer equals the array's
         return particles_.erase(particles_.begin() + first.curr_pos,
                                 particles_.begin() + last.curr_pos);
     }
@@ -448,7 +440,7 @@ struct AoSParticles : public Super_<opts>
         return particles_;
     }
 
-    // does not swap cellmap (never did)
+    // does not swap cellmap
     void swap(This& that) { std::swap(this->particles_, that.particles_); }
     void swap(std::size_t const& a, std::size_t const& b)
     {
@@ -790,6 +782,17 @@ public:
     MKN_KUL_FN_SIG_RET auto& map(auto const& arr) { return cellMap_(arr); }
     MKN_KUL_FN_SIG_RET auto& map(auto const& arr) const { return cellMap_(arr); }
 
+    using Super::swap;
+    // the CellMap follows the particles
+    void swap(std::size_t const& a, std::size_t const& b)
+    {
+        if (a == b)
+            return;
+        cellMap_(particles_[a].iCell()).updateIndex(a, b);
+        cellMap_(particles_[b].iCell()).updateIndex(b, a);
+        Super::swap(a, b);
+    }
+
     auto& box() const { return box_; }
 };
 
@@ -828,7 +831,7 @@ struct AoSParticles<Super, opts>::iterator_impl
         ++curr_pos;
         return *this;
     }
-    auto operator++(int) // postfix increment
+    auto operator++(int)
     {
         auto copy = *this;
         ++(*this);
