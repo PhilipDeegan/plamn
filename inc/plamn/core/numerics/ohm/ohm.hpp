@@ -56,9 +56,7 @@ public:
     // E component c at one point: gradPe_c is that component of grad(layout, Pe), layout the
     //  one of the fields at ijk (patch or tile). The resistive / hyper-resistive runtime flags
     //  and the hyper mode come in as compile-time tags: no branch on them per point (the loops
-    //  vectorise), the projection / laplacian are skipped when eta or nu is zero. Where and how
-    //  it is evaluated (boxes, tiles, GPU) is up to the caller, see
-    //  core/numerics/ohm/ohm_transformer.hpp
+    //  vectorise), the projection / laplacian are skipped when eta or nu is zero
     template<auto c, bool isResistive, bool isHyperResistive, HyperMode hyper>
     void operator()(auto const& ijk, auto const& n, auto const& Ve, auto const& gradPe_c,
                     auto const& B, auto const& J, auto& E) const DAMN_ALL
@@ -220,7 +218,7 @@ private:
     template<auto component, typename VecField>
     auto constant_hyperresistive_(VecField const& J,
                                   damn::core::Point<std::size_t, VecField::dimension> index) const DAMN_ALL
-    { // TODO : https://github.com/PHAREHUB/PHARE/issues/3
+    {
         return -nu * laplacian(layout_, J(component), index);
     }
 

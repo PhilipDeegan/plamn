@@ -94,9 +94,7 @@ namespace core
 
             for (auto& pop : populations_)
             {
-                // we sum over all nodes contiguously, including ghosts
-                // nodes. This is more efficient and easier to code as we don't
-                // have to account for the field dimensionality.
+                // all nodes contiguously, ghosts included: no dimensionality to account for
 
                 auto&& particleDensity = maybe_tile_at(pop.particleDensity(), tile_idx...);
                 auto&& popDensity      = maybe_tile_at(pop.chargeDensity(), tile_idx...);
@@ -114,9 +112,7 @@ namespace core
 
             for (auto const& pop : populations_)
             {
-                // we sum over all nodes contiguously, including ghosts
-                // nodes. This is more efficient and easier to code as we don't
-                // have to account for the field dimensionality.
+                // all nodes contiguously, ghosts included: no dimensionality to account for
 
                 auto&& popDensity = maybe_tile_at(pop.particleDensity(), tile_idx...);
                 core::transform(

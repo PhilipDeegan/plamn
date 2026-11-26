@@ -73,9 +73,8 @@ public:
     auto& links() { return _links; }
     auto& links() const { return _links; }
 
-    // every cell this tile physically reaches: its domain box, plus - for LevelGhost -
-    // its own ghost halo (unfiltered: adjacent tiles' halos legitimately overlap).
-    // callers wanting a deduped subset filter fn themselves
+    // its box, plus for LevelGhost its ghost halo: not deduplicated, adjacent tiles' halos
+    //  overlap
     template<ParticleType type>
     void on_reachable_cells(auto&& fn) const DAMN_ALL
     {
@@ -180,7 +179,7 @@ public:
     template<auto particle_type>
     auto& move_check(auto const& pt, std::size_t const idx, auto& particle) DAMN_ALL;
 
-    // CPU: tile-by-tile on the host; GPU_UNIFIED: one kernel thread per tile on the given stream
+    // CPU: tile by tile on the host; GPU_UNIFIED: a kernel thread per tile, on args' stream
     template<auto type, typename... Args>
     void sync(Args&&... args);
 
@@ -255,7 +254,7 @@ public:
         : Base{that.box_, that.ghost_cells_}
         , particles_{std::move(that.particles_)}
     {
-        on_appended(); // without std::swap does not work well - mirrors TileSetVector
+        on_appended(); // without std::swap does not work well
     }
 
     PCTileSetVector(PCTileSetVector const& that)
@@ -265,9 +264,8 @@ public:
         on_appended();
     }
 
-    // not = default: see TileSetVector::operator= (particles_ts.hpp) -- the
-    // defaulted memberwise copy/move leaves particles_views_ stale, so reconstruct
-    // in place via the copy/move constructors instead, which call on_appended() themselves
+    // not = default: a memberwise copy leaves particles_views_ stale, reconstructed in place
+    //  by the constructors (on_appended())
     PCTileSetVector& operator=(PCTileSetVector&& that)
     {
         if (this == &that)
@@ -308,16 +306,14 @@ public:
     auto& operator()() { return particles_; }
     auto& operator()() const { return particles_; }
 
-    // refreshes recount/gap-sizing/views after particles were added without going through
-    // move_check (a raw append) - see on_moved() for the post-move_check pipeline.
+    // recount, gap sizing, views: after a raw append, or the end of on_moved()
     template<auto type = ParticleType::Domain>
     void on_appended();
 
     template<auto type>
-    void sync_moved(); // realloc + resize ahead of the view-side copies
+    void sync_moved();
 
-    // applies move_check-registered moves: realloc/resize, then the span-side within-tile
-    // adds + cross-tile copies + rm, then finalize (recount, size wall gaps, reset views).
+    // applies move_check's registered moves: doc/core/data/particles/arrays/particles_pc_ts.md
     template<auto type>
     void on_moved(auto&&... args);
 
@@ -336,12 +332,12 @@ public:
     MKN_KUL_FN_SIG_RET bool is_consistent() const;
 
 protected:
-    // visit the AMR cells of a tile that sit within ghost_cells_ of its wall — the only
-    // cells a particle can enter or leave the tile from in one step
+    // cells within ghost_cells_ of the tile's wall: the only ones a particle can enter or leave
+    //  the tile from in one step
     void on_tile_wall_cells(auto const& tile, auto&& fn) const;
 
-    // visit the tile's ghost-box cells it clamp-owns (TileSet::tag_cells_) — the cells
-    // level ghost particles live in and register their cross-tile traffic against
+    // ghost box cells it clamp-owns (TileSet::tag_cells_): where level ghosts live and register
+    //  their cross-tile traffic
     void on_tile_owned_ghost_cells(auto const& tile, auto&& fn) const
     {
         damn::core::Box<int, dim> const& tbox = tile;
@@ -387,14 +383,12 @@ struct PCTileSetParticles : public Super_
     {
     }
 
-    // no begin()/end() here - AoSPCTS is tiled, so top-level particle iteration is not
-    // supported (see Particles::begin()/end() in particles.hpp); use
-    // enumerate()/per_particle() instead.
+    // no begin() / end(): tiled, enumerate() / per_particle() instead
 
     auto data() const DAMN_ALL { return static_cast<Particle_t const*>(nullptr); } // TODO
     auto data() DAMN_ALL { return static_cast<Particle_t*>(nullptr); }             // TODO
 
-    // move_check lives on PCTileSetSpan — no stub here or it shadows the span's version
+    // no move_check here: it would shadow PCTileSetSpan's
     auto nbr_particles_in(std::array<int, dimension> const arr) const
     {
         auto const& tile = *this->particles_.at(this->local_cell(arr));
@@ -424,8 +418,8 @@ struct PCCrossTileCopyDAO
     auto static constexpr dim = Particles::dim;
     using Tile                = PCParticlesTile<typename Particles::per_tile_particles>;
 
-    // the tile's own box plus (LevelGhost) the ghost cells it clamp-owns - the
-    // tile-set bookkeeping read here is shared, and non-owned halo cells hold nothing
+    // its box plus (LevelGhost) the ghost cells it clamp-owns: the tile set's bookkeeping is
+    //  shared, other halo cells hold nothing
     template<auto type>
     void on_owned_cells(auto&& fn) DAMN_ALL
     {
@@ -439,8 +433,7 @@ struct PCCrossTileCopyDAO
     template<auto type>
     void copy_in() DAMN_ALL;
 
-    // both leaver lists of a cell are consumed by one merged rm pass on the per-cell
-    // container — see sync_rm_left for why they cannot be two separate passes
+    // both leaver lists of a cell in one merged rm pass, not two (see sync_rm_left)
     template<auto type>
     void rm_left() DAMN_ALL
     {
@@ -487,15 +480,13 @@ auto& PCTileSetSpan<Particles>::move_check(auto const& pt, std::size_t const idx
     auto const& newcell = particle.iCell();
 
     if (mkn::kul::array_equals(newcell, pt.icell))
-        return *this; // old cell == new cell, no change required
+        return *this;
 
     bool constexpr static ATOMIC = true;
     bool constexpr static GPU    = alloc_mode == damn::AllocatorMode::GPU_UNIFIED;
     using Op                     = damn::core::Operators<SIZE_T, ATOMIC, GPU>;
 
-    // register the departure against the tile-set cell — mirrors
-    // TileSetParticles::move_check: only register here, the actual cross-tile copy
-    // (or removal) happens later during sync
+    // registered against the tile set's cell: the copy (or removal) is the sync's
     auto const leave = [&] DAMN_ALL() {
         auto const old_lcl_cell = local_cell(pt.icell);
 
@@ -519,9 +510,8 @@ auto& PCTileSetSpan<Particles>::move_check(auto const& pt, std::size_t const idx
     else // LevelGhost
     {
         auto& cur_tile = *particles_.at(pt.tile_cell);
-        // level ghosts live only in their cell's clamp owner (TileSet::tag_cells_), so
-        // hand off to the new cell's owner - including into another tile's domain cell,
-        // and even when the new cell is still within this tile's ghost box
+        // level ghosts live only in their cell's clamp owner (TileSet::tag_cells_): handed off
+        //  to the new cell's owner, even into another tile's domain, even within this ghost box
         if (isIn(newcell, ghost_box()) and particles_.at(local_cell(newcell)) != &cur_tile)
         {
             leave();
@@ -533,10 +523,7 @@ auto& PCTileSetSpan<Particles>::move_check(auto const& pt, std::size_t const idx
         return *this;
     }
 
-    // Domain: cell change register: still owned by (or ghosted into) the current
-    // tile. move_check's own box()/old_tile check above covers cross-tile hand-off;
-    // this fallthrough covers "outside the domain, assumed still in this tile's
-    // ghost box" and "inside the domain, inside this tile".
+    // Domain, still this tile's: inside it, or outside the domain (assumed in its ghost box)
     (*particles_.at(pt.tile_cell))().template move_check<particle_type>(pt, idx, particle);
 
     return *this;
@@ -552,15 +539,12 @@ void PCTileSetVector<Particles>::on_appended()
     total_size = 0;
     for (auto& tile : particles_)
     {
-        tile().template on_appended<type>(); // per-tile recount + gap sizing + views
+        tile().template on_appended<type>();
         total_size += tile().size();
     }
 
-    // only cells within ghost_cells_ of a tile wall can register cross-tile
-    // departures; size their gap vectors so move_check's operator[] has room.
-    // level ghost particles live in (and leave from) clamp-owned ghost cells, so
-    // those are sized too — type-agnostic: the initial post-fill sync may run as
-    // Domain on a level ghost array
+    // gaps sized where cross-tile departures register: wall cells, and the clamp-owned ghost
+    //  cells whatever the type (the first sync after a fill may run as Domain on level ghosts)
     for (auto& tile : particles_)
     {
         auto const size_cell = [&](auto const& amr_cell) {
@@ -579,16 +563,14 @@ void PCTileSetVector<Particles>::on_appended()
 
 template<typename Particles>
 template<auto type>
-void PCTileSetVector<Particles>::sync_moved() // realloc + resize ahead of the view-side copies
+void PCTileSetVector<Particles>::sync_moved()
 {
     for (auto& tile : particles_)
     {
         damn::core::Box<int, dim> const& tbox = tile;
         auto& pc                  = tile();
 
-        // fold in cross-tile traffic per cell, gated by clamp ownership - it's shared
-        // bookkeeping, so exactly one tile must fold it in (level ghosts included, they
-        // only ever live in their cell's clamp owner)
+        // shared bookkeeping: exactly one tile, the cell's owner, folds its cross-tile traffic in
         damn::core::for_each_point(pc.ghost_box(), [&](auto const& amr) {
             std::size_t in = 0, out = 0;
             if (isIn(amr, tbox) or particles_.at(amr) == &tile)
@@ -640,9 +622,7 @@ void PCTileSetVector<Particles>::clear()
         tile().clear(); // resets each tile's own per-cell bookkeeping too
     total_size = 0;
 
-    // this level's own cross-tile move_check bookkeeping (registered gaps/counts
-    // against tile-set cells) is separate from each tile's - reset it the same way
-    // the constructor does, or clear() leaves it stale just like the per-cell case.
+    // the tile set's own cross-tile bookkeeping is separate from the tiles'
     zero_bookkeeping();
 
     reset_views();
@@ -693,12 +673,10 @@ void PCCrossTileCopyDAO<Particles>::copy_in() DAMN_ALL
 {
     auto& pc = tile();
 
-    // within-tile movers (including off-domain movers headed for the tile's own
-    // ghost layer) — registered on the tile's own per-cell gap lists
+    // within-tile movers (off-domain ones into its ghost layer too): the tile's own gap lists
     on_owned_cells<type>([&](auto const& amr) { pc.sync_add_new(pc.local_cell(amr)); });
 
-    // cross-tile leavers — registered against the tile-set cell; each lands in
-    // whichever tile owns its particle's new cell
+    // cross-tile leavers: the tile set's gap lists, into the tile owning the new cell
     on_owned_cells<type>([&](auto const& amr) {
         auto const cix     = ps.local_cell(amr);
         auto const& n_gaps = ps.gap_idx_(cix);

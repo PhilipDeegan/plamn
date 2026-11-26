@@ -1,15 +1,8 @@
 #ifndef PLAMN_CORE_DATA_GRID_PATCH_LAYOUT_HPP
 #define PLAMN_CORE_DATA_GRID_PATCH_LAYOUT_HPP
 
-// PatchLayout: the data describing one patch's mesh, and free functions over it
-//   cells:  the patch's cell box in the level (AMR) index space
-//   dx:     mesh size
-//   origin: physical position of the patch's first cell's lower corner
-//   level:  AMR level number
-// ghost width and dimension are compile time, from the options
-//
-// quantity centerings come from the model's quantity tables (hybrid::quantities,
-// mhd::quantities): pass a quantity, or anything with physicalQuantity()
+// one patch's mesh, and free functions over it. Quantity centerings come from the model's
+// quantity tables (hybrid::quantities, mhd::quantities)
 
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"
@@ -46,9 +39,9 @@ struct PatchLayout
     std::uint32_t static constexpr ghost_width = options.field_ghost_width;
     using AMRBox_t                             = damn::core::Box<int, dimension>;
 
-    AMRBox_t cells{};
+    AMRBox_t cells{}; // in the level (AMR) index space
     std::array<double, dimension> dx{};
-    damn::core::Point<double, dimension> origin{};
+    damn::core::Point<double, dimension> origin{}; // the first cell's lower corner
     int level = 0;
 };
 
@@ -119,7 +112,7 @@ MKN_KUL_FN_SIG_RET constexpr auto centering(PatchLayout<o> const&, auto const& q
 }
 
 
-// value of field, a src quantity, recentered at index of the dst quantity's grid
+// field, a src quantity, recentered at index of the dst quantity's grid
 template<auto src, auto dst, std::size_t order = 2, typename Field>
     requires(std::is_enum_v<decltype(src)>)
 MKN_KUL_FN_SIG_RET auto

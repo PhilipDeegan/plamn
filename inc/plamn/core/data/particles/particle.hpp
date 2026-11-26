@@ -84,9 +84,8 @@ struct Particle
     auto copy() const { return *this; }
 };
 
-// Must stay trivially copyable: std::vector only relocates via memmove (fast) instead of
-// per-element construct/destroy (slow) when this holds - losing it silently turns every
-// particle-array growth/reserve into an O(n) memcpy replaced by an O(n) loop of placement-news.
+// must stay trivially copyable: else every particle array growth / reserve silently relocates
+//  by a loop of per element construct / destroy instead of a memmove
 static_assert(std::is_trivially_copyable_v<Particle<1>>);
 static_assert(std::is_trivially_copyable_v<Particle<2>>);
 static_assert(std::is_trivially_copyable_v<Particle<3>>);

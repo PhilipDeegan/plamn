@@ -48,11 +48,10 @@
 namespace plamn::core
 {
 
-// after a REF move: domain particles leaving the owned domain become patch ghosts or are
-// deleted, level ghosts entering it become domain particles. A level ghost lives in one patch
-// only (Simulator's own_level_ghosts_): one in a cell another patch of the level covers is
-// handed to that patch as a patch ghost, as a domain particle would be (no other patch has a
-// copy of it to keep instead, the level ghost duplicate fix); one leaving the ghost box is deleted
+// particles by cell after a REF move: doc/core/numerics/particles_synchronised_mover/
+//  particles_synchronised_mover.md
+// a level ghost lives in one patch only: one in another patch's cell is handed to it as a patch
+//  ghost, no other patch has a copy of it to keep instead
 namespace detail
 {
     template<typename Particles_t>
@@ -88,7 +87,7 @@ void detail::post_move_sync_all(Particles_t& domain, Particles_t& patchGhost,
 }
 
 
-// the fate of a particle after a REF move only depends on its cell, see post_move_sync
+// the fate of a particle after a REF move only depends on its cell
 template<typename Boxing_t>
 struct PostMoveSyncCells
 {
@@ -561,10 +560,7 @@ void ParticlesSynchronisedMover<Particles_t, Layout>::update(auto& ions, auto co
 }
 
 
-/**
- * @brief ParticlesSynchronisedMover::updateAndDepositDomain_
-   evolves moments from time n to n+1 without updating particles, which stay at time n
- */
+// moments from time n to n+1 without updating the particles, which stay at time n
 template<typename Particles_t, typename Layout>
 void ParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositDomain_(
     auto& ions, auto const& em, Boxing_t const& boxing)
@@ -575,11 +571,9 @@ void ParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositDomain_(
 
     for (auto& pop : ions)
     {
-        tmp_particles_ = pop.domainParticles(); // make local copy
+        tmp_particles_ = pop.domainParticles();
         auto& domain   = *tmp_particles_;
 
-        // first push all domain particles twice
-        // accumulate those inNonLevelGhostBox
         auto outRange = damn::core::makeIndexRange(domain);
         auto allowed  = outRange
             = pusher_.move(outRange, outRange, em, pop.charge(), pop.mass(), interpolator_, layout,
@@ -591,7 +585,7 @@ void ParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositDomain_(
         //  as domain particles (each is held by one patch only)
 
         auto pushAndAccumulateGhosts = [&](auto const& inputArray) {
-            tmp_particles_ = inputArray; // work on local copy
+            tmp_particles_ = inputArray;
 
             auto outRange = damn::core::makeIndexRange(*tmp_particles_);
 
@@ -602,15 +596,8 @@ void ParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositDomain_(
             interpolator_(enteredInDomain, pop.particleDensity(), pop.flux(), layout);
         };
 
-        // !TODO REVISE!
-        // After this function is done domain particles overlaping ghost layers of neighbor patches
-        // are sent to these neighbor's patchghost particle array.
-        // After being pushed, some patch ghost particles may enter the domain. These need to be
-        // copied into the domain array so they are transfered to the neighbor patch
-        // ghost array and contribute to moments there too.
-        // On the contrary level ghost particles entering the domain here do not need to be copied
-        // since they contribute to nodes that are not shared with neighbor patches an since
-        // level border nodes will receive contributions from levelghost old and new particles
+        // !TODO REVISE! patch ghosts entering the domain: doc/core/numerics/
+        //  particles_synchronised_mover/particles_synchronised_mover.md
 
         if (pop.levelGhostParticles().size())
             pushAndAccumulateGhosts(pop.levelGhostParticles());
@@ -618,10 +605,7 @@ void ParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositDomain_(
 }
 
 
-/**
- * @brief ParticlesSynchronisedMover::updateAll_
-   evolves moments and particles from time n to n+1
- */
+// moments and particles from time n to n+1
 template<typename Particles_t, typename Layout>
 void ParticlesSynchronisedMover<Particles_t, Layout>::updateAll_(auto& ions, auto const& em,
                                                                  Boxing_t const& boxing)
@@ -630,10 +614,6 @@ void ParticlesSynchronisedMover<Particles_t, Layout>::updateAll_(auto& ions, aut
 
     auto const& layout = boxing.layout;
 
-    // push domain particles, erase from array those leaving domain
-    // push level ghost particles that are in ghost area (==ghost box without domain)
-    // copy ghost particles out of ghost area that are in domain, in particle array
-    // finally all particles in non level ghost box are to be interpolated on mesh.
     for (auto& pop : ions)
     {
         auto& domainParticles = pop.domainParticles();
@@ -646,7 +626,6 @@ void ParticlesSynchronisedMover<Particles_t, Layout>::updateAll_(auto& ions, aut
             = damn::core::makeRange(domainParticles, inDomain.iend(), domainParticles.size());
         auto const not_level_ghosts = boxing.inNonLevelGhostBox(now_ghosts);
 
-        // copy out new patch ghosts
         auto& patchGhost = pop.patchGhostParticles();
         patchGhost.reserve(patchGhost.size() + not_level_ghosts.size());
         std::copy(not_level_ghosts.begin(), not_level_ghosts.end(), std::back_inserter(patchGhost));
@@ -668,7 +647,7 @@ void ParticlesSynchronisedMover<Particles_t, Layout>::updateAll_(auto& ions, aut
                 throw plamn::core::DictionaryException{}("ID", "Updater::outsideGhostBox");
         })
 
-        domainParticles.erase(now_ghosts); // drop all ghosts
+        domainParticles.erase(now_ghosts);
 
         if (pop.levelGhostParticles().size())
         {
@@ -924,7 +903,7 @@ template<MoveSpec spec>
 void ParallelParticlesSynchronisedMover<Particles_t, Layout>::sync_(
     auto& accessor, PatchBoxings auto const& boxings)
 {
-    // AoSCMTS: only writes tile t of each population's arrays, see post_move_sync_tile
+    // AoSCMTS: only writes tile t of each population's arrays
     auto const post_move_sync_tile = [&](auto& view, auto const t) {
         auto const& patch_boxings = boxings.at(view.patchID());
         for (auto& pop : std::get<0>(view.args))
@@ -1206,7 +1185,7 @@ void ParallelParticlesSynchronisedMover<Particles_t, Layout>::update(
     check_move_spec<spec>();
     DAMN_LOG_SCOPE(2, "mkn_xyz::ParticlesSynchronisedMover::updatePopulations");
 
-    if constexpr (not moments_on_streams) // else zeroed on each patch's stream, see reset_moments_
+    if constexpr (not moments_on_streams) // else zeroed on each patch's stream
         Super::reset_moments(accessor);
     this->dt_ = dt;
     if constexpr (spec.copy)
@@ -1284,7 +1263,7 @@ void ParallelParticlesSynchronisedMover<Particles_t, Layout>::updateAndDepositAl
 
                 if constexpr (Particles_t::layout_mode == LayoutMode::AoSPCTS)
                 {
-                    // block = (tile, cell), threads stride the cell (see on_tile_cells)
+                    // block = (tile, cell), threads stride the cell (on_tile_cells)
                     auto const deposit_tiles = [&](auto& particles) {
                         using Launcher       = damn::core::gpu::TileCellLauncher<false>;
                         auto const parts     = *particles;
@@ -1402,10 +1381,7 @@ namespace plamn::core
 {
 namespace detail
 {
-    // layouts in unified memory update on the device: mkn_xyz::ParallelParticlesSynchronisedMover,
-    // as
-    //  test_multi_updater checks them (UpdaterVersion::mkn_parallel), CPU tiled:
-    //  ParallelParticlesSynchronisedMover
+    // layouts in unified memory update on the device: mkn_xyz::ParallelParticlesSynchronisedMover
     template<typename Particles_t, typename Layout>
     using TiledParticlesSynchronisedMoverFor_t =
 #if DAMN_HAVE_MKN_GPU
@@ -1417,9 +1393,7 @@ namespace detail
 #endif
 } // namespace detail
 
-// unified memory updates on the device (mkn_xyz::ParallelParticlesSynchronisedMover), tiled or not:
-// untiled
-//  GPU_UNIFIED (SoAVXChunked) through FlatParallelParticlesSynchronisedMover deposited on the host
+// unified memory updates on the device (mkn_xyz::ParallelParticlesSynchronisedMover), tiled or not
 template<typename Particles_t, typename Layout>
 using ParticlesSynchronisedMoverFor_t = std::conditional_t<
     Particles_t::layout_mode == LayoutMode::AoSMapped,

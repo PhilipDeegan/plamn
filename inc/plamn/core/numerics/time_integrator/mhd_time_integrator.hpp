@@ -26,26 +26,9 @@
 #include <concepts>
 #include <iterator>
 
-// MHD time integration on one level, PHARE's amr/solvers/time_integrator (Euler, TVDRK2, TVDRK3,
-//  SSPRK4_5) in its operation order, so results can match its own bit for bit (in the same
-//  floating point context, see the tests)
-//
-// the level: an adapter giving
-//   level.per_patch(fn)                  fn(patch) for every local patch
-//   level.fill_state_ghosts(s, t)        patch and level ghosts of every patch's states[s]
-//                                        (rho, rhoV, B, Etot) at time t
-//   level.fill_electric_ghosts(t)        the same for every patch's E
-// a patch: members
-//   layout
-//   states    indexable, MHDState (core/models/mhd_state.hpp): [0] the state advanced, the
-//             others the integrator's stages (n_states of them in all)
-//   E         the constrained transport E of the last fluxes computed (one: each E is used
-//             right after it is computed, PHARE keeps one per state)
-//   fluxes    [3] MHDFaceFluxes, ct [3] MHDFaceCT: of the last fluxes computed
-//   butcher   [3] MHDFaceFluxes, butcherE: the step's weighted sums of fluxes and E (what a
-//             coarser level is synchronised with)
-// per patch work goes through the transformers: tiled patches are computed tile by tile
-//  (todo: the level transformer's pool tasks; the butcher sums and RK blends run on the host)
+// MHD time integration on one level in PHARE's operation order, so results can match its own
+//  bit for bit in the same floating point context: doc/core/numerics/time_integrator/
+//  mhd_time_integrator.md
 namespace plamn::core
 {
 
@@ -114,11 +97,7 @@ public:
     {
     }
 
-    // fluxes and E from states[s]: to primitive, Godunov per direction, to conservative (rhoV
-    //  and Etot from V and P again, as PHARE), constrained transport; then E's ghosts. A Hall
-    //  patch (Patch::hall, the build's): J every time (PHARE's needsCurrent), the Godunov faces
-    //  and the constrained transport with the Hall term (GodunovTransformer::hall,
-    //  UpwindCTTransformer::hall)
+    // rhoV and Etot from V and P again, as PHARE; Hall: J every time (PHARE's needsCurrent)
     void compute_fluxes(auto& level, std::size_t const s, double const t) const
     {
         level.per_patch([&](auto& p) {

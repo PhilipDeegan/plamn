@@ -22,13 +22,8 @@ namespace plamn::core
 {
 enum class UpdaterMode : std::uint16_t { domain_only = 0, all };
 
-// what one mover call does (the movers' update<spec>): the push in place (the particles to n+1,
-//  post_move_sync after it when sync) or on copies (copy: the particles stay at n and the copies
-//  are deposited, nothing to sync), and the deposit of the pushed particles in the mover.
-//  UpdaterMode::domain_only is copy_spec, UpdaterMode::all each mover's all_spec (CPU: push and
-//  sync, the domain deposit after the exchange; the device mover deposits too). The other
-//  combinations time the steps on their own (etc/bench/particles/bench_mover.cpp); without the
-//  sync the arrays stay as the push left them
+// what one mover call does: doc/core/numerics/particles_synchronised_mover/
+//  particles_synchronised_mover.md; without the sync the arrays stay as the push left them
 struct MoveSpec
 {
     bool copy    = false;
@@ -169,8 +164,7 @@ struct UpdaterCellMapSelectionBoxing : public UpdaterSelectionBoxing<Layout>
           };
 
     // the level ghost layer: ghost cells no patch of the level covers (a level ghost pushed into
-    //  another patch's cell is that patch's: kept here it would come back as a duplicate,
-    //  the level ghost duplicate fix)
+    //  another patch's cell is that patch's: kept here it would come back as a duplicate)
     Selector_t const inGhostLayer
         = [ghostBox = Super::ghostBox, domainBox = Super::domainBox,
            nonLevelGhostBox = Super::nonLevelGhostBox](auto& particleRange) {

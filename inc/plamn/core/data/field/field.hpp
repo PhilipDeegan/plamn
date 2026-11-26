@@ -100,12 +100,7 @@ protected:
 
 namespace plamn::core
 {
-//! Class Field represents a multidimensional (1,2 or 3D) scalar field
-/** Users of Field objects needing to know which physical quantity a specific
- *  Field instance represents can get this info by calling physicalQuantity().
- *  Users may also give a string name to a field object and get a name by calling
- *  name().
- */
+//! a named, multidimensional (1, 2 or 3D) scalar field of a physical quantity
 template<std::size_t dim, typename PhysicalQuantity, typename Data_t = double,
          auto alloc_mode_ = damn::AllocatorMode::CPU>
 class Field : public basic::Field<FieldOpts<PhysicalQuantity, Data_t>{dim, alloc_mode_}>

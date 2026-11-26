@@ -21,9 +21,8 @@
 namespace plamn::core
 {
 
-// used in SOA_ParticelArray::operator[](std::size_t) for std algorithm interactions
-//  allows copying between vector and array impls without iterators
-//   could be a better way maybe but it's not so simple to change
+// operator[]'s particle: std algorithms, and copies between vector and array impls without
+//  iterators
 template<std::size_t dim>
 using SoAParticle_crt = std::tuple<double const&,                  //  weight
                                    std::array<int, dim> const&,    // iCell

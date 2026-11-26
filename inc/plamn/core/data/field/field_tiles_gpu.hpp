@@ -2,9 +2,9 @@
 #define PLAMN_CORE_DATA_FIELD_FIELD_TILES_GPU_HPP
 
 // device versions of per tile field operations, for GPU_UNIFIED tiled (vec)fields of one patch:
-//  one launch each, a block per job, see gpu::TileLauncher
+//  one launch each, a block per job
 //  each waits for its launch before returning: the jobs live in its scope
-//   todo: async (no wait), the jobs must then outlive the launch, see .gpu_todo
+//   todo: async (no wait), the jobs must then outlive the launch
 
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/exec/kernels.hpp" // IWYU pragma: keep (gpu::Vec_t, gpu::TileLauncher: GPU builds)

@@ -23,11 +23,8 @@ namespace plamn::core
 {
 
 
-//! return the size of the index and weights arrays for
-//! interpolation at a given order
-// Number of points where the interpolator of order interpOrder
-// will deposit mass/momentum. This is hence the size of the
-// index and weight arrays for interpolation at a given order
+// the points a particle deposits to per direction at interpOrder: the size of the index and
+//  weight arrays
 constexpr int nbrPointsSupport(int const interpOrder)
 {
     return interpOrder + 1;
@@ -35,20 +32,6 @@ constexpr int nbrPointsSupport(int const interpOrder)
 
 
 
-/** \brief the class Weight aims at computing the weight coefficient for
- *  interpolation at a specific order
- *
- *  This class assumes the interpolation order is known at compile-time
- *  thus there are three specialization for orders 1, 2 and 3.
- *
- *  the class has only one method called computeWeight that takes three arguments:
- *
- *  \param[in] normalized position is the particle position in the cell normalized by grid
- * spacing \param[in] startIndex first grid index where to interpolate the field \param[out]
- * weights contains the nbrPointsSupport weights calculated
- *
- *  these three parameters are given for a specific direction (x, y or z)
- */
 template<std::size_t interpOrder>
 class Weighter
 {
@@ -56,8 +39,6 @@ class Weighter
 
 
 
-/** \brief Specialization of Weight for first order interpolation
- */
 template<>
 class Weighter<1>
 {
@@ -84,8 +65,6 @@ public:
 };
 
 
-/** \brief specialization of Weighter for second order interpolation
- */
 template<>
 class Weighter<2>
 {
@@ -115,8 +94,6 @@ public:
 
 
 
-/** \brief specialization of Weighter for third order interpolation
- */
 template<>
 class Weighter<3>
 {
@@ -177,8 +154,7 @@ public:
 
 
 
-//! Interpol performs the interpolation of a field using precomputed weights at
-//! indices starting at startIndex. The class is templated by the Dimensionality
+// a field at a particle from precomputed start indices and weights
 template<std::size_t dim>
 class MeshToParticle
 {
@@ -197,18 +173,10 @@ MKN_KUL_FN_SIG_RET auto static resolve_start_index_and_weights(auto const& index
         return std::forward_as_tuple(d_starts[dimdex], d_weights[dimdex]);
 }
 
-/** \brief specialization of Interpol for 1D interpolation
- */
 template<>
 class MeshToParticle<1>
 {
 public:
-    /** Performs the 1D interpolation
-     * \param[in] field is the field from which values are interpolated
-     * \param[in] fieldCentering is the centering (dual or primal) of the field
-     * \param[in] startIndex is the first of the nbrPointsSupport indices where to interpolate
-     * the field \param[in] weights are the nbrPointsSupport weights used for the interpolation
-     */
     template<typename Layout, auto quantity>
     MKN_KUL_FN_SIG_RET DAMN_ALWAYS_INLINE auto op(auto const& field,
                                                   auto const& indexWeights) const DAMN_ALL
@@ -228,19 +196,10 @@ public:
 };
 
 
-/**\brief Specialization of Interpol for 2D interpolation
- */
 template<>
 class MeshToParticle<2>
 {
 public:
-    /** Performs the 2D interpolation
-     * \param[in] field is the field from which values are interpolated
-     * \param[in] fieldCentering is the centering (dual or primal) of the field in each
-     * direction \param[in] startIndex is the first of the nbrPointsSupport indices where to
-     * interpolate the field in both directions \param[in] weights are the nbrPointsSupport
-     * weights used for the interpolation in both directions
-     */
     template<typename Layout, auto quantity>
     MKN_KUL_FN_SIG_RET DAMN_ALWAYS_INLINE auto op(auto const& field,
                                                   auto const& indexWeights) const DAMN_ALL
@@ -275,19 +234,10 @@ public:
 
 
 
-/** \brief Specialization of Interpol for 3D interpolation
- */
 template<>
 class MeshToParticle<3>
 {
 public:
-    /** Performs the 3D interpolation
-     * \param[in] field is the field from which values are interpolated
-     * \param[in] fieldCentering is the centering (dual or primal) of the field in each
-     * direction \param[in] startIndex is the first of the nbrPointsSupport indices where to
-     * interpolate the field in the 3 directions \param[in] weights are the nbrPointsSupport
-     * weights used for the interpolation in the 3 directions
-     */
     template<typename Layout, auto quantity>
     MKN_KUL_FN_SIG_RET DAMN_ALWAYS_INLINE auto op(auto const& field,
                                                   auto const& indexWeights) const DAMN_ALL
@@ -328,7 +278,6 @@ public:
 };
 
 
-//! ParticleToMesh projects a particle density and flux to given grids
 //! the per field operator() deposits func(particle) on one field, the fused one deposits
 //! density and flux together: they are all primal, so share the stencil offset and weights
 //! the fused deposit takes __restrict pointers, without which the compiler must assume a
@@ -341,21 +290,10 @@ public:
 };
 
 
-/** \brief specialization of ParticleToMesh for 1D interpolation
- */
 template<typename Op>
 class ParticleToMesh<1, Op>
 {
-public: /** Performs the 1D interpolation
-         * \param[in] density is the field that will be interpolated from the particle Particle
-         * \param[in] xFlux is the field that will be interpolated from the particle Particle
-         * \param[in] yFlux is the field that will be interpolated from the particle Particle
-         * \param[in] zFlux is the field that will be interpolated from the particle Particle
-         * \param[in] fieldCentering is the centering (dual or primal) of the field in each
-         * direction \param[in] particle is the single particle used for the interpolation of
-         * density and flux \param[in] startIndex is the first index for which a particle will
-         * contribute \param[in] weights is the arrays of weights for the associated index
-         */
+public:
     /*    template<typename Field, typename VecField, typename Particle, typename Indexes,
                  typename Weights>
         inline void operator()(Field& density, VecField& flux, Particle const& particle,
@@ -414,21 +352,10 @@ private:
 
 
 
-/** \brief specialization of ParticleToMesh for 2D interpolation
- */
 template<typename Op>
 class ParticleToMesh<2, Op>
 {
-public: /** Performs the 2D interpolation
-         * \param[in] density is the field that will be interpolated from the particle Particle
-         * \param[in] xFlux is the field that will be interpolated from the particle Particle
-         * \param[in] yFlux is the field that will be interpolated from the particle Particle
-         * \param[in] zFlux is the field that will be interpolated from the particle Particle
-         * \param[in] fieldCentering is the centering (dual or primal) of the field in each
-         * direction \param[in] particle is the single particle used for the interpolation of
-         * density and flux \param[in] startIndex is the first index for which a particle will
-         * contribute \param[in] weights is the arrays of weights for the associated index
-         */
+public:
     template<typename... Args>
     DAMN_ALWAYS_INLINE auto operator()(Args&&... args)
         requires(sizeof...(Args) == 6)
@@ -492,21 +419,10 @@ private:
 
 
 
-/** \brief specialization of ParticleToMesh for 3D interpolation
- */
 template<typename Op>
 class ParticleToMesh<3, Op>
 {
-public: /** Performs the 3D interpolation
-         * \param[in] density is the field that will be interpolated from the particle Particle
-         * \param[in] xFlux is the field that will be interpolated from the particle Particle
-         * \param[in] yFlux is the field that will be interpolated from the particle Particle
-         * \param[in] zFlux is the field that will be interpolated from the particle Particle
-         * \param[in] fieldCentering is the centering (dual or primal) of the field in each
-         * direction \param[in] particle is the single particle used for the interpolation of
-         * density and flux \param[in] startIndex is the first index for which a particle will
-         * contribute \param[in] weights is the arrays of weights for the associated index
-         */
+public:
     template<typename... Args>
     DAMN_ALWAYS_INLINE auto operator()(Args&&... args)
         requires(sizeof...(Args) == 6)
@@ -596,11 +512,6 @@ class Interpolator : private Weighter<interpOrder>
     using This = Interpolator<dim, interpOrder, atomic_ops>;
 
 protected:
-    // this calculates the startIndex and the nbrPointsSupport() weights for
-    // dual field interpolation and puts this at the corresponding location
-    // in 'startIndex' and 'weights'. For dual fields, the normalizedPosition
-    // is offseted compared to primal ones.
-
     template<auto centering, typename Tuple>
     auto static centered_index_and_weights_from_tuple(Tuple&& tup) DAMN_ALL
     {
@@ -676,15 +587,8 @@ public:
     auto static constexpr interp_order = interpOrder;
     auto static constexpr dimension    = dim;
 
-    /**\brief interpolate electromagnetic fields on a particle and return particles EB
-     *
-     * For each particle :
-     *  - The function first calculates the startIndex and weights for interpolation at
-     * order InterpOrder and in dimension dim for dual and primal nodes
-     *  - then it uses Interpol<> to calculate the interpolation of E and B components
-     * onto the particle.
-     */
-
+    // E and B at a particle: the start indices and weights computed once for dual and once for
+    //  primal, not per component
     DAMN_ALWAYS_INLINE auto m2p(auto const& particle, auto const& Em, auto const& layout) DAMN_ALL
     {
         // using E_B_tuple = std::array<std::array<double, 3>, 2>;
@@ -724,12 +628,6 @@ public:
         using E_B_tuple = std::tuple<std::array<double, 3>, std::array<double, 3>>;
         using Scalar    = HybridQuantity::Scalar;
 
-        // for each particle, first calculate the startIndex and weights for dual and
-        // primal quantities. then, knowing the centering (primal or dual) of each
-        // electromagnetic component, we use Interpol to actually perform the
-        // interpolation. the trick here is that the StartIndex and weights have only been
-        // calculated twice, and not for each E,B component.
-
         auto& iCell = particles.iCell(idx);
         auto& delta = particles.delta(idx);
         indexAndWeights_<QtyCentering::dual>(layout, iCell, delta);
@@ -768,15 +666,6 @@ public:
 
 
 
-
-    /**\brief interpolate electromagnetic fields on all particles in the range
-     *
-     * For each particle :
-     *  - The function first calculates the startIndex and weights for interpolation at
-     * order InterpOrder and in dimension dim for dual and primal nodes
-     *  - then it uses Interpol<> to calculate the interpolation of E and B components
-     * onto the particle.
-     */
 
     template<typename VecField, typename Field>
     void particleToMesh(auto const& particle, Field& particleDensity, VecField& flux,
@@ -853,13 +742,6 @@ public:
                            Layout const& layout, double coef = 1.)
         requires(!std::is_arithmetic_v<Layout>)
     {
-        // for each particle, first calculate the startIndex and weights
-        // for dual and primal quantities.
-        // then, knowing the centering (primal or dual) of each electromagnetic
-        // component, we use Interpol to actually perform the interpolation.
-        // the trick here is that the StartIndex and weights have only been
-        // calculated twice, and not for each E,B component.
-
         DAMN_LOG_START(3, "ParticleToMesh::operator()");
 
         // the SoA family's iterators are thrust's zip iterators (thrust on the host too, see

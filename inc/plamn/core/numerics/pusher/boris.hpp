@@ -32,8 +32,7 @@ public:
     BorisPusher(std::array<double, dim> const& ms, double const ts) { setMeshAndTimeStep(ms, ts); }
 
     // This move function should be considered when being used so that all particles are pushed
-    // twice - see: https://github.com/PHAREHUB/PHARE/issues/571
-    /** see Pusher::move() documentation*/
+    // twice
 #if 0
     auto move(auto const& rangeIn, auto& rangeOut,
                        auto const& emFields, double charge, double mass, auto& interpolator,
@@ -85,10 +84,8 @@ public:
 
         DAMN_LOG_SCOPE(2, "Boris::move_no_bc");
 
-        // push the particles of half a step
         // rangeIn : t=n, rangeOut : t=n+1/2
-        // Do not partition on this step - this is to keep all domain and ghost
-        //   particles consistent. see: https://github.com/PHAREHUB/PHARE/issues/571
+        // no partition on this step: it keeps all domain and ghost particles consistent
         prePushStep_(rangeIn, rangeOut);
 
         rangeOut = firstSelector(rangeOut);
@@ -124,7 +121,6 @@ public:
     }
 
 
-    /** see Pusher::move() documentation*/
     void setMeshAndTimeStep(std::array<double, dim> const& ms, double const ts) DAMN_ALL
     {
         std::transform(std::begin(ms), std::end(ms), std::begin(halfDtOverDl_),
@@ -134,11 +130,6 @@ public:
 
 
 private:
-    /** advance the particles in rangeIn of half a time step and store them
-     * in rangeOut.
-     * @return the function returns and iterator on the first leaving particle, as
-     * detected by the auto
-     */
     void prePushStep_(auto const& rangeIn, auto& rangeOut)
     {
         using Particles              = std::decay_t<decltype(rangeIn.array())>;

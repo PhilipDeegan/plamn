@@ -41,7 +41,6 @@ public:
     {
     }
 
-    // the box converted, as eval_on_box below
     static auto box_for(auto const& layout, auto const& rho) { return ghost_box(layout, rho); }
 
     void to_conservative(auto const& layout, auto const& rho, auto const& V, auto const& B,
@@ -56,7 +55,6 @@ public:
         apply_(ToPrimitive{gamma_}, layout, rho, rhoV, B, Etot, V, P);
     }
 
-    // one tile of the tiled fields, eg as one task of a thread pool
     void to_conservative_on_tile(std::size_t const tile_idx, auto const& rho, auto const& V,
                                  auto const& B, auto const& P, auto& rhoV, auto& Etot) const
     {

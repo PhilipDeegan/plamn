@@ -149,7 +149,6 @@ struct TensorField
     }
 
 
-    //! return true if the TensorField can be used to access component data
     MKN_KUL_FN_SIG_RET bool isUsable() const DAMN_ALL
     {
         return std::all_of(std::begin(components_), std::end(components_),

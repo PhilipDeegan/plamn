@@ -250,14 +250,12 @@ public:
     auto& operator()() { return particles_; }
     auto& operator()() const { return particles_; }
 
-    // the particle already carries its NEW cell, pt carries the OLD cell and the tile
-    // physically holding it. Within-tile moves only update the tile's cellmap,
-    // cross-tile moves are unmapped and registered as leavers for on_moved()
+    // particle already in its new cell, pt the old cell and the tile holding it. Within-tile
+    //  moves only update the tile's cellmap, cross-tile ones unmapped, leavers for on_moved()
     template<auto particle_type>
     auto& move_check(auto const& pt, std::size_t const idx, auto const& particle);
 
-    // applies move_check-registered cross-tile moves: each tile pulls its neighbours'
-    // leavers it owns, then swap-pops its own leavers, then on_appended() to finalize
+    // each tile pulls the neighbours' leavers it owns, then swap-pops its own
     template<auto type>
     void on_moved();
 
@@ -373,7 +371,7 @@ auto& MappedTileSetVector<Particles>::move_check(auto const& pt, std::size_t con
 
     auto const& newcell = particle.iCell();
     if (mkn::kul::array_equals(newcell, pt.icell))
-        return *this; // old cell == new cell, no change required
+        return *this;
 
     auto& tile = *particles_.at(pt.tile_cell);
     auto& ps   = tile();

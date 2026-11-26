@@ -106,7 +106,6 @@ public:
             face_, rho, V, B, P, J, jt, rhot, F_rho, F_rhoV, F_Etot, vt, aL, aR, dL, dR);
     }
 
-    // one tile of the tiled fields, eg as one task of a thread pool
     template<std::size_t dir>
     void on_tile(std::size_t const tile_idx, auto const& rho, auto const& V, auto const& B,
                  auto const& P, auto& F_rho, auto& F_rhoV, auto& F_Etot, auto& vt, auto& aL,

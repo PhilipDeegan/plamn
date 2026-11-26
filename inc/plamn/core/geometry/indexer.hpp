@@ -130,7 +130,6 @@ struct IndexerStorage<StorageMode::VECTOR, opts>
     // Populate the inherited SPAN view — call before passing to a GPU kernel.
     void sync() { View::indexes_ = {vec_.data(), vec_.size()}; }
 
-    // All CPU operations work directly on vec_ — no span involved.
 
     MKN_KUL_FN_SIG_RET auto data() const { return vec_.data(); }
     MKN_KUL_FN_SIG_RET auto data() { return vec_.data(); }
@@ -185,7 +184,6 @@ struct IndexerStorage<StorageMode::VECTOR, opts>
 };
 
 
-// Indexer — single opts parameter, dispatches to IndexerStorage.
 
 template<auto opts>
 class Indexer : public IndexerStorage<opts.storage_mode, opts>

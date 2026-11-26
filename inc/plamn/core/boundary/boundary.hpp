@@ -1,21 +1,7 @@
 #ifndef PLAMN_CORE_BOUNDARY_BOUNDARY_HPP
 #define PLAMN_CORE_BOUNDARY_BOUNDARY_HPP
 
-// a model's physical boundaries (PHARE's core/boundary: Boundary, BoundaryFactory,
-//  BoundaryManager), as values: a Boundary is its type, location and a FieldCondition per
-//  quantity, made by make_boundary from its type (and an inflow's state):
-//
-//                ρ, Etot            ρV          B                         E
-//   open         Neumann            Neumann     div free transverse Neum. -
-//   reflective   Neumann            symmetric   div free transverse Neum. antisymmetric
-//   inflow       Dirichlet ρ0, Etot Dirichlet   div free transverse Dir.  Dirichlet -v x B
-//                (from P, γ)        ρ0 v        B0
-//
-//  (inflow: super magnetofast, constant extrapolation; other quantities: none). Reflective, open
-//  and inflow are MHD's only (as PHARE). A BoundaryManager holds the domain's boundaries (each
-//  face of a non periodic direction), from the input's simulation/grid/domain_boundaries; an edge
-//  or corner takes one adjacent face's conditions: the highest direction (by default), or the
-//  highest boundary type
+// a model's physical boundaries, as values: doc/core/boundary/boundary.md
 
 #include "damn/core/def.hpp"
 

@@ -78,7 +78,7 @@ public:
 
     MKN_KUL_FN_SIG_RET static constexpr std::array<Scalar, 6> componentsQuantities(Tensor /*qty*/)
     {
-        // no condition, for now there's only then momentum tensor M
+        // no condition, for now there's only the momentum tensor M
         return {{Scalar::Mxx, Scalar::Mxy, Scalar::Mxz, Scalar::Myy, Scalar::Myz, Scalar::Mzz}};
     }
 };

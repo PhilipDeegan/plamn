@@ -58,9 +58,8 @@ struct MultiBorisBackend;
 
 
 // ── MultiBoris state struct / ModelAccessor ───────────────────────────────────────────
-// default dispatch: damn's thread pools (synchronous, on the calling thread, with
-//  -DDAMN_THREAD_POOL_SYNC=1)
-// see core::mkn_xyz::MultiBoris below for the mkn.gpu ThreadedStreamLauncher dispatch
+// default dispatch: damn's thread pools, core::mkn_xyz::MultiBoris: mkn.gpu streams:
+//  doc/core/numerics/pusher/boris/detail/multi_boris.md
 
 template<typename ModelAccessor, typename Interpolator>
 struct MultiBoris
@@ -106,9 +105,8 @@ void MultiBoris<ModelAccessor, Interpolator>::move(auto const& boxings)
 
 
 // ── Per patch steps, shared by every dispatch (core::MultiBoris / mkn_xyz::MultiBoris) ────
-// tiles of particles, tiled fields: AoSPCTS (per-cell AoS per tile), AoSCMTS (flat cell-mapped),
-// AoSTS/AoSMapped (flat). AoS has its own specialisation below.
-// `in` is either MultiBoris state struct, GPU paths require mkn_xyz::MultiBoris (in.streamer)
+// tiled particles and fields; `in` is either MultiBoris, GPU paths require mkn_xyz::MultiBoris
+//  (in.streamer)
 
 template<LayoutMode layout, typename ModelAccessor, typename Interpolator>
 struct MultiBorisBackend
@@ -140,12 +138,9 @@ struct MultiBorisBackend
     template<auto mode>
     static void move_cpu_copy(auto& in, auto& boxings, auto const i);
 
-    // ── Thread-pooled variants: level 1 (patch -> pool) is dispatched by the caller
-    // (move_pooled), which hands us the specific pool already assigned to patch `i`.
-    // Here we do level 2: one task per tile, submitted to that SAME pool so all of its
-    // threads_per_pool threads work this patch's tiles at once. These must be called
-    // from the dispatching thread itself, never from inside a task already running on
-    // `pool` — detach_task-then-wait on one's own pool deadlocks.
+    // ── Thread-pooled variants: a task per tile on the pool move_pooled gave patch `i`. These
+    // must be called from the dispatching thread itself, never from inside a task already
+    // running on `pool` — detach_task-then-wait on one's own pool deadlocks.
 
     template<auto mode>
     static void move_rest_pooled(auto& pool, auto& in, auto const i);
@@ -156,11 +151,8 @@ struct MultiBorisBackend
     // stream: mkn_xyz::MultiBoris passes the patch's stream for the particle array sync
     static void sync_ref(auto& view, auto&... stream);
 
-    // General case: two levels of parallelism. Each patch is assigned one pool
-    // (round-robin over whichever is next free), and within that pool every tile of
-    // the patch is its own task -- so with N pools of M threads, up to N patches and
-    // N*M tiles are in flight simultaneously. Dispatch happens entirely from this
-    // (calling) thread so no pool ever detach_task-then-waits on itself.
+    // a pool per patch, a task per tile in it: doc/core/numerics/pusher/boris/detail/
+    //  multi_boris.md. Dispatched from this thread only, so no pool waits on itself
     template<MultiBorisMode mode>
     static void move_pooled(MultiBoris_t& in, auto const& boxings);
 
@@ -463,7 +455,7 @@ struct MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>
     static constexpr auto dim        = Layout_t::dimension;
     static constexpr auto alloc_mode = Particles_t::alloc_mode;
 
-    // mkn_xyz::MultiBoris dispatch: untiled, untracked (leavers partitioned after, see
+    // mkn_xyz::MultiBoris dispatch: untiled, untracked (leavers partitioned after,
     //  post_move_sync), GPU_UNIFIED SoAVX pushes (REF) and pushes copies + deposits (COPY) on the
     //  device, a thread per particle, global atomics
     static constexpr bool flat = true;
@@ -544,11 +536,9 @@ struct MultiBorisBackend<LayoutMode::SoAVX, ModelAccessor, Interpolator>
 {
 };
 
-// SoAVXChunked: as SoAVX, the offsets are rebuilt after the post push sync (on_moved)
-//  CPU: its own patch loop, batched in phases (load + half step; m2p + accelerate + half step;
-//  deposit or store back) rather than the flat backend's per particle load, push, deposit (built
-//  for a GPU thread per particle). Same particles in the same order: the same results. GPU: the
-//  flat backend's
+// SoAVXChunked: as SoAVX, the offsets are rebuilt after the post push sync (on_moved). CPU: its
+//  own patch loop, batched in phases: doc/core/numerics/pusher/boris/detail/multi_boris.md. Same
+//  particles in the same order: the same results. GPU: the flat backend's
 #if defined(MKN_WITH_MKN_AVX)
 namespace boris::avx
 {
@@ -617,11 +607,8 @@ namespace boris::avx
         bool deposits = false;
     };
 
-    // the push of one block of L slots on mkn::avx lanes (MultiBorisBackend<SoAVXChunked>::
-    //  batched_avx's): the columns masked loaded and stored (slots past n and gaps load weight 0:
-    //  never live, their memory untouched), advance and accelerate on the lanes, the per cell
-    //  gather g (CellGatherV, null: m2p per lane); REF: stored back, the crossings (record) to
-    //  on_crossed(slot, old cell); COPY: deposited (win: the cell's window, else per lane)
+    // the push of one block of L slots on mkn::avx lanes: doc/core/numerics/pusher/boris/detail/
+    //  multi_boris.md; slots past n and gaps load weight 0: never live, their memory untouched
     template<auto type, MultiBorisMode mode, typename Interpolator_t, std::size_t L, bool record,
              typename EM, typename Layout, typename Boxing, typename Halfdt, typename RhoP,
              typename Flux>
@@ -1007,12 +994,10 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
         }
     }
 
-    // the push on lanes of the columns: blocks of `lanes` consecutive slots, each component a
-    //  [lane] array loaded from (and stored back to) its column, the arithmetic in lane loops
-    //  REF: pushed in place (a level ghost leaving the ghost box on the first half step is stored
-    //  half pushed, not accelerated, as push_particle: post_move_sync drops it). COPY: copies
-    //  pushed, deposited if they end in the non level ghost box, in slot order. Gap slots
-    //  (weight 0) are computed with the others and neither stored nor deposited
+    // the push on lanes of the columns: doc/core/numerics/pusher/boris/detail/multi_boris.md
+    //  REF: a level ghost leaving the ghost box on the first half step is stored half pushed, not
+    //  accelerated (post_move_sync drops it). Gap slots (weight 0) are computed with the others
+    //  and neither stored nor deposited
     static constexpr std::size_t lanes = 8;
 
     template<auto type, MultiBorisMode mode>
@@ -1099,9 +1084,8 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
                           accel[l] = accel[l] and isIn(lane_particle(l).iCell(), boxing.ghostBox);
                   }
 
-                  // m2p: from the cell's stencils on the lanes still in the cell at mid step, else
-                  // per
-                  //  lane (the stencils differ)
+                  // m2p: from the cell's stencils on the lanes still in the cell at mid step,
+                  //  else per lane (the stencils differ)
                   bool in_cell[lanes];
                   for (std::size_t l = 0; l < lanes; ++l)
                   {
@@ -1228,11 +1212,8 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
     }
 
 #if defined(MKN_WITH_MKN_AVX)
-    // batched on mkn::avx lanes (builds with -w mkn.avx): the widest double lanes the build has,
-    //  the columns masked loaded and stored (lanes past the block's end and gap slots load weight
-    //  0: never live, their memory untouched), advance and accelerate on the lanes, the per cell
-    //  gather (CellGatherV) for sorted domain arrays; per lane: the cells (int columns), the
-    //  level ghost box test, m2p off the cell and the deposit
+    // batched on the widest mkn::avx double lanes the build has (-w mkn.avx):
+    //  doc/core/numerics/pusher/boris/detail/multi_boris.md
     static constexpr std::size_t avx_lanes = mkn::avx::Options::N<double>();
 
     template<auto type, MultiBorisMode mode>
@@ -1309,13 +1290,9 @@ struct MultiBorisBackend<LayoutMode::SoAVXChunked, ModelAccessor, Interpolator>
 };
 
 
-// AoS4SoAVXChunked: AoS sorted by cell (particles_aos4soavx_chunked.hpp), pushed as SoAVXChunked's
-//  batched_avx: a cell's run (contiguous) staged into a SoAVXArray of stage_size slots at a time,
-//  pushed there (boris::avx::Push: the cell's gather loaded once, its deposit window), written
-//  back (REF: the live slots; the crossings recorded against the array's slots). Unsorted, or
-//  above interpolation order 1: the whole array staged, no gather. Without mkn.avx, or not host
-//  memory: the AoS backend's per particle push. PLAMN_AVX_STAGE: stage_size (a multiple of the
-//  lanes, default 256)
+// AoS4SoAVXChunked: a cell's run staged into a SoAVXArray, pushed there as SoAVXChunked's
+//  batched_avx, written back: doc/core/numerics/pusher/boris/detail/multi_boris.md
+//  PLAMN_AVX_STAGE: stage_size (a multiple of the lanes, default 256)
 template<typename ModelAccessor, typename Interpolator>
 struct MultiBorisBackend<LayoutMode::AoS4SoAVXChunked, ModelAccessor, Interpolator>
     : public MultiBorisBackend<LayoutMode::AoS, ModelAccessor, Interpolator>
@@ -1808,7 +1785,7 @@ struct MultiBorisFunctors
     }
 
     // one tile's worth of work — the unit of dispatch for pool.detach_task() in the
-    // thread-pooled path (see MultiBorisBackend::move_rest_pooled).
+    // thread-pooled path
     void one_tile(std::size_t const tile_idx)
     {
         auto const tile_picker
@@ -1968,8 +1945,8 @@ struct MultiBorisFunctors
 
     // one tile's worth of the COPY-mode deposit pass. Domain and LevelGhost write into
     // the SAME tile's rhoP/flux, so callers must run this tile's Domain and
-    // LevelGhost passes in one task (never two concurrent tasks for the same tile_idx)
-    // — see MultiBorisBackend::move_cpu_copy_pooled. Different tiles are independent.
+    // LevelGhost passes in one task (never two concurrent tasks for the same tile_idx).
+    // Different tiles are independent.
     void one_copy_tile(std::size_t const tile_idx, auto& boxings, auto& view, auto& pop)
         requires(mkn::kul::any_in(Particles_t::layout_mode, LayoutMode::AoSPCTS,
                                   LayoutMode::AoSCMTS))
@@ -1994,8 +1971,7 @@ struct MultiBorisFunctors
         };
 
         // batched in phases (copy + half step, m2p + accelerate + half step, deposit) as
-        // interleaving m2p and p2m per particle is slower, see updater_realloc's
-        // ParticlesSynchronisedMover1::Pusher::move_domain_copy
+        // interleaving m2p and p2m per particle is slower
         std::array<Particle_t, copy_batch_size> batch;
         std::size_t n = 0;
 

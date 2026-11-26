@@ -48,7 +48,7 @@ template<auto storage_mode, auto opts>
 struct CellMapStorage;
 
 
-// SPAN — non-owning view; Indexer<SPAN> objects live inside the VECTOR storage
+// non-owning: the Indexer<SPAN> objects live inside the VECTOR storage
 template<auto opts>
 struct CellMapStorage<StorageMode::SPAN, opts>
 {
@@ -78,8 +78,8 @@ struct CellMapStorage<StorageMode::SPAN, opts>
     damn::core::NdArrayViewSpan<opts.dimension, idx_span_t, idx_vector_t> cellIndexes_;
 };
 
-// VECTOR — owns the single NdArrayVector; its Indexer<VECTOR> elements inherit Indexer<SPAN>,
-// so the SPAN base above can alias them directly via static_cast with no extra allocation.
+// its Indexer<VECTOR> elements inherit Indexer<SPAN>: the SPAN base aliases them by
+//  static_cast, no extra allocation
 template<auto opts>
 struct CellMapStorage<StorageMode::VECTOR, opts>
     : CellMapStorage<StorageMode::SPAN,
@@ -144,8 +144,7 @@ public:
     {
     }
 
-    // produce a non-owning span view of this CellMap for GPU kernel dispatch.
-    // Syncs every Indexer's span before building the view so GPU sees valid pointers.
+    // for kernels: every Indexer's span synced first, the device sees valid pointers
     auto view()
         requires(opts.storage_mode == StorageMode::VECTOR)
     {
@@ -156,7 +155,7 @@ public:
         return CellMap<span_opts>{*this};
     }
 
-    // refresh span pointer after source CellMap's NdArrayVector may have reallocated
+    // after the source's NdArrayVector may have reallocated
     void reset_from(auto& from)
         requires(opts.storage_mode == StorageMode::SPAN)
     {
@@ -196,7 +195,6 @@ public:
     }
 
 
-    // add a single index to the cellmap with the specified cell
     template<typename CellIndex>
     void addToCell(CellIndex const& cell, std::size_t itemIndex);
 
@@ -205,43 +203,35 @@ public:
     using DefaultExtractor = decltype(default_extractor);
 
 
-    // same as above but cell is found with the CellExtractor
     template<mkn::kul::Iterable Array, typename CellExtractor = DefaultExtractor>
     void add(Array const& items, std::size_t itemIndex, CellExtractor extract = default_extractor);
 
 
 
-    // add all given items indexes to the cellmap.
-    // items will be added to the cell they are in, given the CellExtractor
     template<mkn::kul::Iterable Array, typename CellExtractor = DefaultExtractor>
     void add(Array const& items, CellExtractor extract = default_extractor);
 
 
 
-    // same as above but for indexes within the given range
     template<mkn::kul::Iterable Array, typename CellExtractor = DefaultExtractor>
     void add(Array const& items, std::size_t first, std::size_t last,
              CellExtractor extract = default_extractor);
 
 
 
-    // number of indexes stored in that cell of the cellmap
     MKN_KUL_FN_SIG_RET std::size_t size(cell_t cell) const
     {
         return cellIndexes_(local_(cell)).size();
     }
     MKN_KUL_FN_SIG_RET std::size_t size(cell_t cell) { return cellIndexes_(local_(cell)).size(); }
 
-    // total number of mapped indexes
     MKN_KUL_FN_SIG_RET auto size() const;
 
-    // number of indexes mapped in the given box
     MKN_KUL_FN_SIG_RET auto size(box_t const& box) const;
 
-    // total capacity over all cells
+    // over all cells
     MKN_KUL_FN_SIG_RET auto capacity() const;
 
-    // remove all indexes
     void clear()
     {
         for (auto& cell : cellIndexes_)
@@ -259,35 +249,28 @@ public:
     }
 
 
-    // export from 'from' into 'dest' items indexed in the map found withing 'box'
     template<typename Src, typename Dst>
     void export_to(box_t const& box, Src const& from, Dst& dest) const;
 
 
-    // same as previous but applies a transformation to the items before exporting to 'dest'
     template<typename Src, typename Dst, typename Transformation>
     void export_to(box_t const& box, Src const& from, Dst& dest, Transformation&& Fn) const;
 
 
-    // export items satisfying Predicate in 'from' into 'dest'
     template<typename Src, typename Dst, typename Predicate>
     void export_if(Src const& from, Dst& dest, Predicate&& pred) const;
 
 
 
 
-    // item at itemIndex in items is registered at 'oldCell' but is now in a
-    // different one. This method changes the cellmap to move the index to its new cell
-    // new cell is obtained from the item
+    // itemIndex registered at oldCell, its item now in another cell (extracted from the item)
     template<typename Array, typename CellIndex, typename CellExtractor = DefaultExtractor>
     void update(Array& items, std::size_t itemIndex, CellIndex const& oldCell,
                 CellExtractor extract = default_extractor);
 
 
-    // re-orders the array so that elements satisfying the predicate are found first
-    // and element not satisfying after. Returns the pivot index, which is the first
-    // element not to satisfy the predicate
-    // Ensures the cellmap and the re-ordered array are still consistent.
+    // the array reordered, pred's items first, the cellmap kept consistent: returns the first
+    //  item not satisfying pred
     template<typename Range, typename Predicate, typename CellExtractor = DefaultExtractor>
     auto partition(Range range, Predicate&& pred, CellExtractor = default_extractor);
 
@@ -295,13 +278,12 @@ public:
     void erase(auto& items, box_t const& box);
 
 
-    // erase all items indexed in the given range from both the cellmap and the
-    // array the range is for.
+    // from both the cellmap and the range's array
     template<typename Range>
     void erase(Range range);
 
 
-    // erase items indexes from the cellmap
+    // from the cellmap only
     template<mkn::kul::Iterable Array, typename CellExtractor = DefaultExtractor>
     void erase(Array const& items, std::size_t itemIndex,
                CellExtractor extract = default_extractor);
@@ -311,7 +293,6 @@ public:
     void erase(Array const& items, cell_t const oldCell, std::size_t const itemIndex);
 
 
-    // sort all cell indexes
     void sort();
 
     template<typename CellIndex>
@@ -545,10 +526,7 @@ template<typename Array, typename CellIndex, typename CellExtractor>
 inline void CellMap<opts>::update(Array& items, std::size_t itemIndex, CellIndex const& oldCell,
                                   CellExtractor /*extract*/)
 {
-    // we want to check first if the particle is in the map
-    // already. if is, needs to remove it before inserting it again
-    // with at its right cell.
-    // It could not be in the map at 'oldCell', in that case we want to add it.
+    // it may not be at oldCell: then only added
     auto& oldList = cellIndexes_(local_(oldCell));
     if (oldList.is_indexed(itemIndex))
         oldList.remove(itemIndex);
@@ -612,7 +590,7 @@ void CellMap<opts>::erase(auto& items, box_t const& box)
         if (blist.size() == 0)
             return;
         prev_idx = blist.back();
-        for (std::size_t i = blist.size(); i-- > 0;) // reverse loop
+        for (std::size_t i = blist.size(); i-- > 0;)
         {
             auto const& idx = blist[i];
             DAMN_LOG_LINE_SS(i << " " << idx << " " << items.size());
@@ -634,8 +612,6 @@ inline void CellMap<opts>::erase(Range range)
 {
     auto& items = range.array();
 
-    // first erase indexes from the cellmap
-    // then items from the array
     for (std::size_t i = range.ibegin(); i < range.iend(); ++i)
     {
         erase(items, i);

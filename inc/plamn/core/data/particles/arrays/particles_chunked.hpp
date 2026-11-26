@@ -1,43 +1,9 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTICLES_CHUNKED_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLES_CHUNKED_HPP
 
-// particles sorted by cell, in per cell chunks: the bookkeeping whatever the storage (columns:
-//  SoAVXChunked, particle structures: AoS4SoAVXChunked)
-//
-//  starts_[c] is the first particle of cell c, sizes_[c] its count, cells c flattened in C order
-//  (last direction fastest) over shell() = grow(box, 1) (as AoSMapped's CellMap, the safe outer
-//  shell). A span of cells along the last direction is then one contiguous range of particles:
-//  selecting / exporting a box is a list of ranges.
-//
-//  Each cell's chunk is starts_[c], sizes_[c]: chunks are in cell order, with gaps between them,
-//  free slots holding fillers (weight 0, the cell of the chunk before them). sort() lays them out:
-//  a counting sort (histogram with a slot per particle, exclusive scan of each cell's particles
-//  and gap, one scatter of all particles into a second storage, swapped in), the gaps the
-//  slack: a fraction of the particles spread over the patch's cells, border cells weighted (their
-//  particles leave to and arrive from other patches; inside, about as many enter a cell as leave
-//  it), none in the shell outside the box. Without slack (the default) chunks are contiguous.
-//
-//  Between sorts, particles change cells without one (resettle(), insert(), remove()): a chunk
-//  grows into the gap at its tail or head, whichever is larger, and shrinks from the end with the
-//  smaller gap (the gaps either side even out); an empty chunk takes the middle of the gap it is
-//  in. A chunk with no room either side has a neighbour slide over by one into its other gap,
-//  which, without one, first has its own neighbour slide (up to max_slides chunks each way). Only
-//  when none of them has room is a full sort needed.
-//
-//  Any other mutation (push, append, erase, resize) leaves the chunks stale: sorted() is false
-//  until the next sort(), range accessors assert sorted(). GPU_UNIFIED sorts on the device
-//  (thrust), the order of particles within a cell is then not deterministic (atomic slots), CPU
-//  is stable.
-//
-//  ChunkedOps<Derived> holds the algorithms; Derived (the particles), with a ChunkState in its
-//  storage, provides the storage's part:
-//    size(), copy(i), push_back(p)          as any particles
-//    weight_at_(i), set_weight_(i, w)       a slot's weight (0: a gap)
-//    cell_at_(i)                            a slot's cell (std::array<int, dim>)
-//    move_slot_(to, from), write_slot_(i, p), write_filler_(i, cell)
-//    slot_weights_(), slot_cells_()         sort()'s per slot functors (DAMN_ALL: device sorts)
-//    scatter_sorted_(to, n, slots_total)    every slot i with to(i) != none into slot to(i) of a
-//                                           scratch storage of slots_total slots, swapped in
+// particles in per cell chunks: doc/core/data/particles/arrays/particles_chunked.md
+// stale (sorted() false) after any change but resettle / insert / remove, until sort();
+//  GPU_UNIFIED sorts: the order within a cell is not deterministic
 
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/box_spans.hpp"
@@ -195,7 +161,7 @@ struct ChunkState
     }
 
     box_t box_;
-    container_t<chunk_offset_t> starts_; // per cell, see top of file
+    container_t<chunk_offset_t> starts_; // per cell
     container_t<chunk_offset_t> sizes_;  // per cell
     container_t<chunk_offset_t> gaps_;   // per cell, after its chunk, sort() scratch
     container_t<chunk_offset_t> slots_;  // per particle slot in its cell, sort() scratch; the
@@ -231,7 +197,7 @@ public:
         return std::pair<std::size_t, std::size_t>{self().starts_[c], self().sizes_[c]};
     }
 
-    // fn(start, size) per contiguous range of the particles in box, see Chunks
+    // fn(start, size) per contiguous range of the particles in box
     void for_each_range(box_t const& box, auto&& fn) const
     {
         DAMN_ASSERT(self().sorted());

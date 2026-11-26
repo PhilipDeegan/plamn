@@ -19,13 +19,8 @@ namespace plamn::core
 using enum LayoutMode;
 using enum damn::AllocatorMode;
 
-// AoSTS / AoSPCTS - particles are spread across tiles (and, for AoSPCTS, per-cell
-// buckets within each tile), so there is no single contiguous buffer to write/read in
-// one shot as the flat AoS layouts do. Write/read one particle at a time via
-// per_particle/emplace_back rather than staging through an intermediate flat buffer.
-// value_type is the same Particle_t regardless of layout_mode (see
-// Particles::value_type), so the file format is byte-compatible with the flat
-// AoS/AoSMapped serializers.
+// AoSTS / AoSPCTS: no single contiguous buffer (tiles, AoSPCTS per cell buckets), one particle
+//  at a time, no flat staging buffer. The same Particle_t: the file format is the flat AoS one
 template<auto layout_mode>
 struct TiledParticlesSerializing
 {
@@ -67,8 +62,7 @@ void ParticlesDeserializer<AoSTS, CPU>::operator()(std::string const& file_name,
     TiledParticlesSerializing<AoSTS>::template read<Dst, Src>(file_name, dst, *this);
 }
 
-// file format is a flat Particle_t array, same as AoS/AoSMapped - reuse their chunked
-// reader for cross-format deserialization (e.g. into SoA/SoAVX) instead of duplicating it.
+// the flat AoS file format: their chunked reader
 template<>
 template<typename Src, std::uint16_t N, typename Fn>
 void ParticlesDeserializer<AoSTS, CPU>::readN(std::string const& file_name, Fn fn)

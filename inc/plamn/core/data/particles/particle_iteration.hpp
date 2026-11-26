@@ -1,12 +1,7 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_PARTICLE_ITERATION_HPP
 #define PLAMN_CORE_DATA_PARTICLES_PARTICLE_ITERATION_HPP
 
-// the particles of an array whatever its layout, for code that does not care how they are kept
-//   for_each_particle(particles, fn)  fn(particle) for each: tiled arrays tile by tile, column
-//                                     ones (the SoA family) as a Particle copy (SoAVXChunked's
-//                                     gaps too: weight 0)
-//   particle_at(particles, i)         the i-th of them in for_each_particle's order (tiled: a
-//                                     walk over the tiles' sizes, for occasional access only)
+// the particles of an array whatever its layout
 
 #include "plamn/core/data/particles/particles_def.hpp"
 
@@ -16,6 +11,7 @@
 namespace plamn::core
 {
 
+// tile by tile; columns (the SoA family) as a Particle copy, SoAVXChunked's gaps (weight 0) too
 void for_each_particle(TiledParticles auto const& particles, auto&& fn)
 {
     for (auto const& tile : particles())
@@ -31,6 +27,7 @@ void for_each_particle(auto const& particles, auto&& fn)
             fn(particles[i]);
 }
 
+// in for_each_particle's order. Tiled: a walk over the tiles' sizes, for occasional access only
 decltype(auto) particle_at(TiledParticles auto& particles, std::size_t i)
 {
     for (auto& tile : particles())

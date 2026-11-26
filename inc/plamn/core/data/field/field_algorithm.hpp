@@ -86,7 +86,6 @@ void average(Span const& f1, Span const& f2, Span& avg)
 }
 
 // TODO benchmark several ways of converting to primal
-// https://github.com/PHAREHUB/PHARE/pull/1486#issuecomment-6401620199
 template<std::size_t dim, typename PQ, typename D, auto am>
 auto& convert_to_fortran_primal(      // DOES NOT WORK ON GHOST BOX!
     Field<dim, PQ, D, am>& dst,       //
@@ -423,11 +422,8 @@ void operate(TensorField<Field_t, PQ, rank>& dst, TensorField<Field_t, PQ, rank>
 }
 
 
-/** \brief calls fn(dst.data()[i], fields.data()[i]...) for every cell i of dst (and the
- * co-located fields, which must share dst's shape/tiling). Meant for callbacks that only
- * need the value at the same cell across several fields (no neighbor/projection access) -
- * unlike eval_on_box, this works for tiled fields.
- */
+// fn(dst.data()[i], fields.data()[i]...) for every value i: fields share dst's shape/tiling, no
+//  neighbour or projection access; unlike eval_on_box, works for tiled fields
 template<typename Fn, typename Field_t, typename... Fields>
 void operate_on_fields(Fn&& fn, Field_t& dst, Fields&... fields)
     requires(not is_field_tile_set_v<Field_t>)

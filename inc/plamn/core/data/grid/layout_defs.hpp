@@ -134,24 +134,8 @@ namespace core
     }
 
 
-    /**
-     * @brief Dual-direction prolongation (coarse→fine, ratio 2).
-     *
-     * A quantity dual in `dir` is an average over its dual extent there. Refining splits coarse
-     * cell I into two fine children sitting at ±¼ of the coarse spacing; parity p∈{0,1},
-     * sign σ = 2p−1 (σ=+1 = right child, σ=−1 = left). Offsets are relative to coarse cell I.
-     *
-     * Even-term cancellation: subtracting the conservation constraint kills every even
-     * reconstruction coefficient, so the children
-     * depend only on ODD coefficients ⇒ parabolic ≡ linear (degree-2 skipped). Children are
-     * antisymmetric in σ about ū_I ⇒ they always mean back to ū_I (conservative at every order).
-     *
-     *   order 2 (linear, 3-pt):  ū_I + σ·(ū_{I+1} − ū_{I−1})/8
-     *
-     * Primal-direction prolongation needs no new table: the coincident fine node is an exact
-     * copy and the half-point is the free `directionalInterp<dim, dir, PrimalToDual, order>` (same
-     * midpoint weights). This is the dual counterpart, kept beside it for cohesion.
-     */
+    // dual-direction prolongation (coarse to fine, ratio 2), conservative at every order:
+    //  doc/core/data/grid/layout_defs.md
     template<std::size_t dim, auto dir, int sign, std::size_t order = 2>
     MKN_KUL_FN_SIG_RET consteval auto directionalProlongation()
     {
