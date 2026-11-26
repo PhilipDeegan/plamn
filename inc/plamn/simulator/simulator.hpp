@@ -1071,6 +1071,9 @@ private:
 
 
     std::array<int, dimension> patch_size_{};
+    // per level, without largest_patch_size: a patch is at most the level's domain, as PHARE's
+    //  default (level 0's cells on a refined level cut its boxes in 2^dim per level)
+    std::vector<std::array<int, dimension>> level_size_;
     // cells per direction of the blocks level 0 is cut on when rebalanced
     static constexpr int rebalance_block = 8;
     std::vector<int> domainBox_;
