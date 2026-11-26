@@ -29,14 +29,14 @@ step "python modules (1D, 2D; 1D MHD only, ideal and Hall)"
 ./mkn.py --no-etc --dim 1 --layout SoAVXChunked AoS4SoAVXChunked -- "${W[@]}" # the chunked restarts
 
 step "C++ diagnostics tests (embedded python): 1 rank (mkn test), then 3"
+export PYTHONPATH=.:$PYPHARE/pyphare:tst/plamn/python # the embedded python imports pyphare
 mkn build test -p test_plamn_diagnostics -dKO -t "$J" "${W[@]}" -x res/mkn/mpi
 for t in bin/test_plamn_diagnostics/test/*_test_diagnostics_*d.cpp; do
   mpirun --oversubscribe -n 3 "$t"
 done
 
 step "python tests: one process each, the 1 and 3 rank cases at the same time (as CI)"
-PYTHONPATH=.:$PYPHARE/pyphare:tst/plamn/python \
-  python3 -m phlop.run.test_cases -i tst -c 4 --tags mpi
+python3 -m phlop.run.test_cases -i tst -c 4 --tags mpi
 
 step "clang-format (changed lines)"
 # git clang-format --diff exits 1 on a diff: under pipefail a pipe into grep would not fail the

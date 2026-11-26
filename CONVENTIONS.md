@@ -11,10 +11,19 @@ here as written: comments, code and gates. In short, for comments:
   code. `doc/` mirrors the source tree: `inc/plamn/simulator/simulator.hpp` is explained in
   `doc/simulator/simulator.md`, `etc/bench/harris/harris.py` in `doc/etc/bench/harris/harris.md`
 
+and for memory and threads:
+
+- code that runs every step does not allocate: buffers are owned by what is worked on, per
+  thread (`damn::core::scratch`, a `thread_local damn::MinimizingVector`), or fixed size batches
+- every buffer has one owner, an object or a thread; no false sharing between threads
+
 ## plamn's own
 
 - model components (closures, ...) are owned by the model, and operations run on whole levels;
   patches hold storage and views
+- intermediate field values go in a patch's temporaries (its extra fields, untiled temporaries,
+  scratch grids), allocated with the patch; a patch is worked on by one thread at a time, so its
+  temporaries need no lock and are never shared between threads
 - a model level's advance is `plamn::solver::advance(model, level, ...)`, no `*TimeStepper` /
   `*Integrator` types
 - derived quantities are computed on demand, only on the levels and steps that read them
