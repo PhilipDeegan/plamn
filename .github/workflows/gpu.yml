@@ -15,6 +15,10 @@ on:
   push:
     branches: [master]
   workflow_dispatch:
+    inputs:
+      job:
+        description: "the job to run: all, cuda, cuda_layouts or rocm"
+        default: all
 
 permissions:
   contents: read
@@ -29,6 +33,7 @@ jobs:
   #  sm_120 (RTX 5090, Blackwell), as res/mkn/clang_cuda.yaml and a local RTX 50xx: VGPU_GPU
   #  picks the simulated card (the image's default is nvidia/h100, sm_90)
   cuda:
+    if: ${{ contains(fromJSON('["all", "cuda"]'), github.event.inputs.job || 'all') }}
     name: cuda (clang 22, CUDA 13.5, simulated RTX 5090)
     runs-on: ubuntu-24.04
     container: ghcr.io/0xz/hpc-containers:cuda
@@ -85,9 +90,90 @@ jobs:
       run: |
         KLOG=3 vgpu run mkn clean build test -dKOqp test_plamn_core -x res/mkn/clang_cuda_ci -t 4
 
+  # test_layouts on the simulated RTX 5090: SoAVXChunked GPU_UNIFIED against AoSMapped CPU in 1D,
+  #  2D and 3D, the CPU modules with the image's gcc, Open MPI and HDF5 (/opt/mpi, /opt/hdf5), the
+  #  GPU ones with clang through the same mpicxx. The CPU modules first: CPU and GPU builds share
+  #  damn's bin/
+  cuda_layouts:
+    if: ${{ contains(fromJSON('["all", "cuda_layouts"]'), github.event.inputs.job || 'all') }}
+    name: cuda layouts (simulated RTX 5090)
+    runs-on: ubuntu-24.04
+    container: ghcr.io/0xz/hpc-containers:cuda
+    timeout-minutes: 180
+    env:
+      CUDA_ARCH: sm_120
+      VGPU_GPU: nvidia/rtx5090
+    steps:
+    - uses: actions/checkout@v6
+    - name: Install
+      run: |
+        apt-get update && apt-get install -y curl git openssh-client wget gnupg lsb-release \
+          software-properties-common libnuma-dev python3-dev python3-venv
+        curl -fsSLo llvm.sh https://apt.llvm.org/llvm.sh && bash llvm.sh 22
+        ln -sf /usr/bin/clang-22 /usr/local/bin/clang
+        ln -sf /usr/bin/clang++-22 /usr/local/bin/clang++
+        ln -sf /usr/bin/llvm-ar-22 /usr/local/bin/llvm-ar
+        python3 -m venv /venv && echo /venv/bin >> $GITHUB_PATH
+        /venv/bin/pip install numpy dill pyyaml scipy matplotlib h5py
+    - uses: actions/checkout@v6
+      with:
+        repository: PhilipDeegan/damn
+        ssh-key: ${{ secrets.DAMN_DEPLOY_KEY }}
+        path: tpp/damn
+    - name: damn's branch of the same name (a plamn PR that needs a damn PR), else the PR's base (next)
+      env:
+        BRANCH: ${{ github.head_ref || github.ref_name }}
+        BASE: ${{ github.base_ref }}
+      run: |
+        cd tpp/damn && git config --global --add safe.directory "$PWD"
+        for b in "$BRANCH" "$BASE"; do
+          if [ -n "$b" ] && [ "$b" != master ] && git ls-remote --exit-code --heads origin "$b" >/dev/null; then
+            git fetch -q --depth 1 origin "$b" && git checkout -q FETCH_HEAD && break
+          fi
+        done
+        echo "damn: $(git log --oneline -1)"
+    - name: mkn profiles for this image and GPU
+      run: |
+        CUDA_HOME=$(readlink -f /usr/local/cuda)
+        # CPU: hpc.yaml's stack, at the image's paths
+        sed -e "s|/opt/hpc/mpi|/opt/mpi|g" -e "s|/opt/hpc/hdf5|/opt/hdf5|g" res/mkn/hpc.yaml \
+          > res/mkn/hpc_ci.yaml
+        # GPU: clang_cuda.yaml as the cuda job's, compiled and linked through mpicxx (OMPI_CXX)
+        sed -e "s/cuda.arch: 120/cuda.arch: ${CUDA_ARCH#sm_}/" -e "s|/usr/local/cuda|${CUDA_HOME}|g" \
+          -e "s|compiler:  clang++|compiler:  /opt/mpi/bin/mpicxx|" \
+          -e "s|linker:  clang++|linker:  /opt/mpi/bin/mpicxx|" \
+          res/mkn/clang_cuda.yaml > res/mkn/clang_cuda_mpi_ci.yaml
+        [ -d "${CUDA_HOME}/targets/x86_64-linux/include/cccl" ] \
+          || sed -i '\|targets/x86_64-linux/include/cccl|d' res/mkn/clang_cuda_mpi_ci.yaml
+        sed -i "s|^path: .*|path: ${VGPU_SHIM_DIR}|" res/mkn/clang_cuda_mpi_ci.yaml
+        printf 'find:\n  hdf5:\n    inc: /opt/hdf5/include\n    lib: /opt/hdf5/lib\nenv: OMPI_CXX=clang++\n' \
+          >> res/mkn/clang_cuda_mpi_ci.yaml
+        cat res/mkn/clang_cuda_mpi_ci.yaml
+        $CURL_GET -o mkn $PATH_GET/mkn_nix
+        chmod +x mkn && mv mkn /usr/local/bin/mkn
+    - name: CPU modules
+      run: |
+        KLOG=3 ./mkn.py --no-etc --dim 1 2 3 --layout AoSMapped SoAVXChunked --jobs 4 -- -q \
+          -x res/mkn/hpc_ci
+    - name: GPU modules
+      run: |
+        KLOG=3 ./mkn.py --no-etc --dim 1 2 3 --layout SoAVXChunked --allocator GPU_UNIFIED \
+          --jobs 4 -- -q -x res/mkn/clang_cuda_mpi_ci -l "-ldl"
+    - uses: actions/checkout@v6
+      with:
+        repository: PhilipDeegan/PHARE
+        ref: wrangler
+        path: phare
+        sparse-checkout: pyphare
+    - name: test_layouts
+      run: |
+        PYTHONPATH=.:phare/pyphare:tst/plamn/python \
+          vgpu run python3 -m unittest -v tst.plamn.python.test_layouts
+
   # ROCm on a simulated AMD MI300X (gfx942), hipcc and rocThrust from the image's ROCm
   #  (res/mkn/hip_thrust.yaml, thrust is used only if its headers are found)
   rocm:
+    if: ${{ contains(fromJSON('["all", "rocm"]'), github.event.inputs.job || 'all') }}
     name: rocm (hipcc, ROCm 7.14, simulated MI300X)
     runs-on: ubuntu-24.04
     container: ghcr.io/0xz/hpc-containers:rocm
