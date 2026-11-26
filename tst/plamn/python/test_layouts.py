@@ -96,7 +96,9 @@ def module_built(ndim, layout, allocator):
     name = f"plamn.plamn_cpp_{ndim}_{INTERP}_{REFINED[ndim]}_{layout}_{allocator}"
     try:
         return importlib.util.find_spec(name) is not None
-    except ModuleNotFoundError:
+    except ModuleNotFoundError as e:
+        if e.name != name:  # the plamn package itself does not import: not a missing module
+            raise
         return False
 
 
