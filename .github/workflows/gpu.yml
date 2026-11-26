@@ -135,9 +135,24 @@ jobs:
     - name: mkn profiles for this image and GPU
       run: |
         CUDA_HOME=$(readlink -f /usr/local/cuda)
-        # CPU: hpc.yaml's stack, at the image's paths
-        sed -e "s|/opt/hpc/mpi|/opt/mpi|g" -e "s|/opt/hpc/hdf5|/opt/hdf5|g" res/mkn/hpc.yaml \
-          > res/mkn/hpc_ci.yaml
+        # CPU: mpi.yaml with the image's Open MPI and HDF5
+        cat > res/mkn/hpc_ci.yaml <<'YAML'
+        super: base
+        find:
+          hdf5:
+            inc: /opt/hdf5/include
+            lib: /opt/hdf5/lib
+        compiler:
+          mask:
+            g++:
+              /opt/mpi/bin/mpicc
+              /opt/mpi/bin/mpicxx
+        file:
+          - type: cpp:cxx:cc
+            archiver: ar -cr
+            compiler: /opt/mpi/bin/mpicxx -std=c++20 -fPIC ${cpu.thrust}
+            linker: /opt/mpi/bin/mpicxx
+        YAML
         # GPU: clang_cuda.yaml as the cuda job's, compiled and linked through mpicxx (OMPI_CXX)
         sed -e "s/cuda.arch: 120/cuda.arch: ${CUDA_ARCH#sm_}/" -e "s|/usr/local/cuda|${CUDA_HOME}|g" \
           -e "s|compiler:  clang++|compiler:  /opt/mpi/bin/mpicxx|" \
