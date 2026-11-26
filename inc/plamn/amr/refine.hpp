@@ -7,6 +7,7 @@
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/geometry/point.hpp"
 #include "damn/core/geometry/box_spans.hpp"
+#include "damn/core/memory/scratch.hpp"
 #include "plamn/amr/resources.hpp"
 #include "plamn/amr/split/splitter.hpp"
 #include "plamn/core/data/particles/particle.hpp"
@@ -18,7 +19,6 @@
 #include <span>
 #include <stdexcept>
 #include <utility>
-#include <vector>
 
 namespace damn::amr
 {
@@ -143,7 +143,8 @@ void divergence_free_touch_up(std::array<Resource*, 3> const& B,
         }
         return i;
     };
-    std::vector<double> div(region.size());
+    auto const div = damn::core::scratch<double, struct touch_up_div>(
+        static_cast<std::size_t>(region.size())); // every value set below
     damn::core::for_each_point(region, [&](auto const& c) {
         double v = 0;
         for (std::size_t d = 0; d < dim; ++d)

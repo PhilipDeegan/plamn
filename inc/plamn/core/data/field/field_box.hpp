@@ -270,7 +270,8 @@ void operate_on_fields(FieldBox<GridTileSet<Layout_t, Args...>>& dst,
     // resolve those once rather than intersecting every dst tile with every src tile
     using SrcTile = std::decay_t<decltype(src.field()[0])>;
     using Box_t   = std::decay_t<decltype(src_selection_box)>;
-    std::vector<std::pair<SrcTile const*, Box_t>> src_tiles;
+    static thread_local std::vector<std::pair<SrcTile const*, Box_t>> src_tiles; // the thread's
+    src_tiles.clear();
     for (auto const& src_tile : src.field())
         if (auto const src_overlap = src_selection_box * get_src_box(src_tile))
             src_tiles.emplace_back(&src_tile, *src_overlap);
