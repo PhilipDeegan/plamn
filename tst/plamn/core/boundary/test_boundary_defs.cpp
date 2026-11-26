@@ -1,9 +1,5 @@
 #include "plamn/core/def.hpp"
-// boundary locations (boundary_defs.hpp) numbered as SAMRAI's CartesianBoundaryDefines: faces
-//  (3D), edges (2D) and nodes (1D) as BdryLoc, 3D edges as EdgeBdyLoc3D, 2D corners as
-//  NodeBdyLoc2D, 3D corners as NodeBdyLoc3D, as many of each as SAMRAI counts (NUM_3D_FACES 6,
-//  NUM_2D_EDGES 4, NUM_1D_NODES 2, NUM_3D_EDGES 12, NUM_2D_NODES 4, NUM_3D_NODES 8); an edge or
-//  corner adjacent to the faces its name joins
+// boundary locations numbered as SAMRAI's CartesianBoundaryDefines
 
 #include "plamn/core/boundary/boundary_defs.hpp"
 

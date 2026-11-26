@@ -1,6 +1,4 @@
 #include "plamn/core/def.hpp"
-// boundaries (boundary.hpp): each type's conditions per quantity, an inflow's values, the
-//  manager from the input's dict, an edge or corner's face
 
 #include "plamn/core/boundary/boundary.hpp"
 #include "plamn/core/boundary/boundary_defs.hpp"

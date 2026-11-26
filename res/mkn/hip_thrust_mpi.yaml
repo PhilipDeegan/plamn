@@ -1,7 +1,6 @@
 super: hip_thrust
 
-# as hip_thrust (rocThrust), compiled and linked through mpicxx (openmpi, OMPI_CXX=hipcc)
-#  as clang_cuda_mpi.yaml over clang_cuda.yaml
+# compiled and linked through mpicxx (openmpi, OMPI_CXX=hipcc)
 
 find:
   hdf5:

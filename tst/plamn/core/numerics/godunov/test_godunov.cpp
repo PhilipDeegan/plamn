@@ -1,6 +1,4 @@
 #include "plamn/core/def.hpp"
-//  MHD faces: Linear + VanLeer reconstruction, ideal fluxes, Rusanov; GodunovTransformer per face
-//  against GodunovFace, and tiled (per tile pool tasks, or one GPU launch) == untiled
 
 #include "damn/core/def/damn_config.hpp"
 #include "mkn/kul/for.hpp"

@@ -1,6 +1,5 @@
-"""tiling_gpu's tests/simulator/layouts (test_layouts_3d.py, interp 1): every particle layout
-against the reference, AoSMapped, through the simulator, initialized and advanced, with
-refinement boxes (no tagging), on level 0 only, 1 and 2 levels:
+"""interp 1: every particle layout against the reference, AoSMapped, through the simulator,
+initialized and advanced, with refinement boxes (no tagging), on level 0 only, 1 and 2 levels:
 
   init_L0, init_L1          initialized, fields and particles at t0
   advance_L0, advance_L1    one step

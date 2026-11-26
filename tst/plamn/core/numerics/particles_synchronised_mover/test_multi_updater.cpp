@@ -1,6 +1,4 @@
 #include "plamn/core/def.hpp"
-//  tests/core/numerics/particles_synchronised_mover/test_multi_updater.cpp
-//
 //  requires
 //  - cmake:    -DwithPhlop
 //  - cxxflags: -DDAMN_LOG_LEVEL=1
@@ -265,11 +263,8 @@ void check_particles(Layout_t const& layout, P0& ref, P1& cmp_, double const ato
                                                damn::AllocatorMode::CPU}>;
 
     auto const box = layout.cells;
-    // level/patch ghost particles live outside the domain box entirely - the sorter's
-    // flat-index cell key isn't defined out there, so sorting with the plain domain box
-    // can scatter/misgroup ghost-region particles differently between ref and cmp even
-    // when the underlying data matches. Grow the box for non-domain comparisons so the
-    // flattener covers every cell these particles can actually occupy.
+    // ghost particles lie outside the domain box, where the sorter's flat cell key is undefined:
+    //  sorted on the domain box, ref and cmp could group them differently with the same data
     auto const sort_box = type == ParticleType::Domain
                               ? box
                               : damn::core::grow(box, Layout_t::options.particle_ghost_width);

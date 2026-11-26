@@ -30,8 +30,8 @@ struct Weights : plamn::core::Interpolator<1, interp>
     }
 };
 
-// the weights from delta alone: the same bits at the same delta in any cell of any patch (they
-// rounded at the magnitude of the local index before), the start index shifted with the cell
+// the weights from delta alone: the same bits at the same delta in any cell of any patch, the
+// start index shifted with the cell
 template<std::size_t interp, auto centering>
 void same_weights_in_every_cell()
 {

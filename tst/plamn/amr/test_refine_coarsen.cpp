@@ -1,8 +1,4 @@
-// plamn's refine and coarsen operators through damn::amr::refine and coarsen, on a periodic
-// 2D coarse level of one patch and a fine patch inside it:
-//   FieldRefiner and the coarseners are exact for linear functions, every Yee centering
-//   divergence_free_touch_up: a discretely div free coarse B refines div free
-//   ParticleSplitter: children where asked, weight conserved, the split PHARE's
+// a periodic 2D coarse level of one patch and a fine patch inside it
 
 #include "damn/amr/hierarchy.hpp"
 #include "damn/amr/inter_level.hpp"

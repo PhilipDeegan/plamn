@@ -144,14 +144,12 @@ Particles& read_raw_from_file(Particles& particles, std::string const& filename)
     // Stop eating new lines in binary mode
     f.unsetf(std::ios::skipws);
 
-    // get its size:
     std::streampos fileSize;
     f.seekg(0, std::ios::end);
     fileSize = f.tellg();
     f.seekg(0, std::ios::beg);
     particles.resize(fileSize / sizeof(Particle_t));
 
-    // read the data:
     f.read(reinterpret_cast<char*>(particles.vector().data()),
            particles.size() * sizeof(Particle_t));
 

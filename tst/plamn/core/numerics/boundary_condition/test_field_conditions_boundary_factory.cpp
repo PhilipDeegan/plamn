@@ -1,7 +1,4 @@
 #include "plamn/core/def.hpp"
-// make_boundary (boundary.hpp) from a boundary's input dict: each MHD boundary type's condition per
-//  quantity, and a super magnetofast inflow's total energy and motional electric field imposed on
-//  the ghosts
 
 #include "plamn/core/boundary/boundary.hpp"
 #include "plamn/core/boundary/boundary_defs.hpp"

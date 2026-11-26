@@ -39,8 +39,8 @@ PYTHONPATH=.:$PYPHARE/pyphare:tst/plamn/python \
   python3 -m phlop.run.test_cases -i tst -c 4 --tags mpi
 
 step "clang-format (changed lines)"
-# (git clang-format --diff exits 1 when it has a diff: under pipefail a pipe into grep never
-#  failed this step; capture the diff, then look at it)
+# git clang-format --diff exits 1 on a diff: under pipefail a pipe into grep would not fail the
+#  step, so the diff is captured, then looked at
 fmt=$(git clang-format-22 --binary clang-format-22 --extensions c,cc,cpp,h,hpp,ipp --diff "$mb" -- inc src tst || true)
 if grep -q "^diff" <<<"$fmt"; then
   echo "$fmt"

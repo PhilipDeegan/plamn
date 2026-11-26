@@ -2,7 +2,6 @@
 #define PLAMN_TST_CORE_NUMERICS_TIME_INTEGRATOR_MHD_PATCH_FIXTURES_HPP
 
 // the simulator's MHD patch, with the states any time integration scheme uses
-//  (core/numerics/time_integrator), for tests of a scheme over one patch
 
 #include "plamn/core/models/options/mhd_options_def.hpp"
 #include "plamn/simulator/mhd_patch.hpp"

@@ -1,6 +1,4 @@
 #include "plamn/core/def.hpp"
-//  tests/core/numerics/faraday/test_tileset_faraday.cpp
-//
 //  requires
 //  - cmake:    -DwithPhlop
 //  - cxxflags: -DDAMN_LOG_LEVEL=1
