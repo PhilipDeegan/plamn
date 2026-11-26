@@ -161,8 +161,17 @@ jobs:
         [ -d "${CUDA_HOME}/targets/x86_64-linux/include/cccl" ] \
           || sed -i '\|targets/x86_64-linux/include/cccl|d' res/mkn/clang_cuda_mpi_ci.yaml
         sed -i "s|^path: .*|path: ${VGPU_SHIM_DIR}|" res/mkn/clang_cuda_mpi_ci.yaml
-        printf 'find:\n  hdf5:\n    inc: /opt/hdf5/include\n    lib: /opt/hdf5/lib\nenv: OMPI_CXX=clang++\n' \
-          >> res/mkn/clang_cuda_mpi_ci.yaml
+        cat >> res/mkn/clang_cuda_mpi_ci.yaml <<'YAML'
+        find:
+          hdf5:
+            inc: /opt/hdf5/include
+            lib: /opt/hdf5/lib
+        compiler:
+          mask:
+            clang++:
+              /opt/mpi/bin/mpicxx
+        env: OMPI_CXX=clang++
+        YAML
         cat res/mkn/clang_cuda_mpi_ci.yaml
         $CURL_GET -o mkn $PATH_GET/mkn_nix
         chmod +x mkn && mv mkn /usr/local/bin/mkn
