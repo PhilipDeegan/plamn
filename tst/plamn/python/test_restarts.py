@@ -122,6 +122,17 @@ def simulation(
     return ph.Simulator(sim, log_to_file=False).setup().initialize()
 
 
+def sorted_particles(comps):
+    """a patch's particles in one order whatever their arrays' (arrivals are appended in the
+    order they are selected, which a restart's rebuilt cell maps change): by every column"""
+    columns = [c.reshape(len(c), -1) for c in comps.values()]
+    if not columns or not len(columns[0]):
+        return comps
+    keys = np.concatenate(columns, axis=1)
+    order = np.lexsort(keys.T[::-1])
+    return {name: c[order] for name, c in comps.items()}
+
+
 def state(simulator, restarted=False):
     """everything the restarted run must match: per level B, E, moments, particles; the
     polytropic electrons' Pe, and their entropy Se after a step (a stage's: restarted, the
@@ -146,8 +157,9 @@ def state(simulator, restarted=False):
                 )
             for pd in dw.getPatchLevel(ln).getParticles(pop):  # this rank's patches
                 key = f"{pop}@{ln}:{tuple(pd.lower)}"
-                for name, view in pd.data.components().items():
-                    out[f"{key}:{name}"] = np.array(view)
+                comps = {name: np.array(view) for name, view in pd.data.components().items()}
+                for name, values in sorted_particles(comps).items():
+                    out[f"{key}:{name}"] = values
     return out
 
 
@@ -173,7 +185,12 @@ class RestartsTest(unittest.TestCase):
     def assertSameState(self, a, b, when):
         self.assertEqual(sorted(a), sorted(b), when)
         for key in a:
-            if isinstance(a[key], np.ndarray):
+            if isinstance(a[key], np.ndarray) and a[key].dtype.kind == "f":
+                # the same to rounding: sums in another order (particles arrive in another)
+                np.testing.assert_allclose(
+                    a[key], b[key], rtol=1e-12, atol=1e-14, err_msg=f"{key} {when}"
+                )
+            elif isinstance(a[key], np.ndarray):
                 np.testing.assert_array_equal(a[key], b[key], err_msg=f"{key} {when}")
             else:
                 self.assertEqual(a[key], b[key], f"{key} {when}")
