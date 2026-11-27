@@ -20,6 +20,8 @@
 
 #include "plamn/simulator/simulator_def.hpp"
 
+#include "etc/bench/particles/bench_particles.hpp"
+
 #include "tst/plamn/core/data/grid/test_grid_fixtures.hpp"
 #include "tst/plamn/core/data/particles/test_particles.hpp"
 #include "tst/plamn/core/data/electromag/test_electromag_fixtures.hpp"
@@ -71,35 +73,6 @@ MoveSpec constexpr push_all     {.copy = false, .deposit = true,  .sync = true};
 // clang-format on
 
 
-template<auto opts>
-auto make_ions(auto const& layout) // the reference particles, AoSMapped
-{
-    UsableIons_t<opts> ions{layout, "protons"};
-    auto& particles = ions.populations[0].particles;
-    particles.domain_particles.reserve(layout.cells.size() * ppc);
-    core::add_particles(particles.domain_particles, layout.cells, ppc);
-    add_ghost_particles(particles.level_ghost_particles, layout.cells, ppc, 1);
-    delta_disperse(particles.domain_particles, seed);
-    vary_velocity(particles.domain_particles, -6, 6, seed);
-    delta_disperse(particles.level_ghost_particles, seed);
-    vary_velocity(particles.level_ghost_particles, -6, 6, seed);
-    return ions;
-}
-
-template<auto opts>
-auto from_ions(auto const& layout, auto const& from)
-{
-    UsableIons_t<opts> ions{layout, "protons"};
-    auto& dst = ions.populations[0].particles;
-    auto& src = from.populations[0].particles;
-    reserve(dst.domain_particles, layout.cells, ppc);
-    append_particles<ParticleType::Domain>(src.domain_particles, dst.domain_particles);
-    append_particles<ParticleType::LevelGhost>(src.level_ghost_particles,
-                                               dst.level_ghost_particles);
-    return ions;
-}
-
-
 template<std::size_t dim, auto layout_mode, auto alloc_mode, std::size_t interp = 1>
 struct Case
 {
@@ -122,16 +95,16 @@ struct Case
 
     typename RefTypes::Layout_t const ref_layout = *TestLayout<typename RefTypes::Layout_t>{cells};
     Layout_t const layout                        = *TestLayout<Layout_t>{cells};
-    UsableIons_t<ref_opts> const ref_ions        = make_ions<ref_opts>(ref_layout);
+    UsableIons_t<ref_opts> const ref_ions        = make_ions<ref_opts>(ref_layout, ppc, seed);
 
     Patches make_patches() const
     {
         Patches patches;
         for (std::size_t i = 0; i < n_patches; ++i)
             if constexpr (per_patch) // the reference layout: made as the reference, same seed
-                patches.emplace_back(layout, make_ions<opts>(layout));
+                patches.emplace_back(layout, make_ions<opts>(layout, ppc, seed));
             else
-                patches.emplace_back(layout, from_ions<opts>(layout, ref_ions));
+                patches.emplace_back(layout, from_ions<opts>(layout, ref_ions, ppc));
         return patches;
     }
 
@@ -244,6 +217,9 @@ int main()
     run_case<dim, AoSCMTS, CPU>("AoSCMTS");
     run_case<dim, AoSPCTS, CPU>("AoSPCTS");
     DAMN_WITH_THRUST(run_case<dim, SoAVXChunked, CPU>("SoAVXChunked");)
+    // untiled: a kernel per array, global atomics (the reference for the tile deposits below)
+    DAMN_WITH_GPU(
+        DAMN_WITH_THRUST(run_case<dim, SoAVXChunked, GPU_UNIFIED>("SoAVXChunked GPU_UNIFIED");))
     DAMN_WITH_GPU(run_case<dim, AoSTS, GPU_UNIFIED>("AoSTS GPU_UNIFIED");)
     DAMN_WITH_GPU(run_case<dim, AoSTS, GPU_UNIFIED, 2>("AoSTS GPU_UNIFIED i2");)
     return 0;
