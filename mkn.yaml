@@ -125,11 +125,11 @@ profile:
   main: etc/bench/particles/bench_mover.cpp
 
 # the device deposit of SoAVXChunked GPU_UNIFIED particles, untiled vs by tiles: see the file's header
-- name: bench_tile_deposit
+- name: bench_deposit_windows
   inc: . tpp/damn
   self: base
   mode: none
-  main: etc/bench/particles/bench_tile_deposit.cpp
+  main: etc/bench/particles/bench_deposit_windows.cpp
 
 - name: bench_ohm
   inc: . tpp/damn

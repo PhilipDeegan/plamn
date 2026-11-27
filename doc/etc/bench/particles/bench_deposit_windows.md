@@ -1,12 +1,12 @@
 # Device deposit bench
 
-`etc/bench/particles/bench_tile_deposit.cpp` times the deposit of one SoAVXChunked GPU_UNIFIED
+`etc/bench/particles/bench_deposit_windows.cpp` times the deposit of one SoAVXChunked GPU_UNIFIED
 patch's domain particles (density and the 3 flux components) in several ways, each checked
 against the simulator's deposit (max relative difference).
 
 ```
-mkn build -p bench_tile_deposit -dKO -g 0 -x res/mkn/clang_cuda [-a -DPLAMN_BENCH_INTERP=2]
-PLAMN_CELLS=20 ./bin/bench_tile_deposit/plamn
+mkn build -p bench_deposit_windows -dKO -g 0 -x res/mkn/clang_cuda [-a -DPLAMN_BENCH_INTERP=2]
+PLAMN_CELLS=20 ./bin/bench_deposit_windows/plamn
 ```
 
 ## Variants

@@ -2,7 +2,7 @@
 //  per particle into the patch fields with global atomics (the simulator's), against kernels over
 //  windows of the same untiled, cell sorted, particles (a window: a box of cells, its particles
 //  the cells' chunks; no tiled layout, no window fields):
-//  doc/etc/bench/particles/bench_tile_deposit.md
+//  doc/etc/bench/particles/bench_deposit_windows.md
 //    blk_smem_all  a block per (window, split of its cells), all four fields of the window's
 //                  stencil footprint staged in dynamic shared memory
 //    blk_smem_one  as blk_smem_all, one field staged at a time, four passes over the particles
@@ -14,8 +14,8 @@
 //  staged sums then added into the patch fields atomically (neighbouring footprints overlap).
 //  Every variant is checked against the untiled deposit (max relative difference).
 //
-//   mkn build -p bench_tile_deposit -dKO -g 0 -x res/mkn/clang_cuda [-a -DPLAMN_BENCH_INTERP=2]
-//   mkn run -p bench_tile_deposit -x res/mkn/clang_cuda
+//   mkn build -p bench_deposit_windows -dKO -g 0 -x res/mkn/clang_cuda [-a -DPLAMN_BENCH_INTERP=2]
+//   mkn run -p bench_deposit_windows -x res/mkn/clang_cuda
 //
 // env: PLAMN_CELLS (12 a side), PLAMN_PPC (100), PLAMN_SEED, PLAMN_REPEATS (5: the fastest
 //  printed), PLAMN_WINDOWS (4,6,8,12: block window sizes), PLAMN_SPLITS (1,2,4,8: blocks per
@@ -321,8 +321,8 @@ struct TileDeposit
     //  footprint. The warp sums the footprint's 4 fields x nodes values in passes of 32 (each its
     //  own read of the window's particles, from L1), each lane over its share of the particles,
     //  every pass value's field and node known at compile time; the pass reduce-scattered over the
-    //  warp (doc/etc/bench/particles/bench_tile_deposit.md), lane L adding value L into the patch
-    //  field: one global atomic per window, field and footprint node
+    //  warp (doc/etc/bench/particles/bench_deposit_windows.md), lane L adding value L into the
+    //  patch field: one global atomic per window, field and footprint node
     template<std::uint32_t W>
     void warp_window()
     {
