@@ -9,11 +9,13 @@
 #include "damn/core/memory/memory.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/def/damn_config.hpp"
+#include "damn/core/def/detail/mkn_gpu.hpp"
 #include "mkn/kul/for.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/arrays/particles_chunked.hpp"
 #include "plamn/core/data/particles/arrays/particles_soavx.hpp"
 #include "plamn/core/data/particles/particle.hpp"
+#include "mkn/gpu.hpp"
 
 #include <tuple>
 #include <array>
@@ -265,8 +267,17 @@ private:
         // the scratch columns with at least the live ones' capacity: swapped in, the sort keeps
         //  the headroom (the initializer's reserve, growth) instead of an exact fit
         auto const capacity = std::max(slots_total, this->weight_.capacity());
+        auto const had      = this->scratch_.weight_.capacity();
         std::apply([&](auto&... c) { (damn::reserve(c, capacity, false), ...); },
                    this->scratch_.as_tuple());
+        if constexpr (gpu)
+            if (this->scratch_.weight_.capacity() > had)
+            { // whole on the device: the headroom's pages are first touched there (a later resize
+              //  into them, e.g. the device sync's appends), not faulted in one by one
+                DAMN_WITH_MKN_GPU(std::apply(
+                    [](auto&... c) { (mkn::gpu::prefetch(c.data(), c.capacity()), ...); },
+                    this->scratch_.as_tuple()));
+            }
         damn::resize(this->scratch_.weight_, slots_total, false);
         mkn::kul::for_N<dimension>([&](auto d) {
             damn::resize(this->scratch_.iCell_[d], slots_total, false);
