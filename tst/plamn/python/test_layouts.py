@@ -5,6 +5,7 @@ tagging), on level 0 only, 1 and 2 levels:
   init_L0, init_L1          initialized, fields and particles at t0
   advance_L0, advance_L1    one step
   advance_L2                four steps
+  advance_L2_warp_cells     advance_L2, GPU: the warp per cell deposit at any density
   advance_L1_tiles          one step, 12 cells per dimension, tiles of at most 6
                             (DAMN_TILING_MAX_TILE_SIZE): level 0 6 + 6, level 1 (10 fine
                             cells) 6 + 4, uneven tiles
@@ -65,6 +66,13 @@ CASES = {
     "advance_L2": dict(
         steps=4,
         boxes=[L0_BOX, L1_BOX],
+        atol=dict(b=5e-15, e=5e-14, moments=1e-14, particles=1e-15),
+    ),
+    # GPU: the warp per cell deposit at any density (tests' 15 per cell are under its default)
+    "advance_L2_warp_cells": dict(
+        steps=4,
+        boxes=[L0_BOX, L1_BOX],
+        env=dict(PLAMN_GPU_WARP_CELL_MIN_PPC="0"),
         atol=dict(b=5e-15, e=5e-14, moments=1e-14, particles=1e-15),
     ),
     "advance_L1_tiles": dict(
@@ -337,6 +345,9 @@ class Layouts:
 
     def test_advance_L2(self):
         self.compare("advance_L2")
+
+    def test_advance_L2_warp_cells(self):
+        self.compare("advance_L2_warp_cells")
 
     def test_advance_L1_tiles(self):
         self.compare("advance_L1_tiles")
