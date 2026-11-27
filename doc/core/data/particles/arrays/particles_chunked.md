@@ -55,9 +55,12 @@ the next `sort()`, and the range accessors assert `sorted()`.
 
 ## Device
 
-`GPU_UNIFIED` sorts on the device with thrust, without gaps (the slack serves the host's
-`resettle()`), and the host reads only the total. The order of particles within a cell is then not
-deterministic (slots come from atomics); the CPU sort is stable.
+`GPU_UNIFIED` sorts on the device, without gaps (the slack serves the host's `resettle()`):
+kernels on the default stream (zero the sizes, count, `mkn::gpu::exclusive_scan` for the starts,
+scatter), the host reads only the total (the scan's one wait), and a sync at the end leaves the
+array ready for the host. thrust's algorithms each synchronized the stream, and its scan alone
+took ~45-60 us whatever the size (RTX 5080; mkn.gpu's: 12-18 us). The order of particles within a
+cell is not deterministic (slots come from atomics); the CPU sort is stable.
 
 ## Storage interface
 
