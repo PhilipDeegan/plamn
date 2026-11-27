@@ -90,6 +90,7 @@ profile:
         tst/plamn/simulator/test_mhd_patch.cpp
         tst/plamn/core/numerics/ohm/test_tileset_ohm.cpp
         tst/plamn/amr/test_refine_coarsen.cpp
+        tst/plamn/amr/test_device_items.cpp
         tst/plamn/amr/test_tagging.cpp
 
 # C++ diagnostics tests embedding python (PHARE's tests/diagnostic): the simulation from
