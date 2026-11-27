@@ -313,7 +313,11 @@ namespace detail
             if (f == 1 or f == 2)
                 Op{counts[f]}.increment_return_old();
         });
-        std::size_t const n_first = counts[1], n_second = counts[2];
+        // a memcpy, not a host read: a host fault on counts unmaps src's columns from the device,
+        //  the next kernel faults them back (~0.7 ms at 1e5 particles)
+        std::array<chunk_offset_t, 2> movers{};
+        mkn::gpu::take(counts + 1, movers.data(), 2);
+        std::size_t const n_first = movers[0], n_second = movers[1];
         auto const grow = [](Particles_t* const dst, std::size_t const k) {
             std::size_t const offset = dst ? dst->size() : 0;
             if (dst and k)
