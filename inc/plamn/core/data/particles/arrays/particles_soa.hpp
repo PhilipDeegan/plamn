@@ -238,9 +238,11 @@ struct SoAVector
     }
 
 
-    void resize(std::size_t const& size) // each column as its allocator best grows
+    // each column as its allocator best grows (damn::resize_columns: one wait for all of them)
+    void resize(std::size_t const& size)
     {
-        std::apply([&](auto&... container) { ((damn::resize(container, size)), ...); }, as_tuple());
+        std::apply([&](auto&... container) { damn::resize_columns(size, true, container...); },
+                   as_tuple());
     }
 
     template<auto type>
