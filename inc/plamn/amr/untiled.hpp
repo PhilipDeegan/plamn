@@ -7,7 +7,7 @@
 //  into a sum)
 
 #include "plamn/amr/resources.hpp"
-#include "plamn/core/data/field/field_box.hpp"
+#include "plamn/core/data/field/box_copies.hpp"
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "plamn/core/data/grid/patch_layout.hpp"
 #include "mkn/kul/lang/cpp/compiler/def.hpp"
@@ -35,7 +35,19 @@ public:
     using field_type = grid_type::field_type; // a view of it: what leases hand out
     using pq_type    = Tiled::physical_quantity_type;
 
+    // the box copies a level's leases and releases are collected in, run once per level
+    static auto& copies() { return core::box_copies<Tiled::alloc_mode, Tiled::dimension>(); }
+
     field_type& lease(std::string const& name, Tiled& tiled, auto const& layout, Lease const how)
+    {
+        auto& leased = lease(name, tiled, layout, how, copies());
+        copies().run();
+        return leased;
+    }
+
+    // the temporary's values once copies run
+    field_type& lease(std::string const& name, Tiled& tiled, auto const& layout, Lease const how,
+                      auto& copies)
     {
         if (auto* const leased = find(name))
             return *leased; // leased once for this operation (a name both src and dst)
@@ -48,9 +60,9 @@ public:
         auto& tmp = **pool[used++]; // the grid's view, no reallocation
 
         if (how == Lease::sum)
-            core::reduce_into(tmp, tiled); // zeroed, then every tile added
+            core::summed_into(copies, tmp, tiled);
         else
-            core::copy_fields(tmp, tiled); // zeroed, then every tile's values
+            core::owned_into(copies, tmp, tiled);
         if (n_active_ == active_.size())
             active_.emplace_back();
         auto& a      = active_[n_active_++];
@@ -73,9 +85,16 @@ public:
 
     void release()
     {
+        release(copies());
+        copies().run();
+    }
+
+    // the temporaries are reused by the next lease: run copies before it
+    void release(auto& copies)
+    {
         for (std::size_t i = 0; i < n_active_; ++i)
             if (auto const& a = active_[i]; a.write_back)
-                core::copy_fields(*a.tiled, *a.tmp); // every tile's ghost box
+                core::into_tile_ghosts(copies, *a.tiled, *a.tmp);
         n_active_ = 0;
         for (auto& entry : used_) // the entries kept: leased again every step
             entry.second = 0;
@@ -117,7 +136,9 @@ void with_untiled(Field const& field, auto&& fn)
     using Grid_t      = typename Field::grid_type;
     auto const layout = core::sub_layout(field()[0].layout(), field.box());
     Grid_t tmp{field.name(), layout, field.physicalQuantity()};
-    core::copy_fields(*tmp, field);
+    auto& copies = Untiled<Field>::copies();
+    core::owned_into(copies, *tmp, field);
+    copies.run();
     fn(std::as_const(*tmp));
 }
 void with_untiled(auto const& field, auto&& fn)
@@ -134,9 +155,12 @@ void modify_untiled(Field& field, auto&& fn)
     using Grid_t      = typename Field::grid_type;
     auto const layout = core::sub_layout(field()[0].layout(), field.box());
     Grid_t tmp{field.name(), layout, field.physicalQuantity()};
-    core::copy_fields(*tmp, field);
+    auto& copies = Untiled<Field>::copies();
+    core::owned_into(copies, *tmp, field);
+    copies.run();
     fn(*tmp);
-    core::copy_fields(field, *tmp);
+    core::into_tile_ghosts(copies, field, *tmp);
+    copies.run();
 }
 void modify_untiled(auto& field, auto&& fn)
     requires(!core::TiledField<decltype(field)>)

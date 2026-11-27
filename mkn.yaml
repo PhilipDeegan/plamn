@@ -53,6 +53,7 @@ profile:
   dep: google.test
   mode: none
   test: tst/plamn/core/data/grid/test_layout.cpp
+        tst/plamn/core/data/field/test_box_copies.cpp
         tst/plamn/core/data/particles/test_particle_components.cpp
         tst/plamn/core/data/particles/test_particle_synchronisation.cpp
         tst/plamn/core/data/particles/test_soavx_chunked_gaps.cpp

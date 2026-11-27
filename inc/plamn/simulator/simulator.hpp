@@ -463,27 +463,39 @@ private:
     }
 
     // tiled fields: damn's schedules work on leased untiled temporaries: doc/simulator/simulator.md
+    //  a level's box copies collected over its patches, run at once (one launch on the GPU)
     static void lease_(auto& ld, std::vector<std::string> const& names, amr::Lease const how)
     {
-        for (auto& patch : ld.data)
-            lease_patch_(*patch, names, how);
+        if (ld.data.empty())
+            return;
+        lease_level_(ld, *ld.data[0], names, how);
     }
     static void release_(auto& ld)
     {
-        for (auto& patch : ld.data)
-            release_patch_(*patch);
+        if (ld.data.empty())
+            return;
+        release_level_(ld, *ld.data[0]);
     }
-    static void lease_patch_(TiledFieldsPatch auto& patch, std::vector<std::string> const& names,
-                             amr::Lease const how)
+    static void lease_level_(auto& ld, TiledFieldsPatch auto& first,
+                             std::vector<std::string> const& names, amr::Lease const how)
     {
-        simulator::for_each_field_grid(patch, [&](std::string const& name, auto& grid) {
-            if (std::find(names.begin(), names.end(), name) != names.end())
-                patch.untiled.lease(name, grid, patch.layout, how);
-        });
+        auto& copies = std::decay_t<decltype(first)>::Untiled_t::copies();
+        for (auto& patch : ld.data)
+            simulator::for_each_field_grid(*patch, [&](std::string const& name, auto& grid) {
+                if (std::find(names.begin(), names.end(), name) != names.end())
+                    patch->untiled.lease(name, grid, patch->layout, how, copies);
+            });
+        copies.run();
     }
-    static void lease_patch_(auto&, std::vector<std::string> const&, amr::Lease) {}
-    static void release_patch_(TiledFieldsPatch auto& patch) { patch.untiled.release(); }
-    static void release_patch_(auto&) {}
+    static void lease_level_(auto&, auto&, std::vector<std::string> const&, amr::Lease) {}
+    static void release_level_(auto& ld, TiledFieldsPatch auto& first)
+    {
+        auto& copies = std::decay_t<decltype(first)>::Untiled_t::copies();
+        for (auto& patch : ld.data)
+            patch->untiled.release(copies);
+        copies.run();
+    }
+    static void release_level_(auto&, auto&) {}
     // every tiled field of a patch leased (a regrid moves them all)
     static void lease_all_(TiledFieldsPatch auto& patch, amr::Lease const how)
     {

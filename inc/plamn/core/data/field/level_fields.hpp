@@ -49,6 +49,8 @@ public:
             add(component);
     }
 
+    void clear() { buffers_.clear(); }
+
     LevelFields& zero()
         requires(alloc_mode == damn::AllocatorMode::GPU_UNIFIED)
     {

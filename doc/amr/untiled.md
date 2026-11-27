@@ -23,6 +23,9 @@ One per patch.
   gets into a sum.
 - A name leased twice in one operation (a name both source and destination) gets the same
   temporary.
+- The copies between tiles and temporaries are box copies
+  ([box_copies](../core/data/field/box_copies.md)): `lease(..., copies)` / `release(copies)` only
+  collect them, the simulator runs them once per level; `lease(...)` / `release()` run their own.
 - The temporaries are kept and reused, in a pool per physical quantity: a grid's centering, and
   so its shape on this patch.
 
