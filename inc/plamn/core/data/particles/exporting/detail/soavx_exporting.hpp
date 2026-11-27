@@ -1,19 +1,24 @@
 #ifndef PLAMN_CORE_DATA_PARTICLES_EXPORTING_DETAIL_SOAVX_EXPORTING
 #define PLAMN_CORE_DATA_PARTICLES_EXPORTING_DETAIL_SOAVX_EXPORTING
 
-// SoAVX: untiled and untracked, particles leaving a box are partitioned over the zipped columns
-//  (thrust), then moved to dst / dropped from the tail. Needs thrust, as SoAVX iteration does
-//  GPU_UNIFIED partitions and moves on the device (thrust::device, device copies)
+// SoAVX: untiled and untracked, particles leaving a box are partitioned column by column (keep
+//  flags, their scan for the slots, every column scattered), then moved to dst / dropped from the
+//  tail. GPU_UNIFIED partitions and moves on the device (kernels, device copies)
 
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/vector.hpp"
 #include "mkn/kul/for.hpp"
-#include "mkn/kul/meta.hpp"
 #include "damn/core/memory/memory.hpp"
-
+#include "damn/core/exec/kernels.hpp"
+#include "damn/core/def/detail/mkn_gpu.hpp"
+#include "mkn/gpu/scan.hpp"
+#include "plamn/core/data/particles/arrays/particles_soavx.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
+#include "mkn/gpu.hpp"
 
+#include <array>
 #include <cstddef>
+#include <cstdint>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -24,12 +29,6 @@ template<typename Type, std::size_t dim>
 struct Box;
 } // namespace damn::core
 
-#if DAMN_HAVE_THRUST
-#include "plamn/core/data/particles/arrays/particles_soa_thrust.hpp"
-
-#include <thrust/partition.h>
-#include <thrust/execution_policy.h>
-#endif
 
 namespace plamn::core
 {
@@ -134,25 +133,109 @@ private:
         return list;
     }
 
-    // particles for which keep(iCell) first: returns how many, on the device for GPU_UNIFIED
-    static std::size_t partition_([[maybe_unused]] auto& src, [[maybe_unused]] auto const keep)
+    // particles for which keep(iCell) first, then the others, each in their order (stable):
+    //  returns how many keep. A particle's slot from the scan of the keep flags (kept before it,
+    //  or all kept + the others before it), every column scattered into this thread's scratch
+    //  columns, swapped in (no allocation once they fit). GPU_UNIFIED on the device: kernels on
+    //  the default stream, the scan's total back on the host (its one wait), a sync at the end
+    //  (the moves after it copy on the host's side)
+    template<typename Src>
+    static std::size_t partition_(Src& src, auto const keep)
     {
-#if DAMN_HAVE_THRUST
-        using Iterator_t = SoAVXIteratorAdaptor;
-        auto const it    = Iterator_t::make(src);
-        auto const pred  = [=] DAMN_ALL(auto&& z) { return keep(Iterator_t::iCell(z)); };
-        auto const pivot = [&]() {
-            if constexpr (alloc_mode == damn::AllocatorMode::GPU_UNIFIED)
-                return thrust::partition(thrust::device, it, it + src.size(), pred);
-            else
-                return thrust::partition(thrust::host, it, it + src.size(), pred);
-        }();
-        return static_cast<std::size_t>(std::distance(it, pivot));
-#else
-        static_assert(mkn::kul::dependent_false_v<decltype(src)>,
-                      "SoAVX partitioning needs thrust (on the host too: damn's tpp/cccl)");
-        return 0;
-#endif
+        auto constexpr static dim = Src::dimension;
+        auto constexpr static gpu = alloc_mode == damn::AllocatorMode::GPU_UNIFIED;
+        using Columns_t           = SoAVXVector<dim, alloc_mode>;
+        using Slots_t =
+            typename damn::Vector<std::uint32_t, alloc_mode, /*no construct*/ 1>::vector_t;
+
+        std::size_t const n = src.size();
+        if (n == 0)
+            return 0;
+        // this thread's, never freed (GPU: the context may be gone at exit)
+        thread_local auto* const scratch = new Columns_t{};
+        thread_local auto* const slots_v = new Slots_t{};
+        damn::resize(*slots_v, n, /*copy=*/false);
+        std::apply([&](auto&... c) { (damn::resize(c, n, /*copy=*/false), ...); },
+                   scratch->as_tuple());
+
+        // the columns as plain pointer arrays (a kernel captures trivially copyable data only):
+        //  the doubles (weight, delta, v), the ints (iCell)
+        std::size_t constexpr static n_reals = 1 + dim + 3;
+        struct Columns
+        {
+            std::array<double*, n_reals> reals;
+            std::array<int*, dim> cells;
+        };
+        auto const columns = [](auto& v) {
+            Columns c{};
+            c.reals[0] = v.weight_.data();
+            for (std::size_t d = 0; d < dim; ++d)
+            {
+                c.reals[1 + d] = v.delta_[d].data();
+                c.cells[d]     = v.iCell_[d].data();
+            }
+            for (std::size_t d = 0; d < 3; ++d)
+                c.reals[1 + dim + d] = v.v_[d].data();
+            return c;
+        };
+        auto const from = columns(src);
+        auto const to   = columns(*scratch);
+        auto* const pos = slots_v->data();
+        auto const flag = [=] DAMN_ALL(std::size_t const i) {
+            std::array<int, dim> cell;
+            for (std::size_t d = 0; d < dim; ++d)
+                cell[d] = from.cells[d][i];
+            pos[i] = keep(cell) ? 1 : 0;
+        };
+        auto const scatter
+            = [=] DAMN_ALL(std::size_t const i, std::size_t const kept, bool const kept_i) {
+                  std::size_t const slot = kept_i ? pos[i] : kept + (i - pos[i]);
+                  for (std::size_t c = 0; c < n_reals; ++c)
+                      to.reals[c][slot] = from.reals[c][i];
+                  for (std::size_t c = 0; c < dim; ++c)
+                      to.cells[c][slot] = from.cells[c][i];
+              };
+
+        std::size_t kept = 0;
+        if constexpr (gpu)
+        {
+            DAMN_WITH_MKN_GPU({
+                using Launcher = damn::core::gpu::DeviceLauncher<mkn::gpu::Guess, /*sync=*/false>;
+                Launcher{n}([=] DAMN_ALL() {
+                    if (auto const i = damn::kernel::idx(); i < n)
+                        flag(i);
+                });
+                // the flags scanned in place: flag i is then pos[i + 1] - pos[i] (the last's:
+                //  kept - pos[n - 1])
+                kept = mkn::gpu::exclusive_scan(pos, pos, n);
+                Launcher{n}([=] DAMN_ALL() {
+                    if (auto const i = damn::kernel::idx(); i < n)
+                    {
+                        bool const k = (i + 1 < n ? pos[i + 1] : kept) != pos[i];
+                        scatter(i, kept, k);
+                    }
+                });
+                mkn::gpu::sync();
+            });
+        }
+        else
+        {
+            for (std::size_t i = 0; i < n; ++i)
+            {
+                flag(i);
+                auto const k = pos[i];
+                pos[i]       = static_cast<std::uint32_t>(kept);
+                kept += k;
+            }
+            for (std::size_t i = 0; i < n; ++i)
+                scatter(i, kept, (i + 1 < n ? pos[i + 1] : kept) != pos[i]);
+        }
+
+        auto mine   = src.as_tuple();
+        auto theirs = scratch->as_tuple();
+        mkn::kul::for_N<std::tuple_size_v<decltype(mine)>>(
+            [&](auto c) { std::get<c>(mine).swap(std::get<c>(theirs)); });
+        return kept;
     }
 
     // src's particles from `from` onwards appended to dst, src keeps [0, from): dst presized,

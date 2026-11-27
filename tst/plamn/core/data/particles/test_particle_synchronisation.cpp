@@ -22,6 +22,8 @@
 #include <cstdint>
 #include <type_traits>
 #include <limits>
+#include <string>
+#include <vector>
 
 
 namespace plamn::core
@@ -591,6 +593,91 @@ TYPED_TEST(SoAVXChunkedConvertingTest, roundTripKeepsParticlesAndOffsetsCountCel
     auto const report
         = compare_particles(reference, back, std::numeric_limits<double>::denorm_min());
     EXPECT_TRUE(report) << report.why();
+}
+
+
+// SoAVX's exporting partitions column by column, stable: move_in_domain gives dst the domain's
+//  particles and leaves src the others, delete_particles_not_in keeps the domain's, each in their
+//  order (std::stable_partition's), every column moved with its particle (weight: the id)
+template<typename Param>
+struct SoAVXExportingTest : public ::testing::Test
+{
+};
+template<std::size_t dim_, auto alloc_mode_>
+struct ExportParam
+{
+    auto constexpr static dim        = dim_;
+    auto constexpr static alloc_mode = alloc_mode_;
+};
+using ExportParams_t = testing::Types<ExportParam<1, damn::AllocatorMode::CPU>,
+                                      ExportParam<2, damn::AllocatorMode::CPU>,
+                                      ExportParam<3, damn::AllocatorMode::CPU>
+#if DAMN_HAVE_GPU
+                                      ,
+                                      ExportParam<1, damn::AllocatorMode::GPU_UNIFIED>,
+                                      ExportParam<3, damn::AllocatorMode::GPU_UNIFIED>
+#endif
+                                      >;
+TYPED_TEST_SUITE(SoAVXExportingTest, ExportParams_t, );
+
+TYPED_TEST(SoAVXExportingTest, partitionsAreStableAndMoveWholeParticles)
+{
+    auto constexpr dim  = TypeParam::dim;
+    auto constexpr opts = SimOpts{.dimension = dim};
+    using Layout_t      = PLAMN_Types<opts>::Hybrid::Layout_t;
+    using AoS_t         = ParticlesAoS<dim>;
+    using SoAVX_t       = Particles<ParticlesOptions{
+        .dim = dim, .layout_mode = LayoutMode::SoAVX, .alloc_mode = TypeParam::alloc_mode}>;
+
+    Layout_t const layout = *TestLayout<Layout_t>{std::uint32_t{5}};
+    auto aos              = make_particles<AoS_t>(layout);
+    add_particles(aos, layout.cells, 3);
+    add_ghost_particles(aos, layout.cells, 2, 1);
+    delta_disperse(aos);
+    vary_velocity(aos, -6, 6);
+
+    std::size_t const n = aos.size();
+    ASSERT_GT(n, 0u);
+    SoAVX_t src = make_particles<SoAVX_t>(layout);
+    src.resize(n);
+    std::vector<std::size_t> in, out; // ids, in order
+    for (std::size_t i = 0; i < n; ++i)
+    {
+        auto const& p = aos[i];
+        for (std::size_t d = 0; d < dim; ++d)
+        {
+            src.iCell_[d][i] = p.iCell()[d];
+            src.delta_[d][i] = p.delta()[d];
+        }
+        for (std::size_t d = 0; d < 3; ++d)
+            src.v_[d][i] = p.v()[d];
+        src.weight_[i] = static_cast<double>(i + 1);
+        src.v_[0][i]   = 10. * static_cast<double>(i);
+        std::array<int, dim> cell;
+        for (std::size_t d = 0; d < dim; ++d)
+            cell[d] = src.iCell_[d][i];
+        (isIn(cell, layout.cells) ? in : out).push_back(i);
+    }
+    ASSERT_FALSE(in.empty());
+    ASSERT_FALSE(out.empty());
+    auto const check = [&](auto const& ps, auto const& ids, std::string const& what) {
+        ASSERT_EQ(ps.size(), ids.size()) << what;
+        for (std::size_t k = 0; k < ids.size(); ++k)
+        {
+            EXPECT_EQ(ps.weight_[k], static_cast<double>(ids[k] + 1)) << what << " " << k;
+            EXPECT_EQ(ps.v_[0][k], 10. * static_cast<double>(ids[k])) << what << " " << k;
+        }
+    };
+
+    SoAVX_t kept = src;
+    SoAVX_t dst  = make_particles<SoAVX_t>(layout);
+    move_in_domain(dst, kept, layout.cells);
+    check(dst, in, "move_in_domain dst");
+    check(kept, out, "move_in_domain src");
+
+    SoAVX_t domain = src;
+    delete_particles_not_in(domain, layout.cells);
+    check(domain, in, "delete_particles_not_in");
 }
 
 } // namespace plamn::core
