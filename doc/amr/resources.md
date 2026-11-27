@@ -67,6 +67,7 @@ appended to, not only inserted into its gaps).
 
 ## GPU
 
-damn's device `Append` hooks for unified memory `SoAVXChunked` live in `device_append.hpp`
-(see [device_append.md](device_append.md)), included at the end of `resources.hpp` since they use
-the resources.
+Particle resources in unified memory are `on_device`: damn moves their leaving particles on the
+device, through the item hooks of `device_items.hpp` (see [device_items.md](device_items.md)),
+included at the end of `resources.hpp` since they use the resources. A layout without them
+throws in such a copy: the host does not touch device particles.

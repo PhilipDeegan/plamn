@@ -105,6 +105,8 @@ struct ParticleResource
 {
     using value_type                = Particles::value_type;
     auto static constexpr dimension = Particles::dimension;
+    // in unified memory: damn moves its leaving particles on the device (device_items.hpp)
+    bool static constexpr on_device = Particles::alloc_mode == damn::AllocatorMode::GPU_UNIFIED;
     Particles* particles;
 };
 
@@ -539,6 +541,6 @@ MKN_KUL_FN_SIG_RET auto cell(Particle<dim> const& particle)
 } // namespace plamn::core
 
 // after the resources it uses
-#include "plamn/amr/device_append.hpp" // IWYU pragma: export
+#include "plamn/amr/device_items.hpp" // IWYU pragma: export
 
 #endif // PLAMN_AMR_RESOURCES_HPP
