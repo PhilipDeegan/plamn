@@ -328,6 +328,16 @@ public:
             static_assert(atomic_ops, "GPU must be atomic");
             if constexpr (is_soavx(Particles::layout_mode))
             {
+#if DAMN_HAVE_MKN_GPU_HW
+                if constexpr (Particles::layout_mode == LayoutMode::SoAVXChunked
+                              and interpOrder == 1)
+                    if (particles.sorted()
+                        and particles.size() >= warp_cell_min_ppc() * particles.shell().size())
+                    {
+                        warp_cell_deposit(particles, layout, rhoP, flux, coef, stream...);
+                        return;
+                    }
+#endif
                 // a thread per particle, loaded from the columns, global atomics
                 // plain views (basic::, device copyable), written through per thread copies
                 DAMN_WITH_MKN_GPU( //
@@ -361,6 +371,132 @@ public:
         else
             throw std::runtime_error("fail");
     }
+
+#if DAMN_HAVE_MKN_GPU_HW
+    // the stencil's per direction weights, for a kernel laying out its own sums
+    struct PrimalStencil : Interpolator_t
+    {
+        using Interpolator_t::primal_weights_;
+    };
+
+    // warp_cell_deposit's particles a shell cell, on average: below it (sparse arrays: patch
+    //  ghosts, few particles per cell) the warps mostly idle, a thread per particle is faster
+    //  (crossover ~25 a cell, 3D, RTX 5080). PLAMN_GPU_WARP_CELL_MIN_PPC overrides it (tests: 0)
+    static std::size_t warp_cell_min_ppc()
+    {
+        static auto const min
+            = mkn::kul::env::get_as("PLAMN_GPU_WARP_CELL_MIN_PPC", std::size_t{16});
+        return min;
+    }
+
+    // sorted SoAVXChunked, interp 1: a warp per cell of the chunks' shell, whose particles all
+    //  deposit on the cell's 2^dim nodes. Each lane sums its share of them in registers (4 fields
+    //  x 2^dim values), the warp reduce-scatters those (lane L ends with value L's total): one
+    //  global atomic per field and node a cell, not a particle. Why and how:
+    //  doc/core/numerics/interpolator/interpolating.md
+    template<typename Particles>
+    void warp_cell_deposit(Particles const& particles, auto const& layout, auto& rhoP, auto& flux,
+                           double const coef, auto&... stream)
+        requires(interpOrder == 1)
+    {
+        using Layout_t                          = std::decay_t<decltype(layout)>;
+        std::uint32_t constexpr static n_nodes  = 1u << dim;
+        std::uint32_t constexpr static n_values = 4 * n_nodes; // <= 32: one value a lane
+        static_assert(n_values <= 32);
+
+        SoAVXConstSpanParticles<dim, Particles::alloc_mode> const ps{particles};
+        auto const* const starts = particles.starts_data();
+        auto const* const sizes  = particles.sizes_data();
+        auto const shell         = particles.shell();
+        auto rho_v               = untiled_view(rhoP);
+        auto flux_v              = untiled_view(flux);
+        auto const origin
+            = damn::core::grow(layout.cells, Layout_t::options.field_ghost_width).lower;
+        auto const fshape         = rho_v.shape();
+        std::size_t const n_cells = shell.size();
+
+        damn::kernel::launch(stream..., n_cells * 32, [=] __device__() {
+            auto const i = damn::kernel::idx();
+            auto const c = i / 32;
+            if (c >= n_cells or sizes[c] == 0) // the whole warp: n_cells * 32 threads
+                return;
+            auto const lane = static_cast<std::uint32_t>(i % 32);
+
+            damn::core::Box<int, dim> nodes; // the cell's: [cell, cell + 1]
+            {
+                auto r = c;
+                for (std::size_t d = dim; d-- > 0;)
+                {
+                    auto const extent
+                        = static_cast<std::size_t>(shell.upper[d] - shell.lower[d] + 1);
+                    nodes.lower[d] = shell.lower[d] + static_cast<int>(r % extent);
+                    nodes.upper[d] = nodes.lower[d] + 1;
+                    r /= extent;
+                }
+            }
+
+            // value v: node v / 4 (bit d - 1 - k its offset in direction k), field v % 4; compile
+            //  time indices only (a run time index would put v in local memory)
+            double v[32] = {};
+            for (std::uint32_t j = lane; j < sizes[c]; j += 32)
+            {
+                auto const p  = ps.copy(starts[c] + j);
+                auto const pw = p.weight();
+                if (pw == 0) // a gap
+                    continue;
+                bool own = true; // else moved since the sort (an in place push, no sync yet)
+                for (std::size_t d = 0; d < dim; ++d)
+                    own = own and p.iCell()[d] == nodes.lower[d];
+                if (!own)
+                { // on its own, as the thread per particle deposit
+                    auto rho = rho_v;
+                    auto F   = flux_v;
+                    Interpolator_t{}.particleToMesh(p, rho, F, layout, coef);
+                    continue;
+                }
+                PrimalStencil st;
+                st.p2m_setup(p, nodes); // starts 0: the cell's nodes
+                auto const& pv = p.v();
+                mkn::kul::for_N<n_nodes>([&](auto in) {
+                    std::uint32_t constexpr n = in();
+                    double s                  = pw;
+                    mkn::kul::for_N<dim>([&](auto id) {
+                        s *= st.primal_weights_[id()][(n >> (dim - 1 - id())) & 1];
+                    });
+                    v[n * 4 + 0] += s;
+                    v[n * 4 + 1] += s * pv[0];
+                    v[n * 4 + 2] += s * pv[1];
+                    v[n * 4 + 3] += s * pv[2];
+                });
+            }
+
+            // halving: after the step of h a lane holds h values, those whose index has the lane's
+            //  bit h, in the end value lane
+            mkn::kul::for_N<5>([&](auto is) {
+                std::uint32_t constexpr h = 32u >> (is() + 1);
+                bool const upper          = lane & h;
+#pragma unroll
+                for (std::uint32_t k = 0; k < h; ++k)
+                {
+                    double const send = upper ? v[k] : v[k + h];
+                    double const keep = upper ? v[k + h] : v[k];
+                    v[k]              = keep + __shfl_xor_sync(0xffffffff, send, h);
+                }
+            });
+            if (lane >= n_values or v[0] == 0)
+                return;
+            auto const n   = lane / 4;
+            std::size_t at = 0;
+            for (std::size_t d = 0; d < dim; ++d)
+                at = at * fshape[d]
+                     + static_cast<std::size_t>(
+                         nodes.lower[d] + static_cast<int>((n >> (dim - 1 - d)) & 1) - origin[d]);
+            double* const dst[4]
+                = {rho_v.data(), flux_v[0].data(), flux_v[1].data(), flux_v[2].data()};
+            atomicAdd(dst[lane % 4] + at, v[0] * coef);
+        });
+    }
+#endif
 
     // AoSPCTS GPU deposit, launched with gpu::TileCellLauncher: block = (tile, cell), the block's
     // threads stride the cell's particles. Cells share field nodes, so the interpolator must be
