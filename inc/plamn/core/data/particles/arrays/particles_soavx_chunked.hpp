@@ -9,11 +9,13 @@
 #include "damn/core/memory/memory.hpp"
 #include "damn/core/geometry/box.hpp"
 #include "damn/core/def/damn_config.hpp"
+#include "damn/core/exec/kernels.hpp"
 #include "mkn/kul/for.hpp"
 #include "plamn/core/data/particles/particles_def.hpp"
 #include "plamn/core/data/particles/arrays/particles_chunked.hpp"
 #include "plamn/core/data/particles/arrays/particles_soavx.hpp"
 #include "plamn/core/data/particles/particle.hpp"
+#include "damn/core/def/detail/mkn_gpu.hpp"
 
 #include <tuple>
 #include <array>
@@ -23,13 +25,11 @@
 #include <type_traits>
 #include <utility>
 
-#if DAMN_HAVE_THRUST
-#include <thrust/scan.h>
-#include <thrust/fill.h>
-#include <thrust/for_each.h>
-#include <thrust/execution_policy.h>
-#include <thrust/iterator/counting_iterator.h>
-#endif
+namespace mkn::gpu
+{
+struct Guess;
+} // namespace mkn::gpu
+
 
 namespace plamn::core
 {
@@ -273,9 +273,25 @@ private:
             damn::resize(this->scratch_.delta_[d], slots_total, false);
         });
         mkn::kul::for_N<3>([&](auto d) { damn::resize(this->scratch_.v_[d], slots_total, false); });
+        // the columns as plain pointer arrays (a kernel captures trivially copyable data only):
+        //  the doubles (weight, delta, v), the ints (iCell)
+        std::size_t constexpr static n_reals = 1 + dimension + 3;
+        struct Columns
+        {
+            std::array<double*, n_reals> reals;
+            std::array<int*, dimension> cells;
+        };
         auto const columns = [](auto& v) {
-            return std::apply([](auto&... c) { return std::make_tuple(c.data()...); },
-                              v.as_tuple());
+            Columns c{};
+            c.reals[0] = v.weight_.data();
+            for (std::size_t d = 0; d < dimension; ++d)
+            {
+                c.reals[1 + d] = v.delta_[d].data();
+                c.cells[d]     = v.iCell_[d].data();
+            }
+            for (std::size_t d = 0; d < 3; ++d)
+                c.reals[1 + dimension + d] = v.v_[d].data();
+            return c;
         };
         auto const src     = columns(*this);
         auto const dst     = columns(this->scratch_);
@@ -283,15 +299,18 @@ private:
             auto const slot = to(i);
             if (slot == std::numeric_limits<std::size_t>::max())
                 return;
-            mkn::kul::for_N<std::tuple_size_v<decltype(src)>>(
-                [&](auto c) { std::get<c>(dst)[slot] = std::get<c>(src)[i]; });
+            for (std::size_t c = 0; c < n_reals; ++c)
+                dst.reals[c][slot] = src.reals[c][i];
+            for (std::size_t c = 0; c < dimension; ++c)
+                dst.cells[c][slot] = src.cells[c][i];
         };
         if constexpr (gpu)
-        {
-#if DAMN_HAVE_THRUST
-            auto const first = thrust::counting_iterator<std::size_t>(0);
-            thrust::for_each(thrust::device, first, first + n, scatter);
-#endif
+        { // queued on the default stream: the caller (sort) syncs
+            DAMN_WITH_MKN_GPU(
+                damn::core::gpu::DeviceLauncher<mkn::gpu::Guess, /*sync=*/false>{n}([=] DAMN_ALL() {
+                    if (auto const i = damn::kernel::idx(); i < n)
+                        scatter(i);
+                }));
         }
         else
             for (std::size_t i = 0; i < n; ++i)
