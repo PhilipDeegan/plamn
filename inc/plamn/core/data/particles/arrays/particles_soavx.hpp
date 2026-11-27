@@ -232,10 +232,12 @@ struct SoAVXVector
         std::apply([](auto&... container) { ((container.clear()), ...); }, as_tuple());
     }
 
-    // damn::resize: past the capacity half as much again (appends grow a little each step)
+    // damn::resize_columns: past the capacity half as much again (appends grow a little each
+    //  step), the columns' regrow copies queued before any old buffer is freed: one wait
     void resize(std::size_t const& size)
     {
-        std::apply([&](auto&... container) { ((damn::resize(container, size)), ...); }, as_tuple());
+        std::apply([&](auto&... container) { damn::resize_columns(size, true, container...); },
+                   as_tuple());
     }
 
     template<auto type>
