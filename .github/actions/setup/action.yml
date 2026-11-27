@@ -18,7 +18,7 @@ runs:
   using: composite
   steps:
   - shell: bash
-    run: apt update && apt install -y curl git openssh-client
+    run: apt update && apt install -y curl git openssh-client ccache
 
   # the image has PHARE's requirements.txt (numpy, dill, matplotlib, ...) in a venv only
   # ~/.bashrc activates, which run steps don't source: put it first on PATH for later steps
