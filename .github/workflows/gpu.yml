@@ -28,19 +28,20 @@ env:
   PATH_GET: https://github.com/mkn/mkn/releases/latest/download
 
 jobs:
-  # CUDA on a simulated NVIDIA RTX 5090, clang (the image's nvcc is not used). The simulator needs a
+  # CUDA on a simulated NVIDIA H100, clang (the image's nvcc is not used). The simulator needs a
   #  shared cudart, the profiles link -lcudart (the .so) from its shim.
-  #  sm_120 (RTX 5090, Blackwell), as res/mkn/clang_cuda.yaml and a local RTX 50xx: VGPU_GPU
-  #  picks the simulated card (the image's default is nvidia/h100, sm_90)
+  #  sm_90 (H100), not sm_120 as res/mkn/clang_cuda.yaml and a local RTX 50xx: the simulator
+  #  cannot decode sm_120's named barriers with register operands, which cub's DeviceScan uses
+  #  (pantheongpu/pantheonsim#758); VGPU_GPU picks the simulated card
   cuda:
     if: ${{ contains(fromJSON('["all", "cuda"]'), github.event.inputs.job || 'all') }}
-    name: cuda (clang 22, CUDA 13.5, simulated RTX 5090)
+    name: cuda (clang 22, CUDA 13.5, simulated H100)
     runs-on: ubuntu-24.04
     container: ghcr.io/0xz/hpc-containers:cuda
     timeout-minutes: 120
     env:
-      CUDA_ARCH: sm_120
-      VGPU_GPU: nvidia/rtx5090
+      CUDA_ARCH: sm_90
+      VGPU_GPU: nvidia/h100
     steps:
     - uses: actions/checkout@v6
     - name: Install
@@ -100,8 +101,7 @@ jobs:
     runs-on: ubuntu-24.04
     container: ghcr.io/0xz/hpc-containers:cuda
     timeout-minutes: 180
-    # sm_90 / H100, not the RTX 5090: the simulator cannot decode sm_120's named barriers with
-    #  register operands, which cub's DeviceScan uses (pantheongpu/pantheonsim#758)
+    # sm_90 / H100: as the cuda job above
     env:
       CUDA_ARCH: sm_90
       VGPU_GPU: nvidia/h100
