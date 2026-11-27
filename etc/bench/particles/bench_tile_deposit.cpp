@@ -418,21 +418,23 @@ struct TileDeposit
                                 u[d][n] = x;
                             });
                         });
-                        mkn::kul::for_N<32>([&](auto ii) {
-                            std::uint32_t constexpr idx = pass * 32 + ii();
-                            if constexpr (idx < n_values)
+                        // value idx: node idx / 4, field idx % 4, a pass 8 nodes x 4 fields:
+                        //  a node's weight formed once for its four fields, the products in
+                        //  direction order so its x (and x, y) partials are shared by the pass's
+                        //  nodes (the same expressions)
+                        mkn::kul::for_N<8>([&](auto in) {
+                            std::uint32_t constexpr n = pass * 8 + in();
+                            if constexpr (n < n_fp)
                             {
-                                std::uint32_t constexpr f = idx / n_fp;
-                                std::uint32_t constexpr n = idx % n_fp;
-                                double s                  = pw;
+                                double s = pw;
                                 mkn::kul::for_N<dim>([&](auto id) {
                                     std::size_t constexpr d = id();
                                     s *= u[d][(n / ipow(side, dim - 1 - d)) % side];
                                 });
-                                if constexpr (f == 0)
-                                    v[ii()] += s;
-                                else
-                                    v[ii()] += s * pv[f - 1];
+                                v[in() * 4 + 0] += s;
+                                v[in() * 4 + 1] += s * pv[0];
+                                v[in() * 4 + 2] += s * pv[1];
+                                v[in() * 4 + 3] += s * pv[2];
                             }
                         });
                     }
@@ -453,7 +455,7 @@ struct TileDeposit
                 auto const idx = pass * 32 + lane;
                 if (idx >= n_values or v[0] == 0)
                     return;
-                auto const n   = idx % n_fp;
+                auto const n   = idx / 4;
                 std::size_t at = 0;
                 for (std::size_t d = 0; d < dim; ++d)
                 {
@@ -461,7 +463,7 @@ struct TileDeposit
                         = fb.lower[d] + static_cast<int>(n / ipow(side, dim - 1 - d)) % side;
                     at = at * fshape[d] + static_cast<std::size_t>(node - origin[d]);
                 }
-                atomicAdd(dst[idx / n_fp] + at, v[0]);
+                atomicAdd(dst[idx % 4] + at, v[0]);
             });
 #endif
         };
