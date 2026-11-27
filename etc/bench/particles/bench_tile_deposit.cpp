@@ -1,24 +1,25 @@
 // the device deposit of one SoAVXChunked GPU_UNIFIED patch's domain particles: untiled, a thread
 //  per particle into the patch fields with global atomics (the simulator's), against kernels over
-//  tiles of the same, cell sorted, particles: a block per (tile, split of the tile's cells),
-//  threads over each cell's chunk, into
-//    smem_all  the tile's deposit footprint, all four fields staged in dynamic shared memory
-//    smem_one  one field staged at a time, four passes over the particles
-//    global    nothing staged: straight into the patch fields, in tile order
-//  the staged sums then added into the patch fields atomically (neighbouring footprints overlap).
-//  warp_win: a warp per window of 1 or 2 cells a side, in registers: see warp_window and
-//  doc/etc/bench/particles/bench_tile_deposit.md.
-//  window_rs: warp_win(1)'s per cell sums added into a window of cells' nodes in shared memory
-//  (block atomics, a block per window, a warp per cell at a time), each window node then added once
-//  into the patch fields. Every variant is checked against the untiled deposit (max relative
-//  difference).
+//  windows of the same untiled, cell sorted, particles (a window: a box of cells, its particles
+//  the cells' chunks; no tiled layout, no window fields):
+//  doc/etc/bench/particles/bench_tile_deposit.md
+//    blk_smem_all  a block per (window, split of its cells), all four fields of the window's
+//                  stencil footprint staged in dynamic shared memory
+//    blk_smem_one  as blk_smem_all, one field staged at a time, four passes over the particles
+//    blk_global    as blk_smem_all, nothing staged: straight into the patch fields, window order
+//    blk_rs        a block per window, a warp per cell: the cell's sums in registers,
+//                  reduce-scattered, staged in the window's nodes in shared memory
+//    warp_win      a warp per window of 1 or 2 cells a side: the footprint in registers, see
+//                  warp_window
+//  staged sums then added into the patch fields atomically (neighbouring footprints overlap).
+//  Every variant is checked against the untiled deposit (max relative difference).
 //
 //   mkn build -p bench_tile_deposit -dKO -g 0 -x res/mkn/clang_cuda [-a -DPLAMN_BENCH_INTERP=2]
 //   mkn run -p bench_tile_deposit -x res/mkn/clang_cuda
 //
 // env: PLAMN_CELLS (12 a side), PLAMN_PPC (100), PLAMN_SEED, PLAMN_REPEATS (5: the fastest
-//  printed), PLAMN_TILES (4,6,8,12: tile sizes), PLAMN_SPLITS (1,2,4,8: blocks per tile),
-//  PLAMN_BLOCK (256: threads per block, clamped to each kernel's limit)
+//  printed), PLAMN_WINDOWS (4,6,8,12: block window sizes), PLAMN_SPLITS (1,2,4,8: blocks per
+//  window), PLAMN_BLOCK (256: threads per block, clamped to each kernel's limit)
 
 #include "damn/core/def/damn_config.hpp"
 #include "damn/core/exec/kernels.hpp"
@@ -74,7 +75,7 @@ std::uint32_t constexpr ipow(std::uint32_t const base, std::size_t const exp) DA
 enum class Staging : std::uint8_t { all, one, global };
 char const* name_of(Staging const s)
 {
-    return s == Staging::all ? "smem_all" : s == Staging::one ? "smem_one" : "global";
+    return s == Staging::all ? "blk_smem_all" : s == Staging::one ? "blk_smem_one" : "blk_global";
 }
 
 template<std::size_t dim, std::size_t interp>
@@ -92,11 +93,11 @@ struct TileDeposit
     using Box_t                    = damn::core::Box<int, dim>;
     using Span_t                   = SoAVXConstSpanParticles<dim, alloc>;
 
-    // nodes a particle of a tile's cells deposits on, beyond its cells: interp on either side,
+    // nodes a particle of a window's cells deposits on, beyond its cells: interp on either side,
     //  one more above (primal)
-    static Box_t footprint(Box_t const& tile) DAMN_ALL
+    static Box_t footprint(Box_t const& window) DAMN_ALL
     {
-        Box_t fb = tile;
+        Box_t fb = window;
         for (std::size_t d = 0; d < dim; ++d)
             fb.lower[d] -= interp, fb.upper[d] += interp + 1;
         return fb;
@@ -150,7 +151,7 @@ struct TileDeposit
     }
 
     template<Staging staging>
-    void tiled(std::uint32_t const tile, std::uint32_t const splits)
+    void block_window(std::uint32_t const window, std::uint32_t const splits)
     {
         auto& particles = pop().domainParticles();
         Span_t const ps{particles};
@@ -165,17 +166,17 @@ struct TileDeposit
         auto const origin    = patch_box.lower;
         auto const fshape    = rho_v.shape();
 
-        std::array<int, dim> n_tiles{};
+        std::array<int, dim> n_wins{};
         std::uint32_t n_blocks = 1;
         for (std::size_t d = 0; d < dim; ++d)
         {
-            auto const n = (cells_box.upper[d] - cells_box.lower[d] + 1 + tile - 1) / tile;
-            n_tiles[d]   = static_cast<int>(n);
+            auto const n = (cells_box.upper[d] - cells_box.lower[d] + 1 + window - 1) / window;
+            n_wins[d]    = static_cast<int>(n);
             n_blocks *= n;
         }
         std::size_t fp_nodes = 1;
         for (std::size_t d = 0; d < dim; ++d)
-            fp_nodes *= tile + 2 * interp + 2;
+            fp_nodes *= window + 2 * interp + 2;
         std::size_t const n_fields = staging == Staging::all ? 4 : staging == Staging::one ? 1 : 0;
 
         damn::core::gpu::ChunkLauncher<false> launcher{1, 0};
@@ -185,17 +186,17 @@ struct TileDeposit
         auto kernel  = [=] __device__() mutable {
 #if DAMN_HAVE_MKN_GPU_HW
             extern __shared__ double data[];
-            // the block's tile
+            // the block's window
             Box_t tbox;
             {
                 std::uint32_t t = blockIdx.x;
                 for (std::size_t d = dim; d-- > 0;)
                 {
-                    auto const c = static_cast<int>(t % n_tiles[d]);
-                    t /= n_tiles[d];
-                    tbox.lower[d] = cells_box.lower[d] + c * static_cast<int>(tile);
-                    tbox.upper[d]
-                        = std::min(tbox.lower[d] + static_cast<int>(tile) - 1, cells_box.upper[d]);
+                    auto const c = static_cast<int>(t % n_wins[d]);
+                    t /= n_wins[d];
+                    tbox.lower[d] = cells_box.lower[d] + c * static_cast<int>(window);
+                    tbox.upper[d] = std::min(tbox.lower[d] + static_cast<int>(window) - 1,
+                                             cells_box.upper[d]);
                 }
             }
             auto const fb      = footprint(tbox);
@@ -475,7 +476,7 @@ struct TileDeposit
     }
 
     // interp 1: a window's nodes are its cells' [lower, upper + 1]
-    void window_rs(std::uint32_t const tile)
+    void block_rs(std::uint32_t const window)
         requires(interp == 1)
     {
         auto& particles = pop().domainParticles();
@@ -491,14 +492,14 @@ struct TileDeposit
         std::uint32_t constexpr static n_nodes  = 1u << dim;
         std::uint32_t constexpr static n_values = 4 * n_nodes;
 
-        std::array<int, dim> n_tiles{};
+        std::array<int, dim> n_wins{};
         std::uint32_t n_blocks = 1, wnodes = 1;
         for (std::size_t d = 0; d < dim; ++d)
         {
-            auto const n = (cells_box.upper[d] - cells_box.lower[d] + 1 + tile - 1) / tile;
-            n_tiles[d]   = static_cast<int>(n);
+            auto const n = (cells_box.upper[d] - cells_box.lower[d] + 1 + window - 1) / window;
+            n_wins[d]    = static_cast<int>(n);
             n_blocks *= n;
-            wnodes *= tile + 1;
+            wnodes *= window + 1;
         }
 
         damn::core::gpu::ChunkLauncher<false> launcher{1, 0};
@@ -512,11 +513,11 @@ struct TileDeposit
                 std::uint32_t t = blockIdx.x;
                 for (std::size_t d = dim; d-- > 0;)
                 {
-                    auto const c = static_cast<int>(t % n_tiles[d]);
-                    t /= n_tiles[d];
-                    tbox.lower[d] = cells_box.lower[d] + c * static_cast<int>(tile);
-                    tbox.upper[d]
-                        = std::min(tbox.lower[d] + static_cast<int>(tile) - 1, cells_box.upper[d]);
+                    auto const c = static_cast<int>(t % n_wins[d]);
+                    t /= n_wins[d];
+                    tbox.lower[d] = cells_box.lower[d] + c * static_cast<int>(window);
+                    tbox.upper[d] = std::min(tbox.lower[d] + static_cast<int>(window) - 1,
+                                             cells_box.upper[d]);
                 }
             }
             std::array<std::uint32_t, dim> tshape{}, wshape{};
@@ -657,65 +658,65 @@ struct TileDeposit
             "%uD interp %zu, %u^%u cells, %zu ppc (%zu particles), block %u, smem opt-in %zu B\n",
             static_cast<unsigned>(dim), interp, cells, static_cast<unsigned>(dim), ppc, n_particles,
             block, damn::core::gpu::max_dynamic_shared_bytes());
-        std::printf("%-9s %5s %6s %7s %8s %9s %9s %7s %10s %6s\n", "staging", "tile", "splits",
+        std::printf("%-12s %5s %6s %7s %8s %9s %9s %7s %10s %6s\n", "variant", "window", "splits",
                     "blocks", "smem KB", "ms", "ns/part", "x ref", "max rel", "block");
 
         auto const ref_ms = time([&] { untiled(); });
         auto const ref    = values();
-        std::printf("%-9s %5s %6s %7zu %8s %9.3f %9.3f %7.2f %10s\n", "untiled", "-", "-",
+        std::printf("%-12s %5s %6s %7zu %8s %9.3f %9.3f %7.2f %10s\n", "untiled", "-", "-",
                     (n_particles + 255) / 256, "-", ref_ms, ref_ms * 1e6 / n_particles, 1., "-");
 
-        auto const window = [&]<std::uint32_t W>() {
+        auto const warp_row = [&]<std::uint32_t W>() {
             if (cells % W)
                 return;
             auto const n_windows = static_cast<std::size_t>(std::pow(cells / W, dim));
             auto const ms        = time([&] { warp_window<W>(); });
-            std::printf("%-9s %5u %6s %7zu %8s %9.3f %9.3f %7.2f %10.1e %6u\n", "warp_win", W, "-",
+            std::printf("%-12s %5u %6s %7zu %8s %9.3f %9.3f %7.2f %10.1e %6u\n", "warp_win", W, "-",
                         (n_windows * 32 + used_block - 1) / used_block, "-", ms,
                         ms * 1e6 / n_particles, ms / ref_ms, max_rel_diff(ref, values()),
                         used_block);
         };
-        window.template operator()<1>();
-        window.template operator()<2>();
+        warp_row.template operator()<1>();
+        warp_row.template operator()<2>();
         if constexpr (interp == 1)
         {
-            for (auto const tile : list_of("PLAMN_TILES", "4,6,8,12"))
+            for (auto const window : list_of("PLAMN_WINDOWS", "4,6,8,12"))
             {
-                std::size_t wn = 1, n_tiles = 1;
+                std::size_t wn = 1, n_wins = 1;
                 for (std::size_t d = 0; d < dim; ++d)
-                    wn *= tile + 1, n_tiles *= (cells + tile - 1) / tile;
-                auto const ms = time([&] { window_rs(tile); });
-                std::printf("%-9s %5u %6s %7zu %8.1f %9.3f %9.3f %7.2f %10.1e %6u\n", "window_rs",
-                            tile, "-", n_tiles, 4 * wn * sizeof(double) / 1024., ms,
+                    wn *= window + 1, n_wins *= (cells + window - 1) / window;
+                auto const ms = time([&] { block_rs(window); });
+                std::printf("%-12s %5u %6s %7zu %8.1f %9.3f %9.3f %7.2f %10.1e %6u\n", "blk_rs",
+                            window, "-", n_wins, 4 * wn * sizeof(double) / 1024., ms,
                             ms * 1e6 / n_particles, ms / ref_ms, max_rel_diff(ref, values()),
                             used_block);
             }
         }
 
-        auto const run = [&]<Staging staging>(std::uint32_t const tile,
+        auto const run = [&]<Staging staging>(std::uint32_t const window,
                                               std::uint32_t const splits) {
-            std::size_t fp = 1, n_tiles = 1;
+            std::size_t fp = 1, n_wins = 1;
             for (std::size_t d = 0; d < dim; ++d)
-                fp *= tile + 2 * interp + 2, n_tiles *= (cells + tile - 1) / tile;
+                fp *= window + 2 * interp + 2, n_wins *= (cells + window - 1) / window;
             auto const n_fields = staging == Staging::all ? 4 : staging == Staging::one ? 1 : 0;
             auto const bytes    = n_fields * fp * sizeof(double);
             if (bytes > damn::core::gpu::max_dynamic_shared_bytes())
             {
-                std::printf("%-9s %5u %6u %7zu %8.1f  does not fit\n", name_of(staging), tile,
-                            splits, n_tiles * splits, bytes / 1024.);
+                std::printf("%-12s %5u %6u %7zu %8.1f  does not fit\n", name_of(staging), window,
+                            splits, n_wins * splits, bytes / 1024.);
                 return;
             }
-            auto const ms = time([&] { tiled<staging>(tile, splits); });
-            std::printf("%-9s %5u %6u %7zu %8.1f %9.3f %9.3f %7.2f %10.1e %6u\n", name_of(staging),
-                        tile, splits, n_tiles * splits, bytes / 1024., ms, ms * 1e6 / n_particles,
+            auto const ms = time([&] { block_window<staging>(window, splits); });
+            std::printf("%-12s %5u %6u %7zu %8.1f %9.3f %9.3f %7.2f %10.1e %6u\n", name_of(staging),
+                        window, splits, n_wins * splits, bytes / 1024., ms, ms * 1e6 / n_particles,
                         ms / ref_ms, max_rel_diff(ref, values()), used_block);
         };
-        for (auto const tile : list_of("PLAMN_TILES", "4,6,8,12"))
+        for (auto const window : list_of("PLAMN_WINDOWS", "4,6,8,12"))
             for (auto const splits : list_of("PLAMN_SPLITS", "1,2,4,8"))
             {
-                run.template operator()<Staging::all>(tile, splits);
-                run.template operator()<Staging::one>(tile, splits);
-                run.template operator()<Staging::global>(tile, splits);
+                run.template operator()<Staging::all>(window, splits);
+                run.template operator()<Staging::one>(window, splits);
+                run.template operator()<Staging::global>(window, splits);
             }
     }
 };

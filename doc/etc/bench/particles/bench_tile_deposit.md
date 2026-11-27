@@ -17,13 +17,16 @@ block's dynamic shared memory (`extern __shared__`, sized by the launch's `ds`).
 | Variant | Work | A particle's contribution summed in | Atomics |
 |---|---|---|---|
 | `untiled` (the simulator's) | a thread per particle | nothing: straight into the fields | global, 4 fields x stencil nodes per particle |
-| tiled `global` | a block per (tile, split), threads over each cell's particles | nothing, in tile order | global, as untiled |
-| `smem_all` / `smem_one` | as tiled `global` | the tile's footprint in shared memory, all fields / one per pass | block per particle, then global per staged node |
+| `blk_global` | a block per (window, split of its cells), threads over each cell's particles | nothing, in window order | global, as untiled |
+| `blk_smem_all` / `blk_smem_one` | as `blk_global` | the window's footprint in shared memory, all fields / one per pass | block per particle, then global per staged node |
 | `warp_win` | a warp per window of w^dim cells, its cells in turn | interp 1: registers, then the warp's own slice of shared memory (w > 1) or the fields (w = 1); interp > 1: the warp's slice | interp 1: plain adds into the slice, global per node; interp > 1: block among the warp's lanes, then global per node |
-| `window_rs` | a block per window, a warp per cell | registers, then the window's nodes in shared memory | block per (cell, node, field), then global per node |
+| `blk_rs` | a block per window, a warp per cell | registers, then the window's nodes in shared memory | block per (cell, node, field), then global per node |
 
-SoAVXChunked is sorted by cell (per cell `starts` / `sizes`), so a window or tile is a set of
-cell ranges of the untiled array: no tiled layout needed. The simulator sorts after every push
+A window is a box of cells. SoAVXChunked is sorted by cell (per cell `starts` / `sizes`), so a
+window's particles are a set of cell ranges of the untiled array: every variant reads the same
+untiled particles and writes the same untiled patch fields (no tiled layout, no tile fields, no
+inner ghosts, no particle exchange between windows); a window only decides which block or warp
+deposits which cells. Only the deposit kernel is timed, on sorted particles (no push, no sort). The simulator sorts after every push
 (the mover's sync, `on_moved`), so the deposit after it sees valid chunks; a deposit without the
 sync must check `sorted()`.
 
@@ -33,7 +36,7 @@ A `double` (also `float`, `std::uint64_t`) `atomicAdd` into shared memory compil
 and swap loop on sm_80 to sm_120 (CUDA 13.5: `ATOMS.CAST.SPIN.64` in `cuobjdump -sass`); into
 global memory it is a native add done by the L2 (`ATOM.E.ADD.F64`). Threads adding into the same
 shared node retry until their swap wins: with a block's threads on one cell's nodes, the
-`smem_*` kernels executed 27 to 32 times the untiled kernel's instructions (ncu, 20^3), the SMs
+`blk_smem_*` kernels executed 27 to 32 times the untiled kernel's instructions (ncu, 20^3), the SMs
 busy spinning, memory idle. The untiled kernel instead waits on the queue of global atomics
 (`lg_throttle` stalls): one per particle, field and node.
 
@@ -103,17 +106,17 @@ cell, the fastest of 5 runs, 256 threads a block (each kernel clamped to its reg
 `mkn::gpu::getDeviceKernelMaxThreadsPerBlock`). Ratios are against the untiled deposit of the
 same run.
 
-Interp 1:
+Interp 1 (window 4, 8 splits for the `blk_` variants):
 
 | | 12^3 | 20^3 |
 |---|---|---|
 | untiled | 0.21 ms | 0.96 ms |
-| tiled `global`, tile 4, 8 splits | 1.02 | 0.73 |
-| `smem_all` / `smem_one`, best | 4.1 / 4.5 | 4.1 / 4.1 |
+| `blk_global`, window 4, 8 splits | 1.02 | 0.73 |
+| `blk_smem_all` / `blk_smem_one`, best | 4.1 / 4.5 | 4.1 / 4.1 |
 | butterfly, a warp a cell (replaced by `warp_win` 1) | 0.49 | 0.42 |
 | `warp_win` 1 (reduce-scatter) | **0.28** | **0.24** |
 | `warp_win` 2, 3, 4 | 0.54, 1.71, 3.99 | 0.34, 0.36, 0.88 |
-| `window_rs` 2, 4 | 0.29, 0.54 | 0.24, 0.34 |
+| `blk_rs` 2, 4 | 0.29, 0.54 | 0.24, 0.34 |
 
 A warp's window is done cell after cell: larger windows have fewer warps working (27 blocks at
 12^3, w = 2), and at interp 1 they save nothing the registers did not already.
@@ -124,11 +127,11 @@ Interp 2 (`warp_win` stages in the warp's slice, see below for the register vers
 |---|---|---|
 | untiled | 0.73 ms | 5.5 ms |
 | `warp_win` 1, 2 | 1.48, 2.80 | 0.82, 1.09 |
-| `smem_one`, tile 4 | 1.49 | 0.91 |
-| tiled `global`, tile 4 | **0.75** | **0.63** |
+| `blk_smem_one`, window 4 | 1.49 | 0.91 |
+| `blk_global`, window 4 | **0.75** | **0.63** |
 
 Staged in shared memory, the warp's own slice included, interp 2 is back to compare and swap
-atomics; the best so far is the deposit in tile order with global atomics.
+atomics; the best so far is the deposit in window order with global atomics (`blk_global`).
 
 ### Register sums at higher orders
 
