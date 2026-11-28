@@ -1,7 +1,7 @@
 # A hybrid level's step
 
-`inc/plamn/solver/hybrid/advance.hpp` advances a level of the hybrid model over one step, as
-PHARE's `SolverPPC`. It also holds the steps the simulator uses to initialize and regrid a level:
+`inc/plamn/solver/hybrid/advance.hpp` advances a level of the hybrid model over one step. It
+also holds the steps the simulator uses to initialize and regrid a level:
 the moments, the ion border sums, Ampere and Ohm.
 
 ## The step
@@ -28,7 +28,7 @@ one (`emPred`).
 
 ### Moving the ions and depositing
 
-As PHARE's deposit after the exchange (and the level initialization):
+As at the level initialization:
 
 1. the particles are pushed: per patch with a thread local copy of the mover (it keeps push
    state: mesh, dt, a buffer), or the level's patches at once, each with its boxing by patch id
@@ -37,8 +37,8 @@ As PHARE's deposit after the exchange (and the level initialization):
    particles that left their patch go to the patch owning their cell (`gather_leaving`), then
    each patch deposits its domain particles, so every particle is deposited once;
 3. the level border's moments: the level ghost particles split from the coarser level at both
-   ends of its step are deposited, weighted linearly in time (`1 - alpha` and `alpha`, as PHARE's
-   `fillIonPopMomentGhosts`). Each level ghost particle is held by one patch and deposited once;
+   ends of its step are deposited, weighted linearly in time (`1 - alpha` and `alpha`). Each
+   level ghost particle is held by one patch and deposited once;
 4. the border sums complete every patch's copy of a shared node (`IonPopBorderSum`);
 5. the ions' totals from the populations' moments.
 

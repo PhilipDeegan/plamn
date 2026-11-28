@@ -61,7 +61,7 @@ struct MpiLifeCycle
         {
             // MPI_THREAD_MULTIPLE only for HDF5's subfiling (its concentrator threads call MPI):
             //  it costs every message elsewhere (locks, transports).
-            //  PHARE's PHARE_H5_SUB_FILES is damn's DAMN_H5_SUB_FILES
+            //  PHARE_H5_SUB_FILES sets damn's DAMN_H5_SUB_FILES, unless that is set
             if (auto const* n = std::getenv("PHARE_H5_SUB_FILES");
                 n and !std::getenv("DAMN_H5_SUB_FILES"))
                 setenv("DAMN_H5_SUB_FILES", n, 1);

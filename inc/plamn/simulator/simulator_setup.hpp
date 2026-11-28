@@ -67,7 +67,7 @@ void Simulator<opts>::setup_()
     }
 
     // damn's thread pools (process wide): pyphare's threading, PHARE_THREAD_POOLS and
-    //  PHARE_THREADS_PER_POOL first if set (as PHARE). A pool works a patch, its threads the
+    //  PHARE_THREADS_PER_POOL first if set. A pool works a patch, its threads the
     //  patch's tiles; reconfigured only when it differs
     {
         auto const setting = [&](char const* env, std::string const& key) {
@@ -292,8 +292,7 @@ void Simulator<opts>::register_mhd_resources_()
     resources_["MHD_B"] = damn::amr::same_names(
         {Patch_t::state_name("B", 0) + "_x", Patch_t::state_name("B", 0) + "_y",
          Patch_t::state_name("B", 0) + "_z"}); // the advanced state's B (the root's max)
-    // a reflux's step fluxes and E, their patch ghosts refilled after (PHARE's
-    //  patchGhostRefluxedAlgo_)
+    // a reflux's step fluxes and E, their patch ghosts refilled after
     std::vector<std::string> reflux{"butcherE_x", "butcherE_y", "butcherE_z"};
     for (std::size_t d = 0; d < dimension; ++d)
     {
@@ -323,8 +322,7 @@ void Simulator<opts>::register_resources_()
     add("EMPred_B", components("EMPred_B"));
     add("EMAvg_E", components("EMAvg_E"));
 
-    // the totals a synchronization coarsens, their ghosts refilled after it (PHARE's
-    //  chargeDensitySynchronizers_, ionChargeFluxSynchronizers_)
+    // the totals a synchronization coarsens, their ghosts refilled after it
     add("IonMoments", components("ions_charge_flux"));
     add("IonMoments", damn::amr::same_names({"ions_charge_density"}));
 
@@ -350,7 +348,7 @@ void Simulator<opts>::register_resources_()
         auto const name = ions["pop" + std::to_string(i)]["name"].template to<std::string>();
         models_.hybrid.population_names.push_back(name);
 
-        // every population's moments in one exchange, as PHARE
+        // every population's moments in one exchange
         add("IonPopBorderSum", components(name + "_flux"));
         add("IonPopBorderSum",
             damn::amr::same_names({name + "_density", name + "_charge_density"}));

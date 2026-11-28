@@ -2,7 +2,6 @@
 
 `inc/plamn/amr/coarsen.hpp` holds the coarsen operators that `damn::amr::coarsen` (and
 `damn::mpi`'s) apply to plamn's field resources (`resources.hpp`), for a refinement ratio of 2.
-They match PHARE's.
 
 The rule is chosen per direction, from the field's centering in that direction. Coarse index `q`
 covers the fine nodes / cells around `2q`.

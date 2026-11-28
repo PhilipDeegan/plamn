@@ -2,8 +2,8 @@
 
 plamn is plasma physics on top of [damn](https://github.com/PhilipDeegan/damn): grid layouts,
 fields, particles, ions, electrons, electromagnetics, their numerics, and a simulator over damn's
-patch hierarchy. It follows PHARE's algorithms (hybrid PIC, MHD, AMR with time refinement) and
-takes PHARE's python input (pyphare) unchanged, so the same input script can run on either code.
+patch hierarchy: hybrid PIC, MHD, AMR with time refinement. It takes pyphare's python input
+(pharein) unchanged, so a pyphare input script runs on it as is.
 
 This is a work in progress: a map of the headers and of how to run things. Longer explanations
 live in `doc/`, beside this page.
@@ -29,15 +29,14 @@ live in `doc/`, beside this page.
 A simulation's levels belong to models: MHD below `max_mhd_level`, hybrid above (either can be
 the only one). Each model owns its patch data per level; the hierarchy's geometry, neighbours
 and level maps are the simulator's and shared. Time refinement is damn's; each level takes its
-model's step, and finer levels are synchronised onto coarser ones (coarsening, reflux), as
-PHARE's multi physics integrator.
+model's step, and finer levels are synchronised onto coarser ones (coarsening, reflux).
 
 Refinement is either fixed boxes from the input or tagging, with regrids and level 0 load
 balancing during the run.
 
 ## Build permutations
 
-The simulator is compiled per permutation, as PHARE's: dimension, interpolation order, refined
+The simulator is compiled per permutation: dimension, interpolation order, refined
 particle number, particle layout and allocator (and for MHD the reconstruction, limiter, Riemann
 solver and Hall). Each permutation is its own python module, named after pyphare's simulator id:
 
@@ -50,7 +49,7 @@ plamn/plamn_cpp_<dim>_<interp>_<refined>_<layout>_<allocator>.so
 ```sh
 ./mkn.py --dim 2 3                         # 2D and 3D, interp 1, AoSMapped, CPU
 ./mkn.py --dim 3 --layout SoAVXChunked     # another particle layout
-./mkn.py --dim 2 --diag-doubles --cell-jump 1   # as a PHARE_DIAG_DOUBLES=1 build, PHARE's ghost widths
+./mkn.py --dim 2 --diag-doubles --cell-jump 1   # as a PHARE_DIAG_DOUBLES=1 build, jump 1 ghost widths
 ./mkn.py --mhd                             # MHD only
 ```
 
@@ -61,7 +60,7 @@ modules run on another machine. `-- <mkn args>` passes anything else to mkn (e.g
 ## Running
 
 plamn runs pyphare's input with plamn's C++: `plamn.patch()` swaps pyphare's C++ modules for
-plamn's. pyphare itself comes from a PHARE checkout; no PHARE build is needed.
+plamn's. pyphare itself is used from a source checkout, unbuilt.
 
 ```python
 import plamn

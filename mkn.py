@@ -8,7 +8,7 @@
     ./mkn.py --scope-flags 1=time,mem,perf_all 2=time,perf_all   # phlop per scope metrics
     ./mkn.py --sync-pools                 # damn's thread pools run tasks on the calling thread
     ./mkn.py --dim 2 --diag-doubles       # diagnostics in double precision, as PHARE_DIAG_DOUBLES=1
-    ./mkn.py --dim 2 --cell-jump 1        # PHARE's ghost widths (particles may move 1 cell a step)
+    ./mkn.py --dim 2 --cell-jump 1        # jump 1 ghost widths (particles may move 1 cell a step)
     ./mkn.py --mhd                        # MHD only, 1D: plamn_cpp_1_AoS_CPU_Linear_VanLeer_Rusanov_false
     ./mkn.py --mhd --limiter VanLeer MinMod   # every combination of the MHD choices
 
@@ -154,7 +154,7 @@ def main(argv):
     parser.add_argument(
         "--cell-jump",
         type=int,
-        help="PLAMN_PARTICLE_ALLOWED_CELL_JUMP (default 2; 1: PHARE's ghost widths)",
+        help="PLAMN_PARTICLE_ALLOWED_CELL_JUMP (default 2; 1: narrower ghosts)",
     )
     parser.add_argument(
         "--diag-doubles",

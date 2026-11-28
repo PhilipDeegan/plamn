@@ -26,8 +26,8 @@ struct FiniteVolumeEulerTile
 };
 
 
-// Unew = U - dt div(F) for one conserved field on its domain box (FiniteVolumeEuler per cell), as
-//  PHARE's FiniteVolumeEulerPerField; called per conserved quantity (rho, rhoV components, Etot)
+// Unew = U - dt div(F) for one conserved field on its domain box (FiniteVolumeEuler per cell);
+//  called per conserved quantity (rho, rhoV components, Etot)
 //  Fx, Fy, Fz: its face fluxes per direction (those of directions >= dim are not read)
 //  U and Unew may be the same field: a cell only reads its own U
 //  untiled: the patch's fields, or one tile's views (on_tile)

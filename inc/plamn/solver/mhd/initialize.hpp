@@ -1,7 +1,7 @@
 #ifndef PLAMN_SOLVER_MHD_INITIALIZE_HPP
 #define PLAMN_SOLVER_MHD_INITIALIZE_HPP
 
-// an MHD patch's advanced state from the user's functions, as PHARE's MHDState::initialize:
+// an MHD patch's advanced state from the user's functions:
 //  simulation/mhd_state/{density, velocity, magnetic, pressure}/initializer (the vectors'
 //  {x,y,z}_component) give the primitive state on the patch's ghost boxes, converted to the
 //  conservative one (the model's heat capacity ratio). Its ghosts past a neighbour or a physical

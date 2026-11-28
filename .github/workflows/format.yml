@@ -1,7 +1,7 @@
 name: format
 
-# changed C++ lines follow .clang-format, as PHARE's gate (one clang-format version for
-# everyone: results differ between versions)
+# changed C++ lines follow .clang-format (one clang-format version for everyone: results differ
+# between versions)
 
 on:
   pull_request: # not drafts (each job's if): a draft's pushes cost no Actions minutes, being
@@ -94,8 +94,8 @@ jobs:
 
   clang-tidy:
     if: ${{ !github.event.pull_request.draft }}
-    # .clang-tidy's checks on the changed C++ lines, as PHARE's gate: clang-tidy reads the real
-    # compile commands, from an mkn dry run (res/ci/compile_db.py: no build). Findings show inline
+    # .clang-tidy's checks on the changed C++ lines: clang-tidy reads the real compile commands,
+    # from an mkn dry run (res/ci/compile_db.py: no build). Findings show inline
     # on the PR (annotations). Warning only for now.
     runs-on: ubuntu-24.04
     container: debian:trixie

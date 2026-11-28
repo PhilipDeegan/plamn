@@ -32,7 +32,7 @@ jobs:
         -W 9 -a "-Wno-unused-parameter -Wno-unused-variable -Wno-error=strict-aliasing"
 
   # plamn runs pyphare's python against plamn's modules: pyphare from PhilipDeegan/PHARE's wrangler
-  #  (PHARE master and the live DataWrangler's python accessors, which master lacks yet)
+  #  (pyphare master plus the live DataWrangler's python accessors)
   python:
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-24.04

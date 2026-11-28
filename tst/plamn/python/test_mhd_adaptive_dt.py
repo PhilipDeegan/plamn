@@ -1,6 +1,5 @@
-"""MHD adaptive time steps (core/numerics/stable_dt/mhd.hpp, PHARE's SolverMHD::computeStableDt):
-a uniform 1D state, ideal and Hall MHD, the dt against the formula (PHARE's
-tests/simulator/test_adaptive_stable_dt.py, in 1D: the MHD modules built locally are)
+"""MHD adaptive time steps (core/numerics/stable_dt/mhd.hpp): a uniform 1D state, ideal and Hall
+MHD, the dt against the formula (in 1D: the MHD modules built locally are)
 needs py_etc and the 1D MHD modules built (./mkn.py --mhd --dim 1, ideal and Hall), then from the
 plamn root:
     PYTHONPATH=.:$PHARE/pyphare:tst/plamn/python python3 -m phlop.run.test_cases -i tst

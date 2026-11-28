@@ -93,7 +93,7 @@ profile:
         tst/plamn/amr/test_device_items.cpp
         tst/plamn/amr/test_tagging.cpp
 
-# C++ diagnostics tests embedding python (PHARE's tests/diagnostic): the simulation from
+# C++ diagnostics tests embedding python: the simulation from
 # tst/plamn/simulator/diagnostics_job.py, through pyphare and plamn (py_etc built first:
 # ./mkn.py). MPI: -x res/mkn/mpi; run from the root, e.g. mpirun -n 3 bin/.../test_diagnostics_2d
 # libpython linked (MKN_PYTHON_LIB_EMBED): needs lang.python3 linking libpython3.<minor>, not

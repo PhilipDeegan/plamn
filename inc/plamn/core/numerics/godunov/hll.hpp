@@ -1,10 +1,10 @@
 #ifndef PLAMN_CORE_NUMERICS_GODUNOV_HLL_HPP
 #define PLAMN_CORE_NUMERICS_GODUNOV_HLL_HPP
 
-// HLL flux at one face, PHARE's core/numerics/riemann_solvers/hll.hpp (its operation order: the
-//  same results), ideal MHD (Hall: not yet): the outermost wave speeds SL, SR (the fast
-//  magnetosonic one either side), the flux of the state between them; the upwind constrained
-//  transport inputs from the speeds clipped at 0 (Mignone & Del Zanna 2021, eqs 14, 32)
+// HLL flux at one face (a fixed operation order: bit equal comparisons, etc/compare/phare),
+//  ideal MHD (Hall: not yet): the outermost wave speeds SL, SR (the fast magnetosonic one either
+//  side), the flux of the state between them; the upwind constrained transport inputs from the
+//  speeds clipped at 0 (Mignone & Del Zanna 2021, eqs 14, 32)
 
 #include "damn/core/def.hpp"
 #include "plamn/core/numerics/godunov/mhd_equations.hpp"
@@ -59,7 +59,7 @@ MKN_KUL_FN_SIG_RET GodunovFaceResult hll(double const gamma, MHDPrimitive const&
     r.uct_coefs    = {sr * inv, -sl * inv, d, d};
     for (std::size_t c = 0; c < 3; ++c)
         r.vt[c] = (sr * uL.V[c] - sl * uR.V[c]) * inv;
-    if (j) // PHARE's riemann_averaging with the clipped speeds
+    if (j) // the Riemann averages with the clipped speeds
     {
         for (std::size_t c = 0; c < 3; ++c)
             r.jt[c] = (sr * j->L[c] - sl * j->R[c]) * inv;

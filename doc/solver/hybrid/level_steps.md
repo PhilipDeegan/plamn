@@ -1,8 +1,7 @@
 # A hybrid level and its coarser hybrid level
 
 `inc/plamn/solver/hybrid/level_steps.hpp` holds what happens between a hybrid level and its
-coarser hybrid level around the finer level's substeps, as PHARE's
-`HybridHybridMessengerStrategy`. damn's `damn::amr::advance` hooks call them.
+coarser hybrid level around the finer level's substeps. damn's `damn::amr::advance` hooks call them.
 
 ## Hooks
 
@@ -18,9 +17,8 @@ copies are dropped (`own_level_ghosts`).
 
 ## Synchronization
 
-1. E and the total ion charge density and flux are coarsened onto the coarser level (as PHARE's
-   synchronize: `chargeDensitySynchronizers_`, `ionChargeFluxSynchronizers_`). The populations'
-   moments, the mass density and the bulk velocity stay the coarser level's own.
+1. E and the total ion charge density and flux are coarsened onto the coarser level. The
+   populations' moments, the mass density and the bulk velocity stay the coarser level's own.
 2. The closure's part (polytropic: Pe).
 3. Reflux: the coarser `Eavg` under the fine level becomes the fine level's time average of E
    (`EM_fluxSum_E`), and the coarser level's B is recomputed from its old B by Faraday over its

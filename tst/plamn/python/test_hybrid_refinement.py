@@ -1,14 +1,14 @@
 """two levels with a static refinement box (pyphare's refinement="boxes"), on plamn
 
-The fine level takes ratio^2 = 4 steps per coarse step (dt ~ dx^2, PHARE's getMaxFinerLevelDt),
-its level ghosts are refined from the coarse level in time between the coarse step's start and
-end, and it is synchronized onto the coarse level after its substeps, the coarse B under it
-recomputed from its time averaged E (reflux).
+The fine level takes ratio^2 = 4 steps per coarse step (dt ~ dx^2), its level ghosts are refined
+from the coarse level in time between the coarse step's start and end, and it is synchronized onto
+the coarse level after its substeps, the coarse B under it recomputed from its time averaged E
+(reflux).
 
 1D: the same Alfven wave, from the same particles, on one level and on two. Level 0 B beside the
 box differs between the two by no more than inside it: a wrongly weighted reflux kicks the coarse
-cells sharing the coarse-fine interface (as PHARE's tests/simulator/refinement checks). Far from
-the box nothing changes in a step. The fine level holds the coarse particles under it, split.
+cells sharing the coarse-fine interface. Far from the box nothing changes in a step. The fine level
+holds the coarse particles under it, split.
 
 2D: a small double Harris sheet with one sheet refined stays finite, its fine level holding the
 coarse particles under it, split. With refinement="tagging", level 1 starts on the sheets and is

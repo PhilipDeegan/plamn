@@ -2,7 +2,8 @@
 #define PLAMN_SIMULATOR_SIMULATOR_SUMS_HPP
 
 // plamn::Simulator: heavy debugging, -DDAMN_SUPER_DEBUG only: per stage sums that diff against
-// PHARE's debug branch, forced regrids, rebalance checks: doc/simulator/simulator_sums.md
+// the other code's in etc/compare/phare, forced regrids, rebalance checks:
+// doc/simulator/simulator_sums.md
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
 #include "damn/core/def.hpp"
@@ -28,7 +29,7 @@ namespace plamn
 {
 namespace detail
 {
-    // plamn's resource names as PHARE's debug branch labels them
+    // plamn's resource names as the compared code's debug sums label them
     inline std::string sums_label(std::string const& name)
     {
         static std::map<std::string, std::string> const phare{{"EM_B_x", "Bx"},
@@ -153,7 +154,7 @@ void Simulator<opts>::debug_regrid_(int const ln, double const t)
         }
         return out;
     }();
-    if (static_cast<std::size_t>(ln) + 1 != levels_.size() // the finest only, as PHARE's
+    if (static_cast<std::size_t>(ln) + 1 != levels_.size() // the finest only
         or std::none_of(times.begin(), times.end(),
                         [&](double const x) { return std::abs(x - t) < 1e-12; }))
         return;

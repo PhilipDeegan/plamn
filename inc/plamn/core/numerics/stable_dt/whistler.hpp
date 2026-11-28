@@ -1,9 +1,8 @@
 #ifndef PLAMN_CORE_NUMERICS_STABLE_DT_WHISTLER_HPP
 #define PLAMN_CORE_NUMERICS_STABLE_DT_WHISTLER_HPP
 
-// the hybrid stable time step, the whistler wave CFL bound (PHARE's SolverPPC::computeStableDt
-// and core::compute_whistler_, behind master's "not ready in hybrid" throw): on every node of
-// the mass density, B projected onto it,
+// the hybrid stable time step, the whistler wave CFL bound: on every node of the
+// mass density, B projected onto it,
 //
 //   dt <= cfl_wave / sum_d (vw_d / dx_d),  vw_d = vA (sqrt(1 + x_d^2) + x_d),
 //                                           vA = |B| / sqrt(rho),  x_d = pi / (2 dx_d sqrt(rho))

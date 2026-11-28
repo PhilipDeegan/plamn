@@ -1,7 +1,7 @@
 #ifndef PLAMN_DIAGNOSTIC_PHAREH5_HPP
 #define PLAMN_DIAGNOSTIC_PHAREH5_HPP
 
-// phareh5 diagnostics, PHARE's default format, a file per quantity: the pieces; the file layout:
+// phareh5 diagnostics, pyphare's default format, a file per quantity: the pieces; the file layout:
 // doc/diagnostic/phareh5.md. A dump of one level only (fine_dump_lvl_max): its time holds that
 // level only
 
@@ -33,8 +33,8 @@ struct Box;
 
 namespace plamn::diagnostic::phareh5
 {
-// PHARE master's ghost widths (core/models/options/hybrid_options.hpp): what its files hold,
-//  whatever plamn's own widths
+// the ghost widths phareh5 files hold, as pyphare's readers expect them, whatever plamn's own
+//  widths
 template<std::size_t interp>
 std::uint32_t constexpr field_ghosts = std::array{2u, 4u, 4u}[interp - 1];
 template<std::size_t interp>
@@ -48,8 +48,8 @@ MKN_KUL_FN_SIG_RET inline std::string file_name(std::string const& quantity)
     return name + ".h5";
 }
 
-// what PHARE's core::to_string_with_precision(t, 10) returns: fixed, 10 decimals (it zeroes the
-//  last digit of a copy, then returns the stream's string: every digit kept)
+// a time's key in phareh5 files, as pyphare's readers expect it: fixed, 10 decimals, every digit
+//  kept
 MKN_KUL_FN_SIG_RET inline std::string time_key(double const t)
 {
     std::ostringstream out;
@@ -65,13 +65,13 @@ MKN_KUL_FN_SIG_RET inline std::string patch_path(std::string const& time, int co
            + std::to_string(id);
 }
 
-// a patch's field on PHARE's ghost box (ghosts G of plamn's gw), C order (x slowest): its
+// a patch's field on the phareh5 ghost box (ghosts G of plamn's gw), C order (x slowest): its
 //  shape, and its values into out
 template<std::uint32_t gw, std::uint32_t G, typename Field, typename Float>
 void field_values_untiled_(Field const& field, damn::core::Box<int, Field::dimension> const& cells,
                            std::vector<std::size_t>& shape, std::vector<Float>& out)
 {
-    static_assert(G <= gw, "plamn's field ghosts narrower than PHARE's");
+    static_assert(G <= gw, "plamn's field ghosts narrower than phareh5's");
     auto constexpr dim    = Field::dimension;
     auto const resource   = amr::field_resource<gw>(const_cast<Field&>(field));
     auto const centerings = core::centering<dim>(field);
@@ -109,7 +109,7 @@ void field_values(Field const& field, damn::core::Box<int, Field::dimension> con
                       [&](auto const& f) { field_values_untiled_<gw, G>(f, cells, shape, out); });
 }
 
-// PHARE's particle datasets (ParticlePacker's keys and shapes): weight (n, 1), iCell (n, dim),
+// phareh5's particle datasets (pyphare's keys and shapes): weight (n, 1), iCell (n, dim),
 //  delta (n, dim), v (n, 3), each row-major
 template<std::size_t dim>
 struct ParticleColumns

@@ -1,7 +1,7 @@
 #ifndef PLAMN_AMR_COARSEN_HPP
 #define PLAMN_AMR_COARSEN_HPP
 
-// coarsen operators (ratio 2, as PHARE's) over plamn's field resources: doc/amr/coarsen.md
+// coarsen operators (ratio 2) over plamn's field resources: doc/amr/coarsen.md
 
 #include "damn/core/geometry/box_spans.hpp"
 #include "plamn/amr/resources.hpp"

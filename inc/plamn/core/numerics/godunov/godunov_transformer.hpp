@@ -36,8 +36,7 @@ struct GodunovTile
 
 // the fluxes and upwind constrained transport inputs of every face of direction dir, from the
 //  primitive fields: GodunovFace per face on the domain box of the direction's face quantity,
-//  grown by the reconstruction's ghosts in the transverse directions (PHARE's evalOnBiggerBox
-//  with getGrow), as PHARE's Godunov::operator() for one direction
+//  grown by the reconstruction's ghosts in the transverse directions
 //  untiled: the patch's fields, or one tile's views (on_tile)
 //  tiled:   every tile of the patch, CPU tile by tile, GPU one launch with a block per tile
 template<typename Reconstruction, typename Riemann = RusanovRiemann>

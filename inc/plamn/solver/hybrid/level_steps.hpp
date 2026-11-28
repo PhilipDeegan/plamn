@@ -1,8 +1,8 @@
 #ifndef PLAMN_SOLVER_HYBRID_LEVEL_STEPS_HPP
 #define PLAMN_SOLVER_HYBRID_LEVEL_STEPS_HPP
 
-// a hybrid level and its coarser hybrid level around the finer level's substeps (PHARE's
-//  HybridHybridMessengerStrategy): doc/solver/hybrid/level_steps.md
+// a hybrid level and its coarser hybrid level around the finer level's substeps:
+//  doc/solver/hybrid/level_steps.md
 
 #include "plamn/core/data/field/field_tiles.hpp"
 #include "damn/amr/copy.hpp"
@@ -109,7 +109,7 @@ void accumulate_flux_sum(auto&& level, double const coef)
     });
 }
 
-// PHARE's chargeDensitySynchronizers_, ionChargeFluxSynchronizers_; their ghosts are the caller's
+// the charge density and charge flux; their ghosts are the caller's
 void coarsen_moments(auto&& level)
 {
     static auto const moments = [] { // the same every step: built once (read only after)
@@ -121,7 +121,7 @@ void coarsen_moments(auto&& level)
 }
 
 // both at t: the populations' moments, the mass density and the bulk velocity stay the coarser
-//  level's own (as PHARE's synchronize)
+//  level's own
 template<auto opts>
 void synchronize(HybridModel<opts> const& model, auto&& level, double const t)
 {

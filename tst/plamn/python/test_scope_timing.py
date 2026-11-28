@@ -1,6 +1,6 @@
-"""PHARE_SCOPE_TIMING=1: phlop's scope timers (DAMN_LOG_SCOPE, as PHARE's), one file per
-rank, .phare/timings/rank.<r>.txt, written when the simulator goes; and Simulator.summary(), as
-PHARE's. On any number of ranks (phlop: --tags mpi runs it on 3):
+"""PHARE_SCOPE_TIMING=1: phlop's scope timers (DAMN_LOG_SCOPE), one file per rank,
+.phare/timings/rank.<r>.txt, written when the simulator goes; and pyphare's Simulator.summary().
+On any number of ranks (phlop: --tags mpi runs it on 3):
 
     mpirun -n 3 python3 -m tst.plamn.python.test_scope_timing
 

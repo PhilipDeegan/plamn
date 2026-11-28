@@ -1,8 +1,8 @@
 #ifndef PLAMN_SOLVER_HYBRID_INITIALIZE_HPP
 #define PLAMN_SOLVER_HYBRID_INITIALIZE_HPP
 
-// a hybrid level's data at its creation (PHARE's HybridLevelInitializer): the root level from the
-//  user's functions, a refined level from its coarser level (B divergence free, E, the particles
+// a hybrid level's data at its creation: the root level from the user's functions, a
+//  refined level from its coarser level (B divergence free, E, the particles
 //  split), and their moments; a level moved to other ranks (rebalance) keeps its moments
 // level: the simulator's services for one level: doc/solver/hybrid/level_steps.md
 
@@ -45,8 +45,7 @@ void initialize_root(HybridModel<opts>& model, auto&& level, auto const& sim)
     level.copy(damn::amr::fill_ghosts, "EM_B");
     // a node on a periodic boundary is initialized twice (at 0 and at L; they differ where the
     //  profile is not periodic): every patch holding it takes the max of its copies, once, after
-    //  the ghost fill (the max runs over whole ghost overlaps), before anything reads B (PHARE's
-    //  fillRootGhosts)
+    //  the ghost fill (the max runs over whole ghost overlaps), before anything reads B
     level.copy(damn::amr::max_borders, "EM_B");
     level.copy(damn::amr::fill_ghosts, "EM_E");
     level.check_set("EM_B", "root initialization"); // E: from Ohm's law below

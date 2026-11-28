@@ -41,7 +41,7 @@ def cpp_lib(sim):
     """the plamn simulator module of sim's build permutation, as pyphare.cpp.cpp_lib"""
     import importlib
 
-    # plamn's own id, not pyphare.cpp.simulator_id: PHARE master's has no layout/allocator,
+    # plamn's own id, not pyphare.cpp.simulator_id: pyphare master's has no layout/allocator,
     # tiling_gpu's does. Without them in the simulation, plamn's defaults
     layout = getattr(sim, "model_layout", None) or "AoSMapped"
     allocator = getattr(sim, "allocator", None) or "CPU"
@@ -272,10 +272,10 @@ def _patch_tag_boxes():
 
 
 def _patch_layout_for():
-    """pharesee's hierarchy_from_sim builds hybrid layouts with PHARE's ghost widths (field 2, 4, 4
+    """pharesee's hierarchy_from_sim builds hybrid layouts with fixed ghost widths (field 2, 4, 4
     and particles 1, 2, 2 for interp 1, 2, 3, in HybridGridLayoutFor): use the width each patch
     data carries (nGhosts, from plamn's allowed particle cell jump) instead. Both the tiling_gpu
-    (no model argument) and PHARE master signatures."""
+    (no model argument) and pyphare master signatures."""
     try:  # pharesee needs matplotlib, not every plamn user has it
         from pyphare.pharesee.hierarchy import fromsim
     except ImportError:
@@ -336,7 +336,7 @@ def _patch_enum_int():
 
 
 def _patch_live_simulators():
-    """plamn's simulators hold no process wide state (PHARE's SAMRAI statics): several may be
+    """plamn's simulators hold no process wide state (no SAMRAI statics): several may be
     live side by side (the restart tests run one from another's restart, both advanced). A
     pyphare that allows one live simulator per process (wrangler: _replace_live_simulator raises
     while the previous one has not reached its final time, else resets it) keeps its record of
@@ -356,7 +356,7 @@ def _patch_live_simulators():
     simulator.Simulator._replace_live_simulator = replace_live_simulator
 
 
-# plamn's Simulation keywords that PHARE master's pyphare does not know: the module's particle
+# plamn's Simulation keywords that pyphare master does not know: the module's particle
 #  layout and allocator (cpp_lib reads them; default AoSMapped, CPU)
 PLAMN_KEYWORDS = ("model_layout", "allocator")
 

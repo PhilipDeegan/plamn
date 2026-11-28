@@ -1,7 +1,7 @@
 #ifndef PLAMN_SOLVER_HYBRID_ADVANCE_HPP
 #define PLAMN_SOLVER_HYBRID_ADVANCE_HPP
 
-// a hybrid level's step (PHARE's SolverPPC), and the steps that initialize and regrid a level
+// a hybrid level's step, and the steps that initialize and regrid a level
 //  reuses: doc/solver/hybrid/advance.md
 
 #include "plamn/core/data/field/level_fields.hpp"
@@ -249,7 +249,7 @@ void ampere_ohm(HybridModel<opts> const& model, auto&& level, ClosureStage const
 namespace plamn::solver::hybrid::detail
 {
 // the level ghost particles split from the coarser level at both ends of its step, weighted
-// linearly in time (PHARE's fillIonPopMomentGhosts): each held by one patch, deposited once,
+// linearly in time: each held by one patch, deposited once,
 // before the border sums complete every patch's copy
 template<auto opts>
 void deposit_level_ghosts(auto& level, double const t)

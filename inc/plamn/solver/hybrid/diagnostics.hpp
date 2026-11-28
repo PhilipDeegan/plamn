@@ -1,7 +1,7 @@
 #ifndef PLAMN_SOLVER_HYBRID_DIAGNOSTICS_HPP
 #define PLAMN_SOLVER_HYBRID_DIAGNOSTICS_HPP
 
-// what the diagnostics write of a hybrid level: its quantities' fields on a patch (PHARE's names:
+// what the diagnostics write of a hybrid level: its quantities' fields on a patch (pyphare's names:
 //  /EM_B, /ions/pop/<name>/density, ...) and its particle quantities' populations
 
 #include "damn/core/def.hpp"

@@ -1,12 +1,11 @@
 # An MHD level and its coarser level
 
-`inc/plamn/solver/mhd/level_steps.hpp` holds an MHD level's steps with its coarser level, as
-PHARE's `SolverMHD` and `MultiPhysicsIntegrator` for an MHD pair. PHARE's `MHDMessenger`
-synchronize does nothing there: the reflux is all of it.
+`inc/plamn/solver/mhd/level_steps.hpp` holds an MHD level's steps with its coarser level. The
+synchronization is the reflux only.
 
 | Step | What |
 |---|---|
-| `first_step(model, level)` | at the level's first substep in the coarser level's step: its flux sums zeroed (PHARE's `resetFluxSum`) |
+| `first_step(model, level)` | at the level's first substep in the coarser level's step: its flux sums zeroed |
 | `accumulate_flux_sum(model, level, c)` | flux sums `+= c *` the step's fluxes and E (the scheme's Butcher sums), at every point (`accumulateFluxSum`) |
 | `synchronize(model, level, t)` | the reflux, below |
 

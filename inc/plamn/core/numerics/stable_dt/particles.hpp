@@ -1,8 +1,8 @@
 #ifndef PLAMN_CORE_NUMERICS_STABLE_DT_PARTICLES_HPP
 #define PLAMN_CORE_NUMERICS_STABLE_DT_PARTICLES_HPP
 
-// the hybrid stable time step's particle bound (plamn's: PHARE's hybrid has only the whistler
-//  one): no domain particle moves more than cfl_particles of the allowed cell jump in a step,
+// the hybrid stable time step's particle bound, beside the whistler one: no
+//  domain particle moves more than cfl_particles of the allowed cell jump in a step,
 //
 //   dt <= cfl_particles * cell_jump * dx_d / max |v_d|    over the array's particles, per direction
 //

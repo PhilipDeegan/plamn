@@ -1,7 +1,7 @@
 #ifndef PLAMN_CORE_NUMERICS_STABLE_DT_MHD_HPP
 #define PLAMN_CORE_NUMERICS_STABLE_DT_MHD_HPP
 
-// the MHD stable time step (PHARE's SolverMHD::computeStableDt): on every cell of the mass
+// the MHD stable time step: on every cell of the mass
 //  density, B projected onto it,
 //
 //   dt <= cfl_wave / sum_d (|v_d| + cf_d + cw_d) / dx_d   cf_d the fast magnetosonic speed along d,

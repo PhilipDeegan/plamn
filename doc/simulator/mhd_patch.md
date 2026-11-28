@@ -9,20 +9,19 @@ expect.
 | Member | What |
 |---|---|
 | `states` | the scheme's states: `states[0]` the advanced one, the others its stages; their number is the scheme's, a run time choice |
-| `old` | `states[0]` at the start of the level's step (`prepare_step`): a finer level's ghosts interpolate in time between it and `states[0]` (PHARE's `MHDMessenger` `rhoOld_`...), and a reflux redoes the step from it (PHARE's `SolverMHD` `stateOld_`) |
+| `old` | `states[0]` at the start of the level's step (`prepare_step`): a finer level's ghosts interpolate in time between it and `states[0]`, and a reflux redoes the step from it |
 | `E` | the constrained transport electric field of the last flux computation |
 | `fluxes` | per face direction, of the last flux computation |
 | `ct` | the upwind constrained transport inputs of those fluxes |
 | `butcher`, `butcherE` | the scheme's weighted sums of the fluxes and E: the step's fluxes and E, what a reflux replaces under a finer level |
-| `J`, `E_diss` | resistive MHD: `J = curl B` and the dissipative E (`eta J`), added to the constrained transport E and to the face fluxes (PHARE's `DissipativeElectricField`); Hall MHD needs `J` too |
-| `flux_sum`, `flux_sum_E` | the step fluxes and E summed over the level's substeps in its coarser level's step (PHARE's `SolverMHD` `fluxSum_`, `fluxSumE_`): what its reflux coarsens |
+| `J`, `E_diss` | resistive MHD: `J = curl B` and the dissipative E (`eta J`), added to the constrained transport E and to the face fluxes; Hall MHD needs `J` too |
+| `flux_sum`, `flux_sum_E` | the step fluxes and E summed over the level's substeps in its coarser level's step: what its reflux coarsens |
 | `coupling` | for a hybrid level over this one, in builds with both models: `E_old`, E at the step's start (`keep_E_old`); the hybrid level's E ghosts interpolate in time between it and `E`. Only on the finest MHD level (`make_under_hybrid`) |
 
 ## Storage
 
 The grids are named as their views. The states are not filled (NaN in debug builds): the
-simulator writes them before reading them. The other grids start at 0, as PHARE's fields do,
-which matters in two places:
+simulator writes them before reading them. The other grids start at 0, which matters in two places:
 
 - E's component without an equation (`E_x` in 1D) stays 0;
 - a direction a lower dimension does not have has 0 fluxes.
@@ -32,8 +31,8 @@ patches behind `unique_ptr`.
 
 ## Resources
 
-`for_each_resource` names what damn's schedules may move. The advanced state uses PHARE's MHD
-names.
+`for_each_resource` names what damn's schedules may move. The advanced state uses the names of
+pyphare's MHD quantities.
 
 | Resources | What |
 |---|---|

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # what CI runs (build_nix.yml, format.yml), locally: before marking a PR ready, instead of
 # spending Actions minutes. From the repository root; JOBS=8 compile jobs by default;
-# PYPHARE: the PHARE checkout pyphare comes from (default /mkn/git/phare/wrangler: CI's).
+# PYPHARE: the checkout pyphare is imported from (default /mkn/git/phare/wrangler: CI's).
 #   res/ci/local.sh [base, default origin/next if it exists, else origin/master]
 set -euo pipefail
 BASE=${1:-$(git rev-parse -q --verify origin/next >/dev/null && echo origin/next || echo origin/master)}
@@ -11,8 +11,8 @@ mb=$(git merge-base "$BASE" HEAD)
 
 step() { echo; echo "== $*"; }
 
-# warnings as CI's: -W 9 (-Wall -Wextra -pedantic -Werror with gcc), PHARE's devMode exceptions
-#  (unused parameters, variables), and strict aliasing a warning only (nanobind's sources)
+# warnings as CI's: -W 9 (-Wall -Wextra -pedantic -Werror with gcc), unused parameters and
+#  variables allowed, and strict aliasing a warning only (nanobind's sources)
 W=(-W 9 -a "-Wno-unused-parameter -Wno-unused-variable -Wno-error=strict-aliasing")
 
 # every build output (damn's too) from this run: no library left from an older build, as a .so an

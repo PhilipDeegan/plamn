@@ -1,8 +1,8 @@
 #ifndef PLAMN_CORE_BOUNDARY_BOUNDARY_DEFS_HPP
 #define PLAMN_CORE_BOUNDARY_BOUNDARY_DEFS_HPP
 
-// physical boundaries of the domain (PHARE's core/boundary/boundary_defs.hpp): their kinds, as
-//  pyphare writes them (simulation/grid/domain_boundaries/<location>/type), and their locations:
+// physical boundaries of the domain: their kinds, as pyphare writes them
+//  (simulation/grid/domain_boundaries/<location>/type), and their locations:
 //  codimension 1 (a face in 3D, an edge in 2D, an end in 1D), 2 (an edge in 3D, a corner in
 //  2D) and 3 (a corner in 3D), an edge or corner adjacent to the faces it joins
 

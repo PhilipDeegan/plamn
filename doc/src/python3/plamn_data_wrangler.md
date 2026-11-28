@@ -1,7 +1,7 @@
 # Live data from python: the DataWrangler
 
 `src/python3/plamn_data_wrangler.hpp` gives python live, zero-copy access to a running
-simulator's data, with the API of PHARE's live `DataWrangler`, so that pyphare's
+simulator's data, with the API of pyphare's live `DataWrangler`, so that pyphare's
 `hierarchy_from_sim` works unchanged.
 
 ## API

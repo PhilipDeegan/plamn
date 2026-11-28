@@ -8,7 +8,7 @@
 #include <array>
 
 // MHD state at one point (a face's left / right state, a flux): values, not views, so a face
-//  functor can return them (PHARE's godunov_utils PerIndex / PerIndexVector)
+//  functor can return them
 namespace plamn::core
 {
 

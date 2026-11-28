@@ -1,14 +1,13 @@
 #ifndef PLAMN_CORE_NUMERICS_GODUNOV_HLLD_HPP
 #define PLAMN_CORE_NUMERICS_GODUNOV_HLLD_HPP
 
-// HLLD flux at one face (Miyoshi & Kusano 2005), PHARE's core/numerics/riemann_solvers/hlld.hpp
-//  (its operation order: the same results), ideal MHD (Hall: not yet): the outer fast speeds SL,
-//  SR (as HLL), the contact SM, the rotational SL*, SR*; the four intermediate states L*, L**,
-//  R**, R*, and the flux of the region the face is in. Where the rotational waves (nearly)
-//  coincide with the outer ones, PHARE's HLLC fallback (as idefix / PLUTO): the magnetic field of
-//  the star states from the HLL average, SL* = SR* = SM for the flux. The upwind constrained
-//  transport inputs (Mignone & Del Zanna 2021) from the speeds before that fallback; as HLL's
-//  where it applies.
+// HLLD flux at one face (Miyoshi & Kusano 2005) (a fixed operation order: bit equal
+//  comparisons, etc/compare/phare), ideal MHD (Hall: not yet): the outer fast speeds SL, SR (as
+//  HLL), the contact SM, the rotational SL*, SR*; the four intermediate states L*, L**, R**, R*,
+//  and the flux of the region the face is in. Where the rotational waves (nearly) coincide with the
+//  outer ones, an HLLC fallback (as idefix / PLUTO): the magnetic field of the star states from the
+//  HLL average, SL* = SR* = SM for the flux. The upwind constrained transport inputs (Mignone & Del
+//  Zanna 2021) from the speeds before that fallback; as HLL's where it applies.
 
 #include "damn/core/def.hpp"
 #include "damn/core/def/damn_config.hpp"
@@ -82,7 +81,7 @@ MKN_KUL_FN_SIG_RET GodunovFaceResult hlld(double const gamma, MHDPrimitive const
         }
         for (std::size_t c = 0; c < 3; ++c)
             r.vt[c] = (sr * uL.V[c] - sl * uR.V[c]) * inv;
-        if (j) // PHARE's riemann_averaging with the clipped speeds
+        if (j) // the Riemann averages with the clipped speeds
         {
             for (std::size_t c = 0; c < 3; ++c)
                 r.jt[c] = (sr * j->L[c] - sl * j->R[c]) * inv;

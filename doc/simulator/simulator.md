@@ -1,7 +1,7 @@
 # Simulator
 
-`inc/plamn/simulator/simulator.hpp`: `plamn::Simulator` is PHARE's simulator shell (dict
-parsing, times, `initialize` / `advance`) over damn. Its definitions are split by concern into
+`inc/plamn/simulator/simulator.hpp`: `plamn::Simulator` is the simulator shell pyphare drives
+(dict parsing, times, `initialize` / `advance`) over damn. Its definitions are split by concern into
 `simulator_*.hpp`, included at the end of `simulator.hpp`.
 
 ## Models and levels
@@ -22,7 +22,7 @@ coarser level, the level ghost cells) and the coarser step it subcycles in.
 
 ## Initialize
 
-`initialize()` follows PHARE's `HybridLevelInitializer`:
+`initialize()` makes the levels in order:
 
 1. the root level from the user's functions;
 2. each finer level refined from the coarser one: fields, B made divergence free, particles
@@ -31,13 +31,10 @@ coarser level, the level ghost cells) and the coarser step it subcycles in.
 ## Advance
 
 `advance()` is `damn::amr::advance` (time refinement, `doc/amr/time_refinement.md` in damn). Each
-level takes its model's step, `solver::advance` (hybrid: PHARE's `SolverPPC`,
+level takes its model's step, `solver::advance` (hybrid:
 `solver/hybrid/advance.hpp`). A finer level takes `ratio^2` steps per coarser one, since whistler
-waves need `dt ~ dx^2` (PHARE's `getMaxFinerLevelDt`); `PLAMN_TIME_RATIO` overrides that for
+waves need `dt ~ dx^2`; `PLAMN_TIME_RATIO` overrides that for
 experiments.
-
-The coupling between levels follows PHARE's `MultiPhysicsIntegrator` and
-`HybridHybridMessengerStrategy`.
 
 ### Level ghosts
 
@@ -64,20 +61,20 @@ When levels are regridded, by `simulation/AMR/regrid_mode` or `PLAMN_REGRID_MODE
 | Mode | Tagging | Refinement boxes |
 |---|---|---|
 | `normal` (plamn's) | every `regrid_interval_` level 0 steps, a level only where its boxes changed | never |
-| `high` (PHARE's) | re-clustered and re-made even with unchanged boxes | re-made with the same boxes, during level 0's first step only |
+| `high` (SAMRAI's) | re-clustered and re-made even with unchanged boxes | re-made with the same boxes, during level 0's first step only |
 
 `high` follows SAMRAI's `TimeRefinementIntegrator` and `GriddingAlgorithm`: after every
 `regrid_interval_`-th substep of a level within its coarser level's step, its finer levels are
 re-made, unless the coarser level regrids then too. SAMRAI marks the user's refinement boxes
 changed for its first cycle, hence the first step regrids.
 
-`high` is for comparisons with PHARE. There a regrid is not a no-op: the level ghost fields are
+`high` is for `etc/compare/phare`. There a regrid is not a no-op: the level ghost fields are
 refilled after the synchronization.
 
 ## Load balancing: partitions
 
-How a level's patches get their ranks (`level_of_`). These are plamn's; the PHARE comparisons
-keep `levels`.
+How a level's patches get their ranks (`level_of_`). The `etc/compare/phare` comparisons keep
+`levels`.
 
 | Partition | Ranks |
 |---|---|
@@ -126,7 +123,7 @@ lease is taken first, so where a name is both read and written, the write wins.
 
 ## Rank logs and timing
 
-`std::cout` goes to a file per rank as in PHARE's simulator, chosen by `PHARE_LOG`:
+`std::cout` goes to a file per rank, chosen by `PHARE_LOG`:
 
 | `PHARE_LOG` | Output |
 |---|---|

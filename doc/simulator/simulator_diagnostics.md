@@ -6,17 +6,17 @@ one of two formats:
 
 | Format | What |
 |---|---|
-| phareh5 | PHARE's default (`diagnostic/phareh5.hpp`): fields in their own centering, ghosts included, and particles |
-| pharevtkhdf | a step per dump, every level up to `max_nbr_levels`, an empty entry while a level is not there; no particles (nor in PHARE) |
+| phareh5 | pharein's default (`diagnostic/phareh5.hpp`): fields in their own centering, ghosts included, and particles |
+| pharevtkhdf | a step per dump, every level up to `max_nbr_levels`, an empty entry while a level is not there; no particles |
 
-PHARE's `flush_every` applies to both: a file is closed every `flush_every` dumps (0: never) and
+`flush_every` applies to both: a file is closed every `flush_every` dumps (0: never) and
 reopened at the next.
 
 Unknown quantities are an error at setup, not at a dump.
 
 ## phareh5
 
-As PHARE's `H5Writer`, per level:
+Per level:
 
 1. every rank creates every patch's datasets (`create_data_set_per_mpi`): creating is
    collective, so a rank with fewer patches passes empty ones;

@@ -8,9 +8,8 @@
 
 #include <array>
 
-// MHD primitive (rho, V, B, P) <-> conservative (rho, rhoV, B, Etot) variables, PHARE's
-//  core/numerics/primite_conservative_converter: per value functions, and per cell functors on
-//  the cell centred grid (B, face centred, projected there)
+// MHD primitive (rho, V, B, P) <-> conservative (rho, rhoV, B, Etot) variables: per value
+//  functions, and per cell functors on the cell centred grid (B, face centred, projected there)
 namespace plamn::core
 {
 

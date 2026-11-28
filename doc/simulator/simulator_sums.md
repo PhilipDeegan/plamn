@@ -18,8 +18,8 @@ One line each:
 SUMS L<ln> t=<t> <stage> <name> dom <sum> gh <sum>
 ```
 
-The hybrid model's resources carry PHARE's names (`Bx`, `PredBx`, `AvgEx`, `rhoC`, ...), as the
-PHARE debug branch's `SolverPPC::debug_sums_` prints them, so the two runs' lines diff.
+The hybrid model's resources carry the names (`Bx`, `PredBx`, `AvgEx`, `rhoC`, ...) the compared
+code's debug sums print, so the two runs' lines diff.
 
 The sums are bit equal only on one rank, where they run in node order. With more ranks, each rank
 prints its own (`R<rank>`).

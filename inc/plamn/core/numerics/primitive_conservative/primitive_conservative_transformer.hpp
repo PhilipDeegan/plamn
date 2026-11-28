@@ -30,7 +30,7 @@ struct ConvertTile
 
 
 // to_conservative: rho, V, B, P -> rhoV, Etot; to_primitive: rho, rhoV, B, Etot -> V, P
-//  per cell (ToConservative / ToPrimitive) on the ghost box of rho, as PHARE's converters
+//  per cell (ToConservative / ToPrimitive) on the ghost box of rho
 //  untiled: the patch's fields, or one tile's views (on_tile)
 //  tiled:   every tile of the patch, CPU tile by tile, GPU one launch with a block per tile
 class PrimitiveConservativeTransformer

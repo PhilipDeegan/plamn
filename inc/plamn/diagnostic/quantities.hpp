@@ -1,8 +1,7 @@
 #ifndef PLAMN_DIAGNOSTIC_QUANTITIES_HPP
 #define PLAMN_DIAGNOSTIC_QUANTITIES_HPP
 
-// a diagnostic quantity's fields on a patch (PHARE's diagnostics' accessors), whatever the
-// format; components in file order
+// a diagnostic quantity's fields on a patch, whatever the format; components in file order
 
 #include "damn/core/def.hpp"
 
@@ -46,11 +45,10 @@ hybrid_quantities(std::vector<std::string> const& population_names)
     return q;
 }
 
-// quantity -> its grids on an MHD patch (simulator::MHDPatch), its advanced state's (PHARE's
-//  MHDDiagnosticWriter /mhd/..., B and E as the electromag's). V and P: as the patch has them, the
-//  writer converts the conservative state to them first (PHARE's compute). The quantities a
-//  hybrid level has too, under its names, so one diagnostic spans a coupled hierarchy: B, E, the
-//  ions' mass density (rho) and bulk velocity (V)
+// quantity -> its grids on an MHD patch (simulator::MHDPatch), its advanced state's (/mhd/...,
+//  B and E as the electromag's). V and P: as the patch has them, the writer converts the
+//  conservative state to them first. The quantities a hybrid level has too, under its names, so one
+//  diagnostic spans a coupled hierarchy: B, E, the ions' mass density (rho) and bulk velocity (V)
 template<typename Patch>
 MKN_KUL_FN_SIG_RET std::map<std::string, Accessor<Patch>> mhd_quantities()
 {

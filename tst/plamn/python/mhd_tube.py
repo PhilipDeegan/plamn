@@ -1,5 +1,5 @@
-"""a periodic 1D MHD shock tube (PHARE's tests/functional/mhd_shock states, smaller): the input
-of a watched run (python3 -m plamn ... mhd_tube) and of tests"""
+"""a periodic 1D MHD shock tube (Brio-Wu like states): the input of a watched run
+(python3 -m plamn ... mhd_tube) and of tests"""
 
 import numpy as np
 

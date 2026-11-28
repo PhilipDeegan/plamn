@@ -19,7 +19,7 @@
 
 namespace plamn::solver::hybrid
 {
-// the momentum tensor (PHARE's FluidDiagnosticWriter), of all populations deposited into one and
+// the momentum tensor, of all populations deposited into one and
 //  of each (with its mass): domain particles and the level ghosts at the end of the coarser step
 //  (levelGhostParticlesOld), each held by one patch, so deposited before the border sum completes
 //  every patch's copy (as the moments). resource(key, names): the grids a border sum adds up

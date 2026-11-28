@@ -1,7 +1,7 @@
 # Decomposition log
 
 `inc/plamn/simulator/simulator_decomposition.hpp` records what the running hierarchy's
-decomposition costs, for load balancing work. It is not a PHARE comparison.
+decomposition costs, for load balancing work.
 
 `simulation/AMR/decomposition/log` (or `PLAMN_DECOMPOSITION`) names a file, truncated at setup,
 to which rank 0 writes one JSON line per event.
@@ -35,7 +35,7 @@ per level:
 ### metrics
 
 Weight per rank, imbalance, and the cells exchanged by Distance within `reach` (the field ghost
-width, as PHARE's run summary):
+width):
 
 - `ghost_cells`: same level, patch ghosts;
 - `coarse_cells`: the coarser cells under each grown patch;

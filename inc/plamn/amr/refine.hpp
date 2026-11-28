@@ -1,7 +1,7 @@
 #ifndef PLAMN_AMR_REFINE_HPP
 #define PLAMN_AMR_REFINE_HPP
 
-// refine operators (ratio 2, as PHARE's) over plamn's resources: doc/amr/refine.md
+// refine operators (ratio 2) over plamn's resources: doc/amr/refine.md
 
 #include "damn/core/def.hpp"
 #include "damn/core/geometry/box.hpp"

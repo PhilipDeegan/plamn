@@ -1,8 +1,8 @@
 #ifndef PLAMN_SOLVER_MHD_LEVEL_STEPS_HPP
 #define PLAMN_SOLVER_MHD_LEVEL_STEPS_HPP
 
-// an MHD level's steps with its coarser level (PHARE's SolverMHD and MultiPhysicsIntegrator for
-//  an MHD pair): the reflux is all of the synchronization: doc/solver/mhd/level_steps.md
+// an MHD level's steps with its coarser level: the reflux is all of the synchronization:
+//  doc/solver/mhd/level_steps.md
 
 #include "damn/amr/copy.hpp"
 #include "damn/amr/level_map.hpp"
@@ -56,7 +56,7 @@ namespace detail
         void fill_electric_ghosts(double const t) { level.fill_electric_ghosts(t); }
     };
 
-    // dst += coef src, every point (PHARE's PlusEqualsProduct)
+    // dst += coef src, every point
     void axpy(auto& dst, auto const& src, double const coef)
     {
         auto* d       = dst.data();

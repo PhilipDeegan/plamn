@@ -2,7 +2,6 @@ name: GPU
 
 # CUDA and ROCm builds/tests on simulated GPUs (https://github.com/pantheongpu/pantheonsim), on
 #  GitHub's standard runners. Slow: run on merges to master and on demand, not on pull requests.
-#  Modelled on PHARE's tiling_gpu build.yml (cuda fast / rocm jobs).
 #  In ghcr.io/0xz/hpc-containers' cuda / rocm images (latest; pin to :<flavor>-<sha> if one breaks): the toolkit, PantheonSim (vgpu, its
 #  shared cudart shim), Open MPI built for the GPU and parallel HDF5 (subfiling) in /opt
 #  damn is private: checked out where mkn looks for it (tpp/damn) with a read-only deploy key

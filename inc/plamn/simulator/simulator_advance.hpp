@@ -184,7 +184,7 @@ double Simulator<opts>::advance()
         ss << std::setprecision(17) << "plamn: zero-length step on level 0 at t = " << currentTime_;
         throw std::runtime_error(ss.str());
     }
-    if (!stepping_) // the substeps' split (SAMRAI's, as with PHARE's integrator: grow_dt 1e3)
+    if (!stepping_) // the substeps' split (SAMRAI's, grow_dt 1e3)
     {
         stepping_.emplace(damn::amr::TimeRefinementOptions{
             .time_ratio = time_ratio(), .regrid_interval = regrid_interval_, .grow_dt = 1e3});
@@ -295,9 +295,9 @@ void Simulator<opts>::prepare_step_(int const ln, double const t)
         if constexpr (solver::is_hybrid_model_v<std::remove_cvref_t<decltype(model)>>)
             solver::hybrid::prepare_step(model, level_services_(l));
         else if (ln + 1 < hierarchy_.max_levels)
-            // the state at the step's start (PHARE's MHDMessenger prepareStep), every point: the
-            //  reflux redoes the step from it, so only a level that can have a finer one (one
-            //  made by a regrid after this is still refluxed at the step's end)
+        // the state at the step's start, every point: the
+        //  reflux redoes the step from it, so only a level that can have a finer one (one
+        //  made by a regrid after this is still refluxed at the step's end)
         {
             MHDLevel level{*this, l};
             core::level_copy<opts.alloc_mode>(
@@ -356,7 +356,7 @@ void Simulator<opts>::last_step_(int const ln)
     auto const l = static_cast<std::size_t>(ln);
     step_model_(
         l, [&](auto& model) { solver::hybrid::last_step(model, level_services_(l)); },
-        [](auto&, auto) {}); // MHD: nothing (PHARE's MHDMessenger lastStep)
+        [](auto&, auto) {}); // MHD: nothing
 }
 
 template<auto opts>

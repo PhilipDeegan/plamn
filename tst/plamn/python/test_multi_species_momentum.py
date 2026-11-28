@@ -1,5 +1,5 @@
-"""PHARE's tests/simulator/test_multi_species_momentum.py on plamn, level 0 only (plamn has one
-level): read live through the DataWrangler, no diagnostics
+"""multi species momentum conservation on plamn, level 0 only (plamn has one level):
+read live through the DataWrangler, no diagnostics
 
 Two ion species of different q/m drifting relative to each other in a uniform plasma, with a
 uniform magnetic field and no current. With J = 0 the total force on the ions is

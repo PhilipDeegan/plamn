@@ -1,8 +1,7 @@
 # Field boundary conditions
 
 `inc/plamn/core/numerics/boundary_condition/field_boundary_condition.hpp` fills a field's ghosts
-past a physical boundary of the domain from its domain values, as PHARE's
-`core/numerics/boundary_condition` does.
+past a physical boundary of the domain from its domain values.
 
 A condition is applied on a box of ghost cells (local index space) beyond the boundary at
 `location`. Each field is filled over the nodes of its own centering there.

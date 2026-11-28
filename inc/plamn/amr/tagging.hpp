@@ -1,7 +1,7 @@
 #ifndef PLAMN_AMR_TAGGING_HPP
 #define PLAMN_AMR_TAGGING_HPP
 
-// the cells of a level to refine, from its fields, after PHARE's tagging: doc/amr/tagging.md
+// the cells of a level to refine, from its fields: doc/amr/tagging.md
 
 #include "damn/core/geometry/box_spans.hpp"
 
@@ -190,7 +190,7 @@ MKN_KUL_FN_SIG_RET inline std::vector<std::string> tagged_components(std::string
 }
 
 // the input's simulation/AMR/refinement/tagging node, the method of a model's levels by
-//  method_key (PHARE's TaggerFactory: hybrid_method, mhd_method)
+//  method_key (hybrid_method, mhd_method)
 MKN_KUL_FN_SIG_RET inline Tagging tagging_from(auto const& tagging,
                                                std::string const& method_key = "hybrid_method")
 {

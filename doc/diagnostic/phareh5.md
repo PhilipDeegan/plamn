@@ -1,7 +1,7 @@
 # phareh5
 
-`inc/plamn/diagnostic/phareh5.hpp` holds the pieces of the phareh5 diagnostics, PHARE's default
-format (PHARE's `diagnostic/detail/h5writer.hpp` and `types/`). `Simulator::dump_phareh5_`
+`inc/plamn/diagnostic/phareh5.hpp` holds the pieces of the phareh5 diagnostics, pharein's default
+format, as pharesee reads it. `Simulator::dump_phareh5_`
 (`simulator_diagnostics.hpp`) writes them, a file per quantity:
 `/ions/pop/protons/flux` goes to `ions_pop_protons_flux.h5`.
 
@@ -13,20 +13,21 @@ format (PHARE's `diagnostic/detail/h5writer.hpp` and `types/`). `Simulator::dump
 | `/py_attrs` | the diagnostic's attributes: pyphare's git hash, versions, the serialized simulation |
 | `/t/<time>/pl<level>/p<rank>#<id>` | a patch; attributes `lower`, `upper` (its cells), `nbrCells`, `origin`, `mpi_rank` |
 
-The time is written with 10 decimals, as PHARE's `core::to_string_with_precision(t, 10)`.
+The time is written fixed, with 10 decimals.
 
 ### Fields
 
 A dataset per component: `<name>_<component>` for vectors (`x y z`), tensors (`xx xy xz yy yz
 zz`), B and E; `<name>` for scalars.
 
-Values are on PHARE's ghost box of the patch, in the quantity's own (Yee) centering, C order (x
-slowest), with a `ghosts` attribute. The ghost widths are PHARE master's per interpolation order
-(`core/models/options/hybrid_options.hpp`): what its files hold, whatever plamn's own widths.
+Values are on the patch's ghost box, in the quantity's own (Yee) centering, C order (x slowest),
+with a `ghosts` attribute. The ghost widths are the format's per interpolation order (those of
+jump 1, [ghost widths](../core/data/grid/ghost_width_calculator.md)), whatever plamn's own
+widths.
 
 ### Particles
 
-PHARE's `ParticlePacker` keys and shapes, each in memory (row-major) order:
+The datasets, each in memory (row-major) order:
 
 | Dataset | Shape |
 |---|---|
@@ -40,5 +41,5 @@ width.
 
 ## Levels
 
-A dump at a time covers every level, or one only (PHARE's `dump_level`, with
-`fine_dump_lvl_max`): such a time holds that level only.
+A dump at a time covers every level, or one only (`fine_dump_lvl_max`): such a time
+holds that level only.

@@ -42,7 +42,7 @@ TEST(GodunovPoint, linear_reconstruction)
     EXPECT_DOUBLE_EQ(r2, 1.);
 }
 
-// HLL (PHARE's): equal states give the physical flux; a face every wave crosses one way (both
+// HLL: equal states give the physical flux; a face every wave crosses one way (both
 //  speeds of one sign) takes the upwind flux and, the clipped speeds, upwind CT inputs
 TEST(GodunovPoint, hll_consistency_and_upwinding)
 {
@@ -67,14 +67,14 @@ TEST(GodunovPoint, hll_consistency_and_upwinding)
     auto const f = ideal_mhd_flux<0>(gamma_, fast_l);
     EXPECT_EQ(r.F.rho, f.rho);
     EXPECT_EQ(r.F.Etot, f.Etot);
-    EXPECT_DOUBLE_EQ(r.uct_coefs[0], 1.); // sr (1 / sr): to the last bits, as PHARE's
+    EXPECT_DOUBLE_EQ(r.uct_coefs[0], 1.); // sr (1 / sr): to the last bits
     EXPECT_EQ(r.uct_coefs[1], 0.);
     EXPECT_EQ(r.uct_coefs[2], 0.);
     for (std::size_t c = 0; c < 3; ++c)
         EXPECT_DOUBLE_EQ(r.vt[c], fast_l.V[c]);
 }
 
-// HLLD (PHARE's): equal states give the physical flux, also where its HLLC fallback applies
+// HLLD: equal states give the physical flux, also where its HLLC fallback applies
 //  (a strong normal field at low pressure: the rotational waves at the fast ones); a face every
 //  wave crosses one way takes the upwind flux; an isolated contact (only rho jumps) is exact,
 //  the upwind mass flux (HLL smears it)
@@ -115,7 +115,7 @@ TEST(GodunovPoint, hlld_consistency_upwinding_and_contact)
     EXPECT_GT(std::abs(hll<0>(gamma_, cl, cr).F.rho - .5), 1e-3); // HLL diffuses it
 }
 
-// Hall (PHARE's hall_contribution_): no current, the ideal flux; else the ideal plus
+// Hall: no current, the ideal flux; else the ideal plus
 //  (J x B) / rho in the induction flux and (B.J B_n - B.B J_n) / rho in the energy flux. The
 //  Riemann solvers given zero face currents give their ideal results, and average the
 //  currents and rho as they do V (Rusanov: the mean; HLL, HLLD: the clipped speeds' weights)

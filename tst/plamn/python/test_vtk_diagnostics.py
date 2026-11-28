@@ -1,7 +1,7 @@
-"""pharevtkhdf diagnostics, as PHARE's tests/simulator/test_vtk_diagnostics.py: a 2D run with a
+"""pharevtkhdf diagnostics: a 2D run with a
 refinement box (2 levels), EM and fluid diagnostics at t0 and after a step, read back with h5py:
 
-- every file's layout (assert_vtkhdf_layout, PHARE's): per level and step, Steps entries,
+- every file's layout (assert_vtkhdf_layout): per level and step, Steps entries,
   boxes, rows = sum of prod(cells + 1) * X_TIMES, the X_TIMES copies equal, nodes shared by boxes
   of a level agree
 - the values: each rank's patches, converted to primal again here (numpy, from the live views of
@@ -25,7 +25,7 @@ X_TIMES = {1: 4, 2: 2, 3: 1}[ndim]
 cells, dl, timestep = 40, 0.3, 0.001
 populations = {"protons": (1.0, 1.0), "alpha": (4.0, 2.0)}  # name: (mass, charge)
 
-# per component, primal (True) or dual per direction (Yee, PHARE's gridlayout_hybrid_yee)
+# per component, primal (True) or dual per direction (Yee)
 YEE = {
     "B": [(True, False, False), (False, True, False), (False, False, True)],
     "E": [(False, True, True), (True, False, True), (True, True, False)],
@@ -164,7 +164,7 @@ def primal(pd, centering):
 
 
 def assert_vtkhdf_layout(test, path):
-    """PHARE's: every level and step consistent"""
+    """every level and step consistent"""
     import h5py
 
     with h5py.File(path, "r") as f:

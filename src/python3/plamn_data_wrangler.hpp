@@ -1,7 +1,7 @@
 #ifndef PLAMN_PYTHON3_PLAMN_DATA_WRANGLER_HPP
 #define PLAMN_PYTHON3_PLAMN_DATA_WRANGLER_HPP
 
-// live, zero-copy access to a running simulator's data from python, the API of PHARE's live
+// live, zero-copy access to a running simulator's data from python, the API of pyphare's live
 //  DataWrangler (pyphare's hierarchy_from_sim unchanged): doc/src/python3/plamn_data_wrangler.md
 // data and particles are views, by reference: only valid while the simulator and its patches exist
 

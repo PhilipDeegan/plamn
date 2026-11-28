@@ -1,7 +1,7 @@
 #ifndef PLAMN_SIMULATOR_SIMULATOR_HPP
 #define PLAMN_SIMULATOR_SIMULATOR_HPP
 
-// Simulator: PHARE's simulator shell (dict parsing, times, initialize/advance) over damn; the
+// Simulator: pyphare's simulator interface (dict parsing, times, initialize/advance) over damn; the
 // models, levels, initialization and the advance's steps: doc/simulator/simulator.md
 
 #include "damn/amr/clustering.hpp"
@@ -88,7 +88,7 @@ enum class UpdaterMode : std::uint16_t;
 
 namespace plamn
 {
-// std::cout to a file per rank by PHARE_LOG, as PHARE's simulator: doc/simulator/simulator.md
+// std::cout to a file per rank by PHARE_LOG: doc/simulator/simulator.md
 MKN_KUL_FN_SIG_RET inline std::unique_ptr<std::ofstream> rank_log_file()
 {
     auto const* const env  = std::getenv("PHARE_LOG");
@@ -169,7 +169,7 @@ public:
     double advance() override;
     bool dump_restarts(double timestamp, double timestep) override;
     bool dump_diagnostics(double timestamp, double timestep) override;
-    // the files flush_every left open, closed; the next dump reopens them (PHARE's)
+    // the files flush_every left open, closed; the next dump reopens them
     void flush_diagnostics() override
     {
 #if DAMN_HAS_HIGHFIVE
@@ -271,13 +271,13 @@ public:
     };
     MKN_KUL_FN_SIG_RET LevelField level_field(std::string const& name, std::size_t ln = 0);
 
-    // as PHARE's Simulator::summary, on rank 0 ("" elsewhere, collective): per level
+    // on rank 0 ("" elsewhere, collective): per level
     //  lvl:<n> (<patches>,<cells>,<patch ghost cells>,<level ghost cells>) parts(<particles>),
     //  then tot:<particles>; ghost cells within field_ghost_width of a patch, patch ghosts where
     //  a neighbour (or a periodic image) has them
     MKN_KUL_FN_SIG_RET std::string summary();
 
-    // whistler waves need dt ~ dx^2 (PHARE's getMaxFinerLevelDt); PLAMN_TIME_RATIO overrides it
+    // whistler waves need dt ~ dx^2; PLAMN_TIME_RATIO overrides it
     //  for experiments on the fine levels' ghosts' time interpolation
     MKN_KUL_FN_SIG_RET int time_ratio() const
     {
@@ -342,19 +342,19 @@ private:
     //  each kept by its cell's owner
     void spawn_level_ghosts_(std::size_t ln, bool new_ghosts, std::uint64_t salt);
     // MHD state s's level ghosts from the coarser level at t: rho, rhoV, Etot, B refined from the
-    //  coarser level's old and advanced states, linear in time (PHARE's MHDMessenger
-    //  stateGhostsRefiners_), B made divergence free
+    //  coarser level's old and advanced states, linear in time, B made
+    //  divergence free
     void refine_mhd_level_ghosts_(std::size_t ln, std::size_t s, double t);
 
     auto const& computed_for_(std::string const& key) const;
 
     void setup_diagnostics_();
-    // only >= 0: that level only, the others written empty (PHARE's dump_level)
+    // only >= 0: that level only, the others written empty
     void dump_vtkhdf_(diagnostic::Diagnostic& diag, double time, int only = -1);
-    // only >= 0: that level only (PHARE's dump_level: the time holds that level)
+    // only >= 0: that level only (the time holds that level)
     void dump_phareh5_(diagnostic::Diagnostic& diag, double time, int only = -1);
     void dump_(diagnostic::Diagnostic& diag, double time, int only = -1); // the format's
-    // PHARE's fine_dump_lvl_max: at the end of level ln's substeps that are not a level 0
+    // fine_dump_lvl_max: at the end of level ln's substeps that are not a level 0
     //  step's end (the finest after advancing, coarser ones after their synchronization)
     void fine_dump_(std::size_t ln, double time);
     struct Diagnostics
@@ -363,7 +363,7 @@ private:
         std::string dir;
         bool phareh5   = false;    // else pharevtkhdf
         bool overwrite = false;    // pyphare's mode "overwrite": truncated at the first dump only
-        int fine_dump_lvl_max = 0; // PHARE's: levels 1 to it dumped at their substeps, 0: none
+        int fine_dump_lvl_max = 0;        // levels 1 to it dumped at their substeps, 0: none
         std::vector<diagnostic::Diagnostic> list;
 #if DAMN_HAS_HIGHFIVE
         std::map<std::string, std::unique_ptr<damn::hdf5::h5::HighFiveFile>> files; // open ones
@@ -838,12 +838,12 @@ private:
     // a box's load balancing weight: the particles it will hold, plus its cells for the field
     // work. Each rank evaluates its share of the boxes, then they are summed over ranks
     std::vector<double> box_weights_(int ln, std::vector<Box_t> const& boxes);
-    // once running: the particles each box (level ln's cells) holds now, as PHARE's nppc load
-    //  balancing counts them (cells for mode homogeneous). A level being made or regridded: its
+    // once running: the particles each box (level ln's cells) holds now, as nppc load balancing
+    //  counts them (cells for mode homogeneous). A level being made or regridded: its
     //  old particles where it was, the coarser level's under the rest times the split. Each
     //  rank counts its patches', then they are summed over ranks
     std::vector<double> particle_weights_(int ln, std::vector<Box_t> const& boxes);
-    // PHARE's: a rebalance of level 0 (and so of the finer levels) due at this step
+    // a rebalance of level 0 (and so of the finer levels) due at this step
     MKN_KUL_FN_SIG_RET bool should_rebalance_();
     void rebalance_(double t); // level 0 onto new owners, then each finer level
 
@@ -1072,7 +1072,7 @@ private:
     damn::amr::ClusteringOptions<dimension> clustering_;
     std::vector<std::vector<Box_t>> clustered_; // per level: the boxes it was clustered to
     int regrid_interval_ = 2;                   // SAMRAI's for ratio 2 with time refinement
-    // normal: plamn's; high: PHARE's, for comparisons: doc/simulator/simulator.md
+    // normal: plamn's; high: for etc/compare/phare: doc/simulator/simulator.md
     enum class RegridMode : std::uint8_t { normal, high };
     RegridMode regrid_mode_ = RegridMode::normal;
     // refinement="tagging": every level's boxes found from B alone before any particle is made
@@ -1093,7 +1093,7 @@ private:
         std::string mode           = "nppc";
         double tolerance           = 0.05;
         std::size_t next_rebalance = 200, backoff = 2, max_next_rebalance = 1000;
-        // how a level's patches get their ranks, plamn's (PHARE comparisons keep "levels"):
+        // how a level's patches get their ranks, plamn's (etc/compare/phare keeps "levels"):
         //  doc/simulator/simulator.md
         std::string partition = "levels";
         double spill          = -1;
@@ -1106,8 +1106,8 @@ private:
 
 
     std::array<int, dimension> patch_size_{};
-    // per level, without largest_patch_size: a patch is at most the level's domain, as PHARE's
-    //  default (level 0's cells on a refined level cut its boxes in 2^dim per level)
+    // per level, without largest_patch_size: a patch is at most the level's domain
+    //  (level 0's cells on a refined level cut its boxes in 2^dim per level)
     std::vector<std::array<int, dimension>> level_size_;
     // cells per direction of the blocks level 0 is cut on when rebalanced
     static constexpr int rebalance_block = 8;

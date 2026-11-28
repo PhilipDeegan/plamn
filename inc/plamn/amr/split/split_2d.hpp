@@ -1,8 +1,4 @@
 // IWYU pragma: private, include "plamn/amr/split/split.hpp"
-/*
-Splitting reference material can be found @
-  https://github.com/PHAREHUB/PHARE/wiki/SplitPattern
-*/
 
 #ifndef PLAMN_AMR_SPLIT_SPLIT_2D_HPP
 #define PLAMN_AMR_SPLIT_SPLIT_2D_HPP
