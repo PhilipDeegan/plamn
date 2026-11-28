@@ -1,4 +1,4 @@
-"""a small 1D periodic Alfven wave, from PHARE's tests/functional/alfven_wave"""
+"""a small 1D periodic Alfven wave"""
 
 import numpy as np
 

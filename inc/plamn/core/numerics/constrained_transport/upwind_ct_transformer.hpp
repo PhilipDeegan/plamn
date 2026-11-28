@@ -33,7 +33,7 @@ struct UpwindCTTile
 
 
 // E on the edges by upwind constrained transport (UpwindCT), each component with an equation on
-//  its domain box, as PHARE's UpwindConstrainedTransport::operator() (ideal)
+//  its domain box (ideal)
 //  x, y, z: each face direction's vt, aL, aR, dL, dR (GodunovTransformer's outputs)
 //  untiled: the patch's fields, or one tile's views (on_tile)
 //  tiled:   every tile of the patch, CPU tile by tile, GPU one launch with a block per tile

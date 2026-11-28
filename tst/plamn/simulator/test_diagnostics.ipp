@@ -1,11 +1,11 @@
-// pharevtkhdf diagnostics from C++, as PHARE's tests/diagnostic (test-diagnostics.cpp): the
-// simulation is a python script (diagnostics_job.py), run by an embedded interpreter through
-// pyphare and plamn, which fill plamn's Dict; the Simulator is made from that Dict here, dumps,
-// and the files are read back with HighFive and checked against the patches' data
+// pharevtkhdf diagnostics from C++: the simulation is a python script (diagnostics_job.py), run by
+// an embedded interpreter through pyphare and plamn, which fill plamn's Dict; the Simulator is made
+// from that Dict here, dumps, and the files are read back with HighFive and checked against the
+// patches' data
 //
-// a binary per dimension (test_diagnostics_<dim>d.cpp defines PLAMN_TEST_DIM, as PHARE's per
-// dimension binaries keep a compile's memory down); run from the plamn root, on any number of
-// ranks. PYPHARE: the PHARE checkout pyphare comes from (default ~/git/phare/mkn)
+// a binary per dimension (test_diagnostics_<dim>d.cpp defines PLAMN_TEST_DIM: per dimension
+// binaries keep a compile's memory down); run from the plamn root, on any number of ranks. PYPHARE:
+// the checkout pyphare is imported from (default ~/git/phare/mkn)
 //
 // the Dict is handed over by address (plamn's Dict.address()): plamn_etc and this binary are
 // built from the same headers, the Dict is used in place, the interpreter kept alive meanwhile
@@ -368,7 +368,7 @@ plamn_dict = plamn.current_dict().address()
     // the Dict's python functions go with the interpreter (plamn's atexit clear_dict)
     Py_Finalize();
 
-    // a failed run's files kept to look at, as PHARE
+    // a failed run's files kept to look at
     MPI_Barrier(MPI_COMM_WORLD);
     if (result == 0 and rank() == 0)
     {

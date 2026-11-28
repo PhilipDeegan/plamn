@@ -1,5 +1,5 @@
-"""live, zero-copy access to plamn's simulation data through pyphare's hierarchy_from_sim
-(as PHARE's): needs a pyphare with the live DataWrangler
+"""live, zero-copy access to plamn's simulation data through pyphare's hierarchy_from_sim:
+needs a pyphare with the live DataWrangler
 
     PYTHONPATH=.:$PHARE_WRANGLER/pyphare:tst/plamn/python \
         python3 -m phlop.run.test_cases -i tst/plamn/python/test_data_wrangler.py
@@ -147,7 +147,7 @@ PPC_2D = 100
 
 
 def config_2d():
-    """PHARE's tests/simulator populate_simulation(2, 1) model, on one level"""
+    """a 2D, interp 1 hybrid model, on one level"""
     ph.global_vars.sim = None
     ph.clearDict()
     sim = ph.Simulation(
@@ -198,7 +198,7 @@ def config_2d():
 
 @unittest.skipIf(hierarchy_from_sim is None, "pyphare has no live DataWrangler")
 class DataWrangler2DTest(unittest.TestCase):
-    """the checks of PHARE's test_data_wrangler.py test_hybrid (2D, interp 1), on one level"""
+    """hierarchy_from_sim's live data against the simulator's (2D, interp 1), on one level"""
 
     def setUp(self):
         self.simulator = (

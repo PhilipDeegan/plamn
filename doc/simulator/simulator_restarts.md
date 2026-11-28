@@ -25,7 +25,7 @@ starts those afresh from its time.
 
 ## What is stored
 
-Only what the next step needs and cannot rebuild bit for bit, as PHARE's restarts:
+Only what the next step needs and cannot rebuild bit for bit:
 
 - B and E;
 - the populations' moments with their ghosts: a refined level's level ghosts were filled from the

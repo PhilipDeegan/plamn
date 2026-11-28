@@ -19,6 +19,6 @@ levels' data. It is an empty specialization when the build does not enable MHD.
 
 - The time integration scheme is a run time choice; the reconstruction (and its slope limiter)
   and the Riemann solver are the simulation's compile time options.
-- Hall is a build's choice too (as PHARE's, a template flag in its module's name): the input's
+- Hall is a build's choice too (a template flag in its module's name): the input's
   `hall` must match the module's, else it throws (`./mkn.py --mhd --hall true|false`).
-- As PHARE's, hyper resistivity is only allowed alongside the Hall term.
+- Hyper resistivity is only allowed alongside the Hall term.

@@ -1,7 +1,7 @@
 #ifndef PLAMN_SOLVER_STACKS_HPP
 #define PLAMN_SOLVER_STACKS_HPP
 
-// the types of each model a build enables (PHARE's HybridStack / MHDStack): empty when the model
+// the types of each model a build enables: empty when the model
 //  is not, so a build never names a disabled model's types
 
 #include "plamn/simulator/hybrid_patch.hpp"

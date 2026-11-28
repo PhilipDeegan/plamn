@@ -1,7 +1,6 @@
 # Tagging
 
-`inc/plamn/amr/tagging.hpp` picks the cells of a level to refine from its fields, after PHARE's
-tagging.
+`inc/plamn/amr/tagging.hpp` picks the cells of a level to refine from its fields.
 
 1. A quantity (B, or one component of it) is read at cell centres (`cell_centred`): each primal
    direction is averaged over the cell's two nodes.
@@ -15,7 +14,7 @@ either side.
 
 | Criterion | Indicator | Reach |
 |---|---|---|
-| `DefaultCriterion` (PHARE's default), 1D | per component, `\|avg(c-1..c+3) - avg(c-2..c+2)\| / (1 + \|avg(c-2..c+2)\|)`; the L2 norm over the components | 3 |
+| `DefaultCriterion` (`"default"`), 1D | per component, `\|avg(c-1..c+3) - avg(c-2..c+2)\| / (1 + \|avg(c-2..c+2)\|)`; the L2 norm over the components | 3 |
 | `DefaultCriterion`, 2D / 3D | the max over components and directions of `\|F(c+2e) - F(c)\| / (1 + \|F(c+e) - F(c)\|)` | 2 |
 | `LohnerCriterion` | Lohner's estimator, as PLUTO's (Mignone et al. 2012, eq. 50-51) | 1 |
 
@@ -34,7 +33,7 @@ indicator = sqrt(sum_d n^2 / sum_d D^2)
 
 | Key | What |
 |---|---|
-| `<method_key>` | a model's method (`hybrid_method`, `mhd_method`, as PHARE's TaggerFactory): `"default"` (the default) or `"lohner-per-direction"` |
+| `<method_key>` | a model's method (`hybrid_method`, `mhd_method`): `"default"` (the default) or `"lohner-per-direction"` |
 | `nbr_quantities`, `Q<i>/name`, `Q<i>/threshold` | the quantities to tag on: `B`, `Bx`, `By` or `Bz` |
 | `threshold` | without `nbr_quantities`: B at this threshold (default 0.1) |
 | `params/reltol`, `params/abstol` | Lohner's tolerances (default 0.01, 1e-8) |

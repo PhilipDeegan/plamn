@@ -1,8 +1,8 @@
 # MHD to hybrid coupling
 
 `inc/plamn/simulator/coupling.hpp` holds what crosses the model boundary (`AMR/max_mhd_level`)
-from an MHD level to the hybrid level over it. Coupled runs are plamn's own: there is no PHARE
-reference for them.
+from an MHD level to the hybrid level over it. Coupled runs have no `etc/compare/phare`
+reference.
 
 ## Pieces
 

@@ -10,10 +10,9 @@
 #include <cmath>
 #include <cstdlib>
 
-// Rusanov (local Lax-Friedrichs) flux at one face, PHARE's core/numerics/riemann_solvers/
-//  rusanov.hpp and mhd_speeds.hpp, ideal MHD (Hall: not yet). PHARE's solver keeps the upwind
-//  constrained transport inputs (vt, uct_coefs) as members after solve(): here they are returned
-//  with the flux, so every face is independent (tiles, GPU threads)
+// Rusanov (local Lax-Friedrichs) flux at one face, ideal MHD (Hall: not yet). The upwind
+//  constrained transport inputs (vt, uct_coefs) are returned with the flux, not kept in the
+//  solver, so every face is independent (tiles, GPU threads)
 namespace plamn::core
 {
 
@@ -28,7 +27,7 @@ MKN_KUL_FN_SIG_RET inline double fast_magnetosonic(double const gamma, double co
     auto const cA2        = alfven * alfven;
     auto const cAdir2     = alfven_dir * alfven_dir;
     // the discriminant clamped at 0: round off makes it negative (NaN) where the sound speed is
-    //  the Alfven speed along B (PHARE's compute_fast_magnetosonic_)
+    //  the Alfven speed along B
     auto const disc = (c02 + cA2) * (c02 + cA2) - 4.0 * c02 * cAdir2;
     return std::sqrt((c02 + cA2) * 0.5 + std::sqrt(disc > 0. ? disc : 0.) * 0.5);
 }
@@ -43,7 +42,7 @@ struct GodunovFaceResult
     double rhot = 0;                 // Hall: rho's average, for the CT
 };
 
-// Hall: the current reconstructed to the face, left and right (PHARE's jL, jR); a Riemann
+// Hall: the current reconstructed to the face, left and right; a Riemann
 //  solver given them uses the Hall flux (hall_mhd_flux) and averages them (jt, rhot)
 struct FaceCurrents
 {
@@ -81,7 +80,7 @@ MKN_KUL_FN_SIG_RET GodunovFaceResult rusanov(double const gamma, MHDPrimitive co
     }
     r.F.Etot    = flux(fL.Etot, fR.Etot, cL.Etot, cR.Etot);
     r.uct_coefs = {0.5, 0.5, 0.5 * S, 0.5 * S};
-    if (j) // PHARE's riemann_averaging: 0.5 (L + R)
+    if (j) // the Riemann averages: 0.5 (L + R)
     {
         for (std::size_t c = 0; c < 3; ++c)
             r.jt[c] = 0.5 * (j->L[c] + j->R[c]);

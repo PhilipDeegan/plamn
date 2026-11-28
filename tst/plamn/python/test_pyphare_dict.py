@@ -47,7 +47,7 @@ class PyphareDictTest(unittest.TestCase):
         d = self.dict
         if d.has(
             "simulation/model_layout"
-        ):  # tiling_gpu's pyphare writes it, PHARE master's not
+        ):  # tiling_gpu's pyphare writes it, master's not
             self.assertEqual(
                 d.get_int("simulation/model_layout"),
                 plamn.etc.LayoutMode.AoSMapped.value,

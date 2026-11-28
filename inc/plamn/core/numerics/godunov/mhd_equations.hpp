@@ -9,9 +9,8 @@
 #include <cstddef>
 #include <array>
 
-// MHD physical flux of a primitive state along direction dir, PHARE's
-//  core/numerics/MHD_equations: ideal_mhd_flux, and hall_mhd_flux (the Hall term added, with the
-//  current J at the same point)
+// MHD physical flux of a primitive state along direction dir: ideal_mhd_flux, and hall_mhd_flux
+//  (the Hall term added, with the current J at the same point)
 namespace plamn::core
 {
 
@@ -30,7 +29,7 @@ MKN_KUL_FN_SIG_RET constexpr MHDConservative ideal_mhd_flux(double const gamma,
     auto const vn    = V[dir];
     auto const bn    = B[dir];
 
-    // PHARE's expressions term for term (same rounding): its results are the reference
+    // a fixed operation order, term for term: bit equal comparisons (etc/compare/phare)
     MHDConservative F{};
     F.rho = u.rho * vn;
     for (std::size_t c = 0; c < 3; ++c)
@@ -50,8 +49,8 @@ MKN_KUL_FN_SIG_RET constexpr MHDConservative ideal_mhd_flux(double const gamma,
     return F;
 }
 
-// the ideal flux plus the Hall term (PHARE's compute(u, J): hall_contribution_, its operation
-//  order): the induction flux's (J x B) / rho, the energy flux's (B.J B_n - B.B J_n) / rho
+// the ideal flux plus the Hall term (a fixed operation order, as above): the induction flux's
+//  (J x B) / rho, the energy flux's (B.J B_n - B.B J_n) / rho
 template<std::size_t dir>
 MKN_KUL_FN_SIG_RET constexpr MHDConservative
 hall_mhd_flux(double const gamma, MHDPrimitive const& u, std::array<double, 3> const& J) DAMN_ALL

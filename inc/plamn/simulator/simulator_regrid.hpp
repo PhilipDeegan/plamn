@@ -149,7 +149,7 @@ bool Simulator<opts>::should_rebalance_()
 // after a regrid or a rebalance: every level's totals from the finest down to `lowest` (the
 //  coarsest whose finer level may have changed) from its own populations, then coarsened from
 //  the finer level as a synchronization does, then their ghosts: under a finer level the
-//  totals are the finer level's (PHARE's chargeDensitySynchronizers_ after a regrid). The
+//  totals are the finer level's. The
 //  populations' moments are deposits of the particles, moved or split (regrid_hybrid_data_)
 template<auto opts>
 void Simulator<opts>::rebuild_moments_(int const lowest)
@@ -295,11 +295,10 @@ void Simulator<opts>::regrid_(double const t, int const from, bool const always)
 }
 
 // level ln onto new boxes, at t (every level synchronized): its data moved where the old level
-// was (damn::amr::regrid), refined from the coarser level elsewhere, as PHARE's
-// HybridHybridMessengerStrategy::regrid (moments: copied where the old level was, not deposited
-// again, unlike PHARE's); finer levels go, the caller makes them again, unless keep_finer (a
-// rebalance or a tagging regrid: the caller regrids each finer level onto its new boxes after
-// this one, coarser to finer, which also links them to their new coarser level)
+// was (damn::amr::regrid), refined from the coarser level elsewhere (moments: copied
+// where the old level was, not deposited again); finer levels go, the caller makes them again,
+// unless keep_finer (a rebalance or a tagging regrid: the caller regrids each finer level onto its
+// new boxes after this one, coarser to finer, which also links them to their new coarser level)
 template<auto opts>
 void Simulator<opts>::regrid_level_(int const ln, std::vector<Box_t> const& boxes, double const t,
                                     bool const keep_finer, bool const moved)
@@ -451,7 +450,7 @@ void Simulator<opts>::regrid_hybrid_data_(int const ln, auto const& map,
     prepare_step_(ln, t);
 }
 
-// PHARE's MHDMessenger regrid (stateInitRefiners_): the advanced state moved where the old level
+// the advanced state moved where the old level
 //  was, refined from the coarser level elsewhere (B divergence free there), then its ghosts
 template<auto opts>
 void Simulator<opts>::regrid_mhd_data_(int const ln, auto const& map,

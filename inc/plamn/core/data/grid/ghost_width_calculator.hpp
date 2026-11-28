@@ -15,14 +15,14 @@ constexpr inline std::uint32_t roundUpToEven(std::uint32_t n)
 
 
 // most cells a domain particle may move in one advance (two half pushes): a CFL for particles.
-//  1: PHARE master's widths, to compare with PHARE
+//  1: ghost widths 2, 4, 4 (interp orders 1, 2, 3), for etc/compare/phare
 #ifndef PLAMN_PARTICLE_ALLOWED_CELL_JUMP
 #define PLAMN_PARTICLE_ALLOWED_CELL_JUMP 2
 #endif
 inline constexpr std::uint32_t particle_allowed_cell_jump = PLAMN_PARTICLE_ALLOWED_CELL_JUMP;
 
-// |delta| past its cell's start after a half push before the Boris pusher throws: PHARE's 2, or
-//  the allowed cell jump if larger
+// |delta| past its cell's start after a half push before the Boris pusher throws: 2, or the
+//  allowed cell jump if larger
 inline constexpr std::uint32_t particle_half_push_limit
     = particle_allowed_cell_jump > 2 ? particle_allowed_cell_jump : 2;
 
@@ -59,7 +59,7 @@ constexpr std::uint32_t nbrGhostsFromInterpOrder()
 }
 
 static_assert(nbrGhostsFromInterpOrder<1, 1>() == 2 and nbrGhostsFromInterpOrder<2, 1>() == 4
-              and nbrGhostsFromInterpOrder<3, 1>() == 4); // PHARE's widths, jump 1
+              and nbrGhostsFromInterpOrder<3, 1>() == 4); // jump 1
 
 
 // + 1: Ampere's J is only valid on ghost_width - 1 layers; even, as nbrGhostsFromInterpOrder

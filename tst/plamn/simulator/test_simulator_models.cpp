@@ -142,7 +142,7 @@ TEST(SimulatorModels, mhdMassStaysBetweenWalls)
     EXPECT_NEAR(total(), mass, 1e-12 * mass);
 }
 
-// phareh5 files of an MHD level, PHARE's MHD diagnostics' (/mhd/<quantity>, B as /EM_B): per
+// phareh5 files of an MHD level, the layout pharesee reads (/mhd/<quantity>, B as /EM_B): per
 //  patch the field on its ghost box (the domain in the middle), V converted from the
 //  conservative state
 TEST(SimulatorModels, mhdDiagnosticsAsPhare)
@@ -198,7 +198,7 @@ TEST(SimulatorModels, mhdDiagnosticsAsPhare)
 }
 
 // a restart of an MHD level: its conservative state, the run from it as the run that wrote it.
-//  Not bit for bit: the time restarts from the restart's (PHARE's: start + the steps since), so
+//  Not bit for bit: the time restarts from the restart's (start + the steps since), so
 //  the step's t1 - t0 differs from the uninterrupted run's in its last bits
 TEST(SimulatorModels, mhdRestartContinuesTheRun)
 {
@@ -253,7 +253,7 @@ namespace
     }
 } // namespace
 
-// a refined MHD level from the coarser one (PHARE's MHDMessenger initLevel): its state
+// a refined MHD level from the coarser one: its state
 //  refined, each fine cell pair meaning back to its coarse cell (FieldRefiner's dual stencil)
 TEST(SimulatorModels, mhdRefinedLevelFromTheCoarser)
 {
@@ -310,7 +310,7 @@ TEST(SimulatorModels, mhdRefinedLevelAdvanced)
         EXPECT_TRUE(std::isfinite(rho));
 }
 
-// MHD levels from tags (PHARE's default tagger, mhd_method, on the MHD state's B): a B wave
+// MHD levels from tags (the default tagger, mhd_method, on the MHD state's B): a B wave
 //  tags cells, level 1 made from their clusters at initialization, regridded every 2 level 0
 //  steps; level 0 keeps its mass (the reflux)
 TEST(SimulatorModels, mhdTaggedLevels)

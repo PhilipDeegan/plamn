@@ -1,9 +1,9 @@
 #ifndef PLAMN_CORE_NUMERICS_RECONSTRUCTIONS_MP5_HPP
 #define PLAMN_CORE_NUMERICS_RECONSTRUCTIONS_MP5_HPP
 
-// fifth order monotonicity preserving reconstruction (Suresh and Huynh 1997), PHARE's
-//  core/numerics/reconstructions/mp5.hpp (its operation order: the same results): the left and
-//  right states at face i from cells i-3 .. i+2
+// fifth order monotonicity preserving reconstruction (Suresh and Huynh 1997), a fixed
+//  operation order (bit equal comparisons: etc/compare/phare): the left and right states at face i
+//  from cells i-3 .. i+2
 
 #include "damn/core/def.hpp"
 #include "plamn/core/numerics/reconstructions/stencil.hpp"
@@ -15,7 +15,7 @@
 
 namespace plamn::core
 {
-// PHARE's MinModLimiter::limit over any number of values: 0 unless all have one sign, else the
+// the min mod limiter over any number of values: 0 unless all have one sign, else the
 //  one of least magnitude (the first of them)
 template<typename... Rest>
 MKN_KUL_FN_SIG_RET double min_mod(double const first, Rest const... rest)

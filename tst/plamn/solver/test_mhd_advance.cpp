@@ -132,7 +132,7 @@ TEST(MHDModel, fromInput)
     }
 }
 
-// PHARE's ComputeFluxes: hyper resistivity only alongside the Hall term
+// hyper resistivity only alongside the Hall term
 TEST(MHDModel, hyperResistivityNeedsHall)
 {
     auto sim                                      = input(Scheme::TVDRK2, core::BoundaryType::Open);
@@ -143,7 +143,7 @@ TEST(MHDModel, hyperResistivityNeedsHall)
     EXPECT_DOUBLE_EQ(Model_t::from(sim).resistivity, .01);
 }
 
-// Hall is a build's (PHARE's: a template flag): an input asking for it on an ideal build fails
+// Hall is a build's (a template flag): an input asking for it on an ideal build fails
 TEST(MHDModel, hallMustMatchTheBuild)
 {
     auto sim                         = input(Scheme::TVDRK2, core::BoundaryType::Open);

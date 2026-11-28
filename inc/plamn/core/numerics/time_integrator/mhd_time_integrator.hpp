@@ -26,9 +26,9 @@
 #include <concepts>
 #include <iterator>
 
-// MHD time integration on one level in PHARE's operation order, so results can match its own
-//  bit for bit in the same floating point context: doc/core/numerics/time_integrator/
-//  mhd_time_integrator.md
+// MHD time integration on one level in a fixed operation order, for bit equal comparisons
+//  (etc/compare/phare) in the same floating point context:
+//  doc/core/numerics/time_integrator/mhd_time_integrator.md
 namespace plamn::core
 {
 
@@ -68,7 +68,7 @@ namespace detail
         fn(f0.F_Etot, f.F_Etot...);
     }
 
-    // fn(field) for each evolved field of an MHDState, PHARE's RKUtils order
+    // fn(field) for each evolved field of an MHDState
     void for_each_state_field(auto&& fn, auto& s0, auto&... s)
     {
         fn(s0.rho, s.rho...);
@@ -81,15 +81,14 @@ namespace detail
 } // namespace detail
 
 
-// the steps the integrators are made of (PHARE's ComputeFluxes, EulerUsingComputedFlux,
-//  BaseMHDTimestepper's butcher sums, RKUtils), each over the level
+// the steps the integrators are made of (fluxes, Euler updates, butcher sums, RK
+//  blends), each over the level
 template<typename Reconstruction, typename Riemann = RusanovRiemann>
 class MHDSteps
 {
 public:
     // dissipation: the resistivity eta, the hyper resistivity nu and its mode (0, 0: ideal); with
-    //  either, J and the dissipative E (eta J - nu' laplacian J) are the patch's (J, E_diss), as
-    //  PHARE's ComputeFluxes (DissipativeElectricField)
+    //  either, J and the dissipative E (eta J - nu' laplacian J) are the patch's (J, E_diss)
     explicit MHDSteps(double const gamma,
                       OhmInfo const& dissipation = {0., 0., HyperMode::constant})
         : gamma_{gamma}
@@ -97,7 +96,7 @@ public:
     {
     }
 
-    // rhoV and Etot from V and P again, as PHARE; Hall: J every time (PHARE's needsCurrent)
+    // rhoV and Etot from V and P again; Hall: J every time
     void compute_fluxes(auto& level, std::size_t const s, double const t) const
     {
         level.per_patch([&](auto& p) {
@@ -175,7 +174,7 @@ public:
         level.fill_state_ghosts(so, t);
     }
 
-    // compute_fluxes from states[si], then states[so] from them: PHARE's Euler
+    // compute_fluxes from states[si], then states[so] from them
     void euler(auto& level, std::size_t const si, std::size_t const so, double const t,
                double const dt) const
     {
@@ -183,14 +182,14 @@ public:
         euler_using(level, si, so, last_E, last_fluxes, t, dt);
     }
 
-    // butcher = coef * (the last fluxes, E), every point: a step's first sum (PHARE's reset to 0
-    //  then PlusEqualsProduct: 0 + x == x, the same bits but for the sign of a zero)
+    // butcher = coef * (the last fluxes, E), every point: a step's first sum (not a reset
+    //  to 0 then +=: 0 + x == x, the same bits but for the sign of a zero)
     void assign_butcher(auto& level, double const coef) const { butcher_<false>(level, coef); }
 
-    // butcher += coef * (the last fluxes, E), every point (PHARE's PlusEqualsProduct)
+    // butcher += coef * (the last fluxes, E), every point
     void accumulate_butcher(auto& level, double const coef) const { butcher_<true>(level, coef); }
 
-    // states[dst] = sum_j w_j states[s_j] on the domain (PHARE's RKUtils), no ghosts
+    // states[dst] = sum_j w_j states[s_j] on the domain, no ghosts
     void rk_blend(auto& level, std::size_t const dst,
                   std::same_as<std::pair<double, std::size_t>> auto const... ws) const
     {
@@ -264,9 +263,9 @@ private:
         return hyper.template operator()<false>();
     }
 
-    // the dissipative E (PHARE's DissipativeElectricField) on each E component's domain box:
+    // the dissipative E on each E component's domain box:
     //  e = eta J - coef laplacian(J), coef nu (constant) or nu dx^2 (|B| / rho + 1) (spatial: dx
-    //  the smallest mesh size, B and rho projected onto the E component), in PHARE's order
+    //  the smallest mesh size, B and rho projected onto the E component), in the fixed order
     void dissipative_E_(auto& p, auto const& u) const
     {
         using S       = MHDQuantity::Scalar;
@@ -314,8 +313,8 @@ private:
         return index;
     }
 
-    // the dissipative E's work on the face fluxes of direction d (PHARE's MHDEquations
-    //  dissipative_contributions over the faces' domain box): F_Etot gets E x B along the face's
+    // the dissipative E's work on the face fluxes of direction d (over the faces'
+    //  domain box): F_Etot gets E x B along the face's
     //  normal, projected onto the face (B is evolved by Faraday: no F_B)
     template<std::size_t d>
     static void dissipative_fluxes_(auto& p, auto const& B)

@@ -9,7 +9,7 @@
 
 namespace plamn::amr
 {
-// PHARE's CoarsestRebalanceCheck: once per step, whether level 0 is rebalanced in automatic
+// once per step, whether level 0 is rebalanced in automatic
 //  mode. Workloads are only gathered (collective) when a check is due; every rank holds the
 //  same state so they agree on when. After a balanced check the interval grows by backoff
 //  up to max_interval, after a rebalance it restarts from interval

@@ -1,5 +1,5 @@
-"""a serial 1 level MHD run of a 1D shock tube (PHARE's tests/functional/mhd_shock setup, smaller,
-periodic) through pyphare on plamn's MHD only module
+"""a serial 1 level MHD run of a 1D shock tube (Brio-Wu like states, small, periodic) through
+pyphare on plamn's MHD only module
 
 needs py_etc and the MHD module built (./mkn.py --mhd), then from the plamn root:
     PYTHONPATH=.:$PHARE/pyphare:tst/plamn/python python3 -m phlop.run.test_cases -i tst
@@ -45,7 +45,7 @@ def config(largest_patch_size, diag_dir):
         model_options=["MHDModel"],
     )
 
-    # left and right states of PHARE's shock, a tube each way (periodic)
+    # left and right states of the shock, a tube each way (periodic)
     def left(x):
         return (x > CELLS / 4) & (x < 3 * CELLS / 4)
 

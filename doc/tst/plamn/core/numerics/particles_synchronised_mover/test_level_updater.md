@@ -18,7 +18,7 @@ Level ghosts are handled as in the simulator: each is held by one patch, its cel
 nearest, `damn::amr::owned_elsewhere`), handed over as a patch ghost when it enters another
 patch's domain, and split again every 2 pushes (a coarse step).
 
-Moments follow PHARE's deposit after the exchange (and the simulator's): after the exchange each
+Moments follow the simulator's deposit after the exchange: after the exchange each
 patch deposits its domain particles (`depositDomain`), the level's moments are then every patch's
 sum on each node (the border sums, periodic images included): the same as the level as one patch,
 within the summation order.

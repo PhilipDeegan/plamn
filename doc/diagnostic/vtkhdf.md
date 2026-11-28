@@ -1,12 +1,12 @@
 # pharevtkhdf
 
-`inc/plamn/diagnostic/vtkhdf.hpp` holds the pieces of the pharevtkhdf diagnostics (PHARE's
-format; the file itself is `damn/hdf5/vtkhdf.hpp`'s), and what both formats share.
+`inc/plamn/diagnostic/vtkhdf.hpp` holds the pieces of the pharevtkhdf diagnostics (the file
+itself is `damn/hdf5/vtkhdf.hpp`'s), and what both formats share.
 
 | Piece | What |
 |---|---|
 | `Diagnostic`, `diagnostics_from(dict)` | what pyphare declared, `simulation/diagnostics/<type>/<type><N>`: quantity, `write_timestamps`, `flush_every`, attributes. Types `electromag`, `fluid`, `mhd`, and `particle` (phareh5 only); others are not written |
-| `due(diagnostic, t, dt)` | PHARE's schedule (`DiagnosticsManager`) |
+| `due(diagnostic, t, dt)` | the schedule, below |
 | `file_name(quantity)` | `/ions/pop/protons/flux` goes to `ions_pop_protons_flux.vtkhdf` |
 | `primal_into(...)` | a patch's field written straight into its rows |
 

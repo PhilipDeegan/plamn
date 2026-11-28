@@ -7,10 +7,10 @@
 #include <cstddef>
 
 // upwind constrained transport: E on the cell edges from the faces' Riemann data (vt, aL, aR, dL,
-//  dR of GodunovFaceResult) and the reconstructed B, PHARE's core/numerics/constrained_transport/
-//  upwind_constrained_transport.hpp: ideal (E), Hall (E_hall: the ideal E, then its Hall term
-//  added, from the faces' current and rho averages jt, rhot), its expressions term for term (its
-//  results are the reference; the resistive E is added by the caller). One E component at one edge
+//  dR of GodunovFaceResult) and the reconstructed B: ideal (E), Hall (E_hall: the ideal E, then
+//  its Hall term added, from the faces' current and rho averages jt, rhot), in a fixed operation
+//  order (bit equal comparisons: etc/compare/phare; the resistive E is added by the caller). One
+//  E component at one edge
 namespace plamn::core
 {
 
@@ -37,8 +37,8 @@ struct UpwindCT
     using R = Reconstruction;
 
     // E component c at ijk; x, y, z: the CT fields of each face direction (only those of the
-    //  directions < dim are read). In 1D E_y and E_z have an equation (PHARE's
-    //  UpwindConstrainedTransport: E_x is left as it is, B_x does not change), in 2D and 3D
+    //  directions < dim are read). In 1D E_y and E_z have an equation (E_x is
+    //  left as it is, B_x does not change), in 2D and 3D
     //  every component
     template<std::size_t c, std::size_t dim>
     static constexpr bool has_equation = dim > 1 or c != 0;
@@ -56,7 +56,7 @@ struct UpwindCT
             return Ez_<dim>(ijk, B, x, y);
     }
 
-    // Hall: E, then its Hall term added (PHARE's "E(idx) += ..."), the faces' jt and rhot read
+    // Hall: E, then its Hall term added, the faces' jt and rhot read
     template<std::size_t c, std::size_t dim>
     MKN_KUL_FN_SIG_RET static double E_hall(auto const& ijk, auto const& B, auto const& x,
                                             auto const& y, auto const& z) DAMN_ALL

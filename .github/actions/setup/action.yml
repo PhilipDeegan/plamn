@@ -1,6 +1,6 @@
 name: setup
 description: >-
-  plamn's CI environment in the phare_dep container: apt tools, PHARE's python venv on PATH,
+  plamn's CI environment in the phare_dep container: apt tools, pyphare's python venv on PATH,
   phlop; optionally damn (private: deploy key) at tpp/damn on the branch of the same name, else
   the PR's base, and mkn on PATH
 
@@ -20,7 +20,7 @@ runs:
   - shell: bash
     run: apt update && apt install -y curl git openssh-client ccache
 
-  # the image has PHARE's requirements.txt (numpy, dill, matplotlib, ...) in a venv only
+  # the image has pyphare's requirements.txt (numpy, dill, matplotlib, ...) in a venv only
   # ~/.bashrc activates, which run steps don't source: put it first on PATH for later steps
   - shell: bash
     run: |

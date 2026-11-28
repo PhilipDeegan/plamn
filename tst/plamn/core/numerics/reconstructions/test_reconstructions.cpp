@@ -1,4 +1,4 @@
-// the MHD reconstructions (PHARE's): the left and right states at a face from the cells around it,
+// the MHD reconstructions: the left and right states at a face from the cells around it,
 //  on 1D data given point by point: exact for constant (all) and linear (all but constant) data,
 //  converging at their order on a smooth profile
 

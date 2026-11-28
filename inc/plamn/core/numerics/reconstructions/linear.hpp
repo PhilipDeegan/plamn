@@ -9,9 +9,8 @@
 #include <cstddef>
 #include <cstdint>
 
-// piecewise linear reconstruction with a slope limiter, PHARE's core/numerics/reconstructions/
-//  linear.hpp and slope_limiters: the left and right states at face i of direction dir, from the
-//  cell values i-2 .. i+1 along dir (face i lies between cells i-1 and i)
+// piecewise linear reconstruction with a slope limiter: the left and right states at face i of
+//  direction dir, from the cell values i-2 .. i+1 along dir (face i lies between cells i-1 and i)
 namespace plamn::core
 {
 

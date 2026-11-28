@@ -12,8 +12,8 @@ lets pyphare pass it.
 
 | Mode | dt | Time after n steps |
 |---|---|---|
-| `constant` | the dict's | `start + n * dt`, as PHARE's `ConstantTimeStamper`: no rounding accumulated over the steps |
-| `adaptive` | from a stable bound (the caller's, given the cfl numbers), never past `final_time` | a Kahan sum of the steps, as PHARE's `KahanTimeStamper` |
+| `constant` | the dict's | `start + n * dt`: no rounding accumulated over the steps |
+| `adaptive` | from a stable bound (the caller's, given the cfl numbers), never past `final_time` | a Kahan sum of the steps |
 
 ## Adaptive run stops
 

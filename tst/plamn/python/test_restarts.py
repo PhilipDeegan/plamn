@@ -1,4 +1,4 @@
-"""PHARE's tests/simulator/test_restarts.py, in memory: a simulation
+"""restarts, in memory: a simulation
 writes a restart at step 4 and keeps running; a second one, restart_time at step 4, loads it.
 Both live in the same process (plamn has no process wide state), so they are compared directly,
 without diagnostics: at the restart time and after every step after it, the same levels and
@@ -26,7 +26,7 @@ restart_step = 4
 
 
 def setup_model(ppc=100, polytropic=False):
-    """PHARE's test_restarts model: protons and alpha, a tanh by; polytropic: the electrons'
+    """protons and alpha, a tanh by; polytropic: the electrons'
     (#91), Pe varying so that their entropy s = Pe / n^gamma does"""
     sim = ph.global_vars.sim
     L = sim.simulation_domain()[0]

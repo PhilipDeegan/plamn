@@ -359,7 +359,7 @@ void seed(core::hybrid::PolytropicClosure const& closure, auto& level, auto cons
 }
 
 // a level made or regridded at t from its coarser level, op: where (FieldRefiner, or Masked: the
-//  new cells): the entropy refined, not the pressure (PHARE's regrid)
+//  new cells): the entropy refined, not the pressure
 template<auto opts>
 void refine_state(core::hybrid::IsothermalClosure const&, auto&, auto const&, double)
 { // no state
@@ -400,7 +400,7 @@ void synchronize(core::hybrid::IsothermalClosure const&, auto&)
 }
 template<auto opts>
 void synchronize(core::hybrid::PolytropicClosure const&, auto& level)
-{ // Pe, primal as the moments: the fine nodes' values (PHARE's electronPressureSynchronizers_)
+{ // Pe, primal as the moments: the fine nodes' values
     static std::vector<damn::amr::LevelPair> const Pe{{"Pe", "Pe", ""}}; // built once
     level.coarsen(amr::MomentsCoarsener{}, Pe);
 }

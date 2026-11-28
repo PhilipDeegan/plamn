@@ -1,7 +1,7 @@
 # Physical boundaries
 
-`inc/plamn/core/boundary/boundary.hpp` holds a model's physical boundaries: PHARE's
-`core/boundary` (`Boundary`, `BoundaryFactory`, `BoundaryManager`), as values.
+`inc/plamn/core/boundary/boundary.hpp` holds a model's physical boundaries
+(`Boundary`, `BoundaryFactory`, `BoundaryManager`), as values.
 
 ## Boundary
 
@@ -15,7 +15,7 @@ makes one from its type (and, for an inflow, its state):
 | inflow | Dirichlet `ρ0`; `Etot` Dirichlet (from `P`, `γ`) | Dirichlet `ρ0 v` | div free, transverse Dirichlet `B0` | Dirichlet `-v x B` |
 
 An inflow is super magnetofast, with constant extrapolation. Other quantities have no condition.
-Reflective, open and inflow are MHD's only, as in PHARE.
+Reflective, open and inflow are MHD's only.
 
 ## BoundaryManager
 

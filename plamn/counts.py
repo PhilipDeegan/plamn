@@ -183,7 +183,7 @@ class Counts:
 
     def tags(self, threshold, counts=None):
         """cells to refine: the counts' relative gradient |c[i+1] - c[i-1]| / (c[i+1] + c[i-1])
-        above threshold in any direction (as PHARE's default tagger on a quantity)"""
+        above threshold in any direction (the default tagger's criterion on a quantity)"""
         c = (self.counts if counts is None else counts).astype(float)
         tagged = np.zeros(c.shape, dtype=bool)
         for d in range(c.ndim):

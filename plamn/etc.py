@@ -91,7 +91,7 @@ def phare_deps():
 
 def restored_time(folder):
     """the time a restart folder (restart_path_for_time's) holds: its restart.h5's /restart
-    time (pyphare.pharein.restarts.restored_time, PHARE master's cpp_etc's)"""
+    time (pyphare.pharein.restarts.restored_time, pyphare master's cpp_etc's)"""
     from pathlib import Path
 
     import h5py

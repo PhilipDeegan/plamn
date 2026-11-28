@@ -13,8 +13,7 @@
 
 // one face of direction dir: the left / right states reconstructed from the primitive fields
 //  (rho, V, P cell centred; B face centred: its normal component is on the face already, the
-//  transverse ones are projected to the cell centre then reconstructed), then the Riemann flux,
-//  PHARE's reconstructor.hpp + Godunov::operator() for one face
+//  transverse ones are projected to the cell centre then reconstructed), then the Riemann flux
 namespace plamn::core
 {
 
@@ -31,7 +30,7 @@ struct GodunovFace
         return Riemann::template solve<dir>(gamma, uL, uR);
     }
 
-    // Hall (PHARE's Godunov with Hall): the current J reconstructed to the face as B's
+    // Hall: the current J reconstructed to the face as B's
     //  transverse components are (each from its centring to the cell centres, then to the face),
     //  the Riemann solver given them (the Hall flux; jt, rhot)
     template<std::size_t dir>

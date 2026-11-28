@@ -55,7 +55,7 @@ namespace detail
     }
 
     // fn(the quantity's fields on a patch of the model's): MHD's V and P (and the bulk velocity,
-    //  its V) from the conservative state first (PHARE's compute); a hybrid computed quantity's
+    //  its V) from the conservative state first; a hybrid computed quantity's
     //  scratch grids (computed(patch, quantity): computed per level first), else the view's
     template<typename Model>
         requires solver::is_mhd_model_v<Model>
@@ -97,7 +97,7 @@ void Simulator<opts>::setup_diagnostics_()
         throw std::runtime_error("plamn diagnostics: format " + format
                                  + " not supported (phareh5, pharevtkhdf)");
     diagnostics_.phareh5 = format == "phareh5";
-    if (!diagnostics_.phareh5) // pharevtkhdf has no particles (PHARE's neither)
+    if (!diagnostics_.phareh5) // pharevtkhdf has no particles
         std::erase_if(diagnostics_.list, [](auto const& d) { return d.type == "particle"; });
     diagnostics_.dir               = get("filePath", std::string{"phare_output"});
     diagnostics_.overwrite         = get("mode", std::string{}) == "overwrite";
@@ -217,7 +217,7 @@ void Simulator<opts>::dump_vtkhdf_(diagnostic::Diagnostic& diag, double const ti
             path, truncate ? h5::HiFile::Create | h5::HiFile::Truncate : h5::HiFile::OpenOrCreate);
         diagnostics_.created.insert(path);
 
-        // PHARE's root attributes
+        // the root attributes pyphare reads
         file->write_attribute("/", "dimension", static_cast<std::uint64_t>(dimension));
         file->write_attribute("/", "interpOrder", static_cast<std::uint64_t>(interp_order));
         std::vector<int> upper, periodic;
@@ -295,7 +295,7 @@ void Simulator<opts>::dump_vtkhdf_(diagnostic::Diagnostic& diag, double const ti
         });
     }
 
-    // PHARE's flush_every: closed every flush_every dumps (0: never), reopened at the next
+    // flush_every: closed every flush_every dumps (0: never), reopened at the next
     if (++diag.dumps; diag.flush_every != 0 and diag.dumps % diag.flush_every == 0)
         diagnostics_.files.erase(path);
 #else
@@ -350,7 +350,7 @@ void Simulator<opts>::dump_phareh5_(diagnostic::Diagnostic& diag, double const t
             using Patch_t = Model_t::Patch_t;
             if (!particles and !detail::provides(model, diag.quantity))
                 return; // not on this model's levels: nothing, as a level not there
-            // the fields' points written: PHARE's ghost box (hybrid: per interp order; MHD: the
+            // the fields' points written: the phareh5 ghost box (hybrid: per interp order; MHD: the
             //  patch's)
             auto constexpr gw = Patch_t::field_ghost_width;
             auto constexpr G  = [] {
@@ -446,7 +446,7 @@ void Simulator<opts>::dump_phareh5_(diagnostic::Diagnostic& diag, double const t
                                                   values[i][c].data());
             }
 
-            // the patches' attributes (PHARE's getPatchProperties)
+            // the patches' attributes
             for (std::size_t i = 0; i < n_slots; ++i)
             {
                 bool const mine = i < n_local;
@@ -474,7 +474,7 @@ void Simulator<opts>::dump_phareh5_(diagnostic::Diagnostic& diag, double const t
         });
     }
 
-    // the file's attributes (PHARE's fileAttributes_, the population's, the diagnostic's)
+    // the file's attributes (the simulation's, the population's, the diagnostic's)
     std::vector<int> domain_upper, periodic;
     std::vector<double> cell_width, origin(dimension, 0.);
     for (std::size_t i = 0; i < dimension; ++i)
@@ -505,7 +505,7 @@ void Simulator<opts>::dump_phareh5_(diagnostic::Diagnostic& diag, double const t
     for (auto const& [key, value] : diag.attributes)
         std::visit([&](auto const& v) { file->write_attribute("/py_attrs", key, v); }, value);
 
-    // PHARE's flush_every: closed every flush_every dumps (0: never), reopened at the next
+    // flush_every: closed every flush_every dumps (0: never), reopened at the next
     if (++diag.dumps; diag.flush_every != 0 and diag.dumps % diag.flush_every == 0)
         diagnostics_.files.erase(path);
 #else

@@ -1,9 +1,8 @@
 #ifndef PLAMN_CORE_NUMERICS_RECONSTRUCTIONS_WENO3_HPP
 #define PLAMN_CORE_NUMERICS_RECONSTRUCTIONS_WENO3_HPP
 
-// third order WENO reconstruction, PHARE's core/numerics/reconstructions/weno3.hpp (its
-//  operation order: the same results): the left and right states at face i from cells
-//  i-2 .. i+1
+// third order WENO reconstruction, a fixed operation order (bit equal comparisons:
+//  etc/compare/phare): the left and right states at face i from cells i-2 .. i+1
 
 #include "damn/core/def.hpp"
 #include "plamn/core/numerics/reconstructions/stencil.hpp"

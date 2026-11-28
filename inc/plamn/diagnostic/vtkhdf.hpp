@@ -1,7 +1,7 @@
 #ifndef PLAMN_DIAGNOSTIC_VTKHDF_HPP
 #define PLAMN_DIAGNOSTIC_VTKHDF_HPP
 
-// pharevtkhdf diagnostics, PHARE's format (the file: damn/hdf5/vtkhdf.hpp), and what both
+// pharevtkhdf diagnostics (the file: damn/hdf5/vtkhdf.hpp), and what both
 // formats share: the declared diagnostics, their schedule: doc/diagnostic/vtkhdf.md
 
 #include "plamn/amr/untiled.hpp"
@@ -39,8 +39,8 @@ struct Diagnostic
     std::string type, quantity;
     std::vector<double> timestamps{};
     std::size_t flush_every = 1, next = 0, dumps = 0;
-    // phareh5's /py_attrs: strings, but pyphare's heat_capacity_ratio (a double, as PHARE's MHD
-    //  writer reads it)
+    // phareh5's /py_attrs: strings, but pyphare's heat_capacity_ratio (a double, as
+    //  pyphare reads it)
     std::vector<std::pair<std::string, std::variant<std::string, double>>> attributes{};
 };
 
@@ -83,8 +83,7 @@ MKN_KUL_FN_SIG_RET inline std::vector<Diagnostic> diagnostics_from(initializer::
     return out;
 }
 
-// PHARE's DiagnosticsManager: due when a timestamp is within dt of t, compared as floats; the
-// timestamps passed are caught up
+// due when a timestamp is within dt of t, compared as floats; the timestamps passed are caught up
 MKN_KUL_FN_SIG_RET inline bool due(Diagnostic& diag, double const t, double const dt)
 {
     bool is_due = false;

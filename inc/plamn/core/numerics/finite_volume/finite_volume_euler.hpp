@@ -8,8 +8,7 @@
 #include <cstddef>
 
 // one conserved quantity's finite volume (forward Euler) update in one cell from its face fluxes,
-//  PHARE's core/numerics/finite_volume_euler/finite_volume_euler_per_field.hpp, its expression
-//  order: Unew = U - (dt / dx) (F_x(i + 1) - F_x(i)) - (dt / dy) (...) - ...
+//  in this expression order: Unew = U - (dt / dx) (F_x(i + 1) - F_x(i)) - (dt / dy) (...) - ...
 //  The face i of a flux field is the lower face of cell i (GodunovFace's indexing)
 namespace plamn::core
 {
@@ -18,7 +17,7 @@ template<std::size_t dim>
 struct FiniteVolumeEuler
 {
     double dt;
-    std::array<double, dim> inv_dx; // 1 / dx, as PHARE's inverseMeshSize
+    std::array<double, dim> inv_dx; // 1 / dx
 
     MKN_KUL_FN_SIG_RET double operator()(auto const& ijk, auto const& U, auto const& Fx,
                                          auto const& Fy, auto const& Fz) const DAMN_ALL

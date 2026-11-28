@@ -1,9 +1,8 @@
 #ifndef PLAMN_CORE_NUMERICS_RECONSTRUCTIONS_WENOZ_HPP
 #define PLAMN_CORE_NUMERICS_RECONSTRUCTIONS_WENOZ_HPP
 
-// fifth order WENO-Z reconstruction, PHARE's core/numerics/reconstructions/wenoz.hpp (its
-//  operation order: the same results): the left and right states at face i from cells
-//  i-3 .. i+2
+// fifth order WENO-Z reconstruction, a fixed operation order (bit equal comparisons:
+//  etc/compare/phare): the left and right states at face i from cells i-3 .. i+2
 
 #include "damn/core/def.hpp"
 #include "plamn/core/numerics/reconstructions/stencil.hpp"

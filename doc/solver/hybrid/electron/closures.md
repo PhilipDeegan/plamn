@@ -36,7 +36,7 @@ nothing (Pe comes from the level's own Ne at the next Ohm).
 
 ## Polytropic
 
-As PHARE's polytropic closure, the closure advects the electron entropy `s = Pe / Ne^gamma`
+The polytropic closure advects the electron entropy `s = Pe / Ne^gamma`
 with the electrons:
 
 1. **first stage (and init)**: `Se_old = Pe / Ne^gamma` on the domain (Pe, Ne at t). Its ghosts
@@ -64,8 +64,8 @@ only up to a Courant number of 1.
 
 ### Regrids and new refined levels
 
-A level made or regridded at t (every level synchronized) gets its state from its coarser level,
-as PHARE's regrid: the entropy is refined, not the pressure.
+A level made or regridded at t (every level synchronized) gets its state from its coarser level:
+the entropy is refined, not the pressure.
 
 - `Se_old` is computed from the coarser level's Pe and Ne at t, and from the level's own where
   it was (its Pe moved with it, its Ne deposited again).
@@ -80,4 +80,4 @@ Pe is stored; `Se_old` and `Se` are rebuilt from it, as the first stage sets the
 ### Synchronization
 
 Pe is primal, as the moments: the coarse nodes take the fine nodes' values
-(`amr::MomentsCoarsener`, as PHARE's `electronPressureSynchronizers_`).
+(`amr::MomentsCoarsener`).

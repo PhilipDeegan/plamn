@@ -464,8 +464,7 @@ void post_move_sync(Particles_t& domain, Particles_t& patchGhost, Particles_t& l
 
 // the moments of a patch's domain particles, reset first, to be completed by the border sums: as
 //  at level initialization, after mode all's push and the particle exchange, every particle on
-//  the patch owning its cell (PHARE's depositDomain after the exchange: leavers deposited once, by
-//  their new patch)
+//  the patch owning its cell (after the exchange: leavers deposited once, by their new patch)
 template<std::size_t dim, std::size_t interp_order>
 void deposit_domain(auto& ions, auto const& layout)
 {

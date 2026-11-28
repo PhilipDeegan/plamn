@@ -5,10 +5,10 @@
 
 | Operator | What |
 |---|---|
-| `FieldRefiner` | PHARE's composite linear refinement, any centering |
+| `FieldRefiner` | composite linear refinement, any centering |
 | `CellInjector` | piecewise constant: a fine point takes the coarse point under it |
-| `divergence_free_touch_up` | stage 2 of PHARE's divergence free magnetic refinement |
-| `ParticleSplitter<Splitter>` | PHARE's particle refinement |
+| `divergence_free_touch_up` | stage 2 of the divergence free magnetic refinement |
+| `ParticleSplitter<Splitter>` | particle refinement: coarse particles split into fine ones |
 
 ## `FieldRefiner`
 
@@ -25,8 +25,7 @@ The two dual children mean back to `u_I`.
 
 ## `divergence_free_touch_up(B, cells, region, dx)`
 
-Stage 2 of PHARE's divergence free magnetic refinement (Balsara et al. 2023, see PHARE's
-`magnetic_refine_patch_strategy.hpp`).
+Stage 2 of the divergence free magnetic refinement (Balsara et al. 2023).
 
 After B's components were refined with `FieldRefiner` over whole coarse cells, the faces inside
 each coarse cell are corrected so that the divergences of its fine cells all equal the coarse

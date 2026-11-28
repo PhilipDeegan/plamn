@@ -1,4 +1,4 @@
-"""plots of a simulation while it runs (as PHARE's dw branch's pyphare/__main__.py --watch)
+"""plots of a simulation while it runs
 
     python3 -m plamn [--watch N] [--save DIR] [--quantities B_y rho ...] [--config config]
                      [--input overrides.yaml] <module or path.py>
@@ -85,7 +85,7 @@ class Plotter:
         if save or not os.environ.get("DISPLAY"):
             plt.switch_backend("Agg")
         elif matplotlib.get_backend().lower() == "agg":
-            # an input may have chosen Agg (pyphare's NO_GUI(), e.g. PHARE's harris_2d.py)
+            # an input may have chosen Agg (pyphare's NO_GUI(), which some inputs call at import)
             plt.switch_backend("TkAgg")
 
         self.plt, self.cpp, self.quantities, self.save = plt, cpp, quantities, save

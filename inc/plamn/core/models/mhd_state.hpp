@@ -7,7 +7,7 @@ namespace plamn::core
 {
 
 // a state: conservative (rho, rhoV, B, Etot), what is evolved, and its primitive (V, P),
-//  computed from it (to_primitive) where fluxes need it, as PHARE's MHDState
+//  computed from it (to_primitive) where fluxes need it
 template<typename Grid, typename VecField>
 struct MHDState
 {
@@ -19,7 +19,7 @@ struct MHDState
 };
 
 // one face direction's fluxes of the evolved quantities but B (B is evolved by Faraday from the
-//  constrained transport E, as PHARE: the Godunov faces' B fluxes are not stored)
+//  constrained transport E: the Godunov faces' B fluxes are not stored)
 template<typename Grid, typename VecField>
 struct MHDFaceFluxes
 {

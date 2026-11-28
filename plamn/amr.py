@@ -10,7 +10,7 @@ import numpy as np
 
 from . import plamn_etc
 
-# field ghost width per interpolation order (PHARE's, plamn's): the default reach
+# field ghost width per interpolation order (pyphare's, plamn's): the default reach
 _ghosts = {1: 2, 2: 4, 3: 4}
 
 
@@ -520,7 +520,7 @@ COSTS = {"Self": 0.0, "Local": 0.0, "Numa": 0.3, "Node": 1.0, "Socket": 2.0, "Re
 def remote_ranks(h, reach=None):
     """per level, (max, mean) over ranks of the other ranks whose patches lie within reach of
     the rank's patches (same level ghosts, periodic images included): how many ranks each rank
-    exchanges ghosts with (PHARE's run summary's remote_ranks_max / _avg)"""
+    exchanges ghosts with"""
     reach = _ghosts[h.interp_order] if reach is None else reach
     lower, upper = (np.asarray(b) for b in h.domain)
     extent = upper - lower + 1

@@ -70,8 +70,8 @@ without the generic step), and AoSPC is untested.
 
 `deposit_domain` resets the moments of a patch and deposits its domain particles, to be
 completed by the border sums. As at level initialization, after mode all's push and the
-particle exchange, every particle is on the patch owning its cell, like PHARE's `depositDomain`
-after the exchange: a particle that left is deposited once, by its new patch.
+particle exchange, every particle is on the patch owning its cell (`depositDomain` after the
+exchange): a particle that left is deposited once, by its new patch.
 
 The device deposit after an in place push (`Interpolating::on_tiles`) runs a block per tile of
 `warps` warps (`DepositSpec`), each a contiguous share of the tile's particles: sorted, so each

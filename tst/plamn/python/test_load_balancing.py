@@ -1,4 +1,4 @@
-"""PHARE's tests/simulator/test_load_balancing.py set up on plamn, one level: two populations,
+"""load balancing on plamn, one level: two populations,
 one without particles where its density is below the cutoff. The patches are
 partitioned at initialization by the particles they will hold (damn::amr::partition), so every
 rank starts within one patch of the others. Meaningful on more than one rank:
@@ -23,7 +23,7 @@ density_cut_off = 1e-16  # pyphare's default
 
 
 def density_low(x, y):
-    """PHARE's: no particles in the rows around y = 10 (the cell centres 9.9 and 10.1)"""
+    """no particles in the rows around y = 10 (the cell centres 9.9 and 10.1)"""
     rho = y.copy()
     rho[:] = 0.1
     rho[np.where(np.isclose(y, 10, atol=0.1))] = 0

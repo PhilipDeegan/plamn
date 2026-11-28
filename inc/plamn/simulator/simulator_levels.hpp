@@ -1,7 +1,7 @@
 #ifndef PLAMN_SIMULATOR_SIMULATOR_LEVELS_HPP
 #define PLAMN_SIMULATOR_SIMULATOR_LEVELS_HPP
 
-// plamn::Simulator: making and initializing levels (PHARE's HybridLevelInitializer)
+// plamn::Simulator: making and initializing levels
 // IWYU pragma: private, include "plamn/simulator/simulator.hpp"
 
 #include "mkn/kul/env.hpp"
@@ -243,10 +243,9 @@ void Simulator<opts>::initialize_mhd_()
         });
         level.fill_state_ghosts(0, startTime_);
         // a face on a periodic boundary is initialized twice (at 0 and at L): every patch
-        //  holding it takes the max of its copies, once, after the ghost fill (PHARE's
-        //  MHDMessenger fillRootGhosts)
+        //  holding it takes the max of its copies, once, after the ghost fill
         level.copy(damn::amr::max_borders, "MHD_B");
-        // the refinement boxes' levels, refined (PHARE's MHDMessenger initLevel)
+        // the refinement boxes' levels, refined
         for (std::size_t ln = 1; ln <= refinement_boxes_.size(); ++ln)
         {
             make_level_(static_cast<int>(ln), refinement_boxes_[ln - 1]);
@@ -421,7 +420,7 @@ template<auto opts>
 void Simulator<opts>::initialize_hybrid_()
 {
     // the steps from the start (or the restart's time), the first dt (adaptive: from the
-    //  initialized levels, as PHARE's for its first dump)
+    //  initialized levels)
     auto const start_steps = [&]() {
         restart_stepping_();
         start_timestepper_();
@@ -485,8 +484,8 @@ void Simulator<opts>::initialize_hybrid_()
         }
     planned_.clear(); // made: later levels (regrids) level by level
     // the totals under a finer level the finer one's from the start, as after a synchronization
-    //  (PLAMN_INIT_SYNC=0: each level's own deposit until the first synchronization, as PHARE
-    //  master's initialization with refinement boxes: for comparisons)
+    //  (PLAMN_INIT_SYNC=0: each level's own deposit until the first synchronization, for
+    //  etc/compare/phare with refinement boxes)
     static bool const init_sync = mkn::kul::env::get_as("PLAMN_INIT_SYNC", 1) != 0;
     if (init_sync)
         rebuild_moments_(0);

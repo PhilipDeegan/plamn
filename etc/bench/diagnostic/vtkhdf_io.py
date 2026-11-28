@@ -27,7 +27,7 @@ taskset; mpirun --bind-to none inside them). Per configuration, per dump (the me
                land in the page cache
 
 Run from the plamn root, the 2D module built (./mkn.py --dim 2, with PHARE_SCOPE_TIMING's
-scopes: the default). PYPHARE: the PHARE checkout pyphare comes from. --momentum adds the
+scopes: the default). PYPHARE: the checkout pyphare is imported from. --momentum adds the
 momentum tensors (a deposit and a border sum: not IO). Results: --json writes them
 """
 

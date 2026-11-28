@@ -151,12 +151,12 @@ struct MHDModel<opts, true>
                                                  MHDOpts::TimeIntegratorType::MHDOff);
         if (m.scheme == MHDOpts::TimeIntegratorType::MHDOff)
             throw std::runtime_error("plamn: the MHD model needs a time integration scheme");
-        if (m.hall != opts.Hall) // a build's (PHARE's: a template flag, its module's name)
+        if (m.hall != opts.Hall) // a build's (a template flag, its module's name)
             throw std::runtime_error(std::string{"plamn: the input's hall is "}
                                      + (m.hall ? "true" : "false") + ", this module's "
                                      + (opts.Hall ? "true" : "false")
                                      + " (./mkn.py --mhd --hall true|false)");
-        if (m.hyper_resistivity > 0 and not opts.Hall) // PHARE's: only alongside the Hall term
+        if (m.hyper_resistivity > 0 and not opts.Hall)
             throw std::runtime_error("plamn: hyper resistivity (nu > 0) needs the Hall term");
         auto const& grid = sim["grid"];
         core::validate_physical_boundaries<opts.dimension>(grid);
