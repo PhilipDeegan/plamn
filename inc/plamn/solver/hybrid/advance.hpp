@@ -248,6 +248,29 @@ void ampere_ohm(HybridModel<opts> const& model, auto&& level, ClosureStage const
 
 namespace plamn::solver::hybrid::detail
 {
+// the level ghosts' time weight at t (level 0: none to deposit)
+inline double level_ghost_alpha(auto& level, double const t)
+{
+    auto const alpha = level.alpha(t);
+    if (alpha < -1e-10 or alpha > 1 + 1e-10)
+        throw std::runtime_error("plamn Simulator: level ghost time interpolation coefficient "
+                                 + std::to_string(alpha));
+    return std::clamp(alpha, 0., 1.);
+}
+
+template<auto opts>
+void deposit_patch_level_ghosts(auto& patch, double const alpha)
+{
+    core::DepositInterpolating<opts.dimension, opts.interp_order, opts.alloc_mode> interpolate;
+    for (auto& pop : patch.ions)
+    {
+        interpolate(pop.levelGhostParticlesOld(), pop.particleDensity(), pop.flux(), patch.layout,
+                    1. - alpha);
+        interpolate(pop.levelGhostParticlesNew(), pop.particleDensity(), pop.flux(), patch.layout,
+                    alpha);
+    }
+}
+
 // the level ghost particles split from the coarser level at both ends of its step, weighted
 // linearly in time (PHARE's fillIonPopMomentGhosts): each held by one patch, deposited once,
 // before the border sums complete every patch's copy
@@ -256,21 +279,8 @@ void deposit_level_ghosts(auto& level, double const t)
 {
     if (level.number() == 0)
         return;
-    auto alpha = level.alpha(t);
-    if (alpha < -1e-10 or alpha > 1 + 1e-10)
-        throw std::runtime_error("plamn Simulator: level ghost time interpolation coefficient "
-                                 + std::to_string(alpha));
-    alpha = std::clamp(alpha, 0., 1.);
-    level.per_patch_threaded([&](auto& patch) {
-        core::DepositInterpolating<opts.dimension, opts.interp_order, opts.alloc_mode> interpolate;
-        for (auto& pop : patch.ions)
-        {
-            interpolate(pop.levelGhostParticlesOld(), pop.particleDensity(), pop.flux(),
-                        patch.layout, 1. - alpha);
-            interpolate(pop.levelGhostParticlesNew(), pop.particleDensity(), pop.flux(),
-                        patch.layout, alpha);
-        }
-    });
+    auto const alpha = level_ghost_alpha(level, t);
+    level.per_patch_threaded([&](auto& patch) { deposit_patch_level_ghosts<opts>(patch, alpha); });
 }
 
 namespace detail
@@ -345,6 +355,46 @@ namespace detail
             core::deposit_domain<opts.dimension, opts.interp_order>(patch.ions, patch.layout);
         });
     }
+
+    // the moments after the push (domain particles if domains, the level ghosts), then the
+    //  border sums: other memory, the level's steps one after the other
+    template<auto opts>
+    void deposit_and_sum(auto& level, double const t, bool const domains)
+    {
+        if (domains)
+        {
+            DAMN_LOG_SCOPE(2, "Simulator::move_ions::deposit_domain");
+            deposit_domains<opts>(level);
+        }
+        {
+            DAMN_LOG_SCOPE(2, "Simulator::move_ions::deposit_level_ghosts");
+            deposit_level_ghosts<opts>(level, t);
+        }
+        fill_ion_borders(level);
+    }
+    // host memory: a patch's deposits in one task, its border sum pieces sent once they are done
+    //  (the level's work mode); per patch the same deposits in the same order: the same moments
+    template<auto opts>
+        requires(opts.alloc_mode == damn::AllocatorMode::CPU)
+    void deposit_and_sum(auto& level, double const t, bool const domains)
+    {
+        DAMN_LOG_SCOPE(1, "Simulator::fill_ion_borders_"); // with the deposits
+        bool const ghosts  = level.number() != 0;
+        double const alpha = ghosts ? level_ghost_alpha(level, t) : 0.;
+        level.per_patch_then_copy(
+            [&](auto& patch) {
+                if (domains)
+                {
+                    for (auto& pop : patch.ions)
+                        pop.patchGhostParticles().clear();
+                    core::deposit_domain<opts.dimension, opts.interp_order>(patch.ions,
+                                                                            patch.layout);
+                }
+                if (ghosts)
+                    deposit_patch_level_ghosts<opts>(patch, alpha);
+            },
+            damn::amr::sum_borders, "IonPopBorderSum");
+    }
 } // namespace detail
 
 template<auto opts>
@@ -353,14 +403,24 @@ void move_ions(HybridModel<opts>& model, auto& level, double const t, double con
 {
     using Patch_t = HybridModel<opts>::Patch_t;
     DAMN_LOG_SCOPE(1, "Simulator::move_ions");
+    // every particle deposited once, by the patch owning its cell (the domain_only predictor
+    //  deposits its pushed copies in the updater)
+    bool const exchange = mode != core::UpdaterMode::domain_only;
     {
         DAMN_LOG_SCOPE(1, "Simulator::move_ions::push"); // and deposit
         if constexpr (Patch_t::per_patch_mover)
-            level.per_patch_threaded([&](auto& patch) {
+        {
+            auto const push = [&](auto& patch) {
                 // the mover keeps push state (mesh, dt, a buffer): a copy a thread
                 thread_local auto mover = model.mover;
                 mover.updatePopulations(patch.ions, patch.emAvg, *patch.boxing, dt, mode);
-            });
+            };
+            if (exchange) // a patch's leavers sent once it is pushed (the level's work mode)
+                level.per_patch_then_copy(push, damn::amr::gather_leaving,
+                                          model.particle_routes->gather_leaving);
+            else
+                level.per_patch_threaded(push);
+        }
         else
         { // the level's patches at once, each with its boxing by patch id
             auto& data        = level.data();
@@ -373,24 +433,15 @@ void move_ions(HybridModel<opts>& model, auto& level, double const t, double con
             model.mover.updatePopulations(accessor, boxings, dt, mode);
         }
     }
-    if (mode != core::UpdaterMode::domain_only)
-    {
-        // every particle deposited once, by the patch owning its cell (the domain_only
-        //  predictor deposits its pushed copies in the updater)
+    if constexpr (!Patch_t::per_patch_mover)
+        if (exchange)
         {
             DAMN_LOG_SCOPE(2, "Simulator::move_ions::gather_leaving");
             level.copy(damn::amr::gather_leaving, model.particle_routes->gather_leaving);
         }
-        DAMN_LOG_SCOPE(2, "Simulator::move_ions::deposit_domain");
-        detail::deposit_domains<opts>(level);
-    }
 
-    // then the border sums: every patch's copy of a node the same
-    {
-        DAMN_LOG_SCOPE(2, "Simulator::move_ions::deposit_level_ghosts");
-        deposit_level_ghosts<opts>(level, t + dt);
-    }
-    fill_ion_borders(level);
+    // each particle deposited once, then the border sums: every patch's copy of a node the same
+    detail::deposit_and_sum<opts>(level, t + dt, exchange);
     compute_moments<opts>(level);
 }
 
